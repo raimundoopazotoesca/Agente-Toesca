@@ -32,7 +32,17 @@ from tools.gestion_renta_tools import (
     agregar_vr_contable_pt,
     agregar_vr_contable_rentas,
     agregar_vr_contable_apoquindo,
+    agregar_dividendo_pt,
+    agregar_dividendo_rentas,
+    agregar_dividendo_apoquindo,
+    agregar_aporte_pt,
+    agregar_aporte_rentas,
+    agregar_aporte_apoquindo,
     info_siguiente_accion,
+)
+from tools.eeff_tools import (
+    listar_eeff_disponibles,
+    leer_eeff,
 )
 from tools.web_bursatil_tools import (
     obtener_precio_cuota,
@@ -423,6 +433,150 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── EEFF (Estados Financieros) ──────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_eeff_disponibles",
+            "description": "Lista los trimestres de EEFF disponibles en disco para un fondo y año.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "Nombre del fondo: 'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "año":       {"type": "integer", "description": "Año (ej: 2025)"},
+                },
+                "required": ["fondo_key", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_eeff",
+            "description": (
+                "Lee el PDF de EEFF de un fondo para el trimestre indicado. "
+                "Extrae valor cuota libro por serie y detecta dividendos/aportes. "
+                "Si la extracción automática falla, retorna el texto relevante del PDF "
+                "para que puedas identificar los valores manualmente."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "año":       {"type": "integer", "description": "Año del trimestre"},
+                    "mes":       {"type": "integer", "description": "Mes de cierre del trimestre (3, 6, 9 o 12)"},
+                },
+                "required": ["fondo_key", "año", "mes"],
+            },
+        },
+    },
+    # ── Dividendos y Aportes ────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_dividendo_pt",
+            "description": "Agrega una fila de Dividendo en la hoja A&R PT.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":   {"type": "string"},
+                    "año":              {"type": "integer"},
+                    "mes":              {"type": "integer"},
+                    "monto_por_cuota":  {"type": "number", "description": "Monto del dividendo por cuota"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_por_cuota"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_dividendo_rentas",
+            "description": "Agrega filas de Dividendo en A&R Rentas (series A, C, I).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                    "monto_a":        {"type": "number"},
+                    "monto_c":        {"type": "number"},
+                    "monto_i":        {"type": "number"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_a", "monto_c", "monto_i"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_dividendo_apoquindo",
+            "description": "Agrega una fila de Dividendo en la hoja A&R Apoquindo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":   {"type": "string"},
+                    "año":              {"type": "integer"},
+                    "mes":              {"type": "integer"},
+                    "monto_por_cuota":  {"type": "number"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_por_cuota"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_aporte_pt",
+            "description": "Agrega una fila de Aporte en la hoja A&R PT.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":   {"type": "string"},
+                    "año":              {"type": "integer"},
+                    "mes":              {"type": "integer"},
+                    "monto_por_cuota":  {"type": "number"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_por_cuota"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_aporte_rentas",
+            "description": "Agrega filas de Aporte en A&R Rentas (series A, C, I).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                    "monto_a":        {"type": "number"},
+                    "monto_c":        {"type": "number"},
+                    "monto_i":        {"type": "number"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_a", "monto_c", "monto_i"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_aporte_apoquindo",
+            "description": "Agrega una fila de Aporte en la hoja A&R Apoquindo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":   {"type": "string"},
+                    "año":              {"type": "integer"},
+                    "mes":              {"type": "integer"},
+                    "monto_por_cuota":  {"type": "number"},
+                },
+                "required": ["nombre_archivo", "año", "mes", "monto_por_cuota"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -472,6 +626,16 @@ def _dispatch(name: str, args: dict) -> str:
         "agregar_vr_contable_pt":       lambda a: agregar_vr_contable_pt(a["nombre_archivo"], a["año"], a["mes"], a["precio_cuota"]),
         "agregar_vr_contable_rentas":   lambda a: agregar_vr_contable_rentas(a["nombre_archivo"], a["año"], a["mes"], a["precio_a"], a["precio_c"], a["precio_i"]),
         "agregar_vr_contable_apoquindo": lambda a: agregar_vr_contable_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["precio_cuota"]),
+        # EEFF
+        "listar_eeff_disponibles":      lambda a: listar_eeff_disponibles(a["fondo_key"], a["año"]),
+        "leer_eeff":                    lambda a: leer_eeff(a["fondo_key"], a["año"], a["mes"]),
+        # Dividendos y Aportes
+        "agregar_dividendo_pt":         lambda a: agregar_dividendo_pt(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
+        "agregar_dividendo_rentas":     lambda a: agregar_dividendo_rentas(a["nombre_archivo"], a["año"], a["mes"], a["monto_a"], a["monto_c"], a["monto_i"]),
+        "agregar_dividendo_apoquindo":  lambda a: agregar_dividendo_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
+        "agregar_aporte_pt":            lambda a: agregar_aporte_pt(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
+        "agregar_aporte_rentas":        lambda a: agregar_aporte_rentas(a["nombre_archivo"], a["año"], a["mes"], a["monto_a"], a["monto_c"], a["monto_i"]),
+        "agregar_aporte_apoquindo":     lambda a: agregar_aporte_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
     }
     fn = dispatch.get(name)
     if fn is None:

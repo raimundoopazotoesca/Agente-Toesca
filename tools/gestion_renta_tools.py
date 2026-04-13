@@ -598,6 +598,46 @@ def agregar_vr_contable_apoquindo(nombre_archivo: str, año: int, mes: int,
                        {None: precio_cuota})
 
 
+def agregar_dividendo_pt(nombre_archivo: str, año: int, mes: int,
+                         monto_por_cuota: float) -> str:
+    """Agrega fila Dividendo en hoja A&R PT."""
+    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "Dividendo", {None: monto_por_cuota})
+
+
+def agregar_dividendo_rentas(nombre_archivo: str, año: int, mes: int,
+                              monto_a: float, monto_c: float, monto_i: float) -> str:
+    """Agrega 3 filas Dividendo en A&R Rentas (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "Dividendo",
+                       {"A": monto_a, "C": monto_c, "I": monto_i})
+
+
+def agregar_dividendo_apoquindo(nombre_archivo: str, año: int, mes: int,
+                                 monto_por_cuota: float) -> str:
+    """Agrega fila Dividendo en hoja A&R Apoquindo."""
+    return _agregar_vr(nombre_archivo, "A&R Apoquindo", año, mes, "Dividendo",
+                       {None: monto_por_cuota})
+
+
+def agregar_aporte_pt(nombre_archivo: str, año: int, mes: int,
+                      monto_por_cuota: float) -> str:
+    """Agrega fila Aporte en hoja A&R PT."""
+    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "Aporte", {None: monto_por_cuota})
+
+
+def agregar_aporte_rentas(nombre_archivo: str, año: int, mes: int,
+                           monto_a: float, monto_c: float, monto_i: float) -> str:
+    """Agrega 3 filas Aporte en A&R Rentas (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "Aporte",
+                       {"A": monto_a, "C": monto_c, "I": monto_i})
+
+
+def agregar_aporte_apoquindo(nombre_archivo: str, año: int, mes: int,
+                              monto_por_cuota: float) -> str:
+    """Agrega fila Aporte en hoja A&R Apoquindo."""
+    return _agregar_vr(nombre_archivo, "A&R Apoquindo", año, mes, "Aporte",
+                       {None: monto_por_cuota})
+
+
 def info_siguiente_accion(nombre_archivo: str) -> str:
     """
     Lee el estado actual de las hojas A&R y reporta qué falta actualizar.
