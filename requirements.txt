@@ -1,0 +1,8 @@
+openai>=1.30.0
+python-dotenv>=1.0.0
+openpyxl>=3.1.0
+pandas>=2.0.0
+
+# Solo Windows (integración con Outlook Desktop via COM)
+# En Mac, omitir o instalar con: pip install -r requirements.txt (se ignorará automáticamente)
+pywin32>=306; sys_platform == "win32"
