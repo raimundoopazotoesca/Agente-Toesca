@@ -44,6 +44,13 @@ from tools.eeff_tools import (
     listar_eeff_disponibles,
     leer_eeff,
 )
+from tools.datos_fs_tools import (
+    actualizar_fecha_ar,
+    leer_rentabilidades_ar,
+    pegar_rentabilidades_datos_fs,
+    copiar_datos_tir_rentas,
+    leer_tir_rentas_resumen,
+)
 from tools.web_bursatil_tools import (
     obtener_precio_cuota,
     obtener_precios_mes,
@@ -594,6 +601,106 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+
+    # ── DATOS FS — Rentabilidad del Fondo (en UF) ─────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fecha_ar",
+            "description": (
+                "Actualiza la celda D2 (fecha EEFF) en la hoja A&R del fondo indicado. "
+                "Usar antes de que el usuario abra Excel para recalcular XIRR. "
+                "fecha_serial es el serial Excel (ej: 46112 = 31/03/2026)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Archivo en WORK_DIR"},
+                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fecha_serial":   {"type": "integer", "description": "Serial Excel de la fecha"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_rentabilidades_ar",
+            "description": (
+                "Lee los valores cacheados de rentabilidad contable (XIRR) desde la hoja A&R. "
+                "PT/Apoquindo: N10 (inicio), O10 (YTD), P10 (12M). "
+                "Rentas: P12/Q12 (Serie A), Y12/Z12 (Serie C), AH12/AI12 (Serie I). "
+                "Si las celdas están vacías, se debe abrir Excel y guardar para recalcular."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                },
+                "required": ["nombre_archivo", "fondo_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pegar_rentabilidades_datos_fs",
+            "description": (
+                "Escribe los valores de rentabilidad libro (en UF) en las celdas hardcoded de DATOS FS. "
+                "Los valores deben ser decimales (0.05 = 5%). "
+                "Para PT/Apoquindo: rentabilidades={\"null\": {\"inicio\": 0.05, \"ytd\": 0.03, \"12m\": 0.048}}. "
+                "Para Rentas: rentabilidades={\"A\": {\"inicio\": 0.04, \"ytd\": 0.02, \"12m\": 0.038}, ...}."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":  {"type": "string"},
+                    "fondo_key":       {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "rentabilidades":  {"type": "object", "description": "Dict con valores por serie y métrica"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "rentabilidades"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "copiar_datos_tir_rentas",
+            "description": (
+                "Copia las columnas C:M de la hoja A&R Rentas (archivo CG) a las columnas B:L "
+                "de la hoja 'TIR Fondo' en el archivo TIR. Necesario para que el archivo TIR "
+                "calcule la rentabilidad desde inicio de cada serie."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_cg":  {"type": "string", "description": "Archivo Control de Gestión en WORK_DIR"},
+                    "archivo_tir": {"type": "string", "description": "Archivo TIR Fondo Rentas en WORK_DIR"},
+                },
+                "required": ["archivo_cg", "archivo_tir"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_tir_rentas_resumen",
+            "description": (
+                "Lee la hoja 'Resumen' del archivo TIR Fondo Rentas para obtener la TIR "
+                "desde inicio anualizada por serie (A, C, I). Muestra el contenido completo "
+                "para que el agente identifique los valores correctos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_tir": {"type": "string", "description": "Archivo TIR Fondo Rentas en WORK_DIR"},
+                },
+                "required": ["archivo_tir"],
+            },
+        },
+    },
 ]
 
 
@@ -636,6 +743,12 @@ def _dispatch(name: str, args: dict) -> str:
         "agregar_aporte_pt":            lambda a: agregar_aporte_pt(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
         "agregar_aporte_rentas":        lambda a: agregar_aporte_rentas(a["nombre_archivo"], a["año"], a["mes"], a["monto_a"], a["monto_c"], a["monto_i"]),
         "agregar_aporte_apoquindo":     lambda a: agregar_aporte_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
+        # DATOS FS — Rentabilidad
+        "actualizar_fecha_ar":          lambda a: actualizar_fecha_ar(a["nombre_archivo"], a["fondo_key"], a["fecha_serial"]),
+        "leer_rentabilidades_ar":       lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
+        "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(a["nombre_archivo"], a["fondo_key"], a["rentabilidades"]),
+        "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
+        "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
     }
     fn = dispatch.get(name)
     if fn is None:
