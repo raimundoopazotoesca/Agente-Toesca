@@ -12,9 +12,9 @@ from config import FONDOS_DIR, LOCAL_FILES_DIR, SHAREPOINT_DIR
 # Mapeo de clave SHEET_CFG → nombre de carpeta en disco
 # Ajustar si los nombres reales difieren
 FONDO_CARPETAS = {
-    "A&R Apoquindo": "A&R Apoquindo",
-    "A&R PT":        "A&R PT",
-    "A&R Rentas":    "A&R Rentas",
+    "A&R Apoquindo": "FI Toesca Rentas Apoquindo",
+    "A&R PT":        "FI Toesca Rentas PT",
+    "A&R Rentas":    "FI Toesca Rentas",
 }
 
 # Series por fondo (sincronizado con gestion_renta_tools.SHEET_CFG)
@@ -52,27 +52,50 @@ def _parse_cl_number(s: str):
 def _find_trimestre_folder(ruta_año: str, mes: int):
     """
     Busca la carpeta del trimestre que corresponde al mes dado.
-    Maneja formatos: "31-03-2025", "2025-03-31", "03-2025", "Marzo 2025", etc.
-    Retorna la ruta completa o None.
+    Maneja los formatos reales encontrados en R:/Rentas/Fondos:
+      - "1Q", "2Q", "3Q", "4Q"       (trimestre; Q1=mar, Q2=jun, Q3=sep, Q4=dic)
+      - "2503", "2506", "2509"        (YYMM)
+      - "2303 Marzo", "2306 Junio"    (YYMM + nombre)
+      - "Marzo", "Junio", "Diciembre" (solo nombre)
+      - "03-2025", "06-2025"          (MM-YYYY)
+      - "31-03-2025", "2025-03-31"    (fecha completa)
     """
     if not os.path.isdir(ruta_año):
         return None
+
     mes_str = f"{mes:02d}"
-    # Nombres de mes en español (para formatos tipo "Marzo 2025")
     meses_es = {
         1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
         5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
         9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
     }
+    # Mes → número de trimestre (solo para meses de cierre: 3,6,9,12)
+    mes_a_q = {3: "1", 6: "2", 9: "3", 12: "4"}
+    q_str = mes_a_q.get(mes, "")
     mes_nombre = meses_es.get(mes, "")
+
     carpetas = sorted(os.listdir(ruta_año))
     for c in carpetas:
-        c_lower = c.lower()
-        # Coincidencia numérica (01, 03, 06, 09, 12) o nombre
+        if not os.path.isdir(os.path.join(ruta_año, c)):
+            continue
+        c_lower = c.lower().strip()
+
+        # Formato "1Q", "2Q", "3Q", "4Q"
+        if q_str and c_lower == f"{q_str}q":
+            return os.path.join(ruta_año, c)
+
+        # Formato YYMM: "2503", "2506" — los últimos 2 dígitos son el mes
+        if re.fullmatch(r"\d{4}", c) and c[2:] == mes_str:
+            return os.path.join(ruta_año, c)
+
+        # Formato "YYMM Nombre": "2303 Marzo", "2506 Junio"
+        if re.match(r"\d{4}\s", c) and c[2:4] == mes_str:
+            return os.path.join(ruta_año, c)
+
+        # Formato numérico con mes embebido o nombre de mes
         if mes_str in c or mes_nombre in c_lower:
-            ruta = os.path.join(ruta_año, c)
-            if os.path.isdir(ruta):
-                return ruta
+            return os.path.join(ruta_año, c)
+
     return None
 
 
