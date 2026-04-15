@@ -57,6 +57,8 @@ from tools.caja_tools import (
     leer_celdas_caja,
     inspeccionar_caja_historica,
     agregar_fila_caja_historica,
+    archivar_saldo_caja,
+    listar_saldo_caja_archivados,
 )
 from tools.web_bursatil_tools import (
     obtener_precio_cuota,
@@ -713,6 +715,32 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "archivar_saldo_caja",
+            "description": (
+                "Guarda una copia del archivo Saldo Caja en la carpeta de archivo histórico "
+                "(SALDO_CAJA_DIR o WORK_DIR/saldo_caja/). No sobreescribe si ya existe. "
+                "Llamar después de descargar el adjunto de María José Castro."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Archivo en WORK_DIR a archivar"},
+                },
+                "required": ["nombre_archivo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_saldo_caja_archivados",
+            "description": "Lista todos los archivos Saldo Caja guardados en el archivo histórico.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "listar_hojas_saldo_caja",
             "description": (
                 "Lista las hojas del archivo 'Saldo Caja + FFMM Inmobiliario' (enviado "
@@ -863,6 +891,8 @@ def _dispatch(name: str, args: dict) -> str:
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
         # Caja
+        "archivar_saldo_caja":          lambda a: archivar_saldo_caja(a["nombre_archivo"]),
+        "listar_saldo_caja_archivados": lambda a: listar_saldo_caja_archivados(),
         "listar_hojas_saldo_caja":      lambda a: listar_hojas_saldo_caja(a["archivo_saldo_caja"]),
         "copiar_datos_saldo_caja":      lambda a: copiar_datos_saldo_caja(a["archivo_cg"], a["archivo_saldo_caja"], a["nombre_hoja"]),
         "leer_celdas_caja":             lambda a: leer_celdas_caja(a["archivo_cg"]),

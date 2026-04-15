@@ -20,10 +20,17 @@ Sobre limpieza de números:
 """
 import os
 import re
+import shutil
 import zipfile
 from calendar import monthrange
 from datetime import date, timedelta
-from config import WORK_DIR
+from config import WORK_DIR, SALDO_CAJA_DIR
+
+# Carpeta de archivo: si no está configurada, usa WORK_DIR/saldo_caja/
+def _resolve_saldo_caja_dir() -> str:
+    if SALDO_CAJA_DIR:
+        return SALDO_CAJA_DIR
+    return os.path.join(WORK_DIR, "saldo_caja")
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -600,3 +607,50 @@ def agregar_fila_caja_historica(
         )
     except Exception as e:
         return f"Error al agregar fila histórica: {e}"
+
+
+def archivar_saldo_caja(nombre_archivo: str) -> str:
+    """
+    Copia el archivo Saldo Caja desde WORK_DIR a la carpeta de archivo histórico.
+    Si ya existe un archivo con ese nombre, no lo sobreescribe.
+
+    La carpeta de destino se configura con SALDO_CAJA_DIR en .env.
+    Por defecto usa WORK_DIR/saldo_caja/.
+
+    Útil para guardar cada planilla que envía María José y tener un historial.
+    """
+    src = _resolve_path(nombre_archivo)
+    if not os.path.exists(src):
+        return f"Error: no se encontró '{src}'."
+
+    carpeta = _resolve_saldo_caja_dir()
+    os.makedirs(carpeta, exist_ok=True)
+
+    dst = os.path.join(carpeta, os.path.basename(nombre_archivo))
+    if os.path.exists(dst):
+        return f"Ya existe en archivo: {dst}\n(No se sobreescribió.)"
+
+    shutil.copy2(src, dst)
+    return f"OK: guardado en {dst}"
+
+
+def listar_saldo_caja_archivados() -> str:
+    """
+    Lista todos los archivos Saldo Caja guardados en la carpeta de archivo histórico.
+    """
+    carpeta = _resolve_saldo_caja_dir()
+    if not os.path.isdir(carpeta):
+        return f"Carpeta de archivo vacía o no existe: {carpeta}"
+
+    archivos = sorted(
+        f for f in os.listdir(carpeta)
+        if f.lower().endswith((".xlsx", ".xls"))
+    )
+    if not archivos:
+        return f"No hay archivos en {carpeta}"
+
+    lines = [f"Archivos Saldo Caja en {carpeta}:"]
+    for f in archivos:
+        size = os.path.getsize(os.path.join(carpeta, f))
+        lines.append(f"  - {f}  ({size // 1024} KB)")
+    return "\n".join(lines)
