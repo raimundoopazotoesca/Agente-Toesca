@@ -60,6 +60,13 @@ from tools.caja_tools import (
     archivar_saldo_caja,
     listar_saldo_caja_archivados,
 )
+from tools.input_tools import (
+    actualizar_balance_input,
+    actualizar_fecha_bursatil_input,
+    actualizar_fecha_contable_input,
+    agregar_dividendo_input,
+    inspeccionar_dividendos_input,
+)
 from tools.web_bursatil_tools import (
     obtener_precio_cuota,
     obtener_precios_mes,
@@ -842,6 +849,120 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Input Tools ─────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_input",
+            "description": (
+                "Actualiza el balance trimestral en la hoja Input AP/PT/Ren del CDG. "
+                "Escribe la fecha en B5 (como serial Excel) y los valores en C5:J5 "
+                "(caja, activos circulantes, otros activos, pasivo circ, pasivo LP, "
+                "interés minoritario, patrimonio). Usar después de leer el EEFF del trimestre."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo":  {"type": "string", "description": "Nombre del CDG en work/"},
+                    "fondo_key":       {"type": "string", "description": "Clave del fondo: 'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "año":             {"type": "integer"},
+                    "mes":             {"type": "integer", "description": "Mes de cierre del trimestre (3, 6, 9 o 12)"},
+                    "caja":            {"type": "number"},
+                    "activos_circ":    {"type": "number"},
+                    "otros_activos":   {"type": "number"},
+                    "pasivo_circ":     {"type": "number"},
+                    "pasivo_lp":       {"type": "number"},
+                    "interes_min":     {"type": "number"},
+                    "patrimonio":      {"type": "number"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "año", "mes",
+                             "caja", "activos_circ", "otros_activos",
+                             "pasivo_circ", "pasivo_lp", "interes_min", "patrimonio"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fecha_bursatil_input",
+            "description": (
+                "Actualiza la celda de fecha bursátil mensual en la hoja Input AP/PT/Ren. "
+                "La celda varía por fondo: AP→D9, PT→C11, Ren→C10. "
+                "Usar cada mes para registrar la fecha bursátil de valorización."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fecha_serial":   {"type": "integer", "description": "Fecha como serial Excel (días desde 1899-12-30)"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fecha_contable_input",
+            "description": (
+                "Actualiza la celda de fecha contable trimestral en la hoja Input AP/PT/Ren. "
+                "La celda varía por fondo: AP→C9, PT→D11, Ren→D10. "
+                "Usar cada trimestre cuando se publica el EEFF."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fecha_serial":   {"type": "integer", "description": "Fecha como serial Excel (días desde 1899-12-30)"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_dividendo_input",
+            "description": (
+                "Agrega la fecha de un reparto de dividendos en la tabla de dividendos "
+                "de la hoja Input AP/PT/Ren. Busca la primera fila vacía (B=0) y escribe "
+                "la fecha; los montos son calculados automáticamente por fórmulas de Excel. "
+                "Verifica duplicados antes de escribir."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                    "dia":            {"type": "integer", "description": "Día del mes (opcional, default=último día del mes)"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspeccionar_dividendos_input",
+            "description": (
+                "Muestra las filas de la tabla de dividendos de la hoja Input AP/PT/Ren "
+                "para verificar qué fechas ya están registradas y qué filas están vacías. "
+                "Útil antes de agregar un dividendo."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                },
+                "required": ["nombre_archivo", "fondo_key"],
+            },
+        },
+    },
 ]
 
 
@@ -902,6 +1023,24 @@ def _dispatch(name: str, args: dict) -> str:
             a["col_fecha"], a["col_r5"], a["col_r22"], a["col_r26"],
             a["valor_r5"], a["valor_r22"], a["valor_r26"],
             a.get("fila_inicio_datos", 32),
+        ),
+        # Input AP / PT / Ren
+        "actualizar_balance_input":      lambda a: actualizar_balance_input(
+            a["nombre_archivo"], a["fondo_key"], a["año"], a["mes"],
+            a["caja"], a["activos_circ"], a["otros_activos"],
+            a["pasivo_circ"], a["pasivo_lp"], a["interes_min"], a["patrimonio"],
+        ),
+        "actualizar_fecha_bursatil_input": lambda a: actualizar_fecha_bursatil_input(
+            a["nombre_archivo"], a["fondo_key"], a["fecha_serial"],
+        ),
+        "actualizar_fecha_contable_input": lambda a: actualizar_fecha_contable_input(
+            a["nombre_archivo"], a["fondo_key"], a["fecha_serial"],
+        ),
+        "agregar_dividendo_input":       lambda a: agregar_dividendo_input(
+            a["nombre_archivo"], a["fondo_key"], a["año"], a["mes"], a.get("dia"),
+        ),
+        "inspeccionar_dividendos_input": lambda a: inspeccionar_dividendos_input(
+            a["nombre_archivo"], a["fondo_key"],
         ),
     }
     fn = dispatch.get(name)
