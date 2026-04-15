@@ -51,6 +51,13 @@ from tools.datos_fs_tools import (
     copiar_datos_tir_rentas,
     leer_tir_rentas_resumen,
 )
+from tools.caja_tools import (
+    listar_hojas_saldo_caja,
+    copiar_datos_saldo_caja,
+    leer_celdas_caja,
+    inspeccionar_caja_historica,
+    agregar_fila_caja_historica,
+)
 from tools.web_bursatil_tools import (
     obtener_precio_cuota,
     obtener_precios_mes,
@@ -701,6 +708,112 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+
+    # ── Hoja Caja ──────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_hojas_saldo_caja",
+            "description": (
+                "Lista las hojas del archivo 'Saldo Caja + FFMM Inmobiliario' (enviado "
+                "por María José Castro los lunes). Las hojas tienen nombres de fecha; "
+                "usar para elegir la más cercana al mes del CDG."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_saldo_caja": {"type": "string", "description": "Archivo en WORK_DIR"},
+                },
+                "required": ["archivo_saldo_caja"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "copiar_datos_saldo_caja",
+            "description": (
+                "Copia las columnas A:I de la hoja indicada del archivo Saldo Caja "
+                "a las columnas A:I de la hoja 'Caja' en el CDG. "
+                "Limpia automáticamente números almacenados como texto con puntos (ej: '1.234.567'). "
+                "Después de ejecutar, abrir el CDG en Excel y guardar para que R5/R22/R26 recalculen."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_cg":          {"type": "string", "description": "Archivo CDG en WORK_DIR"},
+                    "archivo_saldo_caja":  {"type": "string", "description": "Archivo Saldo Caja en WORK_DIR"},
+                    "nombre_hoja":         {"type": "string", "description": "Nombre de la hoja a usar (ej: '02-02-2026')"},
+                },
+                "required": ["archivo_cg", "archivo_saldo_caja", "nombre_hoja"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_celdas_caja",
+            "description": (
+                "Lee los valores cacheados de R5, R22 y R26 de la hoja 'Caja' del CDG. "
+                "Ejecutar después de haber abierto y guardado el CDG en Excel "
+                "(para que las fórmulas recalculen con los datos pegados)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_cg": {"type": "string", "description": "Archivo CDG en WORK_DIR"},
+                },
+                "required": ["archivo_cg"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "inspeccionar_caja_historica",
+            "description": (
+                "Muestra el contenido de las filas 28–40 de la hoja 'Caja' para identificar "
+                "la estructura de la tabla Caja Histórica (cabeceras y columnas). "
+                "Ejecutar antes de agregar_fila_caja_historica para saber qué columnas usar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_cg": {"type": "string", "description": "Archivo CDG en WORK_DIR"},
+                },
+                "required": ["archivo_cg"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "agregar_fila_caja_historica",
+            "description": (
+                "Añade una nueva fila a la tabla Caja Histórica (comienza en fila 31). "
+                "La fecha se calcula automáticamente como el último día del mes. "
+                "Requiere saber qué columnas usar (llamar inspeccionar_caja_historica primero)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "archivo_cg":         {"type": "string"},
+                    "año":                {"type": "integer", "description": "Año del CDG (ej: 2026)"},
+                    "mes":                {"type": "integer", "description": "Mes del CDG (ej: 1 para enero)"},
+                    "col_fecha":          {"type": "string", "description": "Columna de fecha (ej: 'A')"},
+                    "col_r5":             {"type": "string", "description": "Columna del valor R5"},
+                    "col_r22":            {"type": "string", "description": "Columna del valor R22"},
+                    "col_r26":            {"type": "string", "description": "Columna del valor R26"},
+                    "valor_r5":           {"type": "number", "description": "Valor numérico de celda R5"},
+                    "valor_r22":          {"type": "number", "description": "Valor numérico de celda R22"},
+                    "valor_r26":          {"type": "number", "description": "Valor numérico de celda R26"},
+                    "fila_inicio_datos":  {"type": "integer", "description": "Primera fila de datos (default: 32)"},
+                },
+                "required": ["archivo_cg", "año", "mes", "col_fecha", "col_r5", "col_r22", "col_r26",
+                             "valor_r5", "valor_r22", "valor_r26"],
+            },
+        },
+    },
 ]
 
 
@@ -749,6 +862,17 @@ def _dispatch(name: str, args: dict) -> str:
         "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(a["nombre_archivo"], a["fondo_key"], a["rentabilidades"]),
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
+        # Caja
+        "listar_hojas_saldo_caja":      lambda a: listar_hojas_saldo_caja(a["archivo_saldo_caja"]),
+        "copiar_datos_saldo_caja":      lambda a: copiar_datos_saldo_caja(a["archivo_cg"], a["archivo_saldo_caja"], a["nombre_hoja"]),
+        "leer_celdas_caja":             lambda a: leer_celdas_caja(a["archivo_cg"]),
+        "inspeccionar_caja_historica":  lambda a: inspeccionar_caja_historica(a["archivo_cg"]),
+        "agregar_fila_caja_historica":  lambda a: agregar_fila_caja_historica(
+            a["archivo_cg"], a["año"], a["mes"],
+            a["col_fecha"], a["col_r5"], a["col_r22"], a["col_r26"],
+            a["valor_r5"], a["valor_r22"], a["valor_r26"],
+            a.get("fila_inicio_datos", 32),
+        ),
     }
     fn = dispatch.get(name)
     if fn is None:
