@@ -8,6 +8,7 @@ Agente conversacional con Gemini 2.5 Flash para automatizar Outlook, SharePoint 
 |---|---|---|
 | Excel / SharePoint / archivos | OK | OK |
 | Gestión Renta Comercial (xlsx) | OK | OK |
+| NOI-RCSD: ER Viña, ER Curicó, JLL, INMOSA | OK | OK |
 | Precios bursátiles (web) | OK | OK |
 | Email (Outlook Desktop) | OK | No disponible |
 

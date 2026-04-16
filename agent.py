@@ -71,6 +71,25 @@ from tools.web_bursatil_tools import (
     obtener_precio_cuota,
     obtener_precios_mes,
 )
+from tools.rentroll_tools import (
+    revisar_rent_rolls,
+    enviar_emails_rent_roll,
+    consolidar_rent_rolls,
+    consolidar_absorcion,
+)
+from tools.vacancia_tools import (
+    actualizar_vacancia,
+    refrescar_tabla_rentas_2,
+)
+from tools.noi_tools import (
+    actualizar_er_vina,
+    actualizar_er_curico,
+    actualizar_noi_pt,
+    actualizar_noi_apoquindo,
+    actualizar_noi_apo3001,
+    actualizar_noi_inmosa,
+    inspeccionar_noi_rcsd,
+)
 from config import GEMINI_API_KEY
 
 load_dotenv()
@@ -963,6 +982,270 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Vacancia y Tabla Rentas 2 ──────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_vacancia",
+            "description": (
+                "Lee los m2 vacantes del período indicado desde la hoja Resumen del CDG "
+                "y los escribe en la columna correspondiente de la hoja Vacancia (filas 47-58). "
+                "Usar mensualmente después de consolidar el Rent Roll. "
+                "Después de ejecutar, llamar a refrescar_tabla_rentas_2."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg": {"type": "string", "description": "Nombre del archivo CDG en WORK_DIR"},
+                    "año":        {"type": "integer", "description": "Año del período (ej: 2026)"},
+                    "mes":        {"type": "integer", "description": "Mes del período (1-12)"},
+                },
+                "required": ["nombre_cdg", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "refrescar_tabla_rentas_2",
+            "description": (
+                "Refresca la tabla dinámica en la hoja 'Tabla Rentas 2' del CDG via Excel COM (solo Windows). "
+                "Es necesario para que la hoja Facts Sheet tenga datos actualizados. "
+                "Usar después de actualizar_vacancia y consolidar_rent_rolls."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg": {"type": "string", "description": "Nombre del archivo CDG en WORK_DIR"},
+                },
+                "required": ["nombre_cdg"],
+            },
+        },
+    },
+    # ── Rent Roll ──────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "revisar_rent_rolls",
+            "description": (
+                "Busca los archivos de Rent Roll del mes indicado en WORK_DIR "
+                "(JLL y Tres Asociados), ejecuta las 4 validaciones "
+                "(coherencia de vacantes, absorción, renta escalonada, contratos vencidos) "
+                "y retorna el resumen de errores por proveedor. "
+                "Usar cuando el usuario pida revisar los RR o el rent roll de un mes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del mes a revisar (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes a revisar (1-12)"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consolidar_absorcion",
+            "description": (
+                "Sincroniza la hoja 'Absorcion' del CDG con las hojas Absorción de los "
+                "proveedores (JLL y Tres A) del período indicado. "
+                "Solo agrega entradas nuevas (deduplicación automática). "
+                "Las nuevas filas se insertan al final del bloque del activo correspondiente. "
+                "Usar después de consolidar el Rent Roll."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":        {"type": "integer"},
+                    "mes":        {"type": "integer"},
+                    "nombre_cdg": {"type": "string"},
+                },
+                "required": ["año", "mes", "nombre_cdg"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consolidar_rent_rolls",
+            "description": (
+                "Copia los datos de los Rent Rolls de proveedores (JLL y Tres A) "
+                "a la hoja 'Rent Roll' del CDG. Usa (Activo2, Detalle Activo) como "
+                "clave de matching — nunca mueve filas ni toca columnas calculadas. "
+                "Usar después de revisar y corregir los RR, cuando el usuario pida consolidar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":       {"type": "integer", "description": "Año del período (ej: 2026)"},
+                    "mes":       {"type": "integer", "description": "Mes del período (1-12)"},
+                    "nombre_cdg": {"type": "string", "description": "Nombre del archivo CDG en WORK_DIR (ej: '2601 Control De Gestión.xlsx')"},
+                },
+                "required": ["año", "mes", "nombre_cdg"],
+            },
+        },
+    },
+    # ── NOI-RCSD ───────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "inspeccionar_noi_rcsd",
+            "description": (
+                "Muestra las etiquetas y el último valor registrado para un activo "
+                "en la hoja NOI-RCSD del CDG. Útil para entender la estructura antes "
+                "de actualizar. activo: 'inmosa', 'pt', 'apoquindo' o 'apo3001'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg": {"type": "string"},
+                    "activo":     {"type": "string", "description": "'inmosa' | 'pt' | 'apoquindo' | 'apo3001'"},
+                },
+                "required": ["nombre_cdg", "activo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_er_vina",
+            "description": (
+                "Lee el INFORME EEFF de Viña Centro (Tres Asociados) y agrega la columna "
+                "del mes indicado en la hoja 'ER Viña' del CDG. Los valores se guardan en UF. "
+                "La hoja NOI-RCSD se actualiza automáticamente por fórmulas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":  {"type": "string", "description": "Nombre del CDG en WORK_DIR"},
+                    "año":         {"type": "integer"},
+                    "mes":         {"type": "integer"},
+                    "nombre_eeff": {"type": "string", "description": "Nombre del INFORME EEFF en WORK_DIR (opcional, se busca automáticamente)"},
+                },
+                "required": ["nombre_cdg", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_er_curico",
+            "description": (
+                "Lee el INFORME EEFF de Curicó (Tres Asociados) y agrega la columna "
+                "del mes indicado en la hoja 'ER Curico' del CDG. Los valores se guardan en CLP. "
+                "La hoja NOI-RCSD se actualiza automáticamente por fórmulas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":  {"type": "string", "description": "Nombre del CDG en WORK_DIR"},
+                    "año":         {"type": "integer"},
+                    "mes":         {"type": "integer"},
+                    "nombre_eeff": {"type": "string", "description": "Nombre del INFORME EEFF en WORK_DIR (opcional, se busca automáticamente)"},
+                },
+                "required": ["nombre_cdg", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_noi_pt",
+            "description": (
+                "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 335-379 del NOI-RCSD "
+                "(sección Parque Titanium). Las celdas con fórmula no se modifican."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":     {"type": "string"},
+                    "nombre_rr_jll":  {"type": "string", "description": "Archivo RR JLL en WORK_DIR"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                },
+                "required": ["nombre_cdg", "nombre_rr_jll", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_noi_apoquindo",
+            "description": (
+                "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 426-456 del NOI-RCSD "
+                "(sección Fondo Apoquindo). Las celdas con fórmula no se modifican."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":     {"type": "string"},
+                    "nombre_rr_jll":  {"type": "string"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                },
+                "required": ["nombre_cdg", "nombre_rr_jll", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_noi_apo3001",
+            "description": (
+                "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 468-476 del NOI-RCSD "
+                "(sección Apoquindo 3001). Las celdas con fórmula no se modifican."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":     {"type": "string"},
+                    "nombre_rr_jll":  {"type": "string"},
+                    "año":            {"type": "integer"},
+                    "mes":            {"type": "integer"},
+                },
+                "required": ["nombre_cdg", "nombre_rr_jll", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_noi_inmosa",
+            "description": (
+                "Copia los valores de INMOSA desde la planilla ER-FC INMOSA "
+                "a las filas 287-295 del NOI-RCSD. "
+                "El archivo ER-FC INMOSA debe estar en WORK_DIR."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg":       {"type": "string"},
+                    "nombre_er_inmosa": {"type": "string", "description": "Nombre del archivo ER-FC INMOSA en WORK_DIR"},
+                    "año":              {"type": "integer"},
+                    "mes":              {"type": "integer"},
+                },
+                "required": ["nombre_cdg", "nombre_er_inmosa", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enviar_emails_rent_roll",
+            "description": (
+                "Envía los correos con los errores de Rent Roll a Nicole (JLL) y Sebastián (Tres A), "
+                "basándose en el resultado de la última revisión con 'revisar_rent_rolls'. "
+                "Usar solo después de que el usuario confirme los errores."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -1042,6 +1325,22 @@ def _dispatch(name: str, args: dict) -> str:
         "inspeccionar_dividendos_input": lambda a: inspeccionar_dividendos_input(
             a["nombre_archivo"], a["fondo_key"],
         ),
+        # Vacancia y Tabla Rentas 2
+        "actualizar_vacancia":           lambda a: actualizar_vacancia(a["nombre_cdg"], a["año"], a["mes"]),
+        "refrescar_tabla_rentas_2":      lambda a: refrescar_tabla_rentas_2(a["nombre_cdg"]),
+        # Rent Roll
+        "revisar_rent_rolls":            lambda a: revisar_rent_rolls(a["año"], a["mes"]),
+        "enviar_emails_rent_roll":       lambda a: enviar_emails_rent_roll(),
+        "consolidar_rent_rolls":         lambda a: consolidar_rent_rolls(a["año"], a["mes"], a["nombre_cdg"]),
+        "consolidar_absorcion":          lambda a: consolidar_absorcion(a["año"], a["mes"], a["nombre_cdg"]),
+        # NOI-RCSD
+        "inspeccionar_noi_rcsd":         lambda a: inspeccionar_noi_rcsd(a["nombre_cdg"], a["activo"]),
+        "actualizar_er_vina":            lambda a: actualizar_er_vina(a["nombre_cdg"], a["año"], a["mes"], a.get("nombre_eeff")),
+        "actualizar_er_curico":          lambda a: actualizar_er_curico(a["nombre_cdg"], a["año"], a["mes"], a.get("nombre_eeff")),
+        "actualizar_noi_pt":             lambda a: actualizar_noi_pt(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
+        "actualizar_noi_apoquindo":      lambda a: actualizar_noi_apoquindo(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
+        "actualizar_noi_apo3001":        lambda a: actualizar_noi_apo3001(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
+        "actualizar_noi_inmosa":         lambda a: actualizar_noi_inmosa(a["nombre_cdg"], a["nombre_er_inmosa"], a["año"], a["mes"]),
     }
     fn = dispatch.get(name)
     if fn is None:
