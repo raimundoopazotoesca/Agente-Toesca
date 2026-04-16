@@ -169,7 +169,7 @@ def extraer_datos_eeff(pdf_path: str, fondo_key: str) -> dict:
       - valor_cuota: {serie_o_None: float}
       - dividendos:  [{serie, monto_por_cuota}]
       - aportes:     [{serie, monto_por_cuota}]
-      - texto_relevante: str (páginas con datos clave, para lectura del agente)
+      - texto_relevante: str (secciones con datos clave, para lectura del agente)
       - error: str | None
     """
     result = {
@@ -180,9 +180,9 @@ def extraer_datos_eeff(pdf_path: str, fondo_key: str) -> dict:
         "error": None,
     }
     try:
-        import pdfplumber
+        from markitdown import MarkItDown
     except ImportError:
-        result["error"] = "pdfplumber no instalado. Ejecutar: pip install pdfplumber"
+        result["error"] = "markitdown no instalado. Ejecutar: pip install markitdown[all]"
         return result
 
     series = FONDO_SERIES.get(fondo_key, [None])
@@ -190,72 +190,64 @@ def extraer_datos_eeff(pdf_path: str, fondo_key: str) -> dict:
                 "activo neto", "patrimonio", "cuotas en circulaci"]
 
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            paginas_relevantes = []
-            texto_completo = ""
+        md = MarkItDown()
+        texto_completo = md.convert(pdf_path).text_content or ""
 
-            for i, page in enumerate(pdf.pages):
-                texto = page.extract_text() or ""
-                texto_completo += texto + "\n\n"
-                texto_lower = texto.lower()
-                if any(kw in texto_lower for kw in keywords):
-                    paginas_relevantes.append(f"[Página {i + 1}]\n{texto}")
+        # Extraer secciones relevantes (párrafos/bloques que contienen keywords)
+        bloques = texto_completo.split("\n\n")
+        relevantes = [b for b in bloques if any(kw in b.lower() for kw in keywords)]
+        result["texto_relevante"] = "\n\n---\n\n".join(relevantes[:12])
 
-            result["texto_relevante"] = "\n\n---\n\n".join(paginas_relevantes[:6])
-
-            # ── Extracción automática de valor cuota libro ──────────────────
-            if series == [None]:
-                # Fondo de serie única
-                patrones = [
-                    r"[Vv]alor\s+cuota\s+libro[^0-9$]*\$?\s*([\d\.,]+)",
-                    r"[Vv]alor\s+de\s+la\s+cuota[^0-9$]*\$?\s*([\d\.,]+)",
-                    r"[Vv]alor\s+cuota[^0-9$\n]{0,30}\$?\s*([\d\.,]+)",
+        # ── Extracción automática de valor cuota libro ──────────────────
+        if series == [None]:
+            patrones = [
+                r"[Vv]alor\s+cuota\s+libro[^0-9$]*\$?\s*([\d\.,]+)",
+                r"[Vv]alor\s+de\s+la\s+cuota[^0-9$]*\$?\s*([\d\.,]+)",
+                r"[Vv]alor\s+cuota[^0-9$\n]{0,30}\$?\s*([\d\.,]+)",
+            ]
+            for pat in patrones:
+                m = re.search(pat, texto_completo)
+                if m:
+                    val = _parse_cl_number(m.group(1))
+                    if val and val > 100:
+                        result["valor_cuota"][None] = val
+                        break
+        else:
+            for serie in series:
+                patrones_serie = [
+                    rf"[Ss]erie\s+{serie}\b[^0-9$\n]{{0,60}}\$?\s*([\d\.,]{{4,}})",
+                    rf"[Cc]uota\s+[Ss]erie\s+{serie}[^0-9$\n]{{0,40}}\$?\s*([\d\.,]{{4,}})",
+                    rf"\b{serie}\s*[\|\s]\s*([\d\.,]{{4,}})",
                 ]
-                for pat in patrones:
+                for pat in patrones_serie:
                     m = re.search(pat, texto_completo)
                     if m:
                         val = _parse_cl_number(m.group(1))
                         if val and val > 100:
-                            result["valor_cuota"][None] = val
+                            result["valor_cuota"][serie] = val
                             break
-            else:
-                # Fondo multiserie: buscar por cada serie
-                for serie in series:
-                    patrones_serie = [
-                        rf"[Ss]erie\s+{serie}\b[^0-9$\n]{{0,60}}\$?\s*([\d\.,]{{4,}})",
-                        rf"[Cc]uota\s+[Ss]erie\s+{serie}[^0-9$\n]{{0,40}}\$?\s*([\d\.,]{{4,}})",
-                        # En tablas: "A ... XXXX" o "Serie A | XXXX"
-                        rf"\b{serie}\s*[\|\s]\s*([\d\.,]{{4,}})",
-                    ]
-                    for pat in patrones_serie:
-                        m = re.search(pat, texto_completo)
-                        if m:
-                            val = _parse_cl_number(m.group(1))
-                            if val and val > 100:
-                                result["valor_cuota"][serie] = val
-                                break
 
-            # ── Extracción de dividendos ────────────────────────────────────
-            patrones_div = [
-                r"[Dd]ividendo[s]?\s+pagado[s]?[^0-9$\n]{0,40}\$?\s*([\d\.,]+)",
-                r"[Dd]ividendo[s]?\s+por\s+cuota[^0-9$\n]{0,20}\$?\s*([\d\.,]+)",
-                r"[Dd]istribuci[oó]n[^0-9$\n]{0,40}\$?\s*([\d\.,]+)",
-            ]
-            for pat in patrones_div:
-                m = re.search(pat, texto_completo)
-                if m:
-                    val = _parse_cl_number(m.group(1))
-                    if val:
-                        result["dividendos"].append({"serie": None, "monto_por_cuota": val})
-                        break
-
-            # ── Extracción de aportes ───────────────────────────────────────
-            patron_aporte = r"[Aa]porte[s]?\s+de\s+capital[^0-9$\n]{0,40}\$?\s*([\d\.,]+)"
-            m = re.search(patron_aporte, texto_completo)
+        # ── Extracción de dividendos ────────────────────────────────────
+        patrones_div = [
+            r"[Dd]ividendo[s]?\s+pagado[s]?[^0-9$\n]{0,40}\$?\s*([\d\.,]+)",
+            r"[Dd]ividendo[s]?\s+por\s+cuota[^0-9$\n]{0,20}\$?\s*([\d\.,]+)",
+            r"[Dd]istribuci[oó]n[^0-9$\n]{0,40}\$?\s*([\d\.,]+)",
+        ]
+        for pat in patrones_div:
+            m = re.search(pat, texto_completo)
             if m:
                 val = _parse_cl_number(m.group(1))
                 if val:
-                    result["aportes"].append({"serie": None, "monto_por_cuota": val})
+                    result["dividendos"].append({"serie": None, "monto_por_cuota": val})
+                    break
+
+        # ── Extracción de aportes ───────────────────────────────────────
+        patron_aporte = r"[Aa]porte[s]?\s+de\s+capital[^0-9$\n]{0,40}\$?\s*([\d\.,]+)"
+        m = re.search(patron_aporte, texto_completo)
+        if m:
+            val = _parse_cl_number(m.group(1))
+            if val:
+                result["aportes"].append({"serie": None, "monto_por_cuota": val})
 
     except Exception as e:
         result["error"] = str(e)
