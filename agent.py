@@ -7,6 +7,10 @@ from tools.memory_tools import (
     leer_contexto,
     actualizar_contexto,
     leer_historial,
+    registrar_kpi,
+    consultar_kpi,
+    resumen_kpis,
+    comparar_periodos,
 )
 
 from tools.email_tools import (
@@ -1290,6 +1294,79 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+
+    # ── KPIs ───────────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "registrar_kpi",
+            "description": (
+                "Registra un KPI financiero o operacional para un fondo y período. "
+                "Usar después de obtener valores de: valor cuota bursátil/contable, NOI, RCSD, "
+                "TIR, LTV, dividend yield, dividendo/aporte por cuota, vacancia, superficie vacante, "
+                "ingresos de arriendo. El agente debe llamar esto proactivamente al procesar datos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo":   {"type": "string", "description": "Nombre del fondo o activo (ej: 'A&R PT', 'Viña Centro', 'Mall Curicó', 'Parque Titanium')"},
+                    "periodo": {"type": "string", "description": "Período YYYY-MM (ej: '2026-03')"},
+                    "kpi":     {"type": "string", "description": "Nombre del KPI: valor_cuota_bursatil, valor_cuota_contable, noi, rcsd, tir, ltv, dividend_yield, dividendo_por_cuota, aporte_por_cuota, vacancia, superficie_vacante, ingresos_arriendo"},
+                    "valor":   {"type": "number", "description": "Valor numérico"},
+                    "unidad":  {"type": "string", "description": "Unidad: CLP, %, m², UF (opcional)"},
+                    "fuente":  {"type": "string", "description": "Origen del dato: CMF, EEFF, RR JLL, planilla CDG (opcional)"},
+                },
+                "required": ["fondo", "periodo", "kpi", "valor"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_kpi",
+            "description": "Muestra el historial de un KPI para un fondo con variación período a período. Usar para responder preguntas sobre evolución o tendencias.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo":      {"type": "string", "description": "Nombre del fondo o activo"},
+                    "kpi":        {"type": "string", "description": "Nombre del KPI"},
+                    "n_periodos": {"type": "integer", "description": "Cuántos períodos mostrar (default 12)"},
+                },
+                "required": ["fondo", "kpi"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resumen_kpis",
+            "description": "Muestra todos los KPIs registrados para un fondo en un período específico.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo":   {"type": "string", "description": "Nombre del fondo o activo"},
+                    "periodo": {"type": "string", "description": "Período YYYY-MM"},
+                },
+                "required": ["fondo", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "comparar_periodos",
+            "description": "Compara todos los KPIs de un fondo entre dos períodos. Muestra variación porcentual. Útil para detectar anomalías o preparar reportes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo":          {"type": "string", "description": "Nombre del fondo o activo"},
+                    "periodo_base":   {"type": "string", "description": "Período base YYYY-MM"},
+                    "periodo_actual": {"type": "string", "description": "Período actual YYYY-MM"},
+                },
+                "required": ["fondo", "periodo_base", "periodo_actual"],
+            },
+        },
+    },
 ]
 
 
@@ -1389,6 +1466,11 @@ def _dispatch(name: str, args: dict) -> str:
         "leer_contexto":                 lambda a: leer_contexto(),
         "actualizar_contexto":           lambda a: actualizar_contexto(a["contenido"]),
         "leer_historial":                lambda a: leer_historial(a.get("n", 20)),
+        # KPIs
+        "registrar_kpi":                 lambda a: registrar_kpi(a["fondo"], a["periodo"], a["kpi"], a["valor"], a.get("unidad", ""), a.get("fuente", "")),
+        "consultar_kpi":                 lambda a: consultar_kpi(a["fondo"], a["kpi"], a.get("n_periodos", 12)),
+        "resumen_kpis":                  lambda a: resumen_kpis(a["fondo"], a["periodo"]),
+        "comparar_periodos":             lambda a: comparar_periodos(a["fondo"], a["periodo_base"], a["periodo_actual"]),
     }
     fn = dispatch.get(name)
     if fn is None:
