@@ -1,6 +1,13 @@
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
+from tools.memory_tools import (
+    load_memory,
+    guardar_tarea,
+    leer_contexto,
+    actualizar_contexto,
+    leer_historial,
+)
 
 from tools.email_tools import (
     list_emails_with_attachments,
@@ -1246,6 +1253,43 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+
+    # ── Memoria ────────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_contexto",
+            "description": "Lee el conocimiento acumulado del agente (context.md). Usar para consultar lo que ya sabe sobre el negocio, fondos, patrones históricos.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_contexto",
+            "description": "Actualiza el conocimiento acumulado del agente. Usar cuando se aprende algo nuevo e importante: un patrón, un valor de referencia, una anomalía, contexto del negocio.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contenido": {"type": "string", "description": "Contenido completo del nuevo contexto (reemplaza el anterior)"},
+                },
+                "required": ["contenido"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_historial",
+            "description": "Muestra las últimas tareas completadas con sus herramientas y resúmenes. Útil para análisis de patrones o para retomar trabajo anterior.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "n": {"type": "integer", "description": "Número de tareas a mostrar (default 20)"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -1341,6 +1385,10 @@ def _dispatch(name: str, args: dict) -> str:
         "actualizar_noi_apoquindo":      lambda a: actualizar_noi_apoquindo(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
         "actualizar_noi_apo3001":        lambda a: actualizar_noi_apo3001(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
         "actualizar_noi_inmosa":         lambda a: actualizar_noi_inmosa(a["nombre_cdg"], a["nombre_er_inmosa"], a["año"], a["mes"]),
+        # Memoria
+        "leer_contexto":                 lambda a: leer_contexto(),
+        "actualizar_contexto":           lambda a: actualizar_contexto(a["contenido"]),
+        "leer_historial":                lambda a: leer_historial(a.get("n", 20)),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -1355,10 +1403,19 @@ def run_agent(user_input: str) -> None:
     print(f"Instrucción: {user_input}")
     print("=" * 60)
 
+    # Inyectar memoria en el system prompt
+    memory_block = load_memory()
+    system_content = SYSTEM_PROMPT
+    if memory_block:
+        system_content = SYSTEM_PROMPT + "\n\n---\n\n" + memory_block
+
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_content},
         {"role": "user",   "content": user_input},
     ]
+
+    tools_used = []
+    final_response = ""
 
     while True:
         response = client.chat.completions.create(
@@ -1373,6 +1430,7 @@ def run_agent(user_input: str) -> None:
 
         if not msg.tool_calls:
             if msg.content:
+                final_response = msg.content
                 print(f"\nAgente: {msg.content}")
             break
 
@@ -1384,11 +1442,19 @@ def run_agent(user_input: str) -> None:
             result = _dispatch(name, args)
             print(f"  ✓ {result[:120]}{'...' if len(result) > 120 else ''}")
 
+            if name not in tools_used:
+                tools_used.append(name)
+
             messages.append({
                 "role":         "tool",
                 "tool_call_id": tool_call.id,
                 "content":      result,
             })
+
+    # Guardar tarea en historial
+    if tools_used or final_response:
+        resumen = final_response[:200] if final_response else "Tarea completada."
+        guardar_tarea(user_input, tools_used, resumen)
 
 
 def main() -> None:
