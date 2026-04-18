@@ -129,7 +129,8 @@ Flujo típico:
 6. Enviar correo con el resultado si es necesario
 
 Al terminar cada tarea resume brevemente qué hiciste e indica si encontraste errores.
-Si falta información para completar la tarea, pregunta antes de proceder."""
+Si falta información para completar la tarea, pregunta antes de proceder.
+Cuando el usuario te indique dónde encontrar un archivo, cómo se llama, o cualquier dato que no sabías, llama siempre a 'actualizar_contexto' para recordarlo en futuras sesiones."""
 
 
 # ─── Definición de herramientas ───────────────────────────────────────────────
