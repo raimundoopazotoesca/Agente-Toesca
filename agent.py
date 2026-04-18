@@ -1478,6 +1478,98 @@ def _dispatch(name: str, args: dict) -> str:
     return fn(args)
 
 
+# ─── Selección dinámica de herramientas ───────────────────────────────────────
+
+# Herramientas que siempre se incluyen (archivos, memoria, utilidades generales)
+_TOOLS_GENERAL = {
+    "buscar_correos_con_planillas", "buscar_correos_por_asunto",
+    "descargar_adjunto_correo", "enviar_correo",
+    "listar_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint",
+    "listar_servidor_local", "copiar_del_servidor", "guardar_en_servidor",
+    "leer_planilla", "validar_planilla", "actualizar_celda",
+    "listar_planillas_en_trabajo",
+    "leer_contexto", "actualizar_contexto", "leer_historial",
+    "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
+}
+
+_TOOLS_CDG = {
+    "crear_planilla_mes", "actualizar_fecha_pendientes", "info_siguiente_accion",
+    "agregar_vr_bursatil_pt", "agregar_vr_bursatil_rentas",
+    "agregar_vr_contable_pt", "agregar_vr_contable_rentas", "agregar_vr_contable_apoquindo",
+    "agregar_dividendo_pt", "agregar_dividendo_rentas", "agregar_dividendo_apoquindo",
+    "agregar_aporte_pt", "agregar_aporte_rentas", "agregar_aporte_apoquindo",
+    "obtener_precio_cuota", "obtener_precios_mes",
+    "listar_eeff_disponibles", "leer_eeff",
+    "actualizar_fecha_ar", "leer_rentabilidades_ar",
+    "pegar_rentabilidades_datos_fs", "copiar_datos_tir_rentas", "leer_tir_rentas_resumen",
+    "actualizar_balance_input", "actualizar_fecha_bursatil_input",
+    "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",
+}
+
+_TOOLS_NOI = {
+    "actualizar_er_vina", "actualizar_er_curico",
+    "actualizar_noi_pt", "actualizar_noi_apoquindo", "actualizar_noi_apo3001",
+    "actualizar_noi_inmosa", "inspeccionar_noi_rcsd",
+}
+
+_TOOLS_CAJA = {
+    "archivar_saldo_caja", "listar_saldo_caja_archivados",
+    "listar_hojas_saldo_caja", "copiar_datos_saldo_caja",
+    "leer_celdas_caja", "inspeccionar_caja_historica", "agregar_fila_caja_historica",
+}
+
+_TOOLS_RENTROLL = {
+    "revisar_rent_rolls", "consolidar_absorcion", "consolidar_rent_rolls",
+    "enviar_emails_rent_roll", "actualizar_vacancia", "refrescar_tabla_rentas_2",
+}
+
+_TOOL_INDEX = {t["function"]["name"]: t for t in TOOL_DEFINITIONS}
+
+
+def _select_tools(user_input: str) -> list:
+    """
+    Selecciona el subset de herramientas relevante para la instrucción dada.
+    Siempre incluye las herramientas generales. Agrega grupos según keywords.
+    Si no hay match claro, devuelve todas (fallback seguro).
+    """
+    u = user_input.lower()
+
+    keywords_noi = ["noi", "viña", "vina", "curicó", "curico", "inmosa",
+                    "er vina", "er viña", "er curico", "estado de resultado",
+                    "titanium", "apoquindo", "apo3001"]
+    keywords_caja = ["caja", "saldo caja", "ffmm", "maría josé", "maria jose"]
+    keywords_cdg = ["cdg", "control de gestión", "control de gestion", "planilla",
+                    "vr bursatil", "vr contable", "valor razonable", "dividendo",
+                    "aporte", "precio cuota", "bursátil", "bursatil",
+                    "input ap", "input pt", "input ren", "datos fs", "tir"]
+    keywords_rentroll = ["rent roll", "rentroll", "vacancia", "absorción",
+                         "absorcion", "jll", "nicole", "tres a", "tres asociados",
+                         "sebastian", "arrendatario", "escalonada"]
+
+    grupos = set()
+    if any(k in u for k in keywords_noi):
+        grupos.add("noi")
+    if any(k in u for k in keywords_caja):
+        grupos.add("caja")
+    if any(k in u for k in keywords_cdg):
+        grupos.add("cdg")
+    if any(k in u for k in keywords_rentroll):
+        grupos.add("rentroll")
+
+    # Si no hay match, devolver todas (fallback)
+    if not grupos:
+        return TOOL_DEFINITIONS
+
+    nombres = set(_TOOLS_GENERAL)
+    if "cdg"      in grupos: nombres |= _TOOLS_CDG
+    if "noi"      in grupos: nombres |= _TOOLS_NOI
+    if "caja"     in grupos: nombres |= _TOOLS_CAJA
+    if "rentroll" in grupos: nombres |= _TOOLS_RENTROLL
+
+    selected = [_TOOL_INDEX[n] for n in nombres if n in _TOOL_INDEX]
+    return selected
+
+
 # ─── Runner principal ─────────────────────────────────────────────────────────
 
 def run_agent(user_input: str) -> None:
@@ -1499,11 +1591,17 @@ def run_agent(user_input: str) -> None:
     tools_used = []
     final_response = ""
 
+    selected_tools = _select_tools(user_input)
+    n_selected = len(selected_tools)
+    n_total = len(TOOL_DEFINITIONS)
+    if n_selected < n_total:
+        print(f"  [tools] {n_selected}/{n_total} herramientas activas")
+
     while True:
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
-            tools=TOOL_DEFINITIONS,
+            tools=selected_tools,
             tool_choice="auto",
         )
 
