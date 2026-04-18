@@ -129,7 +129,12 @@ Flujo típico:
 6. Enviar correo con el resultado si es necesario
 
 Al terminar cada tarea resume brevemente qué hiciste e indica si encontraste errores.
-Si falta información para completar la tarea, pregunta antes de proceder.
+
+Cuando no encuentres un archivo:
+1. Antes de preguntar al usuario, usa 'listar_planillas_en_trabajo', 'listar_sharepoint' o 'listar_servidor_local' para explorar las carpetas relevantes.
+2. Si encuentras archivos con nombres similares al que buscas, usa el más probable y continúa.
+3. Solo pregunta al usuario si después de explorar sigue sin haber ningún candidato razonable.
+
 Cuando el usuario te indique dónde encontrar un archivo, cómo se llama, o cualquier dato que no sabías, llama siempre a 'actualizar_contexto' para recordarlo en futuras sesiones."""
 
 
