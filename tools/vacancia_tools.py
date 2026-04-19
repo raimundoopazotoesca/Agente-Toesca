@@ -138,6 +138,96 @@ def actualizar_vacancia(nombre_cdg: str, año: int, mes: int) -> str:
     return "\n".join(lines)
 
 
+def consultar_vacancia(nombre_cdg: str, año: int, mes: int, activo: str = None) -> str:
+    """
+    Lee los m² vacantes de la hoja Vacancia del CDG para el período indicado.
+
+    Parámetros:
+        nombre_cdg : nombre del archivo CDG en WORK_DIR
+        año        : año del período (ej: 2026)
+        mes        : mes del período (ej: 1)
+        activo     : nombre del activo a consultar (opcional). Si se omite,
+                     retorna todos los activos. Acepta coincidencia parcial
+                     (ej: "viña", "curico", "pt", "apoquindo").
+    """
+    cdg_path = os.path.join(WORK_DIR, nombre_cdg)
+    if not os.path.exists(cdg_path):
+        return f"Error: no se encontró '{nombre_cdg}' en WORK_DIR ({WORK_DIR})"
+
+    wb = openpyxl.load_workbook(cdg_path, read_only=True, data_only=True)
+    if "Vacancia" not in wb.sheetnames:
+        wb.close()
+        return "Error: no se encontró la hoja 'Vacancia' en el CDG."
+
+    ws = wb["Vacancia"]
+
+    # ── 1. Encontrar columna del período ─────────────────────────────────────
+    target_col = None
+    for col in range(1, 200):
+        v = ws.cell(row=46, column=col).value
+        if v is None:
+            continue
+        if isinstance(v, datetime) and v.year == año and v.month == mes:
+            target_col = col
+            break
+        if hasattr(v, "year") and v.year == año and v.month == mes:
+            target_col = col
+            break
+
+    if target_col is None:
+        wb.close()
+        return f"Error: no se encontró la columna para {año}-{mes:02d} en la hoja Vacancia."
+
+    # ── 2. Leer m² por activo ─────────────────────────────────────────────────
+    ACTIVOS = {
+        47: "INMOSA",
+        48: "Machalí",
+        49: "SUCDEN",
+        50: "PT Oficinas",
+        51: "PT Locales",
+        52: "PT Bodegas",
+        53: "Viña Centro",
+        54: "Apoquindo 4700",
+        55: "Apoquindo 4501",
+        56: "Fondo Apoquindo",
+        57: "Curicó",
+        58: "Apoquindo 3001",
+    }
+
+    resultados = {}
+    for row, nombre in ACTIVOS.items():
+        v = ws.cell(row=row, column=target_col).value
+        resultados[nombre] = float(v) if v not in (None, "-", "") else 0.0
+
+    wb.close()
+
+    # ── 3. Filtrar por activo si se especificó ────────────────────────────────
+    if activo:
+        filtro = activo.lower()
+        coincidencias = {k: v for k, v in resultados.items() if filtro in k.lower()}
+        if not coincidencias:
+            disponibles = ", ".join(ACTIVOS.values())
+            return (f"No se encontró el activo '{activo}'.\n"
+                    f"Activos disponibles: {disponibles}")
+        resultados = coincidencias
+
+    # ── 4. Formatear respuesta ────────────────────────────────────────────────
+    MESES = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
+             7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
+    lines = [f"Vacancia — {MESES.get(mes, mes)} {año}", ""]
+    lines.append(f"  {'Activo':<22}  {'m² vacantes':>12}")
+    lines.append("  " + "-" * 37)
+    total = 0
+    for nombre, m2 in resultados.items():
+        lines.append(f"  {nombre:<22}  {m2:>12,.0f}")
+        if nombre != "Fondo Apoquindo":  # evitar doble conteo
+            total += m2
+    if len(resultados) > 1:
+        lines.append("  " + "-" * 37)
+        lines.append(f"  {'Total':<22}  {total:>12,.0f}")
+    return "\n".join(lines)
+
+
 def refrescar_tabla_rentas_2(nombre_cdg: str) -> str:
     """
     Refresca la tabla dinámica en la hoja 'Tabla Rentas 2' del CDG via COM (solo Windows).

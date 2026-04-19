@@ -91,6 +91,7 @@ from tools.rentroll_tools import (
 from tools.vacancia_tools import (
     actualizar_vacancia,
     refrescar_tabla_rentas_2,
+    consultar_vacancia,
 )
 from tools.noi_tools import (
     actualizar_er_vina,
@@ -1039,6 +1040,29 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_vacancia",
+            "description": (
+                "Responde preguntas sobre vacancia: '¿cuál es la vacancia de Viña Centro para enero 2026?'. "
+                "Lee los m2 vacantes de la hoja Vacancia del CDG para el período indicado. "
+                "Puede filtrar por activo específico o retornar todos. "
+                "Activos disponibles: INMOSA, Machalí, SUCDEN, PT Oficinas, PT Locales, PT Bodegas, "
+                "Viña Centro, Apoquindo 4700, Apoquindo 4501, Fondo Apoquindo, Curicó, Apoquindo 3001."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_cdg": {"type": "string", "description": "Nombre del archivo CDG en WORK_DIR"},
+                    "año":        {"type": "integer", "description": "Año del período (ej: 2026)"},
+                    "mes":        {"type": "integer", "description": "Mes del período (ej: 1 para Enero)"},
+                    "activo":     {"type": "string",  "description": "Nombre parcial del activo a consultar (opcional). Ej: 'viña', 'curico', 'pt'. Si se omite retorna todos."},
+                },
+                "required": ["nombre_cdg", "año", "mes"],
+            },
+        },
+    },
     # ── Rent Roll ──────────────────────────────────────────────────────────
     {
         "type": "function",
@@ -1455,6 +1479,7 @@ def _dispatch(name: str, args: dict) -> str:
         # Vacancia y Tabla Rentas 2
         "actualizar_vacancia":           lambda a: actualizar_vacancia(a["nombre_cdg"], a["año"], a["mes"]),
         "refrescar_tabla_rentas_2":      lambda a: refrescar_tabla_rentas_2(a["nombre_cdg"]),
+        "consultar_vacancia":            lambda a: consultar_vacancia(a["nombre_cdg"], a["año"], a["mes"], a.get("activo")),
         # Rent Roll
         "revisar_rent_rolls":            lambda a: revisar_rent_rolls(a["año"], a["mes"]),
         "enviar_emails_rent_roll":       lambda a: enviar_emails_rent_roll(),
@@ -1526,7 +1551,7 @@ _TOOLS_CAJA = {
 
 _TOOLS_RENTROLL = {
     "revisar_rent_rolls", "consolidar_absorcion", "consolidar_rent_rolls",
-    "enviar_emails_rent_roll", "actualizar_vacancia", "refrescar_tabla_rentas_2",
+    "enviar_emails_rent_roll", "actualizar_vacancia", "refrescar_tabla_rentas_2", "consultar_vacancia",
 }
 
 _TOOL_INDEX = {t["function"]["name"]: t for t in TOOL_DEFINITIONS}
