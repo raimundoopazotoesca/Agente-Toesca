@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Inter:wght@300;400;500&display=swap');
 
 #MainMenu, footer, header { visibility: hidden; }
+[data-testid="collapsedControl"] { visibility: visible !important; }
 .block-container { padding: 2rem 2rem 5rem 2rem !important; max-width: 100% !important; }
 
 [data-testid="stSidebar"] { background-color: #111111 !important; border-right: 1px solid #222; }
