@@ -9,11 +9,52 @@ from agent import (
 from tools.memory_tools import load_memory, guardar_tarea
 
 # ─── Página ────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Agente Toesca", page_icon="🏢", layout="wide")
+st.set_page_config(
+    page_title="Agente Toesca",
+    page_icon="🏢",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text()
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+# Botón flotante para mostrar/ocultar sidebar
+st.markdown("""
+<style>
+#sidebar-toggle {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 9998;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #888;
+    font-size: 14px;
+    transition: border-color 0.15s, color 0.15s;
+}
+#sidebar-toggle:hover { border-color: #555; color: #e8e3dc; }
+</style>
+<div id="sidebar-toggle" title="Mostrar/ocultar sidebar" onclick="
+    var btn = window.parent.document.querySelector('[data-testid=collapsedControl] button') ||
+              window.parent.document.querySelector('[data-testid=stSidebarNav] button') ||
+              window.parent.document.querySelector('button[aria-label*=idebar]') ||
+              window.parent.document.querySelector('section[data-testid=stSidebar] ~ div button');
+    if (btn) { btn.click(); }
+    else {
+        var s = window.parent.document.querySelector('[data-testid=stSidebar]');
+        if (s) { s.style.display = s.style.display === 'none' ? '' : 'none'; }
+    }
+">☰</div>
+""", unsafe_allow_html=True)
 
 # ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
 if "loader_shown" not in st.session_state:
