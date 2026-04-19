@@ -15,6 +15,101 @@ st.set_page_config(page_title="Agente Toesca", page_icon="🏢", layout="wide")
 css = Path("style.css").read_text()
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
+# ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
+if "loader_shown" not in st.session_state:
+    st.session_state.loader_shown = True
+    st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&display=swap" rel="stylesheet">
+<div id="toesca-loader">
+  <div class="tl-content">
+    <div class="tl-logo">
+      <span class="tl-text">toesca</span><span class="tl-dot">.</span>
+    </div>
+  </div>
+  <div class="tl-bar"><div class="tl-progress"></div></div>
+</div>
+
+<style>
+#toesca-loader {
+  position: fixed;
+  inset: 0;
+  background: #0a0a0a;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  animation: tl-fadeout 0.7s cubic-bezier(0.4,0,1,1) 4.3s forwards;
+}
+.tl-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tl-logo {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 5rem;
+  font-weight: 400;
+  color: #e8e3dc;
+  display: flex;
+  align-items: baseline;
+  line-height: 1;
+  overflow: visible;
+  position: relative;
+}
+.tl-text {
+  opacity: 0;
+  animation: tl-textin 1.1s ease-out 0.4s forwards;
+}
+.tl-dot {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-48vw);
+  animation: tl-dotin 1.4s cubic-bezier(0.34,1.45,0.64,1) 1.9s forwards;
+  color: #e8e3dc;
+}
+.tl-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: #1a1a1a;
+}
+.tl-progress {
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #e8e3dc 15%, #e8e3dc 85%, transparent);
+  width: 0;
+  animation: tl-progress 5s linear 0s forwards;
+}
+
+@keyframes tl-textin {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0);    }
+}
+@keyframes tl-dotin {
+  0%   { opacity: 0; transform: translateX(-48vw); }
+  12%  { opacity: 1;                               }
+  100% { opacity: 1; transform: translateX(0);     }
+}
+@keyframes tl-progress {
+  from { width: 0%;    }
+  to   { width: 100%;  }
+}
+@keyframes tl-fadeout {
+  from { opacity: 1; }
+  to   { opacity: 0; pointer-events: none; }
+}
+</style>
+
+<script>
+setTimeout(function() {
+  var el = document.getElementById('toesca-loader');
+  if (el) el.remove();
+}, 5000);
+</script>
+""", unsafe_allow_html=True)
+
 # ─── Estado ────────────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
