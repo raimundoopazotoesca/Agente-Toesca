@@ -4,8 +4,11 @@ from pathlib import Path
 
 from agent import (
     client, MODEL, SYSTEM_PROMPT,
-    _select_tools, _dispatch,
+    _select_tools, _dispatch, _llm_call,
+    _MAX_TOOL_ITERS,
 )
+
+_MAX_HISTORY_TURNS = 3   # pares usuario/agente a mantener en contexto
 from tools.memory_tools import load_memory, guardar_tarea
 
 # ─── Página ────────────────────────────────────────────────────────────────────
@@ -226,9 +229,10 @@ if user_input:
     memory_block = load_memory()
     system_content = SYSTEM_PROMPT + ("\n\n---\n\n" + memory_block if memory_block else "")
     api_messages = [{"role": "system", "content": system_content}]
-    for m in st.session_state.messages:
-        if m["role"] in ("user", "assistant"):
-            api_messages.append({"role": m["role"], "content": m["content"]})
+    # Solo los últimos N turnos para evitar acumulación de tokens en sesiones largas
+    history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
+    for m in history[-(_MAX_HISTORY_TURNS * 2):]:
+        api_messages.append({"role": m["role"], "content": m["content"]})
 
     selected_tools = _select_tools(user_input)
     tools_used = []
@@ -239,35 +243,61 @@ if user_input:
         response_area = st.empty()
         tool_lines = []
 
-        while True:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=api_messages,
-                tools=selected_tools,
-                tool_choice="auto",
-            )
-            msg = response.choices[0].message
-            api_messages.append(msg)
+        try:
+            iteration = 0
+            while True:
+                iteration += 1
+                if iteration > _MAX_TOOL_ITERS:
+                    final_response = (
+                        f"⚠️ Límite de {_MAX_TOOL_ITERS} rondas de herramientas alcanzado. "
+                        "La tarea puede estar incompleta. Reformula la instrucción o divídela en pasos."
+                    )
+                    status_area.empty()
+                    response_area.warning(final_response)
+                    break
 
-            if not msg.tool_calls:
-                final_response = msg.content or "Tarea completada."
-                status_area.empty()
-                response_area.markdown(final_response)
-                break
-
-            for tool_call in msg.tool_calls:
-                name = tool_call.function.name
-                args = json.loads(tool_call.function.arguments)
-                tool_lines.append(f'<span class="tool-log-item">→ {name}</span>')
-                status_area.markdown(
-                    '<div class="status-badge"><div class="status-dot"></div>Procesando...</div>'
-                    + "".join(tool_lines),
-                    unsafe_allow_html=True,
+                response = _llm_call(
+                    model=MODEL,
+                    messages=api_messages,
+                    tools=selected_tools,
+                    tool_choice="auto",
                 )
-                result = _dispatch(name, args)
-                if name not in tools_used:
-                    tools_used.append(name)
-                api_messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
+                msg = response.choices[0].message
+                api_messages.append(msg)
+
+                if not msg.tool_calls:
+                    final_response = msg.content or "Tarea completada."
+                    status_area.empty()
+                    response_area.markdown(final_response)
+                    break
+
+                for tool_call in msg.tool_calls:
+                    name = tool_call.function.name
+                    args = json.loads(tool_call.function.arguments)
+                    tool_lines.append(f'<span class="tool-log-item">→ {name}</span>')
+                    status_area.markdown(
+                        '<div class="status-badge"><div class="status-dot"></div>Procesando...</div>'
+                        + "".join(tool_lines),
+                        unsafe_allow_html=True,
+                    )
+                    result = _dispatch(name, args)
+                    if name not in tools_used:
+                        tools_used.append(name)
+                    api_messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
+
+        except RuntimeError as e:
+            # _llm_call agotó los 5 reintentos (429 persistente)
+            status_area.empty()
+            final_response = str(e)
+            response_area.error(
+                "**Rate limit persistente.** La API de Gemini está saturada en este momento. "
+                "Espera 1–2 minutos e intenta de nuevo.\n\n"
+                f"Detalle técnico: `{e}`"
+            )
+        except Exception as e:
+            status_area.empty()
+            final_response = f"Error: {e}"
+            response_area.error(f"**Error inesperado:** `{e}`")
 
     st.session_state.messages.append({"role": "assistant", "content": final_response})
     guardar_tarea(user_input, tools_used, final_response[:200])

@@ -1,4 +1,6 @@
 import json
+import time
+import random
 from openai import OpenAI
 from dotenv import load_dotenv
 from tools.memory_tools import (
@@ -114,6 +116,40 @@ client = OpenAI(
 )
 
 MODEL = "gemini-2.5-flash"
+_MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
+_MAX_TOOL_ITERS     = 20      # máximo de rondas tool-call por tarea (anti-loop-infinito)
+_MIN_CALL_INTERVAL  = 1.5     # segundos mínimos entre llamadas a la API (suaviza RPM)
+_last_call_at: float = 0.0    # timestamp de la última llamada exitosa
+
+
+def _llm_call(**kwargs):
+    """
+    Llama a la API con:
+      - throttle mínimo entre llamadas (_MIN_CALL_INTERVAL)
+      - exponential backoff en 429 / quota exceeded (hasta 5 reintentos)
+    """
+    global _last_call_at
+    # Throttle: esperar si la llamada anterior fue hace menos de _MIN_CALL_INTERVAL
+    if _last_call_at > 0:
+        since = time.time() - _last_call_at
+        if since < _MIN_CALL_INTERVAL:
+            time.sleep(_MIN_CALL_INTERVAL - since)
+
+    for attempt in range(5):
+        try:
+            response = client.chat.completions.create(**kwargs)
+            _last_call_at = time.time()
+            return response
+        except Exception as e:
+            msg = str(e).lower()
+            if "429" in msg or "quota" in msg or "rate" in msg or "resource" in msg:
+                wait = min((2 ** attempt) + random.uniform(0, 1), 60)
+                print(f"  [429] Rate limit — esperando {wait:.0f}s (intento {attempt + 1}/5)...")
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError("Límite de reintentos alcanzado (5/5 intentos con error 429).")
+
 
 SYSTEM_PROMPT = """Eres un agente automatizador especializado en gestión de fondos inmobiliarios para Toesca Asset Management (Chile).
 Tienes acceso a correos Outlook, SharePoint sincronizado, servidor R:, y planillas Excel del Control de Gestión.
@@ -1647,7 +1683,10 @@ def _dispatch(name: str, args: dict) -> str:
     fn = dispatch.get(name)
     if fn is None:
         return f"Error: herramienta '{name}' no reconocida."
-    return fn(args)
+    result = fn(args)
+    if isinstance(result, str) and len(result) > _MAX_TOOL_RESULT:
+        result = result[:_MAX_TOOL_RESULT] + f"\n\n[...resultado truncado — {len(result):,} chars totales. Llama con parámetros más específicos para obtener datos concretos.]"
+    return result
 
 
 # ─── Selección dinámica de herramientas ───────────────────────────────────────
@@ -1709,15 +1748,19 @@ def _select_tools(user_input: str) -> list:
 
     keywords_noi = ["noi", "viña", "vina", "curicó", "curico", "inmosa",
                     "er vina", "er viña", "er curico", "estado de resultado",
-                    "titanium", "apoquindo", "apo3001"]
+                    "titanium", "apoquindo", "apo3001", "er curicó"]
     keywords_caja = ["caja", "saldo caja", "ffmm", "maría josé", "maria jose"]
     keywords_cdg = ["cdg", "control de gestión", "control de gestion", "planilla",
                     "vr bursatil", "vr contable", "valor razonable", "dividendo",
                     "aporte", "precio cuota", "bursátil", "bursatil",
-                    "input ap", "input pt", "input ren", "datos fs", "tir"]
+                    "input ap", "input pt", "input ren", "datos fs", "tir",
+                    "rentabilidad", "eeff", "balance", "trimestre", "cuota",
+                    "cfitript", "cfitoeri", "nemotecnico", "nemotécnico",
+                    "serie a", "serie c", "serie i", "a&r"]
     keywords_rentroll = ["rent roll", "rentroll", "vacancia", "absorción",
                          "absorcion", "jll", "nicole", "tres a", "tres asociados",
-                         "sebastian", "arrendatario", "escalonada"]
+                         "sebastian", "arrendatario", "escalonada", "contrato",
+                         "arrendamiento", "m2", "m²", "ocupación", "ocupacion"]
 
     grupos = set()
     if any(k in u for k in keywords_noi):
@@ -1729,9 +1772,12 @@ def _select_tools(user_input: str) -> list:
     if any(k in u for k in keywords_rentroll):
         grupos.add("rentroll")
 
-    # Si no hay match, devolver todas (fallback)
+    # Si no hay match claro: devolver solo herramientas generales.
+    # Las herramientas generales cubren: correo, archivos, memoria, KPIs.
+    # Para tareas ambiguas el agente puede usar leer_historial/leer_contexto
+    # y pedir más contexto al usuario si es necesario.
     if not grupos:
-        return TOOL_DEFINITIONS
+        return [_TOOL_INDEX[n] for n in _TOOLS_GENERAL if n in _TOOL_INDEX]
 
     nombres = set(_TOOLS_GENERAL)
     if "cdg"      in grupos: nombres |= _TOOLS_CDG
@@ -1770,39 +1816,57 @@ def run_agent(user_input: str) -> None:
     if n_selected < n_total:
         print(f"  [tools] {n_selected}/{n_total} herramientas activas")
 
-    while True:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=selected_tools,
-            tool_choice="auto",
-        )
+    try:
+        iteration = 0
+        while True:
+            iteration += 1
+            if iteration > _MAX_TOOL_ITERS:
+                final_response = (
+                    f"⚠️ Límite de {_MAX_TOOL_ITERS} rondas de herramientas alcanzado. "
+                    "La tarea puede estar incompleta. Reformula la instrucción o divídela en pasos."
+                )
+                print(f"\n[WARN] Límite de iteraciones ({_MAX_TOOL_ITERS}) alcanzado.")
+                break
 
-        msg = response.choices[0].message
-        messages.append(msg)
+            response = _llm_call(
+                model=MODEL,
+                messages=messages,
+                tools=selected_tools,
+                tool_choice="auto",
+            )
 
-        if not msg.tool_calls:
-            if msg.content:
-                final_response = msg.content
-                print(f"\nAgente: {msg.content}")
-            break
+            msg = response.choices[0].message
+            messages.append(msg)
 
-        for tool_call in msg.tool_calls:
-            name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
-            print(f"\n  → Ejecutando: {name}({', '.join(f'{k}={v}' for k, v in args.items())})")
+            if not msg.tool_calls:
+                if msg.content:
+                    final_response = msg.content
+                    print(f"\nAgente: {msg.content}")
+                break
 
-            result = _dispatch(name, args)
-            print(f"  ✓ {result[:120]}{'...' if len(result) > 120 else ''}")
+            for tool_call in msg.tool_calls:
+                name = tool_call.function.name
+                args = json.loads(tool_call.function.arguments)
+                print(f"\n  → Ejecutando: {name}({', '.join(f'{k}={v}' for k, v in args.items())})")
 
-            if name not in tools_used:
-                tools_used.append(name)
+                result = _dispatch(name, args)
+                print(f"  ✓ {result[:120]}{'...' if len(result) > 120 else ''}")
 
-            messages.append({
-                "role":         "tool",
-                "tool_call_id": tool_call.id,
-                "content":      result,
-            })
+                if name not in tools_used:
+                    tools_used.append(name)
+
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tool_call.id,
+                    "content":      result,
+                })
+
+    except RuntimeError as e:
+        final_response = f"⚠️ {e}"
+        print(f"\n[ERROR] {e}")
+    except Exception as e:
+        final_response = f"⚠️ Error inesperado: {e}"
+        print(f"\n[ERROR] Error inesperado: {e}")
 
     # Guardar tarea en historial
     if tools_used or final_response:
