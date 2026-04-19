@@ -39,7 +39,7 @@ if "loader_shown" not in st.session_state:
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  animation: tl-fadeout 0.7s cubic-bezier(0.4,0,1,1) 4.3s forwards;
+  animation: tl-fadeout 0.6s cubic-bezier(0.4,0,1,1) 2.9s forwards;
 }
 .tl-content {
   display: flex;
@@ -59,13 +59,13 @@ if "loader_shown" not in st.session_state:
 }
 .tl-text {
   opacity: 0;
-  animation: tl-textin 1.1s ease-out 0.4s forwards;
+  animation: tl-textin 0.8s ease-out 0.2s forwards;
 }
 .tl-dot {
   display: inline-block;
   opacity: 0;
   transform: translateX(-48vw);
-  animation: tl-dotin 1.4s cubic-bezier(0.34,1.45,0.64,1) 1.9s forwards;
+  animation: tl-dotin 1.0s cubic-bezier(0.34,1.45,0.64,1) 1.2s forwards;
   color: #e8e3dc;
 }
 .tl-bar {
@@ -80,7 +80,7 @@ if "loader_shown" not in st.session_state:
   height: 100%;
   background: linear-gradient(90deg, transparent, #e8e3dc 15%, #e8e3dc 85%, transparent);
   width: 0;
-  animation: tl-progress 5s linear 0s forwards;
+  animation: tl-progress 3.5s linear 0s forwards;
 }
 
 @keyframes tl-textin {
@@ -106,7 +106,7 @@ if "loader_shown" not in st.session_state:
 setTimeout(function() {
   var el = document.getElementById('toesca-loader');
   if (el) el.remove();
-}, 5000);
+}, 3500);
 </script>
 """, unsafe_allow_html=True)
 
