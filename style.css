@@ -1,14 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Inter:wght@300;400;500&display=swap');
 
-#MainMenu, footer, header { visibility: hidden; }
-[data-testid="collapsedControl"] { visibility: visible !important; }
+#MainMenu, footer { visibility: hidden; }
+header { visibility: hidden; }
+[data-testid="collapsedControl"],
+[data-testid="collapsedControl"] * {
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
+}
 .block-container { padding: 2rem 2rem 5rem 2rem !important; max-width: 100% !important; }
 
 [data-testid="stSidebar"] { background-color: #111111 !important; border-right: 1px solid #222; }
 [data-testid="stSidebar"] .block-container { padding: 2rem 1.2rem !important; }
 
 .toesca-logo { font-family: 'EB Garamond', Georgia, serif; font-size: 2.2rem; font-weight: 400; color: #e8e3dc; margin: 0 0 0.1rem 0; line-height: 1; }
-.toesca-tagline { font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.18em; text-transform: uppercase; color: #c9a84c; margin: 0 0 2rem 0; }
+.toesca-tagline { font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.18em; text-transform: uppercase; color: #e8e3dc; margin: 0 0 2rem 0; }
 .sidebar-divider { border: none; border-top: 1px solid #222; margin: 1rem 0; }
 .sidebar-section { font-family: 'Inter', sans-serif; font-size: 0.62rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: #555; margin: 1.2rem 0 0.6rem 0; }
 
@@ -17,7 +23,7 @@
 
 .welcome-container { text-align: center; padding: 4rem 2rem; max-width: 560px; margin: 0 auto; }
 .welcome-logo { font-family: 'EB Garamond', Georgia, serif; font-size: 3.5rem; font-weight: 400; color: #e8e3dc; margin-bottom: 0.2rem; }
-.welcome-tagline { font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase; color: #c9a84c; margin-bottom: 2.5rem; }
+.welcome-tagline { font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 300; letter-spacing: 0.2em; text-transform: uppercase; color: #e8e3dc; margin-bottom: 2.5rem; }
 .welcome-desc { font-family: 'Inter', sans-serif; font-size: 0.88rem; color: #666; line-height: 1.7; margin-bottom: 2rem; }
 .welcome-pill { display: inline-block; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 20px; padding: 0.35rem 0.9rem; font-family: 'Inter', sans-serif; font-size: 0.72rem; color: #888; margin: 0.2rem; }
 
