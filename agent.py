@@ -11,6 +11,8 @@ from tools.memory_tools import (
     consultar_kpi,
     resumen_kpis,
     comparar_periodos,
+    guardar_ubicacion,
+    buscar_ubicacion,
 )
 
 from tools.email_tools import (
@@ -131,12 +133,12 @@ Flujo típico:
 
 Al terminar cada tarea resume brevemente qué hiciste e indica si encontraste errores.
 
-Cuando no encuentres un archivo:
-1. Antes de preguntar al usuario, usa 'listar_planillas_en_trabajo', 'listar_sharepoint' o 'listar_servidor_local' para explorar las carpetas relevantes.
-2. Si encuentras archivos con nombres similares al que buscas, usa el más probable y continúa.
-3. Solo pregunta al usuario si después de explorar sigue sin haber ningún candidato razonable.
-
-Cuando el usuario te indique dónde encontrar un archivo, cómo se llama, o cualquier dato que no sabías, llama siempre a 'actualizar_contexto' para recordarlo en futuras sesiones."""
+Cuando necesites un archivo, sigue este orden estrictamente:
+1. Llama a 'buscar_ubicacion' con el nombre del recurso. Si retorna una ruta conocida, ve directo ahí.
+2. Si no hay ubicación guardada, explora con 'listar_planillas_en_trabajo', 'listar_sharepoint' o 'listar_servidor_local'.
+3. Cuando encuentres el archivo (por cualquier vía), llama a 'guardar_ubicacion' para recordarlo.
+4. Solo pregunta al usuario si después de explorar no hay ningún candidato razonable.
+5. Si el usuario indica una ubicación, guárdala con 'guardar_ubicacion' inmediatamente."""
 
 
 # ─── Definición de herramientas ───────────────────────────────────────────────
@@ -1397,6 +1399,45 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_ubicacion",
+            "description": (
+                "Busca si ya se conoce la ubicación de un archivo o recurso. "
+                "LLAMAR SIEMPRE ANTES de buscar cualquier archivo en disco, SharePoint o servidor. "
+                "Si retorna una ruta conocida, ir directamente ahí sin explorar. "
+                "Ejemplos de concepto: 'eeff viña', 'rent roll jll', 'er inmosa', 'cdg febrero 2026', 'saldo caja'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "concepto": {"type": "string", "description": "Término de búsqueda (ej: 'eeff viña 2026', 'rr jll febrero')"},
+                },
+                "required": ["concepto"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "guardar_ubicacion",
+            "description": (
+                "Guarda la ubicación de un archivo encontrado para recordarlo en futuras sesiones. "
+                "LLAMAR SIEMPRE después de encontrar un archivo que fue buscado (ya sea por el agente o indicado por el usuario). "
+                "Así la próxima vez el agente va directo al archivo sin buscar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "concepto": {"type": "string", "description": "Identificador semántico (ej: 'eeff_vina_2026', 'rr_jll_febrero_2026')"},
+                    "ruta":     {"type": "string", "description": "Ruta absoluta o nombre del archivo encontrado"},
+                    "notas":    {"type": "string", "description": "Info adicional: hoja relevante, convención de nombre, columnas clave, etc."},
+                },
+                "required": ["concepto", "ruta"],
+            },
+        },
+    },
 ]
 
 
@@ -1502,6 +1543,8 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_kpi":                 lambda a: consultar_kpi(a["fondo"], a["kpi"], a.get("n_periodos", 12)),
         "resumen_kpis":                  lambda a: resumen_kpis(a["fondo"], a["periodo"]),
         "comparar_periodos":             lambda a: comparar_periodos(a["fondo"], a["periodo_base"], a["periodo_actual"]),
+        "buscar_ubicacion":              lambda a: buscar_ubicacion(a["concepto"]),
+        "guardar_ubicacion":             lambda a: guardar_ubicacion(a["concepto"], a["ruta"], a.get("notas", "")),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -1521,6 +1564,7 @@ _TOOLS_GENERAL = {
     "listar_planillas_en_trabajo",
     "leer_contexto", "actualizar_contexto", "leer_historial",
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
+    "buscar_ubicacion", "guardar_ubicacion",
 }
 
 _TOOLS_CDG = {

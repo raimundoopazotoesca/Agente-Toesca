@@ -28,6 +28,7 @@ MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory")
 CONTEXT_FILE = os.path.join(MEMORY_DIR, "context.md")
 HISTORIAL_FILE = os.path.join(MEMORY_DIR, "historial.jsonl")
 KPIS_FILE = os.path.join(MEMORY_DIR, "kpis.jsonl")
+UBICACIONES_FILE = os.path.join(MEMORY_DIR, "ubicaciones.json")
 
 
 def _ensure_dir():
@@ -293,4 +294,78 @@ def comparar_periodos(fondo: str, periodo_base: str, periodo_actual: str) -> str
 
         lines.append(f"  {kpi_name:<30} {base_str:>15} {act_str:>15} {var_str:>8}")
 
+    return "\n".join(lines)
+
+
+# ─── Memoria de ubicaciones ────────────────────────────────────────────────────
+
+def _load_ubicaciones() -> dict:
+    _ensure_dir()
+    if not os.path.isfile(UBICACIONES_FILE):
+        return {}
+    with open(UBICACIONES_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+def _save_ubicaciones(data: dict) -> None:
+    _ensure_dir()
+    with open(UBICACIONES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def guardar_ubicacion(concepto: str, ruta: str, notas: str = "") -> str:
+    """
+    Guarda la ubicación de un archivo o recurso para recordarlo en futuras sesiones.
+    Llamar siempre que el agente encuentre un archivo que buscó o que el usuario indique.
+
+    Parámetros:
+        concepto : identificador semántico (ej: 'eeff_vina', 'rr_jll', 'er_inmosa', 'cdg_2602')
+        ruta     : ruta absoluta o nombre de archivo encontrado
+        notas    : información adicional (hoja, columna, convención de nombre, etc.)
+    """
+    data = _load_ubicaciones()
+    data[concepto.lower().strip()] = {
+        "ruta": ruta,
+        "notas": notas,
+        "actualizado": datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_ubicaciones(data)
+    return f"Ubicación guardada: '{concepto}' → {ruta}"
+
+
+def buscar_ubicacion(concepto: str) -> str:
+    """
+    Busca si ya se conoce la ubicación de un archivo o recurso.
+    Llamar SIEMPRE antes de buscar un archivo en disco o SharePoint.
+    Si retorna una ruta, ir directamente sin explorar.
+
+    Parámetros:
+        concepto : término a buscar (ej: 'eeff viña', 'rent roll jll', 'inmosa')
+                   Acepta coincidencia parcial.
+    """
+    data = _load_ubicaciones()
+    if not data:
+        return "Sin ubicaciones guardadas todavía."
+
+    termino = concepto.lower().strip()
+
+    # Coincidencia exacta primero
+    if termino in data:
+        e = data[termino]
+        return f"Ubicación conocida para '{concepto}':\n  Ruta: {e['ruta']}\n  Notas: {e['notas']}\n  (actualizado: {e['actualizado']})"
+
+    # Coincidencia parcial
+    matches = [(k, v) for k, v in data.items() if termino in k or k in termino]
+    if not matches:
+        # Buscar por palabras clave individuales
+        palabras = termino.split()
+        matches = [(k, v) for k, v in data.items() if any(p in k for p in palabras)]
+
+    if not matches:
+        return f"No se encontró ubicación guardada para '{concepto}'. Proceder a buscar en disco."
+
+    lines = [f"Ubicaciones conocidas relacionadas con '{concepto}':"]
+    for k, v in matches[:5]:
+        lines.append(f"  [{k}] {v['ruta']}")
+        if v["notas"]:
+            lines.append(f"    Notas: {v['notas']}")
     return "\n".join(lines)
