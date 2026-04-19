@@ -25,6 +25,11 @@
 - [ ] Exponer Streamlit en la red interna (`http://192.168.x.x:8501`)
 - [ ] Agregar autenticación simple (usuario/contraseña) para controlar acceso
 - [ ] Separar memoria por usuario (hoy es una sola memoria compartida)
+- [ ] Sistema de usuarios con perfil de cargo
+      → Cada usuario tiene nombre, cargo y permisos asociados
+      → El agente adapta sus respuestas según el rol (ej: analista vs gerente)
+      → El cargo determina qué fondos y herramientas puede usar cada persona
+      → Registro de quién hizo qué en el historial de tareas
 
 ### Largo plazo — Escalamiento al equipo completo
 
