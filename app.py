@@ -50,12 +50,14 @@ st.markdown("""
 <div id="toesca-sidebar-btn" title="Sidebar" onclick="
 (function(){
     var selectors = [
+        '[data-testid=stSidebarCollapsedControl] button',
         '[data-testid=stSidebarCollapseButton] button',
         '[data-testid=collapsedControl] button',
         'section[data-testid=stSidebar] button',
-        '[data-baseweb=button][kind=headerNoPadding]',
         'button[aria-label*=sidebar i]',
-        'button[aria-label*=Sidebar]'
+        'button[aria-label*=Sidebar]',
+        'button[aria-label*=Close i]',
+        'button[aria-label*=Open i]'
     ];
     function tryClick(doc) {
         for (var i = 0; i < selectors.length; i++) {
