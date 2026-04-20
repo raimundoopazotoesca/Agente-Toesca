@@ -3,29 +3,20 @@
 #MainMenu, footer { visibility: hidden; }
 header[data-testid="stHeader"] { visibility: hidden; }
 
-/* ── Sidebar toggle buttons (expanded + collapsed states) ───────────────────── */
-[data-testid="collapsedControl"],
-[data-testid="collapsedControl"] *,
-[data-testid="stSidebarCollapseButton"],
-[data-testid="stSidebarCollapseButton"] * {
+/* ── Sidebar toggle buttons — no ocultar el nativo de Streamlit ─────────────── */
+[data-testid="collapsedControl"] {
     visibility: visible !important;
     opacity: 1 !important;
-    display: flex !important;
 }
-[data-testid="collapsedControl"] button,
-[data-testid="stSidebarCollapseButton"] button {
-    background: #141414 !important;
-    border: 1px solid #252525 !important;
-    border-radius: 5px !important;
-    color: #555 !important;
-    width: 2rem !important;
-    height: 2rem !important;
-    transition: color 0.15s, border-color 0.15s !important;
+[data-testid="collapsedControl"] * {
+    visibility: visible !important;
 }
-[data-testid="collapsedControl"] button:hover,
-[data-testid="stSidebarCollapseButton"] button:hover {
-    color: #e8e3dc !important;
-    border-color: #555 !important;
+[data-testid="stSidebarCollapseButton"] {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+[data-testid="stSidebarCollapseButton"] * {
+    visibility: visible !important;
 }
 
 /* ── Chat message avatars ────────────────────────────────────────────────────── */

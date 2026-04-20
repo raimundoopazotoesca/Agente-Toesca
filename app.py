@@ -1,6 +1,17 @@
 import json
+import base64
 import streamlit as st
 from pathlib import Path
+
+# Avatar del agente: "t." en estilo marca Toesca
+_AGENT_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+  <rect width="36" height="36" rx="4" fill="#111111" stroke="#222222" stroke-width="1"/>
+  <text x="18" y="25" text-anchor="middle"
+        font-family="Georgia,'Times New Roman',serif"
+        font-size="17" font-weight="400" letter-spacing="-0.5"
+        fill="#e8e3dc">t.</text>
+</svg>"""
+_AGENT_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_AGENT_SVG).decode()
 
 from agent import (
     client, MODEL, SYSTEM_PROMPT,
@@ -22,6 +33,42 @@ st.set_page_config(
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text()
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+# ─── Botón sidebar ─────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+#toesca-sidebar-btn {
+    position: fixed; top: 12px; left: 12px; z-index: 99999;
+    width: 30px; height: 30px;
+    background: #141414; border: 1px solid #252525; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #666; font-size: 13px; line-height: 1;
+    transition: color .15s, border-color .15s; user-select: none;
+}
+#toesca-sidebar-btn:hover { color: #e8e3dc; border-color: #555; }
+</style>
+<div id="toesca-sidebar-btn" title="Sidebar" onclick="
+(function(){
+    var selectors = [
+        '[data-testid=stSidebarCollapseButton] button',
+        '[data-testid=collapsedControl] button',
+        'section[data-testid=stSidebar] button',
+        '[data-baseweb=button][kind=headerNoPadding]',
+        'button[aria-label*=sidebar i]',
+        'button[aria-label*=Sidebar]'
+    ];
+    function tryClick(doc) {
+        for (var i = 0; i < selectors.length; i++) {
+            var b = doc.querySelector(selectors[i]);
+            if (b) { b.click(); return true; }
+        }
+        return false;
+    }
+    if (!tryClick(document) && window.parent && window.parent !== window) {
+        try { tryClick(window.parent.document); } catch(e) {}
+    }
+})()">&#9776;</div>
+""", unsafe_allow_html=True)
 
 # ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
 if "loader_shown" not in st.session_state:
@@ -175,7 +222,7 @@ if not st.session_state.messages:
     """, unsafe_allow_html=True)
 else:
     for msg in st.session_state.messages:
-        _avatar = ":material/apartment:" if msg["role"] == "assistant" else ":material/person:"
+        _avatar = _AGENT_AVATAR if msg["role"] == "assistant" else ":material/person:"
         with st.chat_message(msg["role"], avatar=_avatar):
             st.markdown(msg["content"])
 
@@ -203,7 +250,7 @@ if user_input:
     tools_used = []
     final_response = ""
 
-    with st.chat_message("assistant", avatar=":material/apartment:"):
+    with st.chat_message("assistant", avatar=_AGENT_AVATAR):
         status_area = st.empty()
         response_area = st.empty()
         tool_lines = []
