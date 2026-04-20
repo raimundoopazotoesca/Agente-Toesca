@@ -295,6 +295,38 @@ def _limpiar_numero(val) -> float | None:
 
 # ─── Herramientas públicas ────────────────────────────────────────────────────
 
+def buscar_saldo_caja(año: int, mes: int) -> str:
+    """
+    Busca el archivo Saldo Caja + FFMM más reciente en SharePoint para el
+    año/mes indicado. Los archivos tienen el formato AAMMDD en el nombre.
+    Retorna la ruta absoluta al archivo o un mensaje de error.
+    """
+    saldo_dir = _resolve_saldo_caja_dir()
+    carpeta_año = os.path.join(saldo_dir, str(año))
+
+    if not os.path.isdir(carpeta_año):
+        return f"Error: carpeta no encontrada: {carpeta_año}"
+
+    archivos = [
+        f for f in os.listdir(carpeta_año)
+        if f.lower().endswith((".xlsx", ".xls")) and re.match(r"\d{6}", f)
+    ]
+    if not archivos:
+        return f"Error: no hay archivos Saldo Caja en {carpeta_año}"
+
+    # Ordenar por fecha embebida en el nombre (AAMMDD)
+    def fecha_key(nombre):
+        m = re.match(r"(\d{2})(\d{2})(\d{2})", nombre)
+        if not m:
+            return 0
+        aa, mm, dd = m.groups()
+        return int(aa) * 10000 + int(mm) * 100 + int(dd)
+
+    archivos_ordenados = sorted(archivos, key=fecha_key)
+    # Tomar el más reciente del año (tiene todo el histórico)
+    return os.path.join(carpeta_año, archivos_ordenados[-1])
+
+
 def listar_hojas_saldo_caja(archivo_saldo_caja: str) -> str:
     """
     Lista todas las hojas del archivo Saldo Caja + FFMM Inmobiliario,
@@ -623,10 +655,15 @@ def archivar_saldo_caja(nombre_archivo: str) -> str:
     if not os.path.exists(src):
         return f"Error: no se encontró '{src}'."
 
-    carpeta = _resolve_saldo_caja_dir()
+    # Determinar año desde el nombre AAMMDD o usar el año actual
+    base = os.path.basename(nombre_archivo)
+    m = re.match(r"(\d{2})(\d{2})\d{2}", base)
+    año = (2000 + int(m.group(1))) if m else date.today().year
+
+    carpeta = os.path.join(_resolve_saldo_caja_dir(), str(año))
     os.makedirs(carpeta, exist_ok=True)
 
-    dst = os.path.join(carpeta, os.path.basename(nombre_archivo))
+    dst = os.path.join(carpeta, base)
     if os.path.exists(dst):
         return f"Ya existe en archivo: {dst}\n(No se sobreescribió.)"
 
@@ -636,21 +673,24 @@ def archivar_saldo_caja(nombre_archivo: str) -> str:
 
 def listar_saldo_caja_archivados() -> str:
     """
-    Lista todos los archivos Saldo Caja guardados en la carpeta de archivo histórico.
+    Lista todos los archivos Saldo Caja guardados, agrupados por año.
     """
     carpeta = _resolve_saldo_caja_dir()
     if not os.path.isdir(carpeta):
         return f"Carpeta de archivo vacía o no existe: {carpeta}"
 
-    archivos = sorted(
-        f for f in os.listdir(carpeta)
-        if f.lower().endswith((".xlsx", ".xls"))
-    )
-    if not archivos:
-        return f"No hay archivos en {carpeta}"
-
     lines = [f"Archivos Saldo Caja en {carpeta}:"]
-    for f in archivos:
-        size = os.path.getsize(os.path.join(carpeta, f))
-        lines.append(f"  - {f}  ({size // 1024} KB)")
-    return "\n".join(lines)
+    for año_dir in sorted(os.listdir(carpeta)):
+        ruta_año = os.path.join(carpeta, año_dir)
+        if not os.path.isdir(ruta_año):
+            continue
+        archivos = sorted(
+            f for f in os.listdir(ruta_año)
+            if f.lower().endswith((".xlsx", ".xls"))
+        )
+        if archivos:
+            lines.append(f"\n  {año_dir}:")
+            for f in archivos:
+                size = os.path.getsize(os.path.join(ruta_año, f))
+                lines.append(f"    - {f}  ({size // 1024} KB)")
+    return "\n".join(lines) if len(lines) > 1 else f"No hay archivos en {carpeta}"

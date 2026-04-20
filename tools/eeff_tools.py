@@ -2,19 +2,20 @@
 Herramientas para leer EEFF (Estados Financieros) de fondos en PDF.
 Extrae valor cuota libro y dividendos/aportes para alimentar la planilla.
 
-Estructura esperada en disco:
-  FONDOS_DIR/<NombreFondo>/EEFF/<Año>/<FechaTrimestre>/VF/<YYYY EEFF NombreFondo>.pdf
+Estructura en SharePoint:
+  Fondo Rentas Apoquindo/EEFF/{YYYY}/{T}T/
+  Fondo Rentas PT/EEFF/{YYYY}/{T}T/
+  Fondo Rentas Inmobiliarias TRI/EEFF/TRI/{YYYY}/{T}T/
 """
 import os
 import re
-from config import FONDOS_DIR, LOCAL_FILES_DIR, SHAREPOINT_DIR
+from config import SHAREPOINT_DIR
 
-# Mapeo de clave SHEET_CFG → nombre de carpeta en disco
-# Ajustar si los nombres reales difieren
-FONDO_CARPETAS = {
-    "A&R Apoquindo": "FI Toesca Rentas Apoquindo",
-    "A&R PT":        "FI Toesca Rentas PT",
-    "A&R Rentas":    "FI Toesca Rentas",
+# Rutas base por fondo en SharePoint
+FONDO_RUTAS = {
+    "A&R Apoquindo": os.path.join(SHAREPOINT_DIR, "Fondo Rentas Apoquindo", "EEFF"),
+    "A&R PT":        os.path.join(SHAREPOINT_DIR, "Fondo Rentas PT", "EEFF"),
+    "A&R Rentas":    os.path.join(SHAREPOINT_DIR, "Fondo Rentas Inmobiliarias TRI", "EEFF", "TRI"),
 }
 
 # Series por fondo (sincronizado con gestion_renta_tools.SHEET_CFG)
@@ -23,13 +24,6 @@ FONDO_SERIES = {
     "A&R PT":        [None],
     "A&R Rentas":    ["A", "C", "I"],
 }
-
-
-def _resolve_fondos_dir() -> str:
-    if FONDOS_DIR:
-        return FONDOS_DIR
-    base = LOCAL_FILES_DIR or SHAREPOINT_DIR or ""
-    return os.path.join(base, "Rentas", "Fondos")
 
 
 def _parse_cl_number(s: str):
@@ -80,7 +74,11 @@ def _find_trimestre_folder(ruta_año: str, mes: int):
             continue
         c_lower = c.lower().strip()
 
-        # Formato "1Q", "2Q", "3Q", "4Q"
+        # Formato SharePoint: "1T", "2T", "3T", "4T"
+        if q_str and c_lower == f"{q_str}t":
+            return os.path.join(ruta_año, c)
+
+        # Formato R: "1Q", "2Q", "3Q", "4Q"
         if q_str and c_lower == f"{q_str}q":
             return os.path.join(ruta_año, c)
 
@@ -102,21 +100,12 @@ def _find_trimestre_folder(ruta_año: str, mes: int):
 def listar_eeff_disponibles(fondo_key: str, año: int) -> str:
     """
     Lista las carpetas de trimestre disponibles para un fondo y año.
-    Útil para descubrir qué EEFF existen antes de leerlos.
     """
-    fondos_dir = _resolve_fondos_dir()
-    carpeta = FONDO_CARPETAS.get(fondo_key, fondo_key)
-    ruta = os.path.join(fondos_dir, carpeta, "EEFF", str(año))
-
-    if not os.path.isdir(fondos_dir):
-        return f"Error: FONDOS_DIR no existe o no está configurado: {fondos_dir}"
+    if fondo_key not in FONDO_RUTAS:
+        return f"Error: fondo '{fondo_key}' no reconocido. Disponibles: {', '.join(FONDO_RUTAS)}"
+    ruta = os.path.join(FONDO_RUTAS[fondo_key], str(año))
     if not os.path.isdir(ruta):
-        return (
-            f"No se encontró la carpeta: {ruta}\n"
-            f"Fondos disponibles en {fondos_dir}:\n"
-            + "\n".join(f"  - {f}" for f in sorted(os.listdir(fondos_dir))
-                        if os.path.isdir(os.path.join(fondos_dir, f)))
-        )
+        return f"No se encontró la carpeta: {ruta}"
     carpetas = sorted(os.listdir(ruta))
     if not carpetas:
         return f"No hay trimestres en {ruta}"
@@ -131,36 +120,25 @@ def buscar_pdf_eeff(fondo_key: str, año: int, mes: int) -> str:
     Busca el PDF de EEFF para el fondo, año y mes de cierre del trimestre.
     Retorna la ruta absoluta al PDF si existe, o un mensaje de error.
     """
-    fondos_dir = _resolve_fondos_dir()
-    carpeta = FONDO_CARPETAS.get(fondo_key, fondo_key)
-    ruta_año = os.path.join(fondos_dir, carpeta, "EEFF", str(año))
+    if fondo_key not in FONDO_RUTAS:
+        return f"Error: fondo '{fondo_key}' no reconocido. Disponibles: {', '.join(FONDO_RUTAS)}"
 
+    ruta_año = os.path.join(FONDO_RUTAS[fondo_key], str(año))
     trim_folder = _find_trimestre_folder(ruta_año, mes)
     if not trim_folder:
         disponibles = listar_eeff_disponibles(fondo_key, año)
         return f"Error: carpeta para mes {mes}/{año} no encontrada.\n{disponibles}"
 
-    # Buscar subcarpeta VF (Version Final)
-    vf_folder = None
-    for nombre_vf in ["VF", "Vf", "vf", "Version Final", "Versión Final", "version final"]:
-        candidate = os.path.join(trim_folder, nombre_vf)
-        if os.path.isdir(candidate):
-            vf_folder = candidate
-            break
-    if not vf_folder:
-        # Si no hay VF, buscar PDFs directamente en la carpeta del trimestre
-        vf_folder = trim_folder
-
-    pdfs = [f for f in os.listdir(vf_folder) if f.lower().endswith(".pdf")]
+    pdfs = [f for f in os.listdir(trim_folder) if f.lower().endswith(".pdf")]
     if not pdfs:
-        return f"Error: no hay PDFs en {vf_folder}"
+        return f"Error: no hay PDFs en {trim_folder}"
 
-    # Priorizar PDFs con "EEFF" o "Estados" en el nombre
+    # Priorizar PDFs con "EEFF", "ESTADOS" o "FINANCIERO" en el nombre
     eeff_pdfs = [f for f in pdfs if any(
         kw in f.upper() for kw in ["EEFF", "ESTADOS", "FINANCIERO"]
     )]
     target = eeff_pdfs[0] if eeff_pdfs else pdfs[0]
-    return os.path.join(vf_folder, target)
+    return os.path.join(trim_folder, target)
 
 
 def extraer_datos_eeff(pdf_path: str, fondo_key: str) -> dict:
@@ -262,8 +240,8 @@ def leer_eeff(fondo_key: str, año: int, mes: int) -> str:
     clave del PDF para que el agente pueda leerlo y extraer valores si la
     extracción automática falla.
     """
-    if fondo_key not in FONDO_CARPETAS:
-        disponibles = ", ".join(FONDO_CARPETAS.keys())
+    if fondo_key not in FONDO_RUTAS:
+        disponibles = ", ".join(FONDO_RUTAS.keys())
         return f"Error: fondo '{fondo_key}' no reconocido. Disponibles: {disponibles}"
 
     pdf_path = buscar_pdf_eeff(fondo_key, año, mes)

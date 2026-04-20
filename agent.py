@@ -41,6 +41,9 @@ from tools.excel_tools import (
 )
 from tools.gestion_renta_tools import (
     crear_planilla_mes,
+    guardar_cdg,
+    buscar_tir,
+    verificar_archivos_cdg,
     actualizar_fecha_pendientes,
     agregar_vr_bursatil_pt,
     agregar_vr_bursatil_rentas,
@@ -67,6 +70,7 @@ from tools.datos_fs_tools import (
     leer_tir_rentas_resumen,
 )
 from tools.caja_tools import (
+    buscar_saldo_caja,
     listar_hojas_saldo_caja,
     copiar_datos_saldo_caja,
     leer_celdas_caja,
@@ -98,6 +102,8 @@ from tools.vacancia_tools import (
     consultar_vacancia,
 )
 from tools.noi_tools import (
+    buscar_rr_jll,
+    buscar_er_inmosa,
     actualizar_er_vina,
     actualizar_er_curico,
     actualizar_noi_pt,
@@ -486,7 +492,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "crear_planilla_mes",
-            "description": "Crea la planilla mensual de Control de Gestión Renta Comercial copiando la del mes anterior en R:\\.",
+            "description": "Crea la planilla mensual de Control de Gestión Renta Comercial copiando la del mes anterior en SharePoint. El archivo nuevo tendrá sufijo vAgente.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -494,6 +500,54 @@ TOOL_DEFINITIONS = [
                 },
                 "required": ["mes_code_nuevo"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "guardar_cdg",
+            "description": (
+                "Guarda el CDG editado de vuelta en SharePoint (RENTA_COMERCIAL_DIR/{año}/). "
+                "SOLO puede guardar archivos vAgente — rechaza vF y vActualizar. "
+                "Llamar al terminar de actualizar el CDG."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del archivo vAgente en WORK_DIR o ruta absoluta"},
+                },
+                "required": ["nombre_archivo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "verificar_archivos_cdg",
+            "description": (
+                "Verifica qué archivos necesarios para actualizar el CDG de un mes están disponibles "
+                "y cuáles faltan. Responde a '¿tienes todo para el CDG de [mes]?'. "
+                "Incluye archivos de fin de trimestre si corresponde (mar/jun/sep/dic)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del CDG (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes del CDG (1-12)"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_tir",
+            "description": (
+                "Busca el archivo Cálculo TIR Fondo Rentas más reciente en SharePoint "
+                "(Controles de Gestión/). Necesario solo en fin de trimestre."
+            ),
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -892,6 +946,25 @@ TOOL_DEFINITIONS = [
     },
 
     # ── Hoja Caja ──────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_saldo_caja",
+            "description": (
+                "Busca el archivo Saldo Caja + FFMM más reciente en SharePoint para el año/mes indicado. "
+                "Los archivos están en SALDO_CAJA_DIR/{año}/ con nombre AAMMDD Saldo Caja + FFMM Inmobiliario.xlsx. "
+                "Retorna la ruta absoluta al archivo más reciente (que contiene todo el histórico)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del CDG (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes del CDG (1-12)"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -1329,6 +1402,44 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "buscar_rr_jll",
+            "description": (
+                "Busca el archivo Rent Roll JLL del mes indicado en SharePoint "
+                "(Rent Rolls/JLL/{año}/) y luego en WORK_DIR. "
+                "Retorna la ruta absoluta. Usar antes de actualizar_noi_pt/apoquindo/apo3001."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer"},
+                    "mes": {"type": "integer"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_er_inmosa",
+            "description": (
+                "Busca el archivo ER-FC INMOSA más reciente del año en SharePoint "
+                "(EEFF Proveedores/Flujos INMOSA/{año}/). "
+                "Cada mes se sube un archivo nuevo. Retorna la ruta absoluta."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer"},
+                    "mes": {"type": "integer"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "actualizar_noi_pt",
             "description": (
                 "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 335-379 del NOI-RCSD "
@@ -1338,7 +1449,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_cdg":     {"type": "string"},
-                    "nombre_rr_jll":  {"type": "string", "description": "Archivo RR JLL en WORK_DIR"},
+                    "nombre_rr_jll":  {"type": "string", "description": "Ruta absoluta o nombre en WORK_DIR del RR JLL"},
                     "año":            {"type": "integer"},
                     "mes":            {"type": "integer"},
                 },
@@ -1595,6 +1706,9 @@ def _dispatch(name: str, args: dict) -> str:
         "listar_planillas_en_trabajo":  lambda a: list_work_files(),
         # Gestión Renta Comercial
         "crear_planilla_mes":           lambda a: crear_planilla_mes(a["mes_code_nuevo"]),
+        "guardar_cdg":                  lambda a: guardar_cdg(a["nombre_archivo"]),
+        "buscar_tir":                   lambda a: buscar_tir(),
+        "verificar_archivos_cdg":       lambda a: verificar_archivos_cdg(a["año"], a["mes"]),
         "actualizar_fecha_pendientes":  lambda a: actualizar_fecha_pendientes(a["nombre_archivo"], a["año"], a["mes"]),
         "info_siguiente_accion":        lambda a: info_siguiente_accion(a["nombre_archivo"]),
         "obtener_precio_cuota":         lambda a: obtener_precio_cuota(a["nemotecnico"], a["año"], a["mes"]),
@@ -1621,6 +1735,7 @@ def _dispatch(name: str, args: dict) -> str:
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
         # Caja
+        "buscar_saldo_caja":            lambda a: buscar_saldo_caja(a["año"], a["mes"]),
         "archivar_saldo_caja":          lambda a: archivar_saldo_caja(a["nombre_archivo"]),
         "listar_saldo_caja_archivados": lambda a: listar_saldo_caja_archivados(),
         "listar_hojas_saldo_caja":      lambda a: listar_hojas_saldo_caja(a["archivo_saldo_caja"]),
@@ -1664,6 +1779,8 @@ def _dispatch(name: str, args: dict) -> str:
         "inspeccionar_noi_rcsd":         lambda a: inspeccionar_noi_rcsd(a["nombre_cdg"], a["activo"]),
         "actualizar_er_vina":            lambda a: actualizar_er_vina(a["nombre_cdg"], a["año"], a["mes"], a.get("nombre_eeff")),
         "actualizar_er_curico":          lambda a: actualizar_er_curico(a["nombre_cdg"], a["año"], a["mes"], a.get("nombre_eeff")),
+        "buscar_rr_jll":                 lambda a: buscar_rr_jll(a["año"], a["mes"]),
+        "buscar_er_inmosa":              lambda a: buscar_er_inmosa(a["año"], a["mes"]),
         "actualizar_noi_pt":             lambda a: actualizar_noi_pt(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
         "actualizar_noi_apoquindo":      lambda a: actualizar_noi_apoquindo(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
         "actualizar_noi_apo3001":        lambda a: actualizar_noi_apo3001(a["nombre_cdg"], a["nombre_rr_jll"], a["año"], a["mes"]),
@@ -1705,7 +1822,8 @@ _TOOLS_GENERAL = {
 }
 
 _TOOLS_CDG = {
-    "crear_planilla_mes", "actualizar_fecha_pendientes", "info_siguiente_accion",
+    "crear_planilla_mes", "guardar_cdg", "verificar_archivos_cdg", "buscar_tir",
+    "actualizar_fecha_pendientes", "info_siguiente_accion",
     "agregar_vr_bursatil_pt", "agregar_vr_bursatil_rentas",
     "agregar_vr_contable_pt", "agregar_vr_contable_rentas", "agregar_vr_contable_apoquindo",
     "agregar_dividendo_pt", "agregar_dividendo_rentas", "agregar_dividendo_apoquindo",
@@ -1719,13 +1837,14 @@ _TOOLS_CDG = {
 }
 
 _TOOLS_NOI = {
+    "buscar_rr_jll", "buscar_er_inmosa",
     "actualizar_er_vina", "actualizar_er_curico",
     "actualizar_noi_pt", "actualizar_noi_apoquindo", "actualizar_noi_apo3001",
     "actualizar_noi_inmosa", "inspeccionar_noi_rcsd",
 }
 
 _TOOLS_CAJA = {
-    "archivar_saldo_caja", "listar_saldo_caja_archivados",
+    "buscar_saldo_caja", "archivar_saldo_caja", "listar_saldo_caja_archivados",
     "listar_hojas_saldo_caja", "copiar_datos_saldo_caja",
     "leer_celdas_caja", "inspeccionar_caja_historica", "agregar_fila_caja_historica",
 }

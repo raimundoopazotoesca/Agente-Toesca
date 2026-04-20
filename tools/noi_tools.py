@@ -36,11 +36,13 @@ import openpyxl
 from config import SHAREPOINT_DIR, WORK_DIR
 
 # ── Rutas base ─────────────────────────────────────────────────────────────────
-_TRES_A_BASE = os.path.join(SHAREPOINT_DIR, "Fondo Rentas", "Informes TresA")
+_TRES_A_BASE = os.path.join(SHAREPOINT_DIR, "EEFF Proveedores", "Informes TresA")
 _TRES_A_DIRS = {
     "vina":   os.path.join(_TRES_A_BASE, "Viña Centro"),
     "curico": os.path.join(_TRES_A_BASE, "Curico"),
 }
+_RR_JLL_BASE = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
+_INMOSA_BASE = os.path.join(SHAREPOINT_DIR, "EEFF Proveedores", "Flujos INMOSA (Residencias Adulto Mayor)")
 
 # Sheet XML paths within the CDG xlsx (derived from workbook.xml.rels)
 _ER_VINA_XML   = "xl/worksheets/sheet54.xml"
@@ -359,24 +361,28 @@ def _leer_eeff_estado_resultado(eeff_path: str) -> tuple:
 # ── Descubrir archivo EEFF ────────────────────────────────────────────────────
 
 def _find_eeff_file(mall: str, año: int, mes: int) -> Optional[str]:
-    """Busca INFORME EEFF en WORK_DIR y luego en SharePoint TresA."""
+    """Busca INFORME EEFF en SharePoint TresA/{año}/ y luego en WORK_DIR."""
     mes_str = f"{mes:02d}-{año}"
-    search_dirs = [WORK_DIR]
-    if mall in _TRES_A_DIRS and os.path.isdir(_TRES_A_DIRS[mall]):
-        search_dirs.append(_TRES_A_DIRS[mall])
-
     keywords = {
-        "vina":   ["vi", "a", "centro"],
+        "vina":   ["vi", "centro"],
         "curico": ["curic"],
     }
     kws = keywords.get(mall, [])
 
+    # Primero busca en SharePoint con subcarpeta del año
+    sp_año_dir = os.path.join(_TRES_A_DIRS[mall], str(año)) if mall in _TRES_A_DIRS else None
+    search_dirs = []
+    if sp_año_dir and os.path.isdir(sp_año_dir):
+        search_dirs.append(sp_año_dir)
+    search_dirs.append(WORK_DIR)
+
     for d in search_dirs:
+        # Buscar con fecha exacta MM-YYYY en nombre
         for f in glob.glob(os.path.join(d, "*.xlsx")):
             bn = os.path.basename(f).lower()
             if mes_str.lower() in bn and all(k in bn for k in kws):
                 return f
-        # Fallback sin fecha exacta: buscar el archivo más reciente con keywords
+        # Fallback: más reciente con keywords
         candidates = [
             f for f in glob.glob(os.path.join(d, "*.xlsx"))
             if all(k in os.path.basename(f).lower() for k in kws)
@@ -643,6 +649,26 @@ def actualizar_er_curico(nombre_cdg: str, año: int, mes: int,
 
 # ── PT / Apoquindo / Apoquindo 3001 (desde hoja NOI PT del RR JLL) ───────────
 
+def buscar_rr_jll(año: int, mes: int) -> str:
+    """
+    Busca el archivo Rent Roll JLL del mes indicado en SharePoint.
+    Retorna la ruta absoluta o un mensaje de error.
+    """
+    aamm = f"{str(año)[2:]}{mes:02d}"
+    sp_año_dir = os.path.join(_RR_JLL_BASE, str(año))
+    search_dirs = []
+    if os.path.isdir(sp_año_dir):
+        search_dirs.append(sp_año_dir)
+    search_dirs.append(WORK_DIR)
+
+    for d in search_dirs:
+        for pat in [f"{aamm} Rent Roll y NOI*.xlsx", f"{aamm}*Rent Roll*.xlsx"]:
+            matches = glob.glob(os.path.join(d, pat))
+            if matches:
+                return matches[0]
+    return f"Error: no se encontró RR JLL {aamm} en {sp_año_dir} ni en WORK_DIR."
+
+
 def _actualizar_noi_desde_jll(
     nombre_cdg: str,
     nombre_rr_jll: str,
@@ -654,15 +680,16 @@ def _actualizar_noi_desde_jll(
 ) -> str:
     """
     Copia datos de la hoja 'NOI PT' del RR JLL a las filas indicadas del NOI-RCSD.
-    Matching por etiqueta de fila (col C del CDG). Fórmulas se respetan.
+    nombre_rr_jll puede ser nombre de archivo (busca en WORK_DIR) o ruta absoluta.
     """
     cdg_path = os.path.join(WORK_DIR, nombre_cdg)
-    jll_path = os.path.join(WORK_DIR, nombre_rr_jll)
+    jll_path = (nombre_rr_jll if os.path.isabs(nombre_rr_jll)
+                else os.path.join(WORK_DIR, nombre_rr_jll))
 
     if not os.path.exists(cdg_path):
         return f"Error: '{nombre_cdg}' no encontrado en WORK_DIR."
     if not os.path.exists(jll_path):
-        return f"Error: '{nombre_rr_jll}' no encontrado en WORK_DIR."
+        return f"Error: RR JLL no encontrado en {jll_path}."
 
     # ── 1. Leer RR JLL (openpyxl read_only, rápido) ───────────────────────────
     wb_jll = openpyxl.load_workbook(jll_path, read_only=True, data_only=True)
@@ -835,6 +862,29 @@ def actualizar_noi_apo3001(nombre_cdg: str, nombre_rr_jll: str,
 
 
 # ── INMOSA (desde ER-FC INMOSA en SharePoint) ─────────────────────────────────
+
+def buscar_er_inmosa(año: int, mes: int) -> str:
+    """
+    Busca el archivo ER-FC INMOSA más reciente del año en SharePoint.
+    Los archivos están en EEFF Proveedores/Flujos INMOSA/{año}/ y se nombran
+    'ER-FC INMOSA {año} {meses}.xlsx'. Cada mes se sube uno nuevo — el más
+    reciente contiene los datos del mes indicado.
+    Retorna la ruta absoluta o mensaje de error.
+    """
+    sp_año_dir = os.path.join(_INMOSA_BASE, str(año))
+    search_dirs = [sp_año_dir, WORK_DIR] if os.path.isdir(sp_año_dir) else [WORK_DIR]
+
+    for d in search_dirs:
+        if not os.path.isdir(d):
+            continue
+        archivos = [f for f in os.listdir(d) if f.lower().endswith(".xlsx")
+                    and "inmosa" in f.lower()]
+        if archivos:
+            # El más reciente por fecha de modificación
+            return max((os.path.join(d, f) for f in archivos), key=os.path.getmtime)
+
+    return f"Error: no se encontró ER-FC INMOSA para {año} en {sp_año_dir} ni WORK_DIR."
+
 
 def actualizar_noi_inmosa(nombre_cdg: str, nombre_er_inmosa: str,
                           año: int, mes: int) -> str:

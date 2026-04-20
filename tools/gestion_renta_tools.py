@@ -3,6 +3,7 @@ Herramientas para el flujo mensual del Control de Gestión Renta Comercial.
 Manipulación directa del XML del xlsx (sin cargar el workbook completo en openpyxl)
 para máxima velocidad con archivos de 14MB+ y 87 hojas.
 """
+import glob
 import os
 import re
 import shutil
@@ -445,7 +446,7 @@ def crear_planilla_mes(mes_code_nuevo: str) -> str:
                 return f"Error: no hay archivo anterior a {mes_code_nuevo} en {carpeta_año}."
             origen = os.path.join(carpeta_año, candidatos[-1])
 
-        nombre_nuevo = f"{mes_code_nuevo} Control De Gestión Renta Comercial.xlsx"
+        nombre_nuevo = f"{mes_code_nuevo} Control De Gestión Renta Comercial vAgente.xlsx"
         destino = os.path.join(carpeta_año, nombre_nuevo)
 
         if os.path.exists(destino):
@@ -456,6 +457,38 @@ def crear_planilla_mes(mes_code_nuevo: str) -> str:
 
     except Exception as e:
         return f"Error al crear planilla: {e}"
+
+
+def guardar_cdg(nombre_archivo: str) -> str:
+    """
+    Guarda el CDG editado (debe ser un archivo vAgente) de vuelta en SharePoint,
+    en la misma carpeta donde van los CDG del año (RENTA_COMERCIAL_DIR/{YYYY}/).
+
+    PROHIBIDO editar/guardar archivos vF o vActualizar — solo vAgente.
+    """
+    src = _resolve_path(nombre_archivo)
+    base = os.path.basename(src)
+
+    if "vagente" not in base.lower():
+        return (
+            f"Error: solo puedes guardar archivos 'vAgente'. "
+            f"'{base}' parece ser una versión que no debes modificar."
+        )
+    if not os.path.exists(src):
+        return f"Error: '{src}' no encontrado."
+
+    # Determinar año desde el código AAMM al inicio del nombre
+    import re as _re
+    m = _re.match(r"(\d{2})(\d{2})", base)
+    año = ("20" + m.group(1)) if m else str(date.today().year)
+
+    carpeta_destino = os.path.join(RUTA_COMERCIAL, año)
+    if not os.path.isdir(carpeta_destino):
+        return f"Error: carpeta destino no existe: {carpeta_destino}"
+
+    destino = os.path.join(carpeta_destino, base)
+    shutil.copy2(src, destino)
+    return f"OK: '{base}' guardado en {carpeta_destino}"
 
 
 def actualizar_fecha_pendientes(nombre_archivo: str, año: int, mes: int) -> str:
@@ -688,3 +721,121 @@ def info_siguiente_accion(nombre_archivo: str) -> str:
         return "\n\n".join(report)
     except Exception as e:
         return f"Error al leer estado: {e}"
+
+
+# ─── TIR y verificación de archivos ──────────────────────────────────────────
+
+def buscar_tir() -> str:
+    """
+    Busca el archivo Cálculo TIR Fondo Rentas más reciente en SharePoint
+    (Controles de Gestión/). Retorna la ruta absoluta o mensaje de error.
+    """
+    carpeta = os.path.join(SHAREPOINT_DIR, "Controles de Gestión")
+    archivos = glob.glob(os.path.join(carpeta, "*TIR*Rentas*.xlsx"))
+    if not archivos:
+        archivos = glob.glob(os.path.join(carpeta, "*TIR*.xlsx"))
+    if not archivos:
+        return f"Error: no se encontró archivo TIR en {carpeta}"
+    return max(archivos, key=os.path.getmtime)
+
+
+def verificar_archivos_cdg(año: int, mes: int) -> str:
+    """
+    Verifica qué archivos necesarios para actualizar el CDG del mes indicado
+    están disponibles y cuáles faltan. Responde a '¿tienes todo para el CDG de [mes]?'
+
+    Archivos requeridos siempre:
+      - CDG mes anterior (para copiar)
+      - Saldo Caja (más reciente del año)
+      - RR JLL (Nicole)
+      - RR Tres A Viña (Sebastián)
+      - RR Tres A Curicó (Sebastián)
+      - EEFF Viña Centro
+      - EEFF Curicó
+      - EEFF INMOSA
+
+    Adicionales en fin de trimestre (mar/jun/sep/dic):
+      - EEFF A&R PT
+      - EEFF A&R Rentas (TRI)
+      - EEFF A&R Apoquindo
+      - TIR Fondo Rentas
+    """
+    from tools.caja_tools import buscar_saldo_caja
+    from tools.noi_tools import buscar_rr_jll, buscar_er_inmosa, _find_eeff_file
+    from tools.rentroll_tools import _find_file
+    from tools.eeff_tools import buscar_pdf_eeff
+
+    aamm = f"{str(año)[2:]}{mes:02d}"
+    es_trimestre = mes in (3, 6, 9, 12)
+    meses_es = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
+                7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
+
+    listos = []
+    faltan = []
+
+    def chk(nombre, ruta_o_error):
+        ok = ruta_o_error and os.path.isfile(ruta_o_error)
+        if ok:
+            listos.append(f"  [OK] {nombre}: {os.path.basename(ruta_o_error)}")
+        else:
+            faltan.append(f"  [FALTA] {nombre}")
+
+    # ── CDG mes anterior ──────────────────────────────────────────────────────
+    mes_ant = mes - 1 if mes > 1 else 12
+    año_ant = año if mes > 1 else año - 1
+    aamm_ant = f"{str(año_ant)[2:]}{mes_ant:02d}"
+    carpeta_cdg = os.path.join(RENTA_COMERCIAL_DIR, str(año if mes > 1 else año_ant))
+    cdg_prev = None
+    if os.path.isdir(carpeta_cdg):
+        candidatos = [f for f in os.listdir(carpeta_cdg)
+                      if f.startswith(aamm_ant) and f.endswith(".xlsx")]
+        if candidatos:
+            cdg_prev = os.path.join(carpeta_cdg, candidatos[-1])
+    chk(f"CDG {aamm_ant} (mes anterior)", cdg_prev)
+
+    # ── Saldo Caja ────────────────────────────────────────────────────────────
+    sc = buscar_saldo_caja(año, mes)
+    chk("Saldo Caja", sc if not sc.startswith("Error") else None)
+
+    # ── RR JLL ────────────────────────────────────────────────────────────────
+    rr_jll = buscar_rr_jll(año, mes)
+    chk(f"RR JLL {aamm}", rr_jll if not rr_jll.startswith("Error") else None)
+
+    # ── RR Tres A ─────────────────────────────────────────────────────────────
+    chk(f"RR Tres A Viña {meses_es[mes]}", _find_file(año, mes, "vina"))
+    chk(f"RR Tres A Curicó {meses_es[mes]}", _find_file(año, mes, "curico"))
+
+    # ── EEFF Viña y Curicó ────────────────────────────────────────────────────
+    chk(f"EEFF Viña Centro {mes:02d}-{año}", _find_eeff_file("vina", año, mes))
+    chk(f"EEFF Curicó {mes:02d}-{año}", _find_eeff_file("curico", año, mes))
+
+    # ── INMOSA ────────────────────────────────────────────────────────────────
+    inmosa = buscar_er_inmosa(año, mes)
+    chk("EEFF INMOSA", inmosa if not inmosa.startswith("Error") else None)
+
+    # ── Fin de trimestre ──────────────────────────────────────────────────────
+    if es_trimestre:
+        for fondo in ["A&R PT", "A&R Rentas", "A&R Apoquindo"]:
+            ruta_pdf = buscar_pdf_eeff(fondo, año, mes)
+            ok = os.path.isfile(ruta_pdf) if ruta_pdf else False
+            chk(f"EEFF {fondo} {mes:02d}-{año}", ruta_pdf if ok else None)
+
+        tir = buscar_tir()
+        chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None)
+
+    # ── Resumen ───────────────────────────────────────────────────────────────
+    sufijo = " (fin de trimestre)" if es_trimestre else ""
+    lines = [f"Verificación CDG {meses_es[mes]} {año}{sufijo}:", ""]
+    if listos:
+        lines.append("Disponibles:")
+        lines.extend(listos)
+    if faltan:
+        lines.append("")
+        lines.append("Faltan:")
+        lines.extend(faltan)
+        lines.append("")
+        lines.append("=> No se puede iniciar la actualizacion hasta tener todos los archivos.")
+    else:
+        lines.append("")
+        lines.append("=> Todo listo para actualizar el CDG.")
+    return "\n".join(lines)

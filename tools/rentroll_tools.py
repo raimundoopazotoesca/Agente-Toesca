@@ -23,8 +23,15 @@ from typing import Optional
 
 import openpyxl
 
-from config import WORK_DIR
+from config import WORK_DIR, SHAREPOINT_DIR
 from tools.email_tools import send_email
+
+# ── Rutas SharePoint Rent Rolls ──────────────────────────────────────────────
+_RR_JLL_DIR = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
+_RR_TRESA_DIRS = {
+    "vina":   os.path.join(SHAREPOINT_DIR, "Rent Rolls", "Tres Asociados", "Mall Viña Centro"),
+    "curico": os.path.join(SHAREPOINT_DIR, "Rent Rolls", "Tres Asociados", "Curicó"),
+}
 
 # ── Constantes de proveedores ────────────────────────────────────────────────
 NICOLE_EMAIL = "nicole.carvajal@jll.com"
@@ -51,7 +58,7 @@ def _cierre_mes(año: int, mes: int) -> date:
 
 def _find_file(año: int, mes: int, proveedor: str) -> Optional[str]:
     """
-    Busca el archivo de RR en WORK_DIR según proveedor.
+    Busca el archivo de RR en SharePoint (subcarpeta año) y luego WORK_DIR.
     proveedor: 'jll', 'vina', 'curico'
     """
     aamm = f"{str(año)[2:]}{mes:02d}"
@@ -65,10 +72,23 @@ def _find_file(año: int, mes: int, proveedor: str) -> Optional[str]:
                    f"*Curic*{aamm}*.xlsx"],
     }
 
-    for pat in patterns.get(proveedor, []):
-        matches = glob.glob(os.path.join(WORK_DIR, pat))
-        if matches:
-            return matches[0]
+    # Directorios de búsqueda: SharePoint/{año}/ primero, luego WORK_DIR
+    sp_año_dirs = {
+        "jll":    os.path.join(_RR_JLL_DIR, str(año)),
+        "vina":   os.path.join(_RR_TRESA_DIRS["vina"], str(año)),
+        "curico": os.path.join(_RR_TRESA_DIRS["curico"], str(año)),
+    }
+    search_dirs = []
+    sp_dir = sp_año_dirs.get(proveedor, "")
+    if sp_dir and os.path.isdir(sp_dir):
+        search_dirs.append(sp_dir)
+    search_dirs.append(WORK_DIR)
+
+    for d in search_dirs:
+        for pat in patterns.get(proveedor, []):
+            matches = glob.glob(os.path.join(d, pat))
+            if matches:
+                return matches[0]
     return None
 
 
