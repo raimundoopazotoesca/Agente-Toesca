@@ -50,25 +50,30 @@ st.markdown("""
 <div id="toesca-sidebar-btn" title="Sidebar" onclick="
 (function(){
     var selectors = [
+        '[data-testid=stSidebarCollapsedControl]',
+        '[data-testid=stSidebarCollapseButton]',
         '[data-testid=stSidebarCollapsedControl] button',
         '[data-testid=stSidebarCollapseButton] button',
         '[data-testid=collapsedControl] button',
         'section[data-testid=stSidebar] button',
         'button[aria-label*=sidebar i]',
-        'button[aria-label*=Sidebar]',
         'button[aria-label*=Close i]',
         'button[aria-label*=Open i]'
     ];
     function tryClick(doc) {
         for (var i = 0; i < selectors.length; i++) {
-            var b = doc.querySelector(selectors[i]);
-            if (b) { b.click(); return true; }
+            var el = doc.querySelector(selectors[i]);
+            if (el) {
+                var b = el.tagName === 'BUTTON' ? el : el.querySelector('button');
+                if (b) { b.click(); return true; }
+                el.click(); return true;
+            }
         }
         return false;
     }
-    if (!tryClick(document) && window.parent && window.parent !== window) {
-        try { tryClick(window.parent.document); } catch(e) {}
-    }
+    var docs = [document];
+    try { if (window.parent && window.parent !== window) docs.push(window.parent.document); } catch(e){}
+    for (var d=0; d<docs.length; d++) { if (tryClick(docs[d])) return; }
 })()">&#9776;</div>
 """, unsafe_allow_html=True)
 
