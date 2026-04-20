@@ -23,42 +23,6 @@ st.set_page_config(
 css = Path("style.css").read_text()
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
-# Botón flotante para mostrar/ocultar sidebar
-st.markdown("""
-<style>
-#sidebar-toggle {
-    position: fixed;
-    top: 14px;
-    left: 14px;
-    z-index: 9998;
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #888;
-    font-size: 14px;
-    transition: border-color 0.15s, color 0.15s;
-}
-#sidebar-toggle:hover { border-color: #555; color: #e8e3dc; }
-</style>
-<div id="sidebar-toggle" title="Mostrar/ocultar sidebar" onclick="
-    var btn = window.parent.document.querySelector('[data-testid=collapsedControl] button') ||
-              window.parent.document.querySelector('[data-testid=stSidebarNav] button') ||
-              window.parent.document.querySelector('button[aria-label*=idebar]') ||
-              window.parent.document.querySelector('section[data-testid=stSidebar] ~ div button');
-    if (btn) { btn.click(); }
-    else {
-        var s = window.parent.document.querySelector('[data-testid=stSidebar]');
-        if (s) { s.style.display = s.style.display === 'none' ? '' : 'none'; }
-    }
-">☰</div>
-""", unsafe_allow_html=True)
-
 # ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
 if "loader_shown" not in st.session_state:
     st.session_state.loader_shown = True
@@ -211,7 +175,8 @@ if not st.session_state.messages:
     """, unsafe_allow_html=True)
 else:
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
+        _avatar = ":material/apartment:" if msg["role"] == "assistant" else ":material/person:"
+        with st.chat_message(msg["role"], avatar=_avatar):
             st.markdown(msg["content"])
 
 # ─── Procesar input ────────────────────────────────────────────────────────────
@@ -223,7 +188,7 @@ user_input = st.chat_input("Escribe una instrucción...") or _pending
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=":material/person:"):
         st.markdown(user_input)
 
     memory_block = load_memory()
@@ -238,7 +203,7 @@ if user_input:
     tools_used = []
     final_response = ""
 
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=":material/apartment:"):
         status_area = st.empty()
         response_area = st.empty()
         tool_lines = []

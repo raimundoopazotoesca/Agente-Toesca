@@ -1,12 +1,60 @@
 @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Inter:wght@300;400;500&display=swap');
 
 #MainMenu, footer { visibility: hidden; }
-header { visibility: hidden; }
+header[data-testid="stHeader"] { visibility: hidden; }
+
+/* ── Sidebar toggle buttons (expanded + collapsed states) ───────────────────── */
 [data-testid="collapsedControl"],
-[data-testid="collapsedControl"] * {
+[data-testid="collapsedControl"] *,
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapseButton"] * {
     visibility: visible !important;
     opacity: 1 !important;
     display: flex !important;
+}
+[data-testid="collapsedControl"] button,
+[data-testid="stSidebarCollapseButton"] button {
+    background: #141414 !important;
+    border: 1px solid #252525 !important;
+    border-radius: 5px !important;
+    color: #555 !important;
+    width: 2rem !important;
+    height: 2rem !important;
+    transition: color 0.15s, border-color 0.15s !important;
+}
+[data-testid="collapsedControl"] button:hover,
+[data-testid="stSidebarCollapseButton"] button:hover {
+    color: #e8e3dc !important;
+    border-color: #555 !important;
+}
+
+/* ── Chat message avatars ────────────────────────────────────────────────────── */
+/* Container del mensaje */
+[data-testid="stChatMessage"] {
+    padding: 1.1rem 0 !important;
+    border-bottom: 1px solid #141414 !important;
+    align-items: flex-start !important;
+}
+/* Avatar — zona izquierda: dark square refinado */
+[data-testid="stChatMessage"] [data-testid="stAvatarImage"],
+[data-testid="stChatMessage"] > div:first-child > div {
+    background: #111 !important;
+    border: 1px solid #1e1e1e !important;
+    border-radius: 4px !important;
+    color: #555 !important;
+}
+/* Íconos material dentro del avatar */
+[data-testid="stChatMessage"] [data-testid="stAvatarImage"] span,
+[data-testid="stChatMessage"] > div:first-child span[class*="material"] {
+    color: #444 !important;
+    font-size: 1rem !important;
+}
+/* Texto del mensaje — tipografía alineada */
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
+    font-family: 'Inter', sans-serif !important;
+    font-size: 0.88rem !important;
+    line-height: 1.75 !important;
+    color: #c9c3bb !important;
 }
 .block-container { padding: 2rem 2rem 5rem 2rem !important; max-width: 100% !important; }
 
