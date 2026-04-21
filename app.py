@@ -285,7 +285,13 @@ if user_input:
                 api_messages.append(msg)
 
                 if not msg.tool_calls:
-                    final_response = msg.content or "Tarea completada."
+                    if msg.content:
+                        final_response = msg.content
+                    else:
+                        # El modelo retornó contenido vacío tras tool calls — pedir resumen explícito
+                        api_messages.append({"role": "user", "content": "Resume brevemente los resultados de lo que encontraste."})
+                        followup = _llm_call(model=MODEL, messages=api_messages, tools=[], tool_choice="none")
+                        final_response = followup.choices[0].message.content or "Sin respuesta del modelo."
                     status_area.empty()
                     response_area.markdown(final_response)
                     break

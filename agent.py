@@ -246,15 +246,21 @@ PRECIOS BURSÁTILES:
   (A&R Apoquindo NO tiene VR Bursátil)
 
 VR CONTABLE (solo fin de trimestre: mar/jun/sep/dic):
-  → agregar_vr_contable_pt(...)
-  → agregar_vr_contable_rentas(...)
-  → agregar_vr_contable_apoquindo(...)
+  Los EEFF de los fondos A&R corresponden al TRIMESTRE ANTERIOR al CDG:
+    CDG marzo  → leer_eeff(mes=12, año=año-1)
+    CDG junio  → leer_eeff(mes=3,  año=año)
+    CDG sep    → leer_eeff(mes=6,  año=año)
+    CDG dic    → leer_eeff(mes=9,  año=año)
+  Flujo VR Contable:
+    1. leer_eeff(fondo_key, año_eeff, mes_eeff) → extraer valor cuota
+    2. agregar_vr_contable_pt/rentas/apoquindo(nombre_cdg, año_cdg, mes_cdg, precio_cuota)
 
 ARCHIVOS FUENTE:
   RR JLL (Nicole Carvajal): "{AAMM} Rent Roll y NOI.xlsx" — hoja "NOI PT"
-  EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx"
-  EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx"
-  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA
+  EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx" — del MES del CDG
+  EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx" — del MES del CDG
+  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA — del MES del CDG
+  EEFF fondos A&R (PDF): del TRIMESTRE ANTERIOR al CDG (ver tabla arriba)
 
 ═══════════════════════════════════════════════════════════════
 FLUJO MENSUAL CDG
@@ -526,7 +532,10 @@ TOOL_DEFINITIONS = [
             "name": "verificar_archivos_cdg",
             "description": (
                 "Verifica qué archivos necesarios para actualizar el CDG de un mes están disponibles "
-                "y cuáles faltan. Responde a '¿tienes todo para el CDG de [mes]?'. "
+                "y cuáles faltan. Usar cuando el usuario pregunta: '¿tienes todo para el CDG?', "
+                "'¿qué archivos tienes?', '¿qué archivos te faltan?', '¿qué tienes actualizado?'. "
+                "El resultado incluye SIEMPRE dos secciones: 'Disponibles' (archivos encontrados) "
+                "y 'Faltan' (archivos no encontrados). SIEMPRE reportar ambas secciones al usuario. "
                 "Incluye archivos de fin de trimestre si corresponde (mar/jun/sep/dic)."
             ),
             "parameters": {
@@ -706,6 +715,8 @@ TOOL_DEFINITIONS = [
             "description": (
                 "Lee el PDF de EEFF de un fondo para el trimestre indicado. "
                 "Extrae valor cuota libro por serie y detecta dividendos/aportes. "
+                "IMPORTANTE: para VR Contable del CDG, usar el trimestre ANTERIOR al mes del CDG "
+                "(CDG marzo → mes=12, año=año-1; CDG junio → mes=3; etc.). "
                 "Si la extracción automática falla, retorna el texto relevante del PDF "
                 "para que puedas identificar los valores manualmente."
             ),
@@ -713,8 +724,8 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "fondo_key": {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
-                    "año":       {"type": "integer", "description": "Año del trimestre"},
-                    "mes":       {"type": "integer", "description": "Mes de cierre del trimestre (3, 6, 9 o 12)"},
+                    "año":       {"type": "integer", "description": "Año del trimestre (OJO: puede diferir del año del CDG)"},
+                    "mes":       {"type": "integer", "description": "Mes de cierre del trimestre ANTERIOR al CDG (3, 6, 9 o 12)"},
                 },
                 "required": ["fondo_key", "año", "mes"],
             },

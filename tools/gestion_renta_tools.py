@@ -770,32 +770,46 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     meses_es = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
                 7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
 
-    listos = []
-    faltan = []
+    checklist = []  # lista de (nombre, ok: bool, detalle: str)
 
     def chk(nombre, ruta_o_error):
-        ok = ruta_o_error and os.path.isfile(ruta_o_error)
-        if ok:
-            listos.append(f"  [OK] {nombre}: {os.path.basename(ruta_o_error)}")
-        else:
-            faltan.append(f"  [FALTA] {nombre}")
+        ok = bool(ruta_o_error and os.path.isfile(ruta_o_error))
+        detalle = os.path.basename(ruta_o_error) if ok else "FALTA"
+        checklist.append((nombre, ok, detalle))
 
-    # ── CDG mes anterior ──────────────────────────────────────────────────────
+    _MESES_ABR = {"ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,
+                  "jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12}
+
+    # ── CDG mes anterior — solo versión vF ───────────────────────────────────
     mes_ant = mes - 1 if mes > 1 else 12
     año_ant = año if mes > 1 else año - 1
     aamm_ant = f"{str(año_ant)[2:]}{mes_ant:02d}"
     carpeta_cdg = os.path.join(RENTA_COMERCIAL_DIR, str(año if mes > 1 else año_ant))
     cdg_prev = None
     if os.path.isdir(carpeta_cdg):
-        candidatos = [f for f in os.listdir(carpeta_cdg)
-                      if f.startswith(aamm_ant) and f.endswith(".xlsx")]
-        if candidatos:
-            cdg_prev = os.path.join(carpeta_cdg, candidatos[-1])
-    chk(f"CDG {aamm_ant} (mes anterior)", cdg_prev)
+        candidatos_vf = sorted([
+            f for f in os.listdir(carpeta_cdg)
+            if f.startswith(aamm_ant) and f.endswith(".xlsx") and "vF" in f
+        ])
+        if candidatos_vf:
+            cdg_prev = os.path.join(carpeta_cdg, candidatos_vf[-1])
+    chk(f"CDG {aamm_ant} vF (mes anterior)", cdg_prev)
 
-    # ── Saldo Caja ────────────────────────────────────────────────────────────
+    # ── Saldo Caja — necesita archivo del mes SIGUIENTE al CDG ───────────────
+    # Al copiar Caja se selecciona la hoja con fecha más cercana al cierre del mes;
+    # para que esa hoja exista, el archivo debe ser de mes+1 o posterior.
+    mes_sig = mes + 1 if mes < 12 else 1
+    año_sig = año if mes < 12 else año + 1
+    aamm_sig = f"{str(año_sig)[2:]}{mes_sig:02d}"
     sc = buscar_saldo_caja(año, mes)
-    chk("Saldo Caja", sc if not sc.startswith("Error") else None)
+    if sc.startswith("Error") and mes == 12:
+        sc = buscar_saldo_caja(año + 1, 1)
+    sc_valido = None
+    if not sc.startswith("Error"):
+        m_sc = re.match(r"(\d{2})(\d{2})\d{2}", os.path.basename(sc))
+        if m_sc and (m_sc.group(1) + m_sc.group(2)) >= aamm_sig:
+            sc_valido = sc
+    chk(f"Saldo Caja (necesita {meses_es[mes_sig]} {año_sig} o posterior)", sc_valido)
 
     # ── RR JLL ────────────────────────────────────────────────────────────────
     rr_jll = buscar_rr_jll(año, mes)
@@ -805,37 +819,52 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     chk(f"RR Tres A Viña {meses_es[mes]}", _find_file(año, mes, "vina"))
     chk(f"RR Tres A Curicó {meses_es[mes]}", _find_file(año, mes, "curico"))
 
-    # ── EEFF Viña y Curicó ────────────────────────────────────────────────────
-    chk(f"EEFF Viña Centro {mes:02d}-{año}", _find_eeff_file("vina", año, mes))
-    chk(f"EEFF Curicó {mes:02d}-{año}", _find_eeff_file("curico", año, mes))
+    # ── EEFF Viña y Curicó — validar que el archivo sea del mes correcto ──────
+    mes_str = f"{mes:02d}-{año}"
+    for label, mall in [(f"EEFF Viña Centro {mes_str}", "vina"),
+                        (f"EEFF Curicó {mes_str}", "curico")]:
+        path = _find_eeff_file(mall, año, mes)
+        valido = path if (path and mes_str in os.path.basename(path)) else None
+        chk(label, valido)
 
-    # ── INMOSA ────────────────────────────────────────────────────────────────
+    # ── EEFF INMOSA — validar que el archivo cubra el mes del CDG ─────────────
     inmosa = buscar_er_inmosa(año, mes)
-    chk("EEFF INMOSA", inmosa if not inmosa.startswith("Error") else None)
+    inmosa_valido = None
+    if not inmosa.startswith("Error"):
+        nombre_lower = os.path.basename(inmosa).lower()
+        menciones = [(nombre_lower.find(abr), m)
+                     for abr, m in _MESES_ABR.items() if abr in nombre_lower]
+        if menciones:
+            ultimo_mes = max(menciones, key=lambda x: x[0])[1]
+            inmosa_valido = inmosa if ultimo_mes >= mes else None
+        else:
+            inmosa_valido = inmosa  # sin meses en nombre, asumir válido
+    chk(f"EEFF INMOSA (necesita cubrir {meses_es[mes]})", inmosa_valido)
 
     # ── Fin de trimestre ──────────────────────────────────────────────────────
+    # Los EEFF son del trimestre ANTERIOR (ej: CDG marzo → EEFF diciembre año-1)
     if es_trimestre:
+        trim_map = {3: (12, año - 1), 6: (3, año), 9: (6, año), 12: (9, año)}
+        mes_eeff, año_eeff = trim_map[mes]
         for fondo in ["A&R PT", "A&R Rentas", "A&R Apoquindo"]:
-            ruta_pdf = buscar_pdf_eeff(fondo, año, mes)
+            ruta_pdf = buscar_pdf_eeff(fondo, año_eeff, mes_eeff)
             ok = os.path.isfile(ruta_pdf) if ruta_pdf else False
-            chk(f"EEFF {fondo} {mes:02d}-{año}", ruta_pdf if ok else None)
+            chk(f"EEFF {fondo} {mes_eeff:02d}-{año_eeff}", ruta_pdf if ok else None)
 
         tir = buscar_tir()
         chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None)
 
     # ── Resumen ───────────────────────────────────────────────────────────────
     sufijo = " (fin de trimestre)" if es_trimestre else ""
+    n_faltan = sum(1 for _, ok, _ in checklist if not ok)
     lines = [f"Verificación CDG {meses_es[mes]} {año}{sufijo}:", ""]
-    if listos:
-        lines.append("Disponibles:")
-        lines.extend(listos)
-    if faltan:
-        lines.append("")
-        lines.append("Faltan:")
-        lines.extend(faltan)
-        lines.append("")
-        lines.append("=> No se puede iniciar la actualizacion hasta tener todos los archivos.")
+    col_w = max((len(nombre) for nombre, _, _ in checklist), default=30) + 2
+    for nombre, ok, detalle in checklist:
+        estado = "✓" if ok else "✗"
+        lines.append(f"  {estado}  {nombre:<{col_w}} {detalle}")
+    lines.append("")
+    if n_faltan:
+        lines.append(f"=> Faltan {n_faltan} archivo(s). No se puede iniciar hasta tenerlos todos.")
     else:
-        lines.append("")
         lines.append("=> Todo listo para actualizar el CDG.")
     return "\n".join(lines)

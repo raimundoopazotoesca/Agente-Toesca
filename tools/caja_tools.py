@@ -24,13 +24,19 @@ import shutil
 import zipfile
 from calendar import monthrange
 from datetime import date, timedelta
-from config import WORK_DIR, SALDO_CAJA_DIR
+from config import WORK_DIR, SALDO_CAJA_DIR, SHAREPOINT_DIR
 
 # Carpeta de archivo: si no está configurada, usa WORK_DIR/saldo_caja/
 def _resolve_saldo_caja_dir() -> str:
     if SALDO_CAJA_DIR:
         return SALDO_CAJA_DIR
     return os.path.join(WORK_DIR, "saldo_caja")
+
+def _sharepoint_saldo_caja_dir() -> str:
+    """Ruta SharePoint: Controles de Gestión/Saldo Caja/"""
+    if SHAREPOINT_DIR:
+        return os.path.join(SHAREPOINT_DIR, "Controles de Gestión", "Saldo Caja")
+    return ""
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -297,24 +303,11 @@ def _limpiar_numero(val) -> float | None:
 
 def buscar_saldo_caja(año: int, mes: int) -> str:
     """
-    Busca el archivo Saldo Caja + FFMM más reciente en SharePoint para el
-    año/mes indicado. Los archivos tienen el formato AAMMDD en el nombre.
+    Busca el archivo Saldo Caja + FFMM más reciente para el año indicado.
+    Busca primero en SharePoint (Controles de Gestión/Saldo Caja/{año}/)
+    y luego en SALDO_CAJA_DIR (R:). Los archivos tienen formato AAMMDD en el nombre.
     Retorna la ruta absoluta al archivo o un mensaje de error.
     """
-    saldo_dir = _resolve_saldo_caja_dir()
-    carpeta_año = os.path.join(saldo_dir, str(año))
-
-    if not os.path.isdir(carpeta_año):
-        return f"Error: carpeta no encontrada: {carpeta_año}"
-
-    archivos = [
-        f for f in os.listdir(carpeta_año)
-        if f.lower().endswith((".xlsx", ".xls")) and re.match(r"\d{6}", f)
-    ]
-    if not archivos:
-        return f"Error: no hay archivos Saldo Caja en {carpeta_año}"
-
-    # Ordenar por fecha embebida en el nombre (AAMMDD)
     def fecha_key(nombre):
         m = re.match(r"(\d{2})(\d{2})(\d{2})", nombre)
         if not m:
@@ -322,9 +315,30 @@ def buscar_saldo_caja(año: int, mes: int) -> str:
         aa, mm, dd = m.groups()
         return int(aa) * 10000 + int(mm) * 100 + int(dd)
 
-    archivos_ordenados = sorted(archivos, key=fecha_key)
-    # Tomar el más reciente del año (tiene todo el histórico)
-    return os.path.join(carpeta_año, archivos_ordenados[-1])
+    def _buscar_en(carpeta_año):
+        if not os.path.isdir(carpeta_año):
+            return None
+        archivos = [
+            f for f in os.listdir(carpeta_año)
+            if f.lower().endswith((".xlsx", ".xls")) and re.match(r"\d{6}", f)
+        ]
+        if not archivos:
+            return None
+        return os.path.join(carpeta_año, sorted(archivos, key=fecha_key)[-1])
+
+    # 1. SharePoint
+    sp_dir = _sharepoint_saldo_caja_dir()
+    if sp_dir:
+        resultado = _buscar_en(os.path.join(sp_dir, str(año)))
+        if resultado:
+            return resultado
+
+    # 2. SALDO_CAJA_DIR (R:)
+    resultado = _buscar_en(os.path.join(_resolve_saldo_caja_dir(), str(año)))
+    if resultado:
+        return resultado
+
+    return f"Error: no se encontró archivo Saldo Caja para {año} en SharePoint ni en servidor"
 
 
 def listar_hojas_saldo_caja(archivo_saldo_caja: str) -> str:

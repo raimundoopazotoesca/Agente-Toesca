@@ -76,9 +76,15 @@ SALDO_CAJA_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja
 6. `agregar_vr_bursatil_rentas(...)` → A&R Rentas series A/C/I (mensual)
    - A&R Apoquindo no tiene VR Bursátil
 7. Si fin de trimestre (mar/jun/sep/dic):
+   - Los EEFF de fondos A&R son del **trimestre anterior** al CDG:
+     - CDG marzo → `leer_eeff(mes=12, año=año-1)`
+     - CDG junio → `leer_eeff(mes=3, año=año)`
+     - CDG sep → `leer_eeff(mes=6, año=año)`
+     - CDG dic → `leer_eeff(mes=9, año=año)`
    - `agregar_vr_contable_pt(...)`
    - `agregar_vr_contable_rentas(...)`
    - `agregar_vr_contable_apoquindo(...)`
+   - **EEFF Viña, Curicó, INMOSA**: siempre usan el mes del CDG (no trimestre anterior)
 8. `guardar_en_servidor(...)`
 
 ## Flujo mensual NOI-RCSD (noi_tools.py)
