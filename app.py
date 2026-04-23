@@ -47,6 +47,11 @@ authenticator = stauth.Authenticate(
 
 # Si el usuario no está logueado (status is None o False), mostramos la pantalla custom y paramos
 if st.session_state.get("authentication_status") is not True:
+    
+    # Reiniciar la pantalla de carga para que la transición ocurra siempre al loguearse
+    if "loader_shown" in st.session_state:
+        del st.session_state["loader_shown"]
+        
     # Inyectamos algo de CSS global básico para ocultar sidebar antes de login
     st.markdown("""
     <style>
