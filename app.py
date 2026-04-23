@@ -30,6 +30,97 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ─── Pantalla de carga (Garantizada sin interrupciones) ────────────────────────
+import time
+import streamlit.components.v1 as components
+
+if st.session_state.get("authentication_status") is True:
+    if "loader_start_time" not in st.session_state:
+        st.session_state.loader_start_time = time.time()
+
+    if time.time() - st.session_state.loader_start_time < 3.5:
+        # Inyectamos el loader directamente en el DOM raíz (fuera de React)
+        # Esto evita que Streamlit destruya o reinicie la animación durante los reruns
+        components.html("""
+        <script>
+        (function() {
+            var parentDoc = window.parent.document;
+            
+            // Si ya está inyectado, no hacemos nada (mantiene la animación fluida)
+            if (parentDoc.getElementById('toesca-loader-container')) return;
+            
+            var container = parentDoc.createElement('div');
+            container.id = 'toesca-loader-container';
+            container.innerHTML = `
+                <style>
+                @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&display=swap');
+
+                #toesca-loader {
+                  position: fixed;
+                  inset: 0;
+                  background: #0a0a0a;
+                  z-index: 9999999;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  flex-direction: column;
+                  animation: tl-fadeout 0.6s cubic-bezier(0.4,0,1,1) 2.9s forwards;
+                }
+                .tl-content { display: flex; align-items: center; justify-content: center; }
+                .tl-logo {
+                  font-family: 'EB Garamond', Georgia, serif; font-size: 5rem;
+                  font-weight: 400; color: #e8e3dc; display: flex; align-items: baseline;
+                  line-height: 1; overflow: visible; position: relative;
+                }
+                .tl-text { opacity: 0; animation: tl-textin 0.8s ease-out 0.2s forwards; }
+                .tl-dot {
+                  display: inline-block; opacity: 0; transform: translateX(-48vw);
+                  animation: tl-dotin 1.0s cubic-bezier(0.34,1.45,0.64,1) 1.2s forwards;
+                  color: #e8e3dc;
+                }
+                .tl-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 1px; background: #1a1a1a; }
+                .tl-progress {
+                  height: 100%;
+                  background: linear-gradient(90deg, transparent, #e8e3dc 15%, #e8e3dc 85%, transparent);
+                  width: 0;
+                  animation: tl-progress 3.5s linear 0s forwards;
+                }
+
+                @keyframes tl-textin {
+                  0%   { opacity: 0; transform: translateY(10px); }
+                  100% { opacity: 1; transform: translateY(0);    }
+                }
+                @keyframes tl-dotin {
+                  0%   { opacity: 0; transform: translateX(-48vw); }
+                  12%  { opacity: 1;                               }
+                  100% { opacity: 1; transform: translateX(0);     }
+                }
+                @keyframes tl-progress {
+                  from { width: 0%;    }
+                  to   { width: 100%;  }
+                }
+                @keyframes tl-fadeout {
+                  from { opacity: 1; }
+                  to   { opacity: 0; pointer-events: none; }
+                }
+                </style>
+                <div id="toesca-loader">
+                  <div class="tl-content">
+                    <div class="tl-logo"><span class="tl-text">toesca</span><span class="tl-dot">.</span></div>
+                  </div>
+                  <div class="tl-bar"><div class="tl-progress"></div></div>
+                </div>
+            `;
+            parentDoc.body.appendChild(container);
+            
+            // Eliminar del DOM una vez terminada la animación
+            setTimeout(function() {
+                if (container.parentNode) container.parentNode.removeChild(container);
+            }, 3500);
+        })();
+        </script>
+        """, width=0, height=0)
+
 # ─── Autenticación y Pantalla de Login Elegante ──────────────────────────────
 import yaml
 from yaml.loader import SafeLoader
@@ -49,8 +140,8 @@ authenticator = stauth.Authenticate(
 if st.session_state.get("authentication_status") is not True:
     
     # Reiniciar la pantalla de carga para que la transición ocurra siempre al loguearse
-    if "loader_shown" in st.session_state:
-        del st.session_state["loader_shown"]
+    if "loader_start_time" in st.session_state:
+        del st.session_state["loader_start_time"]
         
     # Inyectamos algo de CSS global básico para ocultar sidebar antes de login
     st.markdown("""
@@ -63,67 +154,119 @@ if st.session_state.get("authentication_status") is not True:
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         st.markdown("""
-        <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
-        <div style="text-align: center; margin-top: 10vh; margin-bottom: 2.5rem;">
-            <div style="font-family: 'EB Garamond', Georgia, serif; font-size: 5rem; color: #e8e3dc; line-height: 1;">toesca.</div>
-            <div style="font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #ffffff; margin-bottom: 2rem; margin-top: 0.5rem;">Gestión de Fondos</div>
-            <p style="color: #999; font-family: 'Inter', sans-serif; font-size: 0.95rem; line-height: 1.6; font-weight: 300;">
-                Bienvenido al <b>Agente Toesca</b>.<br>Ingrese sus credenciales corporativas para acceder 
-                al entorno automatizado de Control de Gestión y Análisis de Activos.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
         
-        st.markdown("""
         <style>
-        /* Glassmorphism para el form de login */
+        /* Animaciones Globales del Login */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes formEntrance {
+            from { opacity: 0; transform: translate3d(0, 30px, 0); }
+            to { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+        
+        .login-header-wrapper {
+            animation: fadeInDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        /* Glassmorphism premium para el form de login */
         div[data-testid="stForm"] {
-            background: rgba(15, 15, 15, 0.7) !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            border-radius: 12px !important;
-            padding: 2.5rem 2rem !important;
-            backdrop-filter: blur(12px) !important;
-            -webkit-backdrop-filter: blur(12px) !important;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+            background: linear-gradient(135deg, rgba(25, 25, 25, 0.7), rgba(10, 10, 10, 0.9)) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.18) !important; /* Efecto luz cenital */
+            border-radius: 16px !important;
+            padding: 3rem 2.5rem !important;
+            backdrop-filter: blur(25px) saturate(150%) !important;
+            -webkit-backdrop-filter: blur(25px) saturate(150%) !important;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.02) !important;
+            
+            /* Animación de entrada y Fix de Chrome */
+            opacity: 0; /* Comienza invisible para la animación */
+            animation: formEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards !important;
+            backface-visibility: hidden !important;
+            -webkit-backface-visibility: hidden !important;
         }
-        /* Labels de los inputs */
+
+        /* Labels de los inputs más corporativos y limpios */
         div[data-testid="stForm"] label {
-            color: #d0d0d0 !important;
+            color: #a3a3a3 !important;
             font-family: 'Inter', sans-serif !important;
-            font-weight: 400 !important;
+            font-size: 0.72rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.1em !important;
+            text-transform: uppercase !important;
+            margin-bottom: 0.5rem !important;
         }
-        /* Cajas de texto */
+
+        /* Cajas de texto premium */
         div[data-testid="stForm"] input {
-            background-color: rgba(0, 0, 0, 0.5) !important;
+            background-color: rgba(0, 0, 0, 0.4) !important;
             color: #ffffff !important;
-            border: 1px solid #444 !important;
-            border-radius: 6px !important;
-            padding: 0.6rem 1rem !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 8px !important;
+            padding: 0.85rem 1.2rem !important;
+            font-size: 0.95rem !important;
+            font-family: 'Inter', sans-serif !important;
+            transition: all 0.3s ease !important;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
         }
+
+        /* Focus en cajas de texto (Acento Corporativo Dorado/Toesca) */
         div[data-testid="stForm"] input:focus {
-            border-color: #ffffff !important;
-            box-shadow: 0 0 0 1px #ffffff !important;
+            border-color: #c9a84c !important;
+            background-color: rgba(0, 0, 0, 0.6) !important;
+            box-shadow: 0 0 0 1px #c9a84c, inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+            outline: none !important;
         }
-        /* Botón de Iniciar Sesión */
+
+        div[data-testid="stForm"] input::placeholder {
+            color: rgba(255, 255, 255, 0.2) !important;
+        }
+
+        /* Botón de Iniciar Sesión Elevado */
         div[data-testid="stForm"] button {
-            background-color: #e8e3dc !important;
-            color: #000000 !important;
+            background: linear-gradient(135deg, #e8e3dc, #c4beaf) !important;
+            color: #111111 !important;
             border: none !important;
             font-weight: 600 !important;
             font-family: 'Inter', sans-serif !important;
-            border-radius: 6px !important;
-            padding: 0.6rem !important;
-            transition: all 0.2s ease !important;
-            margin-top: 1rem !important;
+            font-size: 0.95rem !important;
+            letter-spacing: 0.02em !important;
+            border-radius: 8px !important;
+            padding: 0.85rem !important;
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+            margin-top: 1.5rem !important;
+            box-shadow: 0 4px 15px rgba(232, 227, 220, 0.15) !important;
+            width: 100% !important;
         }
+
+        /* Hover de Botón */
         div[data-testid="stForm"] button:hover {
-            background-color: #ffffff !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 15px rgba(255, 255, 255, 0.25) !important;
+            background: linear-gradient(135deg, #ffffff, #e8e3dc) !important;
+            transform: translateY(-3px) !important;
+            box-shadow: 0 8px 25px rgba(232, 227, 220, 0.3) !important;
         }
-        /* Ocultar elementos extra que a veces pone el authenticator */
+        
+        /* Click de Botón */
+        div[data-testid="stForm"] button:active {
+            transform: translateY(0px) !important;
+            box-shadow: 0 2px 10px rgba(232, 227, 220, 0.2) !important;
+        }
+
+        /* Ajustes Opcionales Streamlit */
         .stMarkdown p { font-family: 'Inter', sans-serif !important; }
         </style>
+        
+        <div class="login-header-wrapper" style="text-align: center; margin-top: 8vh; margin-bottom: 2.5rem;">
+            <div style="font-family: 'EB Garamond', Georgia, serif; font-size: 5.5rem; color: #e8e3dc; line-height: 1;">toesca.</div>
+            <div style="font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 400; letter-spacing: 0.25em; text-transform: uppercase; color: #ffffff; margin-bottom: 2rem; margin-top: 0.8rem; opacity: 0.9;">Gestión de Fondos</div>
+            <p style="color: #a0a0a0; font-family: 'Inter', sans-serif; font-size: 0.95rem; line-height: 1.6; font-weight: 300; max-width: 400px; margin: 0 auto;">
+                Bienvenido al <b>Agente Toesca</b>.<br>Ingrese sus credenciales corporativas para acceder 
+                al entorno automatizado.
+            </p>
+        </div>
         """, unsafe_allow_html=True)
 
         try:
@@ -213,100 +356,7 @@ components.html("""
 </script>
 """, width=0, height=0)
 
-# ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
-if "loader_shown" not in st.session_state:
-    st.session_state.loader_shown = True
-    st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&display=swap" rel="stylesheet">
-<div id="toesca-loader">
-  <div class="tl-content">
-    <div class="tl-logo">
-      <span class="tl-text">toesca</span><span class="tl-dot">.</span>
-    </div>
-  </div>
-  <div class="tl-bar"><div class="tl-progress"></div></div>
-</div>
 
-<style>
-#toesca-loader {
-  position: fixed;
-  inset: 0;
-  background: #0a0a0a;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  animation: tl-fadeout 0.6s cubic-bezier(0.4,0,1,1) 2.9s forwards;
-}
-.tl-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.tl-logo {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 5rem;
-  font-weight: 400;
-  color: #e8e3dc;
-  display: flex;
-  align-items: baseline;
-  line-height: 1;
-  overflow: visible;
-  position: relative;
-}
-.tl-text {
-  opacity: 0;
-  animation: tl-textin 0.8s ease-out 0.2s forwards;
-}
-.tl-dot {
-  display: inline-block;
-  opacity: 0;
-  transform: translateX(-48vw);
-  animation: tl-dotin 1.0s cubic-bezier(0.34,1.45,0.64,1) 1.2s forwards;
-  color: #e8e3dc;
-}
-.tl-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 1px;
-  background: #1a1a1a;
-}
-.tl-progress {
-  height: 100%;
-  background: linear-gradient(90deg, transparent, #e8e3dc 15%, #e8e3dc 85%, transparent);
-  width: 0;
-  animation: tl-progress 3.5s linear 0s forwards;
-}
-
-@keyframes tl-textin {
-  0%   { opacity: 0; transform: translateY(10px); }
-  100% { opacity: 1; transform: translateY(0);    }
-}
-@keyframes tl-dotin {
-  0%   { opacity: 0; transform: translateX(-48vw); }
-  12%  { opacity: 1;                               }
-  100% { opacity: 1; transform: translateX(0);     }
-}
-@keyframes tl-progress {
-  from { width: 0%;    }
-  to   { width: 100%;  }
-}
-@keyframes tl-fadeout {
-  from { opacity: 1; }
-  to   { opacity: 0; pointer-events: none; }
-}
-</style>
-
-<script>
-setTimeout(function() {
-  var el = document.getElementById('toesca-loader');
-  if (el) el.remove();
-}, 3500);
-</script>
-""", unsafe_allow_html=True)
 
 # ─── Estado ────────────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:

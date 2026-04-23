@@ -3,5 +3,15 @@
     "ruta": "Controles de Gestión/Saldo Caja/2026/260413 Saldo Caja + FFMM Inmobiliario.xlsx",
     "notas": "",
     "actualizado": "2026-04-21T08:56:36"
+  },
+  "er_inmosa": {
+    "ruta": "Sharepoint -> Documentos\\EEFF Proveedores\\Flujos INMOSA (Residencias Adulto Mayor)\\{YYYY}",
+    "notas": "La carpeta final depende del año que se consulte.",
+    "actualizado": "2026-04-23T14:41:50"
+  },
+  "tir_rentas": {
+    "ruta": "Sharepoint -> Documentos\\Controles de Gestión\\Cálculo TIR Fondo Rentas (act. sept-25).xlsx",
+    "notas": "Planilla para calcular el TIR del Fondo Rentas",
+    "actualizado": "2026-04-23T14:41:50"
   }
 }

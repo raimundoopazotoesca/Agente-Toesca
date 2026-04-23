@@ -13,10 +13,10 @@
 ## Próximos pasos
 
 ### Corto plazo — Ajustes y Pruebas
-- [ ] Confirmar ruta exacta del archivo ER-FC INMOSA en SharePoint
-- [ ] Confirmar nombre del archivo TIR Fondo Rentas
-- [ ] Probar el flujo completo de febrero 2026 end-to-end
-- [ ] Agregar `streamlit` a `requirements.txt`
+- [x] Confirmar ruta exacta del archivo ER-FC INMOSA en SharePoint
+- [x] Confirmar nombre del archivo TIR Fondo Rentas
+- [ ] Probar el flujo completo de marzo 2026 end-to-end
+- [x] Agregar `streamlit` a `requirements.txt`
 
 ### Mediano plazo 1 — Multi-usuario en red interna
 - [ ] Correr el agente en una PC fija de la oficina (Windows, con Outlook y OneDrive) o servidor en red.
