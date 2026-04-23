@@ -310,7 +310,7 @@ with st.sidebar:
     st.markdown('<p class="toesca-logo">toesca.</p>', unsafe_allow_html=True)
     st.markdown('<p class="toesca-tagline">Gestión de Fondos</p>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-size:13px; color:#888; padding-bottom:10px;">👤 {st.session_state.get("name", "")}</div>', unsafe_allow_html=True)
-    authenticator.logout('Cerrar Sesión', 'unrendered')
+    authenticator.logout('Cerrar Sesión', 'main')
     
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
