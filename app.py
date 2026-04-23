@@ -135,6 +135,10 @@ if st.session_state.get("authentication_status") is not True:
     else:
         # Detenemos la ejecución de la app si no se ha logueado exitosamente
         st.stop()
+else:
+    # IMPORTANTE: Llamar a login silenciosamente cuando ya está autenticado
+    # para que Streamlit-Authenticator escriba y mantenga las cookies de sesión.
+    authenticator.login('main')
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text(encoding="utf-8")
