@@ -130,8 +130,11 @@ if st.session_state.get("authentication_status") is not True:
         if st.session_state.get("authentication_status") is False:
             st.error('Usuario o contraseña incorrectos.')
     
-    # Detenemos la ejecución de la app si no se ha logueado exitosamente
-    st.stop()
+    if st.session_state.get("authentication_status") is True:
+        st.rerun()
+    else:
+        # Detenemos la ejecución de la app si no se ha logueado exitosamente
+        st.stop()
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text(encoding="utf-8")
