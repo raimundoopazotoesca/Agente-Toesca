@@ -1,0 +1,16 @@
+cookie:
+  expiry_days: 30
+  key: toesca_signature_key
+  name: toesca_auth_cookie
+credentials:
+  usernames:
+    admin:
+      email: admin@toesca.cl
+      name: Administrador
+      password: $2b$12$gSz.m/SbOCTILws/vBF5qez.zIjk4D1DWPQZZkYhkJXZI/I/P937i
+    raimundo:
+      email: raimundo@toesca.cl
+      name: Raimundo Opazo
+      password: $2b$12$2r73jPxnGgzhKogRb2IueO9JED05sINMdKab9OxCE82ztuFXZv3hC
+pre-authorized:
+  emails: []

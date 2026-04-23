@@ -30,6 +30,32 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ─── Autenticación ─────────────────────────────────────────────────────────────
+import yaml
+from yaml.loader import SafeLoader
+import streamlit_authenticator as stauth
+
+with open('config.yaml', encoding='utf-8') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
+)
+
+try:
+    authenticator.login()
+except Exception as e:
+    st.error(e)
+
+if st.session_state.get("authentication_status") is False:
+    st.error('Usuario o contraseña incorrectos.')
+    st.stop()
+elif st.session_state.get("authentication_status") is None:
+    st.stop()
+
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
@@ -203,6 +229,9 @@ if "pending_input" not in st.session_state:
 with st.sidebar:
     st.markdown('<p class="toesca-logo">toesca.</p>', unsafe_allow_html=True)
     st.markdown('<p class="toesca-tagline">Gestión de Fondos</p>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-size:13px; color:#888; padding-bottom:10px;">👤 {st.session_state.get("name", "")}</div>', unsafe_allow_html=True)
+    authenticator.logout('Cerrar Sesión', 'unrendered')
+    
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
     st.markdown('<p class="sidebar-section">Acciones rápidas</p>', unsafe_allow_html=True)
