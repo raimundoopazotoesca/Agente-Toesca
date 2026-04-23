@@ -61,7 +61,7 @@ if st.session_state.get("authentication_status") is not True:
         <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
         <div style="text-align: center; margin-top: 10vh; margin-bottom: 2.5rem;">
             <div style="font-family: 'EB Garamond', Georgia, serif; font-size: 5rem; color: #e8e3dc; line-height: 1;">toesca.</div>
-            <div style="font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #c9a84c; margin-bottom: 2rem; margin-top: 0.5rem;">Gestión de Fondos</div>
+            <div style="font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #ffffff; margin-bottom: 2rem; margin-top: 0.5rem;">Gestión de Fondos</div>
             <p style="color: #999; font-family: 'Inter', sans-serif; font-size: 0.95rem; line-height: 1.6; font-weight: 300;">
                 Bienvenido al <b>Agente Toesca</b>.<br>Ingrese sus credenciales corporativas para acceder 
                 al entorno automatizado de Control de Gestión y Análisis de Activos.
@@ -73,38 +73,38 @@ if st.session_state.get("authentication_status") is not True:
         <style>
         /* Glassmorphism para el form de login */
         div[data-testid="stForm"] {
-            background: rgba(20, 20, 20, 0.65) !important;
-            border: 1px solid rgba(201, 168, 76, 0.15) !important;
+            background: rgba(15, 15, 15, 0.7) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
             border-radius: 12px !important;
             padding: 2.5rem 2rem !important;
             backdrop-filter: blur(12px) !important;
             -webkit-backdrop-filter: blur(12px) !important;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
         }
         /* Labels de los inputs */
         div[data-testid="stForm"] label {
-            color: #b0b0b0 !important;
+            color: #d0d0d0 !important;
             font-family: 'Inter', sans-serif !important;
             font-weight: 400 !important;
         }
         /* Cajas de texto */
         div[data-testid="stForm"] input {
-            background-color: rgba(10, 10, 10, 0.8) !important;
-            color: #e8e3dc !important;
-            border: 1px solid #333 !important;
+            background-color: rgba(0, 0, 0, 0.5) !important;
+            color: #ffffff !important;
+            border: 1px solid #444 !important;
             border-radius: 6px !important;
             padding: 0.6rem 1rem !important;
         }
         div[data-testid="stForm"] input:focus {
-            border-color: #c9a84c !important;
-            box-shadow: 0 0 0 1px #c9a84c !important;
+            border-color: #ffffff !important;
+            box-shadow: 0 0 0 1px #ffffff !important;
         }
         /* Botón de Iniciar Sesión */
         div[data-testid="stForm"] button {
-            background-color: #c9a84c !important;
-            color: #111 !important;
+            background-color: #e8e3dc !important;
+            color: #000000 !important;
             border: none !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
             font-family: 'Inter', sans-serif !important;
             border-radius: 6px !important;
             padding: 0.6rem !important;
@@ -112,9 +112,9 @@ if st.session_state.get("authentication_status") is not True:
             margin-top: 1rem !important;
         }
         div[data-testid="stForm"] button:hover {
-            background-color: #d8b75c !important;
+            background-color: #ffffff !important;
             transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(201, 168, 76, 0.2) !important;
+            box-shadow: 0 4px 15px rgba(255, 255, 255, 0.25) !important;
         }
         /* Ocultar elementos extra que a veces pone el authenticator */
         .stMarkdown p { font-family: 'Inter', sans-serif !important; }
