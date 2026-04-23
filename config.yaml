@@ -5,12 +5,20 @@ cookie:
 credentials:
   usernames:
     admin:
-      email: admin@toesca.cl
+      email: admin@toesca.com
       name: Administrador
-      password: $2b$12$gSz.m/SbOCTILws/vBF5qez.zIjk4D1DWPQZZkYhkJXZI/I/P937i
-    raimundo:
-      email: raimundo@toesca.cl
+      password: $2b$12$S/Dq10GleSQAgF2Xk4152Oi/qgNY23qAoS3KGZ59X36LR93mc344e
+    gregorio.delajara@toesca.com:
+      email: gregorio.delajara@toesca.com
+      name: Gregorio de la Jara
+      password: $2b$12$rGod4OkOjT1swXnfitvjOOPh2Ozl3IqYaG9NoOQ/fNeci7gcAmg0W
+    marcos.quiroga@toesca.com:
+      email: marcos.quiroga@toesca.com
+      name: Marcos Quiroga
+      password: $2b$12$33X68BJjSAxggEezF3iST.LLZ5O84IPDxh7S0OcoKm8Rt7QWSvtgS
+    raimundo.opazo@toesca.com:
+      email: raimundo.opazo@toesca.com
       name: Raimundo Opazo
-      password: $2b$12$2r73jPxnGgzhKogRb2IueO9JED05sINMdKab9OxCE82ztuFXZv3hC
+      password: $2b$12$8RI3QSohSHhyL6ZX0fG/vOPXi4PYA/2S12S8duNiIRTHCwRLACR82
 pre-authorized:
   emails: []
