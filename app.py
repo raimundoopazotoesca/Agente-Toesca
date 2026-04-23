@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Autenticación ─────────────────────────────────────────────────────────────
+# ─── Autenticación y Pantalla de Login Elegante ──────────────────────────────
 import yaml
 from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
@@ -45,15 +45,92 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
-try:
-    authenticator.login()
-except Exception as e:
-    st.error(e)
+# Si el usuario no está logueado (status is None o False), mostramos la pantalla custom y paramos
+if st.session_state.get("authentication_status") is not True:
+    # Inyectamos algo de CSS global básico para ocultar sidebar antes de login
+    st.markdown("""
+    <style>
+    [data-testid="collapsedControl"] { display: none !important; }
+    [data-testid="stSidebar"] { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        st.markdown("""
+        <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+        <div style="text-align: center; margin-top: 10vh; margin-bottom: 2.5rem;">
+            <div style="font-family: 'EB Garamond', Georgia, serif; font-size: 5rem; color: #e8e3dc; line-height: 1;">toesca.</div>
+            <div style="font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 300; letter-spacing: 0.25em; text-transform: uppercase; color: #c9a84c; margin-bottom: 2rem; margin-top: 0.5rem;">Gestión de Fondos</div>
+            <p style="color: #999; font-family: 'Inter', sans-serif; font-size: 0.95rem; line-height: 1.6; font-weight: 300;">
+                Bienvenido al <b>Agente Toesca</b>.<br>Ingrese sus credenciales corporativas para acceder 
+                al entorno automatizado de Control de Gestión y Análisis de Activos.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <style>
+        /* Glassmorphism para el form de login */
+        div[data-testid="stForm"] {
+            background: rgba(20, 20, 20, 0.65) !important;
+            border: 1px solid rgba(201, 168, 76, 0.15) !important;
+            border-radius: 12px !important;
+            padding: 2.5rem 2rem !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+        }
+        /* Labels de los inputs */
+        div[data-testid="stForm"] label {
+            color: #b0b0b0 !important;
+            font-family: 'Inter', sans-serif !important;
+            font-weight: 400 !important;
+        }
+        /* Cajas de texto */
+        div[data-testid="stForm"] input {
+            background-color: rgba(10, 10, 10, 0.8) !important;
+            color: #e8e3dc !important;
+            border: 1px solid #333 !important;
+            border-radius: 6px !important;
+            padding: 0.6rem 1rem !important;
+        }
+        div[data-testid="stForm"] input:focus {
+            border-color: #c9a84c !important;
+            box-shadow: 0 0 0 1px #c9a84c !important;
+        }
+        /* Botón de Iniciar Sesión */
+        div[data-testid="stForm"] button {
+            background-color: #c9a84c !important;
+            color: #111 !important;
+            border: none !important;
+            font-weight: 500 !important;
+            font-family: 'Inter', sans-serif !important;
+            border-radius: 6px !important;
+            padding: 0.6rem !important;
+            transition: all 0.2s ease !important;
+            margin-top: 1rem !important;
+        }
+        div[data-testid="stForm"] button:hover {
+            background-color: #d8b75c !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(201, 168, 76, 0.2) !important;
+        }
+        /* Ocultar elementos extra que a veces pone el authenticator */
+        .stMarkdown p { font-family: 'Inter', sans-serif !important; }
+        </style>
+        """, unsafe_allow_html=True)
 
-if st.session_state.get("authentication_status") is False:
-    st.error('Usuario o contraseña incorrectos.')
-    st.stop()
-elif st.session_state.get("authentication_status") is None:
+        try:
+            # Login location se pone en 'main'
+            authenticator.login('main')
+        except Exception as e:
+            st.error(e)
+
+        if st.session_state.get("authentication_status") is False:
+            st.error('Usuario o contraseña incorrectos.')
+    
+    # Detenemos la ejecución de la app si no se ha logueado exitosamente
     st.stop()
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
