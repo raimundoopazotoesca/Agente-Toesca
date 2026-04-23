@@ -14,8 +14,8 @@ _AGENT_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" wid
 _AGENT_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_AGENT_SVG).decode()
 
 from agent import (
-    client, MODEL, SYSTEM_PROMPT,
-    _select_tools, _dispatch, _llm_call,
+    client, MODEL, BASE_PROMPT, PROMPT_CDG, PROMPT_NOI, PROMPT_RENTROLL, PROMPT_CAJA,
+    _select_tools, _dispatch, _llm_call, get_intent_groups,
     _MAX_TOOL_ITERS,
 )
 
@@ -47,35 +47,56 @@ st.markdown("""
 }
 #toesca-sidebar-btn:hover { color: #e8e3dc; border-color: #555; }
 </style>
-<div id="toesca-sidebar-btn" title="Sidebar" onclick="
-(function(){
-    var selectors = [
-        '[data-testid=stSidebarCollapsedControl]',
-        '[data-testid=stSidebarCollapseButton]',
-        '[data-testid=stSidebarCollapsedControl] button',
-        '[data-testid=stSidebarCollapseButton] button',
-        '[data-testid=collapsedControl] button',
-        'section[data-testid=stSidebar] button',
-        'button[aria-label*=sidebar i]',
-        'button[aria-label*=Close i]',
-        'button[aria-label*=Open i]'
-    ];
-    function tryClick(doc) {
-        for (var i = 0; i < selectors.length; i++) {
-            var el = doc.querySelector(selectors[i]);
+<div id="toesca-sidebar-btn" title="Sidebar">&#9776;</div>
+""", unsafe_allow_html=True)
+
+import streamlit.components.v1 as components
+components.html("""
+<script>
+(function() {
+    var parentDoc = window.parent.document;
+    
+    function toggleSidebar() {
+        var ids = ['stSidebarCollapsedControl', 'stSidebarCollapseButton', 'collapsedControl', 'baseButton-headerNoPadding'];
+        for (var i=0; i<ids.length; i++) {
+            var el = parentDoc.querySelector('[data-testid="'+ids[i]+'"]');
             if (el) {
                 var b = el.tagName === 'BUTTON' ? el : el.querySelector('button');
-                if (b) { b.click(); return true; }
-                el.click(); return true;
+                if (b) { b.click(); return; }
+                el.click(); return;
             }
         }
-        return false;
+        var buttons = parentDoc.querySelectorAll('button');
+        for (var j=0; j<buttons.length; j++) {
+            var aria = (buttons[j].getAttribute('aria-label') || '').toLowerCase();
+            var testid = (buttons[j].getAttribute('data-testid') || '').toLowerCase();
+            if (aria.includes('sidebar') || testid.includes('sidebar')) {
+                buttons[j].click();
+                return;
+            }
+        }
+        var header = parentDoc.querySelector('header');
+        if (header) {
+            var btn = header.querySelector('button');
+            if (btn) { btn.click(); return; }
+        }
     }
-    var docs = [document];
-    try { if (window.parent && window.parent !== window) docs.push(window.parent.document); } catch(e){}
-    for (var d=0; d<docs.length; d++) { if (tryClick(docs[d])) return; }
-})()">&#9776;</div>
-""", unsafe_allow_html=True)
+
+    function attachListener() {
+        var btn = parentDoc.getElementById('toesca-sidebar-btn');
+        if (btn && !btn.hasAttribute('data-listener')) {
+            btn.setAttribute('data-listener', 'true');
+            btn.addEventListener('click', toggleSidebar);
+        }
+    }
+    
+    // Attempt attachment immediately and also observe mutations in case it re-renders
+    attachListener();
+    var observer = new MutationObserver(attachListener);
+    observer.observe(parentDoc.body, { childList: true, subtree: true });
+})();
+</script>
+""", width=0, height=0)
 
 # ─── Pantalla de carga (solo en el primer render) ─────────────────────────────
 if "loader_shown" not in st.session_state:
@@ -245,22 +266,35 @@ if user_input:
     with st.chat_message("user", avatar=":material/person:"):
         st.markdown(user_input)
 
+    recent_history = " ".join([m["content"] for m in st.session_state.messages[-4:] if m["role"] == "user"])
+    grupos = get_intent_groups(recent_history + " " + user_input)
+    selected_tools = _select_tools(grupos)
+    
+    system_content = BASE_PROMPT
+    if "cdg" in grupos: system_content += "\n\n" + PROMPT_CDG
+    if "noi" in grupos: system_content += "\n\n" + PROMPT_NOI
+    if "rentroll" in grupos: system_content += "\n\n" + PROMPT_RENTROLL
+    if "caja" in grupos: system_content += "\n\n" + PROMPT_CAJA
+    
     memory_block = load_memory()
-    system_content = SYSTEM_PROMPT + ("\n\n---\n\n" + memory_block if memory_block else "")
+    if memory_block:
+        system_content += "\n\n---\n\n" + memory_block
+    
     api_messages = [{"role": "system", "content": system_content}]
     # Solo los últimos N turnos para evitar acumulación de tokens en sesiones largas
     history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
     for m in history[-(_MAX_HISTORY_TURNS * 2):]:
         api_messages.append({"role": m["role"], "content": m["content"]})
-
-    selected_tools = _select_tools(user_input)
+    
     tools_used = []
     final_response = ""
 
-    with st.chat_message("assistant", avatar=_AGENT_AVATAR):
-        status_area = st.empty()
-        response_area = st.empty()
-        tool_lines = []
+    _generation_container = st.empty()
+    with _generation_container.container():
+        with st.chat_message("assistant", avatar=_AGENT_AVATAR):
+            status_area = st.empty()
+            response_area = st.empty()
+            tool_lines = []
 
         try:
             iteration = 0
@@ -292,8 +326,20 @@ if user_input:
                         api_messages.append({"role": "user", "content": "Resume brevemente los resultados de lo que encontraste."})
                         followup = _llm_call(model=MODEL, messages=api_messages, tools=[], tool_choice="none")
                         final_response = followup.choices[0].message.content or "Sin respuesta del modelo."
+                        
                     status_area.empty()
-                    response_area.markdown(final_response)
+                    
+                    # Simular tipeo
+                    import time
+                    def stream_text(text):
+                        words = text.split(" ")
+                        for i, word in enumerate(words):
+                            yield word + (" " if i < len(words) - 1 else "")
+                            time.sleep(0.015)
+                            
+                    with response_area:
+                        st.write_stream(stream_text(final_response))
+                        
                     break
 
                 for tool_call in msg.tool_calls:
