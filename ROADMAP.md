@@ -4,8 +4,8 @@
 
 - Agente Python con Gemini 2.5 Flash
 - Interfaz: chat web local via Streamlit (`streamlit run app.py`)
-- Herramientas: CDG, NOI, Caja, Rent Roll, EEFF, Fondos, Email, Memoria/KPIs
-- Selección dinámica de herramientas por tarea (~30-60% ahorro en tokens)
+- Herramientas: CDG, NOI, Caja, Rent Roll, EEFF, Fondos, Email, Memoria/KPIs, **Fact Sheets PPTX (PT/APO/TRI)**
+- Selección dinámica de herramientas por intent en `registry.py` (~30-60% ahorro en tokens)
 - Archivos leídos desde OneDrive sincronizado localmente
 
 ---
@@ -15,8 +15,10 @@
 ### Corto plazo — Ajustes y Pruebas
 - [x] Confirmar ruta exacta del archivo ER-FC INMOSA en SharePoint
 - [x] Confirmar nombre del archivo TIR Fondo Rentas
-- [ ] Probar el flujo completo de marzo 2026 end-to-end
 - [x] Agregar `streamlit` a `requirements.txt`
+- [x] Automatización Fact Sheets PPTX (PT, APO, TRI) — preparar, actualizar, guardar
+- [ ] Probar flujo completo end-to-end con datos reales Q1 2026
+- [ ] Actualización automática de gráficos en Fact Sheets (charts embebidos PPTX)
 
 ### Mediano plazo 1 — Multi-usuario en red interna
 - [ ] Correr el agente en una PC fija de la oficina (Windows, con Outlook y OneDrive) o servidor en red.

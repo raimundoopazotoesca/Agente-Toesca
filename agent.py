@@ -206,6 +206,7 @@ Las categorías permitidas son:
 - "noi" (NOI, Viña, Curicó, JLL, INMOSA, Apoquindo)
 - "caja" (Saldo Caja, FFMM, archivar caja)
 - "rentroll" (Rent Roll, vacancia, absorción)
+- "factsheet" (Fact Sheet, FS, presentación del fondo, actualizar fact sheet, generar fact sheet)
 Si no aplica ninguna, responde [].
 
 Historial de conversación:
