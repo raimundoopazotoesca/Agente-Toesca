@@ -12,6 +12,11 @@
 
 ## Próximos pasos
 
+### Urgente — Actualizaciones Críticas
+- [ ] **Enseñar a actualizar dividendos en input PT:** Definir flujo de captura y validación de dividendos para Parque Titanium.
+- [ ] **Enseñar planillas balances consolidados:** Documentar e implementar la lógica de actualización de balances consolidados.
+- [ ] **Terminar de enseñar FS PT:** Completar la automatización y validación del Fact Sheet de Parque Titanium.
+
 ### Corto plazo — Ajustes y Pruebas
 - [x] Confirmar ruta exacta del archivo ER-FC INMOSA en SharePoint
 - [x] Confirmar nombre del archivo TIR Fondo Rentas
