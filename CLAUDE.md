@@ -68,11 +68,11 @@ SALDO_CAJA_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja
 
 ## Fondos gestionados
 
-| Clave `fondo_key` | Carpeta en R:\Rentas\Fondos | Hoja en CDG |
+| Fondo (Nombre Real) | Clave `fondo_key` (Uso Interno/Excel) | Carpeta en R:\Rentas\Fondos |
 |---|---|---|
-| `A&R Apoquindo` | `FI Toesca Rentas Apoquindo` | `Input AP` |
-| `A&R PT` | `FI Toesca Rentas PT` | `Input PT` |
-| `A&R Rentas` | `FI Toesca Rentas` | `Input Ren` (series A, C, I) |
+| Toesca Rentas Inmobiliarias Apoquindo | `A&R Apoquindo` | `FI Toesca Rentas Apoquindo` |
+| Toesca Rentas Inmobiliarias PT | `A&R PT` | `FI Toesca Rentas PT` |
+| Toesca Rentas Inmobiliarias | `A&R Rentas` | `FI Toesca Rentas` |
 
 ## Nemotécnicos
 
