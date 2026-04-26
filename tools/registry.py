@@ -114,6 +114,7 @@ from tools.factsheet_tools import (
     obtener_valor_libro_fs,
     obtener_historico_valor_libro_fs,
     obtener_precios_bursatiles_fs,
+    leer_repartos_fs,
     listar_shapes_fs,
     leer_tabla_fs,
     preparar_fs,
@@ -1712,6 +1713,28 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "leer_repartos_fs",
+            "description": (
+                "Lee los dividendos pagados en las últimas 12 meses desde la hoja Input del CDG. "
+                "Retorna JSON lista de {fecha, concepto, monto_serie_unica} listo para "
+                "datos_json['dividendos'] de actualizar_fs_pt. "
+                "Usar CDG con fecha contable del FS (ej: FS Enero 2026 → CDG 2601)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del CDG en WORK_DIR, ej: '2601 Control De Gestión Renta Comercial vF.xlsx'"},
+                    "fondo_key":      {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año_fs":         {"type": "integer", "description": "Año del Fact Sheet"},
+                    "mes_fs":         {"type": "integer", "description": "Mes del Fact Sheet (1, 4, 7 o 10)"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "año_fs", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "actualizar_fs_apoquindo",
             "description": (
                 "Actualiza las tablas numéricas del Slide 1 del Fact Sheet Apoquindo: "
@@ -1889,6 +1912,7 @@ def _dispatch(name: str, args: dict) -> str:
         "obtener_valor_libro_fs":          lambda a: obtener_valor_libro_fs(a["fondo_key"], a["año_fs"], a["mes_fs"]),
         "fecha_contable_fs":              lambda a: str(fecha_contable_fs(a["año"], a["mes_fs"])),
         "obtener_precios_bursatiles_fs":  lambda a: obtener_precios_bursatiles_fs(a["nemotecnico"], a["año"], a["mes"], a.get("n", 3)),
+        "leer_repartos_fs":               lambda a: leer_repartos_fs(a["nombre_archivo"], a["fondo_key"], a["año_fs"], a["mes_fs"]),
         "actualizar_fs_apoquindo":       lambda a: actualizar_fs_apoquindo(a["año"], a["mes"], a["datos_json"]),
         "actualizar_fs_tri":             lambda a: actualizar_fs_tri(a["año"], a["mes"], a["datos_json"]),
         "guardar_fs":                    lambda a: guardar_fs(a["fondo_key"], a["año"], a["mes"]),
@@ -1951,6 +1975,7 @@ _TOOLS_RENTROLL = {
 _TOOLS_FACTSHEET = {
     "listar_shapes_fs", "leer_tabla_fs", "preparar_fs",
     "fecha_contable_fs", "obtener_valor_libro_fs", "obtener_historico_valor_libro_fs", "obtener_precios_bursatiles_fs",
+    "leer_repartos_fs",
     "actualizar_fs_pt", "actualizar_fs_apoquindo", "actualizar_fs_tri", "guardar_fs",
     # Herramientas de datos que el agente necesita para alimentar el FS
     "obtener_precio_cuota", "leer_eeff", "leer_rentabilidades_ar",

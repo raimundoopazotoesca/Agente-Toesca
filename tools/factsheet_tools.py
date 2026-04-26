@@ -153,6 +153,14 @@ def _fmt_clp(valor: float) -> str:
     return "$" + f"{round(valor):,}".replace(",", ".")
 
 
+def _fmt_div(monto: float) -> str:
+    """440.7897 → '$440,8'  |  1234.5 → '$1.234,5'"""
+    r = round(monto, 1)
+    ent = int(r)
+    dec = round((r - ent) * 10)
+    return f"${ent:,}".replace(",", ".") + f",{dec}"
+
+
 def _mes_anterior(año: int, mes: int, n: int = 1):
     """Retorna (año, mes) n meses antes."""
     m = mes - n
@@ -326,6 +334,71 @@ def obtener_precios_bursatiles_fs(nemotecnico: str, año: int, mes: int, n: int 
         salida += "\nErrores:\n" + "\n".join(f"  {e}" for e in errores)
     salida += f"\nJSON listo para datos_json['precios_bursatiles']:\n{json.dumps(resultados, ensure_ascii=False)}"
     return salida
+
+
+def leer_repartos_fs(nombre_archivo: str, fondo_key: str, año_fs: int, mes_fs: int) -> str:
+    """
+    Lee los dividendos del CDG (hoja Input del fondo) pagados en las últimas 12 meses del FS.
+    Retorna JSON lista de {fecha, concepto, monto_serie_unica} listos para datos_json['dividendos'].
+    fondo_key: "PT", "Apoquindo" o "TRI"
+    """
+    from datetime import timedelta
+    import zipfile as _zip
+    from tools.input_tools import INPUT_CFG, _read_cell_numeric, _find_sheet_xml_path
+
+    _fondo_map = {"PT": "A&R PT", "Apoquindo": "A&R Apoquindo", "TRI": "A&R Rentas"}
+    input_key = _fondo_map.get(fondo_key)
+    if not input_key:
+        return json.dumps({"error": f"fondo_key inválido: {fondo_key}"})
+
+    cfg = INPUT_CFG.get(input_key)
+    if not cfg:
+        return json.dumps({"error": f"No hay INPUT_CFG para '{input_key}'"})
+
+    path = os.path.join(WORK_DIR, nombre_archivo)
+    if not os.path.exists(path):
+        return json.dumps({"error": f"Archivo '{nombre_archivo}' no encontrado en WORK_DIR"})
+
+    xml_path = _find_sheet_xml_path(path, cfg["sheet"])
+    if not xml_path:
+        return json.dumps({"error": f"Hoja '{cfg['sheet']}' no encontrada en {nombre_archivo}"})
+
+    with _zip.ZipFile(path) as z:
+        sheet_xml = z.read(xml_path).decode("utf-8")
+
+    fecha_fin = fecha_contable_fs(año_fs, mes_fs)
+    try:
+        fecha_inicio = fecha_fin.replace(year=fecha_fin.year - 1) + timedelta(days=1)
+    except ValueError:
+        fecha_inicio = date(fecha_fin.year - 1, fecha_fin.month, 28) + timedelta(days=1)
+
+    excel_base = date(1899, 12, 30)
+    div_col = cfg["div_date_col"]
+    monto_col = "E"
+
+    repartos = []
+    empty_streak = 0
+    for row in range(cfg["div_start_row"], cfg["div_start_row"] + 400):
+        serial = _read_cell_numeric(sheet_xml, f"{div_col}{row}")
+        if not serial:
+            empty_streak += 1
+            if empty_streak > 20:
+                break
+            continue
+        empty_streak = 0
+        fecha_pago = excel_base + timedelta(days=int(serial))
+        if fecha_pago < fecha_inicio or fecha_pago > fecha_fin:
+            continue
+        monto = _read_cell_numeric(sheet_xml, f"{monto_col}{row}")
+        if monto is None:
+            continue
+        repartos.append({
+            "fecha": fecha_pago.strftime("%d-%m-%Y"),
+            "concepto": "Dividendo Provisorio",
+            "monto_serie_unica": _fmt_div(monto),
+        })
+
+    return json.dumps(repartos, ensure_ascii=False, indent=2)
 
 
 def listar_shapes_fs(fondo_key: str, año: int, mes: int) -> str:
