@@ -111,6 +111,7 @@ from tools.noi_tools import (
 from tools.factsheet_tools import (
     fecha_contable_fs,
     obtener_valor_libro_fs,
+    obtener_historico_valor_libro_fs,
     obtener_precios_bursatiles_fs,
     listar_shapes_fs,
     leer_tabla_fs,
@@ -1605,6 +1606,28 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "obtener_historico_valor_libro_fs",
+            "description": (
+                "Retorna los últimos n trimestres de valor cuota libro para la Tabla 7 del FS. "
+                "El trimestre más reciente es el cierre contable del mes del FS. "
+                "Llama a leer_eeff para cada trimestre automáticamente. "
+                "Retorna JSON listo para datos_json['valor_libro']."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "año_fs":    {"type": "integer"},
+                    "mes_fs":    {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
+                    "n":         {"type": "integer", "description": "Número de trimestres (default 3)"},
+                },
+                "required": ["fondo_key", "año_fs", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "obtener_valor_libro_fs",
             "description": (
                 "Extrae el valor cuota libro del EEFF PDF para la tabla 'EL FONDO' del Fact Sheet. "
@@ -1838,6 +1861,7 @@ def _dispatch(name: str, args: dict) -> str:
         "leer_tabla_fs":                 lambda a: leer_tabla_fs(a["fondo_key"], a["año"], a["mes"], a["shape_name"]),
         "preparar_fs":                   lambda a: preparar_fs(a["fondo_key"], a["año"], a["mes"]),
         "actualizar_fs_pt":              lambda a: actualizar_fs_pt(a["año"], a["mes"], a["datos_json"]),
+        "obtener_historico_valor_libro_fs": lambda a: obtener_historico_valor_libro_fs(a["fondo_key"], a["año_fs"], a["mes_fs"], a.get("n", 3)),
         "obtener_valor_libro_fs":          lambda a: obtener_valor_libro_fs(a["fondo_key"], a["año_fs"], a["mes_fs"]),
         "fecha_contable_fs":              lambda a: str(fecha_contable_fs(a["año"], a["mes_fs"])),
         "obtener_precios_bursatiles_fs":  lambda a: obtener_precios_bursatiles_fs(a["nemotecnico"], a["año"], a["mes"], a.get("n", 3)),
@@ -1902,7 +1926,7 @@ _TOOLS_RENTROLL = {
 
 _TOOLS_FACTSHEET = {
     "listar_shapes_fs", "leer_tabla_fs", "preparar_fs",
-    "fecha_contable_fs", "obtener_valor_libro_fs", "obtener_precios_bursatiles_fs",
+    "fecha_contable_fs", "obtener_valor_libro_fs", "obtener_historico_valor_libro_fs", "obtener_precios_bursatiles_fs",
     "actualizar_fs_pt", "actualizar_fs_apoquindo", "actualizar_fs_tri", "guardar_fs",
     # Herramientas de datos que el agente necesita para alimentar el FS
     "obtener_precio_cuota", "leer_eeff", "leer_rentabilidades_ar",

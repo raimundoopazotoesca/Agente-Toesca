@@ -176,6 +176,13 @@ def _parse_precio_cuota(texto: str):
     return {"fecha": fecha, "valor": _fmt_clp(precio)}
 
 
+def _trimestre_anterior(año: int, mes: int) -> tuple:
+    """Retorna (año, mes) del trimestre anterior (meses: 3, 6, 9, 12)."""
+    meses_trim = {3: (año, 12, año - 1), 6: (año, 3, año), 9: (año, 6, año), 12: (año, 9, año)}
+    año_prev, mes_prev, año_adj = meses_trim[mes]
+    return (año_adj if mes == 3 else año_prev), mes_prev
+
+
 def obtener_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int) -> str:
     """
     Retorna el valor cuota libro formateado para la tabla 'EL FONDO' del Fact Sheet.
@@ -224,6 +231,65 @@ def obtener_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int) -> str:
         info_fondo_json["valor_libro"] = _fmt_clp(val)
 
     lineas.append(f"\nJSON listo para datos_json['info_fondo']:\n{json.dumps(info_fondo_json, ensure_ascii=False)}")
+    return "\n".join(lineas)
+
+
+def obtener_historico_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int, n: int = 3) -> str:
+    """
+    Retorna los últimos n trimestres de valor cuota libro para la Tabla 7 del FS.
+    El trimestre más reciente es el cierre contable del FS (fecha_contable_fs).
+    Los anteriores se calculan retrocediendo de a un trimestre.
+
+    fondo_key: 'A&R PT', 'A&R Apoquindo', 'A&R Rentas'
+    mes_fs: 1, 4, 7 ó 10
+    n: número de trimestres (default 3)
+
+    Retorna texto con los valores y JSON listo para datos_json['valor_libro'].
+    """
+    from tools.eeff_tools import extraer_datos_eeff, buscar_pdf_eeff
+
+    # Construir lista de (año, mes) trimestral desde el más antiguo al más reciente
+    fc = fecha_contable_fs(año_fs, mes_fs)
+    trimestres = [(fc.year, fc.month)]
+    for _ in range(n - 1):
+        trimestres.insert(0, _trimestre_anterior(*trimestres[0]))
+
+    resultados = []
+    errores = []
+
+    for año_t, mes_t in trimestres:
+        from calendar import monthrange as _mr
+        ultimo_dia = _mr(año_t, mes_t)[1]
+        fecha_str = f"{ultimo_dia:02d}-{mes_t:02d}-{año_t}"
+
+        pdf_path = buscar_pdf_eeff(fondo_key, año_t, mes_t)
+        if not os.path.isfile(pdf_path):
+            errores.append(f"{fecha_str}: PDF no encontrado")
+            continue
+
+        datos = extraer_datos_eeff(pdf_path, fondo_key)
+        if not datos["valor_cuota"]:
+            errores.append(f"{fecha_str}: valor cuota no extraído del PDF")
+            continue
+
+        if fondo_key == "A&R Rentas":
+            # Multi-serie: devolver dict por serie
+            series = {s: _fmt_clp(v) for s, v in datos["valor_cuota"].items()}
+            resultados.append({"fecha": fecha_str, **{f"serie_{s.lower()}": v for s, v in series.items()}})
+        else:
+            val = list(datos["valor_cuota"].values())[0]
+            resultados.append({"fecha": fecha_str, "valor": _fmt_clp(val)})
+
+    lineas = [f"Valor cuota libro histórico {fondo_key} (últimos {n} trimestres):"]
+    for r in resultados:
+        if "valor" in r:
+            lineas.append(f"  {r['fecha']}  {r['valor']}")
+        else:
+            series_str = "  |  ".join(f"{k}: {v}" for k, v in r.items() if k != "fecha")
+            lineas.append(f"  {r['fecha']}  {series_str}")
+    if errores:
+        lineas.append("\nErrores:\n" + "\n".join(f"  {e}" for e in errores))
+    lineas.append(f"\nJSON listo para datos_json['valor_libro']:\n{json.dumps(resultados, ensure_ascii=False)}")
     return "\n".join(lineas)
 
 
