@@ -61,6 +61,7 @@ from tools.eeff_tools import (
 from tools.datos_fs_tools import (
     actualizar_fecha_ar,
     leer_rentabilidades_ar,
+    leer_rentabilidades_completas_fs,
     pegar_rentabilidades_datos_fs,
     copiar_datos_tir_rentas,
     leer_tir_rentas_resumen,
@@ -725,6 +726,28 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                },
+                "required": ["nombre_archivo", "fondo_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_rentabilidades_completas_fs",
+            "description": (
+                "Lee todas las métricas de rentabilidad para el Fact Sheet desde la hoja DATOS FS del CDG: "
+                "inicio, YTD, 12M, Dividend Yield y DY+Amortización, tanto bursátil como libro. "
+                "Para Apoquindo solo retorna libro (sin ticker). "
+                "Para Rentas retorna las 3 series (A, C, I). "
+                "El CDG debe corresponder al mes del FS y estar recalculado en Excel. "
+                "Retorna JSON listo para datos_json['rentabilidad'] en actualizar_fs_pt/apoquindo/tri."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del CDG en WORK_DIR"},
                     "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
                 },
                 "required": ["nombre_archivo", "fondo_key"],
@@ -1790,7 +1813,8 @@ def _dispatch(name: str, args: dict) -> str:
         "agregar_aporte_apoquindo":     lambda a: agregar_aporte_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
         # DATOS FS — Rentabilidad
         "actualizar_fecha_ar":          lambda a: actualizar_fecha_ar(a["nombre_archivo"], a["fondo_key"], a["fecha_serial"]),
-        "leer_rentabilidades_ar":       lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
+        "leer_rentabilidades_ar":              lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
+        "leer_rentabilidades_completas_fs":    lambda a: leer_rentabilidades_completas_fs(a["nombre_archivo"], a["fondo_key"]),
         "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(a["nombre_archivo"], a["fondo_key"], a["rentabilidades"]),
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
@@ -1900,7 +1924,7 @@ _TOOLS_CDG = {
     "agregar_aporte_pt", "agregar_aporte_rentas", "agregar_aporte_apoquindo",
     "obtener_precio_cuota", "obtener_precios_mes",
     "listar_eeff_disponibles", "leer_eeff",
-    "actualizar_fecha_ar", "leer_rentabilidades_ar",
+    "actualizar_fecha_ar", "leer_rentabilidades_ar", "leer_rentabilidades_completas_fs",
     "pegar_rentabilidades_datos_fs", "copiar_datos_tir_rentas", "leer_tir_rentas_resumen",
     "actualizar_balance_input", "actualizar_fecha_bursatil_input",
     "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",

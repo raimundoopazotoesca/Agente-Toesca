@@ -343,6 +343,134 @@ def leer_rentabilidades_ar(nombre_archivo: str, fondo_key: str) -> str:
         return f"Error al leer rentabilidades: {e}"
 
 
+# ─── Celdas DATOS FS para todas las métricas del FS (bursátil + libro) ────────
+# Estructura: {serie_o_None: {métrica: {bursatil: ref, libro: ref}}}
+# Apoquindo no tiene bursátil (sin ticker) → solo 'libro'
+DATOS_FS_RENT_CELLS = {
+    "A&R PT": {
+        None: {
+            "inicio":   {"bursatil": "G98",  "libro": "H98"},
+            "ytd":      {"bursatil": "G99",  "libro": "H99"},
+            "12m":      {"bursatil": "G100", "libro": "H100"},
+            "dy":       {"bursatil": "G101", "libro": "H101"},
+            "dy_amort": {"bursatil": "G102", "libro": "H102"},
+        }
+    },
+    "A&R Apoquindo": {
+        None: {
+            "inicio":   {"libro": "H136"},
+            "ytd":      {"libro": "H137"},
+            "12m":      {"libro": "H138"},
+            "dy":       {"libro": "H139"},
+            "dy_amort": {"libro": "H140"},
+        }
+    },
+    "A&R Rentas": {
+        "A": {
+            "inicio":   {"bursatil": "G10", "libro": "H10"},
+            "ytd":      {"bursatil": "G11", "libro": "H11"},
+            "12m":      {"bursatil": "G12", "libro": "H12"},
+            "dy":       {"bursatil": "G13", "libro": "H13"},
+            "dy_amort": {"bursatil": "G14", "libro": "H14"},
+        },
+        "C": {
+            "inicio":   {"bursatil": "I10", "libro": "J10"},
+            "ytd":      {"bursatil": "I11", "libro": "J11"},
+            "12m":      {"bursatil": "I12", "libro": "J12"},
+            "dy":       {"bursatil": "I13", "libro": "J13"},
+            "dy_amort": {"bursatil": "I14", "libro": "J14"},
+        },
+        "I": {
+            "inicio":   {"bursatil": "K10", "libro": "L10"},
+            "ytd":      {"bursatil": "K11", "libro": "L11"},
+            "12m":      {"bursatil": "K12", "libro": "L12"},
+            "dy":       {"bursatil": "K13", "libro": "L13"},
+            "dy_amort": {"bursatil": "K14", "libro": "L14"},
+        },
+    },
+}
+
+# Hoja DATOS FS
+DATOS_FS_SHEET = "xl/worksheets/sheet9.xml"
+
+
+def _fmt_pct(val: float) -> str:
+    """0.0860 → '8,6%'  |  -0.0638 → '-6,4%'"""
+    return f"{val * 100:.1f}%".replace(".", ",")
+
+
+def leer_rentabilidades_completas_fs(nombre_archivo: str, fondo_key: str) -> str:
+    """
+    Lee todas las métricas de rentabilidad del FS desde la hoja DATOS FS del CDG:
+    inicio, YTD, 12M, Dividend Yield, DY+Amortización — para bursátil y libro.
+
+    Para A&R Apoquindo solo retorna valores libro (sin ticker bursátil).
+    Para A&R Rentas retorna las 3 series (A, C, I).
+
+    Retorna texto con los valores y JSON listo para datos_json['rentabilidad']
+    en actualizar_fs_pt / actualizar_fs_apoquindo / actualizar_fs_tri.
+
+    IMPORTANTE: el CDG debe corresponder al mes del FS y estar recalculado en Excel.
+    """
+    if fondo_key not in DATOS_FS_RENT_CELLS:
+        return f"Error: fondo '{fondo_key}' no reconocido."
+
+    filepath = _resolve_path(nombre_archivo)
+    if not os.path.exists(filepath):
+        return f"Error: no se encontró '{filepath}'."
+
+    try:
+        with zipfile.ZipFile(filepath, "r") as zf:
+            sheet_xml = zf.read(DATOS_FS_SHEET).decode("utf-8")
+    except Exception as e:
+        return f"Error al leer DATOS FS: {e}"
+
+    cell_map = DATOS_FS_RENT_CELLS[fondo_key]
+    metricas = ["inicio", "ytd", "12m", "dy", "dy_amort"]
+    labels = {
+        "inicio":   "Desde inicio (anualizada)",
+        "ytd":      "YTD (anualizada)",
+        "12m":      "Últimos 12 meses",
+        "dy":       "Dividend Yield",
+        "dy_amort": "DY + Amortización",
+    }
+
+    resultado = {}
+    lines = [f"Rentabilidades FS — {fondo_key}:"]
+
+    for serie, metr_map in cell_map.items():
+        label_serie = f"Serie {serie}" if serie else "Fondo"
+        lines.append(f"\n  {label_serie}:")
+        serie_data = {}
+
+        for met in metricas:
+            refs = metr_map.get(met, {})
+            row_data = {}
+            for tipo, ref in refs.items():
+                val = _read_cell_numeric(sheet_xml, ref)
+                if val is not None:
+                    row_data[tipo] = _fmt_pct(val)
+                else:
+                    row_data[tipo] = "[vacío]"
+            # Formatear línea
+            if "bursatil" in row_data and "libro" in row_data:
+                lines.append(f"    {labels[met]:35s} B:{row_data['bursatil']:8s} L:{row_data['libro']}")
+            elif "libro" in row_data:
+                lines.append(f"    {labels[met]:35s} L:{row_data['libro']}")
+            # Guardar para JSON — claves según fondo
+            if serie:
+                for tipo, val in row_data.items():
+                    resultado[f"{met}_{tipo}_{serie.lower()}"] = val
+            else:
+                for tipo, val in row_data.items():
+                    resultado[f"{met}_{tipo}"] = val
+
+        serie_data = resultado
+
+    lines.append(f"\nJSON listo para datos_json['rentabilidad']:\n{__import__('json').dumps(resultado, ensure_ascii=False)}")
+    return "\n".join(lines)
+
+
 def pegar_rentabilidades_datos_fs(
     nombre_archivo: str,
     fondo_key: str,
