@@ -32,7 +32,6 @@ st.set_page_config(
 
 # ─── Pantalla de carga (Garantizada sin interrupciones) ────────────────────────
 import time
-import streamlit.components.v1 as components
 
 if st.session_state.get("authentication_status") is True:
     if "loader_start_time" not in st.session_state:
@@ -57,7 +56,7 @@ if st.session_state.get("authentication_status") is True:
 
         # Inyectamos el loader directamente en el DOM raíz (fuera de React)
         # Esto evita que Streamlit destruya o reinicie la animación durante los reruns
-        components.html("""
+        st.iframe("""
         <script>
         (function() {
             var parentDoc = window.parent.document;
@@ -135,7 +134,7 @@ if st.session_state.get("authentication_status") is True:
             }, 3500);
         })();
         </script>
-        """, width=0, height=0)
+        """, width="content", height="content")
 
 # ─── Autenticación y Pantalla de Login Elegante ──────────────────────────────
 import yaml
@@ -185,7 +184,7 @@ if st.session_state.get("authentication_status") is not True:
 
     # UI personalizada: iframe completo, sin interferencia del parser de Markdown
     _html = open('login_template.html', encoding='utf-8').read().replace('__ERR__', _err_msg)
-    components.html(_html, height=720, scrolling=False)
+    st.iframe(_html, height=720)
 
     if st.session_state.get("authentication_status") is True:
         st.rerun()
@@ -218,8 +217,7 @@ st.markdown("""
 <div id="toesca-sidebar-btn" title="Sidebar">&#9776;</div>
 """, unsafe_allow_html=True)
 
-import streamlit.components.v1 as components
-components.html("""
+st.iframe("""
 <script>
 (function() {
     var parentDoc = window.parent.document;
@@ -264,7 +262,7 @@ components.html("""
     observer.observe(parentDoc.body, { childList: true, subtree: true });
 })();
 </script>
-""", width=0, height=0)
+""", width="content", height="content")
 
 
 

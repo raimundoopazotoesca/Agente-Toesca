@@ -16,6 +16,7 @@
 - [ ] **Enseñar a actualizar dividendos en input PT:** Definir flujo de captura y validación de dividendos para Parque Titanium.
 - [ ] **Enseñar planillas balances consolidados:** Documentar e implementar la lógica de actualización de balances consolidados.
 - [ ] **Terminar de enseñar FS PT:** Completar la automatización y validación del Fact Sheet de Parque Titanium.
+- [ ] **Enseñar a usar planilla resumen recaudación.**
 
 ### Corto plazo — Ajustes y Pruebas
 - [x] Confirmar ruta exacta del archivo ER-FC INMOSA en SharePoint
