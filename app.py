@@ -39,6 +39,22 @@ if st.session_state.get("authentication_status") is True:
         st.session_state.loader_start_time = time.time()
 
     if time.time() - st.session_state.loader_start_time < 3.5:
+        # Prevenimos el flash de la UI nativa ocultándola brevemente 
+        # mientras el iframe inyecta el loader en el DOM
+        st.markdown("""
+        <style>
+        @keyframes toesca-prevent-flash {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        [data-testid="stAppViewContainer"],
+        [data-testid="stSidebar"],
+        header[data-testid="stHeader"] {
+            animation: toesca-prevent-flash 0.1s ease-in 0.8s both !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         # Inyectamos el loader directamente en el DOM raíz (fuera de React)
         # Esto evita que Streamlit destruya o reinicie la animación durante los reruns
         components.html("""
@@ -138,151 +154,45 @@ authenticator = stauth.Authenticate(
 
 # Si el usuario no está logueado (status is None o False), mostramos la pantalla custom y paramos
 if st.session_state.get("authentication_status") is not True:
-    
-    # Reiniciar la pantalla de carga para que la transición ocurra siempre al loguearse
+
     if "loader_start_time" in st.session_state:
         del st.session_state["loader_start_time"]
-        
-    # Inyectamos algo de CSS global básico para ocultar sidebar antes de login
+
+    _err_msg = "Usuario o contraseña incorrectos" if st.session_state.get("authentication_status") is False else ""
+
+    # CSS global: ocultar chrome de Streamlit + esconder form nativo fuera de pantalla
     st.markdown("""
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-    [data-testid="collapsedControl"] { display: none !important; }
-    [data-testid="stSidebar"] { display: none !important; }
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebar"],
+    header[data-testid="stHeader"] { display: none !important; }
+    [data-testid="stAppViewContainer"], .main { background: #050505 !important; }
+    .block-container { padding-top: 0 !important; padding-bottom: 0 !important; }
+    div[data-testid="stForm"] {
+        position: fixed !important; left: -9999px !important;
+        top: 0 !important; width: 1px !important; height: 1px !important;
+        overflow: hidden !important;
+    }
     </style>
     """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 1.2, 1])
-    with col2:
-        st.markdown("""
-        <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-        
-        <style>
-        /* Animaciones Globales del Login */
-        @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes formEntrance {
-            from { opacity: 0; transform: translate3d(0, 30px, 0); }
-            to { opacity: 1; transform: translate3d(0, 0, 0); }
-        }
-        
-        .login-header-wrapper {
-            animation: fadeInDown 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-        }
 
-        /* Glassmorphism premium para el form de login */
-        div[data-testid="stForm"] {
-            background: linear-gradient(135deg, rgba(25, 25, 25, 0.7), rgba(10, 10, 10, 0.9)) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.18) !important; /* Efecto luz cenital */
-            border-radius: 16px !important;
-            padding: 3rem 2.5rem !important;
-            backdrop-filter: blur(25px) saturate(150%) !important;
-            -webkit-backdrop-filter: blur(25px) saturate(150%) !important;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.02) !important;
-            
-            /* Animación de entrada y Fix de Chrome */
-            opacity: 0; /* Comienza invisible para la animación */
-            animation: formEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards !important;
-            backface-visibility: hidden !important;
-            -webkit-backface-visibility: hidden !important;
-        }
+    # Form nativo: fuera de pantalla, funcional (maneja auth + cookies)
+    try:
+        authenticator.login('main')
+    except Exception:
+        pass
 
-        /* Labels de los inputs más corporativos y limpios */
-        div[data-testid="stForm"] label {
-            color: #a3a3a3 !important;
-            font-family: 'Inter', sans-serif !important;
-            font-size: 0.72rem !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.1em !important;
-            text-transform: uppercase !important;
-            margin-bottom: 0.5rem !important;
-        }
+    # UI personalizada: iframe completo, sin interferencia del parser de Markdown
+    _html = open('login_template.html', encoding='utf-8').read().replace('__ERR__', _err_msg)
+    components.html(_html, height=720, scrolling=False)
 
-        /* Cajas de texto premium */
-        div[data-testid="stForm"] input {
-            background-color: rgba(0, 0, 0, 0.4) !important;
-            color: #ffffff !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-radius: 8px !important;
-            padding: 0.85rem 1.2rem !important;
-            font-size: 0.95rem !important;
-            font-family: 'Inter', sans-serif !important;
-            transition: all 0.3s ease !important;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
-        }
-
-        /* Focus en cajas de texto (Acento Corporativo Dorado/Toesca) */
-        div[data-testid="stForm"] input:focus {
-            border-color: #c9a84c !important;
-            background-color: rgba(0, 0, 0, 0.6) !important;
-            box-shadow: 0 0 0 1px #c9a84c, inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-            outline: none !important;
-        }
-
-        div[data-testid="stForm"] input::placeholder {
-            color: rgba(255, 255, 255, 0.2) !important;
-        }
-
-        /* Botón de Iniciar Sesión Elevado */
-        div[data-testid="stForm"] button {
-            background: linear-gradient(135deg, #e8e3dc, #c4beaf) !important;
-            color: #111111 !important;
-            border: none !important;
-            font-weight: 600 !important;
-            font-family: 'Inter', sans-serif !important;
-            font-size: 0.95rem !important;
-            letter-spacing: 0.02em !important;
-            border-radius: 8px !important;
-            padding: 0.85rem !important;
-            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-            margin-top: 1.5rem !important;
-            box-shadow: 0 4px 15px rgba(232, 227, 220, 0.15) !important;
-            width: 100% !important;
-        }
-
-        /* Hover de Botón */
-        div[data-testid="stForm"] button:hover {
-            background: linear-gradient(135deg, #ffffff, #e8e3dc) !important;
-            transform: translateY(-3px) !important;
-            box-shadow: 0 8px 25px rgba(232, 227, 220, 0.3) !important;
-        }
-        
-        /* Click de Botón */
-        div[data-testid="stForm"] button:active {
-            transform: translateY(0px) !important;
-            box-shadow: 0 2px 10px rgba(232, 227, 220, 0.2) !important;
-        }
-
-        /* Ajustes Opcionales Streamlit */
-        .stMarkdown p { font-family: 'Inter', sans-serif !important; }
-        </style>
-        
-        <div class="login-header-wrapper" style="text-align: center; margin-top: 8vh; margin-bottom: 2.5rem;">
-            <div style="font-family: 'EB Garamond', Georgia, serif; font-size: 5.5rem; color: #e8e3dc; line-height: 1;">toesca.</div>
-            <div style="font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 400; letter-spacing: 0.25em; text-transform: uppercase; color: #ffffff; margin-bottom: 2rem; margin-top: 0.8rem; opacity: 0.9;">Gestión de Fondos</div>
-            <p style="color: #a0a0a0; font-family: 'Inter', sans-serif; font-size: 0.95rem; line-height: 1.6; font-weight: 300; max-width: 400px; margin: 0 auto;">
-                Bienvenido al <b>Agente Toesca</b>.<br>Ingrese sus credenciales corporativas para acceder 
-                al entorno automatizado.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        try:
-            # Login location se pone en 'main'
-            authenticator.login('main')
-        except Exception as e:
-            st.error(e)
-
-        if st.session_state.get("authentication_status") is False:
-            st.error('Usuario o contraseña incorrectos.')
-    
     if st.session_state.get("authentication_status") is True:
         st.rerun()
     else:
-        # Detenemos la ejecución de la app si no se ha logueado exitosamente
         st.stop()
+
+
 else:
     # IMPORTANTE: Llamar a login silenciosamente cuando ya está autenticado
     # para que Streamlit-Authenticator escriba y mantenga las cookies de sesión.
@@ -396,11 +306,24 @@ with st.sidebar:
             st.session_state.messages = []
             st.rerun()
 
-# ─── Área principal ────────────────────────────────────────────────────────────
-if not st.session_state.messages:
-    st.markdown("""
-    <div class="welcome-container">
-        <div class="welcome-logo">toesca.</div>
+# ─── Procesar input inicial ──────────────────────────────────────────────────
+_pending = st.session_state.get("pending_input")
+if _pending:
+    st.session_state.pending_input = None
+
+user_input = st.chat_input("Escribe una instrucción...") or _pending
+
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
+# ─── Área principal (Renderizar historial o Welcome) ─────────────────────────
+# ─── Área principal (Renderizar historial o Welcome) ─────────────────────────
+# 1. Componente estático: SIEMPRE debe ser el primer elemento para que Streamlit
+# no lo destruya al re-renderizar, permitiendo la transición CSS fluida.
+st.markdown("""
+<div class="welcome-container" id="toesca-welcome-ui">
+    <div class="welcome-logo">toesca.</div>
+    <div class="welcome-fade-group">
         <div class="welcome-tagline">Agente de Gestión de Fondos</div>
         <div class="welcome-desc">
             Puedo actualizar el Control de Gestión, calcular el NOI de cada activo,
@@ -415,27 +338,33 @@ if not st.session_state.messages:
             <span class="welcome-pill">📁 EEFF</span>
         </div>
     </div>
+</div>
+""", unsafe_allow_html=True)
+
+# 2. Componente dinámico: Segundo elemento en el DOM. Cambia el CSS si hay mensajes.
+if st.session_state.messages:
+    st.markdown("""
+    <style>
+    .welcome-container { padding: 0rem 2rem 1.5rem 2rem !important; }
+    .welcome-logo { font-size: 2.8rem !important; color: rgba(232, 227, 220, 0.85) !important; margin-bottom: 0 !important; }
+    .welcome-fade-group { opacity: 0 !important; transform: translateY(-20px) !important; max-height: 0 !important; margin: 0 !important; pointer-events: none !important; }
+    </style>
     """, unsafe_allow_html=True)
 else:
-    for msg in st.session_state.messages:
-        _avatar = _AGENT_AVATAR if msg["role"] == "assistant" else ":material/person:"
-        with st.chat_message(msg["role"], avatar=_avatar):
-            st.markdown(msg["content"])
+    # Mantenemos el mismo orden en el Virtual DOM de Streamlit (índice 1)
+    st.markdown("<style>/* Estado inicial */</style>", unsafe_allow_html=True)
 
-# ─── Procesar input ────────────────────────────────────────────────────────────
-_pending = st.session_state.get("pending_input")
-if _pending:
-    st.session_state.pending_input = None
+for msg in st.session_state.messages:
+    _avatar = _AGENT_AVATAR if msg["role"] == "assistant" else ":material/person:"
+    with st.chat_message(msg["role"], avatar=_avatar):
+        st.markdown(msg["content"])
 
-user_input = st.chat_input("Escribe una instrucción...") or _pending
+# ─── Generar respuesta del asistente si corresponde ───────────────────────────
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    user_msg_text = st.session_state.messages[-1]["content"]
 
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar=":material/person:"):
-        st.markdown(user_input)
-
-    recent_history = " ".join([m["content"] for m in st.session_state.messages[-4:] if m["role"] == "user"])
-    grupos = get_intent_groups(recent_history + " " + user_input)
+    recent_history = " ".join([m["content"] for m in st.session_state.messages[-5:-1] if m["role"] == "user"])
+    grupos = get_intent_groups(recent_history + " " + user_msg_text)
     selected_tools = _select_tools(grupos)
     
     system_content = BASE_PROMPT
@@ -449,7 +378,7 @@ if user_input:
         system_content += "\n\n---\n\n" + memory_block
     
     api_messages = [{"role": "system", "content": system_content}]
-    # Solo los últimos N turnos para evitar acumulación de tokens en sesiones largas
+    
     history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
     for m in history[-(_MAX_HISTORY_TURNS * 2):]:
         api_messages.append({"role": m["role"], "content": m["content"]})
@@ -503,7 +432,7 @@ if user_input:
                         words = text.split(" ")
                         for i, word in enumerate(words):
                             yield word + (" " if i < len(words) - 1 else "")
-                            time.sleep(0.015)
+                            time.sleep(0.035)  # Aumentado para que sea más lento y fluido
                             
                     with response_area:
                         st.write_stream(stream_text(final_response))
@@ -539,4 +468,5 @@ if user_input:
             response_area.error(f"**Error inesperado:** `{e}`")
 
     st.session_state.messages.append({"role": "assistant", "content": final_response})
-    guardar_tarea(user_input, tools_used, final_response[:200])
+    guardar_tarea(user_msg_text, tools_used, final_response[:200])
+    st.rerun()

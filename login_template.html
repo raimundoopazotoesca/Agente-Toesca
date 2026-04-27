@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+    background: #050505;
+    color: #e2e2e2;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+}
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes cf-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cf-rule {
+    from { width: 0; opacity: 0; }
+    to   { width: 32px; opacity: 1; }
+}
+
+.cf-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+    padding: 0 1.5rem;
+}
+
+/* ── Brand ── */
+.cf-brand {
+    text-align: center;
+    margin-bottom: 2.75rem;
+    opacity: 0;
+    animation: cf-up 0.8s cubic-bezier(0.2,0.8,0.2,1) 0.1s forwards;
+}
+.cf-logo {
+    display: block;
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 4.5rem;
+    font-weight: 400;
+    color: #e8e3dc;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+.cf-rule {
+    display: block;
+    width: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.25);
+    margin: 1.3rem auto 1.1rem;
+    animation: cf-rule 0.6s ease-out 0.6s forwards;
+}
+.cf-tag {
+    display: block;
+    font-size: 0.58rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.48);
+    font-weight: 400;
+    opacity: 0;
+    animation: cf-up 0.5s ease-out 0.75s forwards;
+}
+
+/* ── Card ── */
+.cf-card {
+    width: 100%;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 2rem 1.75rem;
+    opacity: 0;
+    animation: cf-up 0.6s cubic-bezier(0.2,0.8,0.2,1) 0.85s forwards;
+}
+
+/* ── Fields ── */
+.cf-field { margin-bottom: 1.4rem; }
+
+.cf-label {
+    display: block;
+    font-size: 0.57rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 0.45rem;
+}
+
+.cf-input {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #ececec;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 300;
+    padding: 0.68rem 0.9rem;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+    -webkit-appearance: none;
+}
+.cf-input:focus {
+    border-color: rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.08);
+}
+.cf-input::placeholder { color: rgba(255,255,255,0.2); }
+
+/* ── Error ── */
+.cf-error {
+    font-size: 0.7rem;
+    color: rgba(255,110,90,0.9);
+    text-align: center;
+    min-height: 1.1em;
+    margin-bottom: 0.4rem;
+}
+
+/* ── Button ── */
+.cf-btn {
+    display: block;
+    width: 100%;
+    background: #e8e3dc;
+    color: #0a0a0a;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 0.88rem;
+    cursor: pointer;
+    margin-top: 0.6rem;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 2px 12px rgba(232,227,220,0.1);
+}
+.cf-btn:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(232,227,220,0.2);
+}
+.cf-btn:active { transform: translateY(0); box-shadow: none; }
+
+/* ── Footer ── */
+.cf-footer {
+    margin-top: 2rem;
+    font-size: 0.57rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.2);
+    text-align: center;
+    opacity: 0;
+    animation: cf-up 0.5s ease-out 1.4s forwards;
+}
+</style>
+</head>
+<body>
+<div class="cf-wrap">
+    <div class="cf-brand">
+        <span class="cf-logo">toesca.</span>
+        <span class="cf-rule"></span>
+        <span class="cf-tag">Gestión de Fondos</span>
+    </div>
+    <div class="cf-card">
+        <div class="cf-field">
+            <label class="cf-label" for="cf-user">Usuario</label>
+            <input id="cf-user" class="cf-input" type="text" autocomplete="username" placeholder="">
+        </div>
+        <div class="cf-field">
+            <label class="cf-label" for="cf-pass">Contraseña</label>
+            <input id="cf-pass" class="cf-input" type="password" autocomplete="current-password" placeholder="">
+        </div>
+        <p class="cf-error">__ERR__</p>
+        <button class="cf-btn" onclick="cfLogin()">Ingresar</button>
+    </div>
+    <div class="cf-footer">&copy; 2026 Toesca Asset Management</div>
+</div>
+
+<script>
+function cfLogin() {
+    var user = document.getElementById('cf-user').value.trim();
+    var pass = document.getElementById('cf-pass').value;
+    var errEl = document.querySelector('.cf-error');
+    if (!user || !pass) {
+        if (errEl) errEl.textContent = 'Ingrese sus credenciales';
+        return;
+    }
+    if (errEl) errEl.textContent = '';
+    try {
+        var pd = window.parent.document;
+        var allInputs = Array.from(pd.querySelectorAll('input')).filter(el => 
+            el.getAttribute('type') === 'text' || el.getAttribute('type') === 'password'
+        );
+        var userInput = pd.querySelector('input[aria-label="Username"]') || pd.querySelector('input[aria-label="Usuario"]') || allInputs[0];
+        var passInput = pd.querySelector('input[aria-label="Password"]') || pd.querySelector('input[aria-label="Contraseña"]') || allInputs[1];
+
+        if (!userInput || !passInput) {
+            if (errEl) errEl.textContent = 'Error: recargue la página';
+            return;
+        }
+        var setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+        setter.set.call(userInput, user);
+        userInput.dispatchEvent(new window.parent.Event('input', {bubbles: true}));
+        setter.set.call(passInput, pass);
+        passInput.dispatchEvent(new window.parent.Event('input', {bubbles: true}));
+        
+        var btn = Array.from(pd.querySelectorAll('button')).find(b => b.textContent.includes('Login') || b.textContent.includes('Ingresar'));
+        if (!btn) {
+            // Fallback si no encuentra por texto
+            btn = pd.querySelector('.stForm button') || pd.querySelector('button[kind="primary"]');
+        }
+        if (btn) btn.click();
+    } catch(e) {
+        if (errEl) errEl.textContent = 'Error: ' + e.message;
+    }
+}
+document.getElementById('cf-user').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('cf-pass').focus();
+});
+document.getElementById('cf-pass').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') cfLogin();
+});
+</script>
+</body>
+</html>

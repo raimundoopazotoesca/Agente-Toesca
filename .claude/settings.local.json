@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile app.py)",
+      "Bash(python _patch_login.py)",
+      "Bash(rm _patch_login.py)"
+    ]
+  }
+}
