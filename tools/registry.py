@@ -61,6 +61,7 @@ from tools.eeff_tools import (
 from tools.datos_fs_tools import (
     actualizar_fecha_ar,
     leer_rentabilidades_ar,
+    leer_rentabilidades_completas_fs,
     pegar_rentabilidades_datos_fs,
     copiar_datos_tir_rentas,
     leer_tir_rentas_resumen,
@@ -107,6 +108,20 @@ from tools.noi_tools import (
     actualizar_noi_apo3001,
     actualizar_noi_inmosa,
     inspeccionar_noi_rcsd,
+)
+from tools.factsheet_tools import (
+    fecha_contable_fs,
+    obtener_valor_libro_fs,
+    obtener_historico_valor_libro_fs,
+    obtener_precios_bursatiles_fs,
+    leer_repartos_fs,
+    listar_shapes_fs,
+    leer_tabla_fs,
+    preparar_fs,
+    actualizar_fs_pt,
+    actualizar_fs_apoquindo,
+    actualizar_fs_tri,
+    guardar_fs,
 )
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
@@ -712,6 +727,28 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
+                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                },
+                "required": ["nombre_archivo", "fondo_key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_rentabilidades_completas_fs",
+            "description": (
+                "Lee todas las métricas de rentabilidad para el Fact Sheet desde la hoja DATOS FS del CDG: "
+                "inicio, YTD, 12M, Dividend Yield y DY+Amortización, tanto bursátil como libro. "
+                "Para Apoquindo solo retorna libro (sin ticker). "
+                "Para Rentas retorna las 3 series (A, C, I). "
+                "El CDG debe corresponder al mes del FS y estar recalculado en Excel. "
+                "Retorna JSON listo para datos_json['rentabilidad'] en actualizar_fs_pt/apoquindo/tri."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del CDG en WORK_DIR"},
                     "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
                 },
                 "required": ["nombre_archivo", "fondo_key"],
@@ -1515,6 +1552,247 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Fact Sheets ──────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_shapes_fs",
+            "description": "Lista todos los shapes del Slide 1 de un Fact Sheet. Útil para descubrir nombres de tablas antes de actualizar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año":       {"type": "integer", "description": "Año del FS (ej: 2026)"},
+                    "mes":       {"type": "integer", "description": "Mes del FS (1-12)"},
+                },
+                "required": ["fondo_key", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_tabla_fs",
+            "description": "Lee el contenido de una tabla específica del Fact Sheet (Slide 1) por nombre de shape (ej: 'Tabla 52'). Útil para inspeccionar datos antes de actualizar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key":  {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año":        {"type": "integer"},
+                    "mes":        {"type": "integer"},
+                    "shape_name": {"type": "string", "description": "Nombre del shape, ej: 'Tabla 52'"},
+                },
+                "required": ["fondo_key", "año", "mes", "shape_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "preparar_fs",
+            "description": "Copia el archivo vActualizar/vRevisar del Fact Sheet desde SharePoint a WORK_DIR para edición. Llamar siempre antes de actualizar_fs_pt.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año":       {"type": "integer"},
+                    "mes":       {"type": "integer"},
+                },
+                "required": ["fondo_key", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fs_pt",
+            "description": (
+                "Actualiza todas las tablas numéricas del Slide 1 del Fact Sheet PT. "
+                "Requiere haber llamado preparar_fs('PT', año, mes) antes. "
+                "datos_json acepta los campos: precios_bursatiles, valor_libro, rentabilidad, dividendos, "
+                "otros_indicadores, balance, gastos, endeudamiento, perfil_vencimiento, info_fondo. "
+                "Solo actualiza los campos incluidos; el resto queda sin cambios."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":       {"type": "integer"},
+                    "mes":       {"type": "integer"},
+                    "datos_json": {
+                        "type": "string",
+                        "description": "JSON con los datos a actualizar. Ver docstring de actualizar_fs_pt para estructura completa.",
+                    },
+                },
+                "required": ["año", "mes", "datos_json"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "obtener_historico_valor_libro_fs",
+            "description": (
+                "Retorna los últimos n trimestres de valor cuota libro para la Tabla 7 del FS. "
+                "El trimestre más reciente es el cierre contable del mes del FS. "
+                "Llama a leer_eeff para cada trimestre automáticamente. "
+                "Retorna JSON listo para datos_json['valor_libro']."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "año_fs":    {"type": "integer"},
+                    "mes_fs":    {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
+                    "n":         {"type": "integer", "description": "Número de trimestres (default 3)"},
+                },
+                "required": ["fondo_key", "año_fs", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "obtener_valor_libro_fs",
+            "description": (
+                "Extrae el valor cuota libro del EEFF PDF para la tabla 'EL FONDO' del Fact Sheet. "
+                "Usa automáticamente la fecha contable correcta según el mes del FS. "
+                "Retorna JSON listo para datos_json['info_fondo']. "
+                "Para A&R Rentas retorna las 3 series (A, C, I)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "año_fs":    {"type": "integer", "description": "Año del FS"},
+                    "mes_fs":    {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
+                },
+                "required": ["fondo_key", "año_fs", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fecha_contable_fs",
+            "description": (
+                "Retorna la fecha de cierre contable para el mes del FS. "
+                "FS enero→31-dic año anterior, abril→31-mar, julio→30-jun, octubre→30-sep. "
+                "Usar para saber qué EEFF y balance corresponde leer para cada FS."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":    {"type": "integer"},
+                    "mes_fs": {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
+                },
+                "required": ["año", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "obtener_precios_bursatiles_fs",
+            "description": (
+                "Obtiene los últimos n meses de precios de cuota formateados para el Fact Sheet. "
+                "Usa obtener_precio_cuota internamente y parsea el resultado. "
+                "Retorna JSON listo para usar en datos_json['precios_bursatiles'] de actualizar_fs_pt o actualizar_fs_tri."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {"type": "string", "description": "Ej: 'CFITRIPT-E', 'CFITOERI1A'"},
+                    "año":         {"type": "integer"},
+                    "mes":         {"type": "integer"},
+                    "n":           {"type": "integer", "description": "Número de meses hacia atrás (default 3)"},
+                },
+                "required": ["nemotecnico", "año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_repartos_fs",
+            "description": (
+                "Lee los dividendos pagados en las últimas 12 meses desde la hoja Input del CDG. "
+                "Retorna JSON lista de {fecha, concepto, monto_serie_unica} listo para "
+                "datos_json['dividendos'] de actualizar_fs_pt. "
+                "Usar CDG con fecha contable del FS (ej: FS Enero 2026 → CDG 2601)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del CDG en WORK_DIR, ej: '2601 Control De Gestión Renta Comercial vF.xlsx'"},
+                    "fondo_key":      {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año_fs":         {"type": "integer", "description": "Año del Fact Sheet"},
+                    "mes_fs":         {"type": "integer", "description": "Mes del Fact Sheet (1, 4, 7 o 10)"},
+                },
+                "required": ["nombre_archivo", "fondo_key", "año_fs", "mes_fs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fs_apoquindo",
+            "description": (
+                "Actualiza las tablas numéricas del Slide 1 del Fact Sheet Apoquindo: "
+                "valor cuota libro, rentabilidad (solo libro, sin bursátil), otros indicadores, "
+                "gastos, balance consolidado, endeudamiento, perfil de vencimiento. "
+                "No tiene tabla de precios bursátiles ni de repartos. "
+                "Requiere haber llamado preparar_fs('Apoquindo', año, mes) antes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":        {"type": "integer"},
+                    "mes":        {"type": "integer"},
+                    "datos_json": {"type": "string", "description": "JSON con los datos a actualizar. Ver docstring de actualizar_fs_apoquindo para estructura completa."},
+                },
+                "required": ["año", "mes", "datos_json"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_fs_tri",
+            "description": (
+                "Actualiza las tablas numéricas del Slide 1 del Fact Sheet TRI (Rentas Inmobiliarias). "
+                "Maneja 3 series (A, C, I) en rentabilidad, precios bursátiles, valor libro y repartos. "
+                "Tablas: Tabla 15 (bursátil), Tabla 3 (libro), Tabla 11 (rentabilidad), "
+                "Tabla 52 (repartos), Tabla 44 (otros indicadores), Tabla 5 (balance), "
+                "Tabla 8 (gastos), Tabla 38 (endeudamiento), Tabla 2 (perfil vencimiento). "
+                "Requiere haber llamado preparar_fs('TRI', año, mes) antes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año":        {"type": "integer"},
+                    "mes":        {"type": "integer"},
+                    "datos_json": {"type": "string", "description": "JSON con los datos a actualizar. Ver docstring de actualizar_fs_tri para estructura completa."},
+                },
+                "required": ["año", "mes", "datos_json"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "guardar_fs",
+            "description": "Guarda el Fact Sheet actualizado desde WORK_DIR a la carpeta Facts Sheet del fondo en SharePoint. Nombra el archivo como YYMM Fact Sheet - <fondo>.pptx.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {"type": "string", "description": "'PT', 'Apoquindo' o 'TRI'"},
+                    "año":       {"type": "integer"},
+                    "mes":       {"type": "integer"},
+                },
+                "required": ["fondo_key", "año", "mes"],
+            },
+        },
+    },
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
@@ -1558,7 +1836,8 @@ def _dispatch(name: str, args: dict) -> str:
         "agregar_aporte_apoquindo":     lambda a: agregar_aporte_apoquindo(a["nombre_archivo"], a["año"], a["mes"], a["monto_por_cuota"]),
         # DATOS FS — Rentabilidad
         "actualizar_fecha_ar":          lambda a: actualizar_fecha_ar(a["nombre_archivo"], a["fondo_key"], a["fecha_serial"]),
-        "leer_rentabilidades_ar":       lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
+        "leer_rentabilidades_ar":              lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
+        "leer_rentabilidades_completas_fs":    lambda a: leer_rentabilidades_completas_fs(a["nombre_archivo"], a["fondo_key"]),
         "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(a["nombre_archivo"], a["fondo_key"], a["rentabilidades"]),
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
@@ -1624,6 +1903,19 @@ def _dispatch(name: str, args: dict) -> str:
         "comparar_periodos":             lambda a: comparar_periodos(a["fondo"], a["periodo_base"], a["periodo_actual"]),
         "buscar_ubicacion":              lambda a: buscar_ubicacion(a["concepto"]),
         "guardar_ubicacion":             lambda a: guardar_ubicacion(a["concepto"], a["ruta"], a.get("notas", "")),
+        # Fact Sheets
+        "listar_shapes_fs":              lambda a: listar_shapes_fs(a["fondo_key"], a["año"], a["mes"]),
+        "leer_tabla_fs":                 lambda a: leer_tabla_fs(a["fondo_key"], a["año"], a["mes"], a["shape_name"]),
+        "preparar_fs":                   lambda a: preparar_fs(a["fondo_key"], a["año"], a["mes"]),
+        "actualizar_fs_pt":              lambda a: actualizar_fs_pt(a["año"], a["mes"], a["datos_json"]),
+        "obtener_historico_valor_libro_fs": lambda a: obtener_historico_valor_libro_fs(a["fondo_key"], a["año_fs"], a["mes_fs"], a.get("n", 3)),
+        "obtener_valor_libro_fs":          lambda a: obtener_valor_libro_fs(a["fondo_key"], a["año_fs"], a["mes_fs"]),
+        "fecha_contable_fs":              lambda a: str(fecha_contable_fs(a["año"], a["mes_fs"])),
+        "obtener_precios_bursatiles_fs":  lambda a: obtener_precios_bursatiles_fs(a["nemotecnico"], a["año"], a["mes"], a.get("n", 3)),
+        "leer_repartos_fs":               lambda a: leer_repartos_fs(a["nombre_archivo"], a["fondo_key"], a["año_fs"], a["mes_fs"]),
+        "actualizar_fs_apoquindo":       lambda a: actualizar_fs_apoquindo(a["año"], a["mes"], a["datos_json"]),
+        "actualizar_fs_tri":             lambda a: actualizar_fs_tri(a["año"], a["mes"], a["datos_json"]),
+        "guardar_fs":                    lambda a: guardar_fs(a["fondo_key"], a["año"], a["mes"]),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -1656,7 +1948,7 @@ _TOOLS_CDG = {
     "agregar_aporte_pt", "agregar_aporte_rentas", "agregar_aporte_apoquindo",
     "obtener_precio_cuota", "obtener_precios_mes",
     "listar_eeff_disponibles", "leer_eeff",
-    "actualizar_fecha_ar", "leer_rentabilidades_ar",
+    "actualizar_fecha_ar", "leer_rentabilidades_ar", "leer_rentabilidades_completas_fs",
     "pegar_rentabilidades_datos_fs", "copiar_datos_tir_rentas", "leer_tir_rentas_resumen",
     "actualizar_balance_input", "actualizar_fecha_bursatil_input",
     "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",
@@ -1680,6 +1972,15 @@ _TOOLS_RENTROLL = {
     "enviar_emails_rent_roll", "actualizar_vacancia", "refrescar_tabla_rentas_2", "consultar_vacancia",
 }
 
+_TOOLS_FACTSHEET = {
+    "listar_shapes_fs", "leer_tabla_fs", "preparar_fs",
+    "fecha_contable_fs", "obtener_valor_libro_fs", "obtener_historico_valor_libro_fs", "obtener_precios_bursatiles_fs",
+    "leer_repartos_fs",
+    "actualizar_fs_pt", "actualizar_fs_apoquindo", "actualizar_fs_tri", "guardar_fs",
+    # Herramientas de datos que el agente necesita para alimentar el FS
+    "obtener_precio_cuota", "leer_eeff", "leer_rentabilidades_ar",
+}
+
 _TOOL_INDEX = {t["function"]["name"]: t for t in TOOL_DEFINITIONS}
 
 
@@ -1691,7 +1992,8 @@ def _select_tools(grupos: set) -> list:
     if "cdg"      in grupos: nombres |= _TOOLS_CDG
     if "noi"      in grupos: nombres |= _TOOLS_NOI
     if "caja"     in grupos: nombres |= _TOOLS_CAJA
-    if "rentroll" in grupos: nombres |= _TOOLS_RENTROLL
+    if "rentroll"   in grupos: nombres |= _TOOLS_RENTROLL
+    if "factsheet"  in grupos: nombres |= _TOOLS_FACTSHEET
 
     return [_TOOL_INDEX[n] for n in nombres if n in _TOOL_INDEX]
 

@@ -1,5 +1,27 @@
 # Automation Agent — Contexto del proyecto
 
+## Gestión de recursos — regla permanente
+
+Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
+
+| Tarea | Recurso |
+|---|---|
+| Arquitectura, razonamiento complejo, decisiones multi-paso | Claude Opus (este modelo) |
+| Código mecánico, funciones simples, fixes puntuales, ediciones de 1-2 archivos | Codex (`/codex:rescue`) |
+| Review de diff / código nuevo | Codex (`/codex:review`) |
+| Exploración de codebase, búsquedas en archivos | Subagente `Explore` |
+| Planificación de implementación no trivial | Subagente `Plan` |
+| Tareas independientes simultáneas | Múltiples subagentes en paralelo |
+| Ediciones simples, respuestas cortas | Inline, sin subagente |
+
+**Reglas de eficiencia (siempre activas):**
+1. Leer `MEMORY.md` antes de explorar código ya visto — evita re-trabajo
+2. Paralelizar tool calls independientes en un solo mensaje
+3. Usar Codex para código simple: no consume tokens de Anthropic
+4. Lanzar subagentes solo para búsquedas que toman >3 queries — si son 1-2, hacerlas inline
+5. Leer solo la sección necesaria de un archivo, nunca el archivo completo si no hace falta
+6. Si la memoria o el contexto ya tienen la respuesta, no buscar en el código
+
 ## Stack
 
 - Python + Gemini 2.5 Flash vía API compatible con OpenAI (`generativelanguage.googleapis.com/v1beta/openai/`)
@@ -11,9 +33,11 @@
 ## Arquitectura
 
 ```
-agent.py              # runner principal: tool-calling loop + TOOL_DEFINITIONS + _dispatch
+agent.py              # runner principal: loop de conversación, system prompt
 config.py             # variables de entorno
 tools/
+  registry.py         # TOOL_DEFINITIONS, _dispatch, selección dinámica por intent
+  memory_tools.py     # contexto, historial, KPIs (SQLite agente_toesca.db)
   email_tools.py      # Outlook: listar, descargar adjuntos, enviar, buscar
   sharepoint_tools.py # listar/copiar desde/hacia SharePoint
   local_tools.py      # listar/copiar desde/hacia servidor R:
@@ -27,6 +51,7 @@ tools/
   noi_tools.py        # hoja NOI-RCSD: ER Viña, ER Curico, JLL PT/Apoquindo/Apo3001, INMOSA
   rentroll_tools.py   # validación RR JLL y Tres Asociados (en desarrollo)
   vacancia_tools.py   # vacancia mensual (en desarrollo)
+  factsheet_tools.py  # actualización PPTX fact sheets (PT, APO, TRI)
 ```
 
 ## Variables de entorno (.env)
@@ -43,11 +68,11 @@ SALDO_CAJA_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja
 
 ## Fondos gestionados
 
-| Clave `fondo_key` | Carpeta en R:\Rentas\Fondos | Hoja en CDG |
+| Fondo (Nombre Real) | Clave `fondo_key` (Uso Interno/Excel) | Carpeta en R:\Rentas\Fondos |
 |---|---|---|
-| `A&R Apoquindo` | `FI Toesca Rentas Apoquindo` | `Input AP` |
-| `A&R PT` | `FI Toesca Rentas PT` | `Input PT` |
-| `A&R Rentas` | `FI Toesca Rentas` | `Input Ren` (series A, C, I) |
+| Toesca Rentas Inmobiliarias Apoquindo | `A&R Apoquindo` | `FI Toesca Rentas Apoquindo` |
+| Toesca Rentas Inmobiliarias PT | `A&R PT` | `FI Toesca Rentas PT` |
+| Toesca Rentas Inmobiliarias | `A&R Rentas` | `FI Toesca Rentas` |
 
 ## Nemotécnicos
 
@@ -109,12 +134,6 @@ Activos y fuentes de datos:
 
 ### Estructura ER Curico / ER Viña en CDG
 
-```
-xl/worksheets/sheet54.xml  → ER Viña
-xl/worksheets/sheet56.xml  → ER Curico
-xl/worksheets/sheet40.xml  → NOI-RCSD
-```
-
 **ER Curico**: Section 1 (filas 3-112, cols E-BZ) = datos mensuales reales en CLP.
 Section 2 (filas 113+) = agregaciones con fórmulas que referencian Section 1.
 NOI-RCSD referencia Section 2. Al escribir Section 1 → Section 2 auto-calcula → NOI auto.
@@ -126,10 +145,9 @@ NOI-RCSD referencia Section 2 de ER Viña.
 **Fila de fechas**: ER Curico = fila 4, ER Viña = fila 6 (seriales Excel).
 **Fila de UF**: ER Curico = fila 3, ER Viña = fila 5.
 
-### Mapeo NOI-RCSD → ER (hardcoded en _NOI_CURICO_MAP / _NOI_VINA_MAP)
+### Mapeo NOI-RCSD → ER
 
-NOI fila 7 = row de fechas globales (col CY = Enero 2026).
-`actualizar_er_curico/vina` escribe ER Section 1 + agrega fórmulas en NOI-RCSD col del mes, todo en un solo zip.
+Hardcoded en `_NOI_CURICO_MAP` / `_NOI_VINA_MAP`. NOI fila 7 = row de fechas (col CY = Ene 2026). `actualizar_er_curico/vina` escribe ER Section 1 + NOI col del mes en un solo zip.
 
 ### Archivos EEFF Viña disponibles
 
@@ -177,9 +195,9 @@ Usar las helpers que escanean char-by-char:
 ## Agregar herramienta nueva
 
 1. Crear función en `tools/<nombre>.py`
-2. Importar en `agent.py`
-3. Agregar entrada en `TOOL_DEFINITIONS` (lista de dicts con `type`, `function.name`, `function.description`, `function.parameters`)
-4. Agregar lambda en `_dispatch`
+2. Importar en `tools/registry.py`
+3. Agregar entrada en `TOOL_DEFINITIONS` en `registry.py` (dict con `type`, `function.name`, `function.description`, `function.parameters`)
+4. Agregar lambda en `_dispatch` en `registry.py`
 
 ## Formato de fechas Excel
 

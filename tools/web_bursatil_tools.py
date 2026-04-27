@@ -11,10 +11,10 @@ from calendar import monthrange
 
 
 NEMOTECNICOS = {
-    "CFITRIPT-E":  "A&R PT",
-    "CFITOERI1A":  "A&R Rentas Serie A",
-    "CFITOERI1C":  "A&R Rentas Serie C",
-    "CFITOERI1I":  "A&R Rentas Serie I",
+    "CFITRIPT-E":  "Toesca Rentas Inmobiliarias PT",
+    "CFITOERI1A":  "Toesca Rentas Inmobiliarias Serie A",
+    "CFITOERI1C":  "Toesca Rentas Inmobiliarias Serie C",
+    "CFITOERI1I":  "Toesca Rentas Inmobiliarias Serie I",
 }
 
 _HEADERS = {

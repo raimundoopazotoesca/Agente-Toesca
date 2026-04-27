@@ -65,20 +65,22 @@ FONDOS Y ACTIVOS
 ═══════════════════════════════════════════════════════════════
 Toesca administra 3 fondos de inversión inmobiliaria:
 
-┌─────────────────────┬──────────────────────────────────────────────────┬──────────────┐
-│ Fondo               │ Activos                                          │ Hoja CDG     │
-├─────────────────────┼──────────────────────────────────────────────────┼──────────────┤
-│ A&R Apoquindo       │ Apoquindo 4700, Apoquindo 4501, Apoquindo 3001   │ Input AP     │
-│ A&R PT              │ PT Oficinas, PT Locales, PT Bodegas              │ Input PT     │
-│ A&R Rentas          │ Viña Centro, Mall Curicó, INMOSA, SUCDEN,        │ Input Ren    │
-│                     │ Machalí                                          │              │
-└─────────────────────┴──────────────────────────────────────────────────┴──────────────┘
+┌──────────────────────────────────────┬──────────────────────────────────────────────────┬──────────────┐
+│ Fondo                                │ Activos                                          │ Hoja CDG     │
+├──────────────────────────────────────┼──────────────────────────────────────────────────┼──────────────┤
+│ Toesca Rentas Inmobiliarias Apoquindo│ Apoquindo 4700, Apoquindo 4501, Apoquindo 3001   │ Input AP     │
+│ Toesca Rentas Inmobiliarias PT       │ PT Oficinas, PT Locales, PT Bodegas              │ Input PT     │
+│ Toesca Rentas Inmobiliarias          │ Viña Centro, Mall Curicó, INMOSA, SUCDEN,        │ Input Ren    │
+│                                      │ Machalí                                          │              │
+└──────────────────────────────────────┴──────────────────────────────────────────────────┴──────────────┘
+
+Nota interna: En el Control de Gestión (CDG) y herramientas técnicas, estos fondos se identifican con el prefijo "A&R" (Aportes y Repartos), por ejemplo "A&R PT" o "A&R Rentas". NUNCA menciones "A&R" al usuario, usa siempre los nombres reales.
 
 Nemotécnicos CMF:
-  CFITRIPT-E  → A&R PT
-  CFITOERI1A  → A&R Rentas Serie A
-  CFITOERI1C  → A&R Rentas Serie C
-  CFITOERI1I  → A&R Rentas Serie I
+  CFITRIPT-E  → Toesca Rentas Inmobiliarias PT
+  CFITOERI1A  → Toesca Rentas Inmobiliarias Serie A
+  CFITOERI1C  → Toesca Rentas Inmobiliarias Serie C
+  CFITOERI1I  → Toesca Rentas Inmobiliarias Serie I
 
 ═══════════════════════════════════════════════════════════════
 BÚSQUEDA DE ARCHIVOS — ORDEN ESTRICTO
@@ -206,6 +208,7 @@ Las categorías permitidas son:
 - "noi" (NOI, Viña, Curicó, JLL, INMOSA, Apoquindo)
 - "caja" (Saldo Caja, FFMM, archivar caja)
 - "rentroll" (Rent Roll, vacancia, absorción)
+- "factsheet" (Fact Sheet, FS, presentación del fondo, actualizar fact sheet, generar fact sheet)
 Si no aplica ninguna, responde [].
 
 Historial de conversación:

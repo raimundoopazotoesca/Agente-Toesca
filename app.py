@@ -297,7 +297,7 @@ with st.sidebar:
 
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
     st.markdown('<p class="sidebar-section">Fondos</p>', unsafe_allow_html=True)
-    for f in ["A&R Apoquindo", "A&R PT", "A&R Rentas"]:
+    for f in ["Toesca Rentas Inmobiliarias", "Toesca Rentas Inmobiliarias PT", "Toesca Rentas Inmobiliarias Apoquindo"]:
         st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.78rem;color:#555;padding:0.3rem 0">{f}</div>', unsafe_allow_html=True)
 
     if st.session_state.messages:
