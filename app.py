@@ -13,10 +13,11 @@ _AGENT_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" wid
 </svg>"""
 _AGENT_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_AGENT_SVG).decode()
 
+import random
 from agent import (
     client, MODEL, BASE_PROMPT, PROMPT_CDG, PROMPT_NOI, PROMPT_RENTROLL, PROMPT_CAJA,
     _select_tools, _dispatch, _llm_call, get_intent_groups,
-    _MAX_TOOL_ITERS,
+    _MAX_TOOL_ITERS, _thinking_phrase,
 )
 
 _MAX_HISTORY_TURNS = 3   # pares usuario/agente a mantener en contexto
@@ -404,6 +405,11 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     response_area.warning(final_response)
                     break
 
+                _phrase = _thinking_phrase(grupos)
+                status_area.markdown(
+                    f'<div class="status-badge"><div class="status-dot"></div>{_phrase}...</div>',
+                    unsafe_allow_html=True,
+                )
                 response = _llm_call(
                     model=MODEL,
                     messages=api_messages,

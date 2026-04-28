@@ -1,12 +1,95 @@
 import json
 import time
 import random
+import sys
+import threading
+import itertools
 from openai import OpenAI
 from dotenv import load_dotenv
 from config import GEMINI_API_KEY
 from tools.registry import TOOL_DEFINITIONS, _dispatch, _select_tools
 
 load_dotenv()
+
+_THINKING_PHRASES = {
+    "generic": [
+        "Pensando",
+        "Un momento",
+        "Procesando",
+        "Analizando tu solicitud",
+    ],
+    "cdg": [
+        "Consultando el Control de Gestión",
+        "Calibrando precios de cuota",
+        "Calculando valores bursátiles",
+        "Reconciliando balances contables",
+        "Verificando dividendos distribuidos",
+        "Consolidando información de activos",
+    ],
+    "noi": [
+        "Evaluando NOI del trimestre",
+        "Cruzando datos de Parque Titanium",
+        "Procesando datos INMOSA",
+        "Procesando datos de Viña Centro",
+        "Analizando ocupación de Mall Curicó",
+        "Leyendo EEFF de los fondos",
+    ],
+    "caja": [
+        "Revisando flujos de caja",
+        "Cuadrando el saldo de caja",
+        "Procesando movimientos de caja",
+    ],
+    "rentroll": [
+        "Revisando el rent roll",
+        "Calculando vacancia por activo",
+        "Analizando absorción de espacios",
+    ],
+    "factsheet": [
+        "Preparando el fact sheet",
+        "Calculando TIR del portafolio",
+        "Analizando rendimientos del fondo",
+    ],
+}
+
+
+def _thinking_phrase(grupos: set = None) -> str:
+    if grupos:
+        for g in ("cdg", "noi", "caja", "rentroll", "factsheet"):
+            if g in grupos:
+                return random.choice(_THINKING_PHRASES[g])
+    return random.choice(_THINKING_PHRASES["generic"])
+
+_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+
+class _Thinking:
+    """Muestra un spinner animado con una frase temática mientras el LLM procesa."""
+
+    def __init__(self, phrase: str = None):
+        self._phrase = phrase or random.choice(_THINKING_PHRASES)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+
+    def _spin(self):
+        try:
+            frames = itertools.cycle(_SPINNER_FRAMES)
+        except Exception:
+            frames = itertools.cycle(["|", "/", "-", "\\"])
+        while not self._stop.is_set():
+            sys.stdout.write(f"\r  {next(frames)} {self._phrase}...")
+            sys.stdout.flush()
+            time.sleep(0.08)
+        sys.stdout.write("\r" + " " * (len(self._phrase) + 12) + "\r")
+        sys.stdout.flush()
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *args):
+        self._stop.set()
+        self._thread.join()
+
 
 client = OpenAI(
     api_key=GEMINI_API_KEY,
@@ -275,12 +358,13 @@ def run_agent(user_input: str) -> None:
                 print(f"\n[WARN] Límite de iteraciones ({_MAX_TOOL_ITERS}) alcanzado.")
                 break
 
-            response = _llm_call(
-                model=MODEL,
-                messages=messages,
-                tools=selected_tools,
-                tool_choice="auto",
-            )
+            with _Thinking(_thinking_phrase(grupos)):
+                response = _llm_call(
+                    model=MODEL,
+                    messages=messages,
+                    tools=selected_tools,
+                    tool_choice="auto",
+                )
 
             msg = response.choices[0].message
             messages.append(msg)

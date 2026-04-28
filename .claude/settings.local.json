@@ -4,7 +4,14 @@
       "Bash(python -c ' *)",
       "Bash(python -m py_compile app.py)",
       "Bash(python _patch_login.py)",
-      "Bash(rm _patch_login.py)"
+      "Bash(rm _patch_login.py)",
+      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" status)",
+      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" diff)",
+      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" add app.py ROADMAP.md)",
+      "Bash(git -C 'c:\\\\Users\\\\raimundo.opazo\\\\automation_agent' commit -m ' *)",
+      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" push)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)"
     ]
   }
 }

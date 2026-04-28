@@ -291,7 +291,8 @@ def actualizar_fecha_bursatil_input(
 ) -> str:
     """
     Actualiza la fecha bursátil en la hoja Input del fondo.
-    Se actualiza mensualmente con el último día hábil del mes bursátil.
+    Debe ser el último día del mes del CDG (el mes de la planilla, no el mes actual).
+    Ej: CDG 2604 → 30/04/2026. CDG 2603 → 31/03/2026.
 
     Celdas: Input AP → D9 | Input PT → C11 | Input Ren → C10
     """

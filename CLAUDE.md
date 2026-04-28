@@ -96,7 +96,7 @@ SALDO_CAJA_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja
 1. `crear_planilla_mes("2604")` → copia desde mes anterior
 2. Copiar al WORK_DIR (`copiar_del_servidor`)
 3. `actualizar_fecha_pendientes(...)` → B2 de hoja Pendientes = 1º día del mes
-4. `obtener_precios_mes(año, mes-1)` → precios último día mes anterior
+4. `obtener_precios_mes(año, mes)` → precios último día del mes del CDG (ej. CDG 2604 → 30/04/2026)
 5. `agregar_vr_bursatil_pt(...)` → A&R PT (mensual)
 6. `agregar_vr_bursatil_rentas(...)` → A&R Rentas series A/C/I (mensual)
    - A&R Apoquindo no tiene VR Bursátil
