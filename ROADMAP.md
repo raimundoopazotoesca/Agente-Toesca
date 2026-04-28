@@ -13,8 +13,14 @@
 ## Próximos pasos
 
 ### Urgente — Actualizaciones Críticas
-- [ ] **Enseñar a actualizar dividendos en input PT:** Definir flujo de captura y validación de dividendos para Parque Titanium.
+- [x] **Enseñar a actualizar dividendos en input PT/AP/Ren:** `agregar_dividendo_input` soporta los 3 fondos vía `INPUT_CFG`; solo escribe fecha en col B, el resto lo calculan fórmulas Excel.
 - [ ] **Enseñar planillas balances consolidados:** Documentar e implementar la lógica de actualización de balances consolidados.
+  - [x] Estructura PT mapeada: 3 hojas (Fondo PT, Inmob Boulevard, Torre A), 8 trimestres D-K, income statement YTD acumulado
+  - [x] Fuente Boulevard confirmada: `SharePoint/TRI/EEFF/Boulevard/`; mapeo balance sheet 1-a-1 con EEFF PDF (M$×1000)
+  - [ ] Confirmar fuente EEFF Torre A (ubicación desconocida)
+  - [ ] Confirmar mapeo ER detallado (cuentas granulares vs notas del EEFF)
+  - [ ] Confirmar si hay EEFF trimestrales o solo anuales para activos
+  - [ ] Implementar herramienta de actualización
 - [ ] **Terminar de enseñar FS PT:** Completar la automatización y validación del Fact Sheet de Parque Titanium.
 - [ ] **Enseñar a usar planilla resumen recaudación.**
 
