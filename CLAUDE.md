@@ -1,5 +1,20 @@
 # Automation Agent — Contexto del proyecto
 
+## Wiki de conocimiento
+
+La wiki acumulativa del agente vive en `wiki/` (relativo a la raíz de este repo).
+Vault de Obsidian: abrir la carpeta `wiki/` como vault.
+
+**Reglas:**
+1. **Antes de explorar código ya visto**, leer `wiki/index.md` — puede estar ya documentado
+2. **Al aprender algo nuevo** (error resuelto, detalle de proceso, comportamiento inesperado), actualizar la página wiki correspondiente y el log
+3. **Al responder preguntas de dominio** (fondos, activos, procesos), leer primero las páginas relevantes del wiki
+4. Agregar entrada en `wiki/log.md` con formato `## [YYYY-MM-DD] tipo | Descripción`
+5. Después de cualquier actualización al wiki, hacer commit y push al repo del agente:
+   ```bash
+   git add -A && git commit -m "wiki: <descripción breve>" && git push
+   ```
+
 ## Gestión de recursos — regla permanente
 
 Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
