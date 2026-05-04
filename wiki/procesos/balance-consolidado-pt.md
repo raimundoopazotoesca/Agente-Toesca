@@ -51,6 +51,24 @@ Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Doc
 | `Consolidado Fondo PT` | Output (no editar) | Consolidado a nivel fondo |
 | `BC PT` | Output (no editar) | Balance simplificado → alimenta fact sheet |
 
+## Regla general: ¿EEFF o Análisis?
+
+Para cada sección (balance / EERR) de cada hoja, determinar la fuente mirando el mismo período del año anterior:
+
+```
+Para MM.YYYY → revisar MM.YYYY-1 en la planilla
+Si TODOS los valores inputeados terminan en 000 → fuente es EEFF PDF (M$ × 1.000)
+Si ALGÚN valor NO termina en 000       → fuente es Análisis xlsx (pesos directos)
+```
+
+**Por qué funciona:**
+- EEFF reporta en M$ → al multiplicar ×1000 siempre quedan 3 ceros al final
+- Análisis reporta en pesos exactos → los valores raramente terminan en 000
+
+Aplica sección por sección dentro de la misma hoja (ej: en Inmob Boulevard el balance usa EEFF y el EERR usa Análisis — los valores del balance terminan en 000 y los del EERR no).
+
+---
+
 ## Procedimiento de actualización
 
 ### 1. Crear archivo del nuevo período
