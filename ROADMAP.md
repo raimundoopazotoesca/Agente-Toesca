@@ -15,12 +15,12 @@
 ### Urgente — Actualizaciones Críticas
 - [ ] **Automatizar todas las fechas de la planilla con hoja Pendientes.**
 - [x] **Enseñar a actualizar dividendos en input PT/AP/Ren:** `agregar_dividendo_input` soporta los 3 fondos vía `INPUT_CFG`; solo escribe fecha en col B, el resto lo calculan fórmulas Excel.
-- [ ] **Enseñar planillas balances consolidados:** Documentar e implementar la lógica de actualización de balances consolidados.
+- [x] **Enseñar planillas balances consolidados PT:** Proceso completo documentado en `wiki/procesos/balance-consolidado-pt.md`
   - [x] Estructura PT mapeada: 3 hojas (Fondo PT, Inmob Boulevard, Torre A), 8 trimestres D-K, income statement YTD acumulado
-  - [x] Fuente Boulevard confirmada: `SharePoint/TRI/EEFF/Boulevard/`; mapeo balance sheet 1-a-1 con EEFF PDF (M$×1000)
-  - [ ] Confirmar fuente EEFF Torre A (ubicación desconocida)
-  - [ ] Confirmar mapeo ER detallado (cuentas granulares vs notas del EEFF)
-  - [ ] Confirmar si hay EEFF trimestrales o solo anuales para activos
+  - [x] Fuente Boulevard: EEFF PDF (balance M$×1000) + Análisis xlsx hoja EERR (pesos directo)
+  - [x] Fuente Torre A: Análisis xlsx hoja "Estado de Situacion" + "EERR"; no se usa EEFF PDF
+  - [x] Regla detección fuente: valores terminan en 000 → EEFF; si no → Análisis
+  - [x] Regla cuentas duplicadas: excluir cuentas con mismo monto exacto en ambos lados; aplica a todos los balances
   - [ ] Implementar herramienta de actualización
 - [ ] **Terminar de enseñar FS PT:** Completar la automatización y validación del Fact Sheet de Parque Titanium.
 - [ ] **Enseñar a usar planilla resumen recaudación.**
