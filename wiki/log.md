@@ -5,6 +5,14 @@
 
 ---
 
+## [2026-05-04] aprendizaje | Balance Consolidado PT documentado
+
+- Mapeada hoja Fondo PT: clasificaciones, unidades (M$×1000), procedimiento inserción columna
+- Verificado cruce EEFF 4Q2025 → planilla: Total Activo, Patrimonio, Resultado cuadran
+- Fuente EEFF: SharePoint/Fondo Rentas PT/EEFF/{año}/{TT}/
+- Fuente planilla vF: SharePoint/Controles de Gestión/Renta Comercial/Balances Consolidados/
+- Pendiente: mapeo Inmob Boulevard, Torre A (fuente desconocida), EEFF trimestrales
+
 ## [2026-05-01] init | Wiki creada
 
 - Estructura inicial creada: `raw/`, `wiki/agente/`, `fondos/`, `activos/`, `procesos/`, `conceptos/`, `errores/`

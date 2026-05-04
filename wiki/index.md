@@ -36,6 +36,7 @@
 | [[procesos/cdg-mensual]] | Flujo completo Control de Gestión mensual | mensual | 2026-05-01 |
 | [[procesos/noi-rcsd]] | Actualización hoja NOI-RCSD | mensual | 2026-05-01 |
 | [[procesos/fact-sheets]] | Actualización Fact Sheets PPTX | mensual | 2026-05-01 |
+| [[procesos/balance-consolidado-pt]] | Balance Consolidado Rentas PT: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-04 |
 
 ## Conceptos
 
