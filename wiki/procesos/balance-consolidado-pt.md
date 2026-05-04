@@ -16,12 +16,28 @@ SharePoint/Controles de Gestión/Renta Comercial/Balances Consolidados/{año}/{T
 ```
 Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Controles de Gestión/Renta Comercial/Balances Consolidados/`
 
-**EEFF Fondo PT (fuente de datos):**
+**EEFF Fondo PT (balance):**
 ```
 SharePoint/Fondo Rentas PT/EEFF/{YYYY}/{TT}/
   EEFF {AAAAMM} Toesca FI Rentas PT Final.pdf
 ```
 Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas PT/EEFF/`
+
+**Boulevard (balance + EERR):**
+```
+SharePoint/TRI/EEFF/Boulevard/
+  EEFF 31-12-{YYYY} Boulevard.pdf          ← balance sheet (anual)
+  {MM}-{YYYY} - Análisis Inmobiliaria Boulevard PT.xlsx  ← EERR (hoja "EERR")
+```
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas Inmobiliarias TRI/EEFF/Boulevard/`
+
+**Torre A (balance + EERR):**
+```
+SharePoint/TRI/EEFF/Torre A/
+  {MM}-{YYYY} - Análisis Torre A.xlsx      ← balance (hoja "Estado de Situacion") + EERR (hoja "EERR")
+```
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas Inmobiliarias TRI/EEFF/Torre A/`
+> EEFF PDF de Torre A existe pero NO se usa — siempre usar el Análisis xlsx.
 
 ## Hojas del archivo
 
@@ -157,9 +173,108 @@ Guardar el archivo como `{MM.YYYY}- Balance Consolidado Rentas PT vAgente.xlsx` 
 | Total Patrimonio | 22.480.192 | 22.480.192.000 ✓ |
 | Resultado del ejercicio | 4.671.152 | 4.671.152.000 ✓ |
 
+---
+
+## Hoja Inmob Boulevard
+
+### Fuentes de datos
+
+| Sección | Fuente | Unidades |
+|---|---|---|
+| Balance | EEFF PDF Boulevard (págs 3-4) | M$ → × 1.000 → pesos |
+| EERR | Análisis xlsx, hoja "EERR", col E | pesos (usar directo) |
+
+> Boulevard solo tiene EEFF anual (un archivo por año). Para trimestres intermedios usar el Análisis xlsx que se actualiza mensualmente.
+
+### Mapeo Balance (Inmob Boulevard)
+
+| Fila | Cuenta planilla | Clas | Fuente EEFF / Nota |
+|---|---|---|---|
+| 7 | Efectivo | 1 | EEFF pág 3: "Efectivo y equivalentes al efectivo" (Nota 5) |
+| 12 | CxC por operaciones | 2 | EEFF pág 3: "Deudores comerciales y otras cuentas por cobrar" (Nota 6) |
+| 13 | CxC entidades relacionadas corrientes | 11 | EEFF pág 3: "Cuentas por cobrar entidades relacionadas corrientes" (Nota 8) |
+| 23 | Otras CxC NC (CxC no corrientes por operaciones) | 2 | EEFF pág 3: "Otras cuentas por cobrar no corrientes" (Nota 6) |
+| 27 | Propiedades de Inversión | 3 | EEFF pág 3: "Propiedades de inversión" (Nota 7) |
+| 31 | Activo por Impuesto Diferido | 5 | EEFF pág 3: "Activos por impuestos diferidos" (Nota 11) |
+| 40 | Préstamos corrientes | 6 | EEFF pág 4: "Otros pasivos financieros corrientes" (Nota 9) |
+| 42 | CxP por operaciones | 8 | EEFF pág 4: "Cuentas comerciales y otras cuentas por pagar" (Nota 10) |
+| 44 | CxP entidades relacionadas corrientes | 14 | EEFF pág 4: "Cuentas por pagar entidades relacionadas corrientes" (Nota 8) |
+| 46 | Otras provisiones corrientes | 8 | EEFF pág 4: "Otras provisiones corrientes" (Nota 12) |
+| 52 | Préstamos NC | 6 | EEFF pág 4: "Otros pasivos financieros no corrientes" (Nota 9) |
+| 55 | CxP entidades relacionadas NC | 13 | EEFF pág 4: "Cuentas por pagar entidades relacionadas no corrientes" (Nota 8) |
+| 62 | Aportes | 9 | EEFF pág 4 / cambios patrimonio: "Capital emitido" |
+| 64 | Resultados acumulados | 9 | EEFF pág 4: "Resultados acumulados" |
+| 65 | Resultado del ejercicio | 9 | EEFF pág 4: "Pérdida/Ganancia del ejercicio" |
+
+### Mapeo EERR (Inmob Boulevard)
+
+Fuente: Análisis xlsx, hoja "EERR", columna E. Copiar línea por línea a planilla filas 76-120.
+Las cuentas usan códigos contables (`4-1-01-01`, `5-1-01-01`, etc.) que coinciden con los nombres en la planilla.
+Validar: planilla fila 120 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESULTADO DEL PERIODO".
+
+---
+
+## Hoja Torre A
+
+### Fuentes de datos
+
+| Sección | Fuente | Unidades |
+|---|---|---|
+| Balance | Análisis xlsx, hoja "Estado de Situacion", col C | pesos (usar directo, sin ×1000) |
+| EERR | Análisis xlsx, hoja "EERR", col E | pesos (usar directo) |
+
+> Para Torre A NO se usa el EEFF PDF — solo el Análisis xlsx.
+
+### Regla de intereses diferidos (CRÍTICO)
+
+El Análisis Torre A incluye en Activos NC:
+- "Intereses Diferidos Tramo A" + "Intereses Diferidos Tramo B" → total ~10.680 M pesos
+
+Estos tienen una contrapartida **exactamente igual** en el pasivo. Al consolidar:
+- **NO incluirlos** en el balance consolidado (ni en activos ni en pasivos)
+- Razón: solo inflan artificialmente ambos lados sin representar valor real
+- Síntoma de que aplicar: activos diferidos = pasivos diferidos exactamente
+
+Como consecuencia: `Total Activos planilla ≠ Total Activos análisis` (se diferencia en el monto excluido).
+**La regla que SIEMPRE debe cumplirse:** `Total Activos = Total Pasivos + Patrimonio` en la planilla.
+
+### Criterio general
+
+Llenar los mismos índices de clasificación que se llenaron en períodos anteriores. Si aparece un ítem nuevo o dudoso, comparar contra el período anterior y omitir lo que hinche simétricamente el balance.
+
+### Mapeo Balance (Torre A)
+
+Los valores están en PESOS en el análisis (col C de "Estado de Situacion"). Usar directo sin multiplicar.
+
+| Fila | Cuenta planilla | Clas | Fuente Análisis |
+|---|---|---|---|
+| 7 | Efectivo | 1 | "EFECTIVO Y EQUIVALENTE AL EFECTIVO" |
+| 12 | CxC por operaciones | 2 | "CLIENTE" - "PROVISION INCOBRABLES" |
+| 13 | CxC entidades relacionadas corrientes | 11 | "PRESTAMO POR COBRAR INMOB BOULEVARD PT" |
+| 24 | CxC entidades relacionadas NC | 11 | "CUENTAS POR COBRAR EMPRESAS RELACIONADAS" (total) |
+| 27 | Propiedades de Inversión | 3 | "PROPIEDADES DE INVERSION" |
+| 31 | Activo por Impuesto Diferido | 5 | "ACTIVO POR IMPUESTO DIFERIDO" |
+| 30 | Intereses Diferidos | — | **NO INCLUIR** (ver regla arriba) |
+| 52 | Préstamos NC | 6 | Préstamos largo plazo |
+| 56 | Pasivos por impuestos diferidos | 7 | "IMPUESTO DIFERIDO PASIVO" |
+
+### Mapeo EERR (Torre A)
+
+Mismo proceso que Boulevard: usar hoja "EERR" col E del Análisis xlsx.
+Validar: planilla fila 114 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESULTADO DEL PERIODO" = 4.543.723.954 (4Q2025).
+
+---
+
+## Resumen de fuentes por hoja
+
+| Hoja | Balance fuente | EERR fuente | Unidades |
+|---|---|---|---|
+| Fondo PT | EEFF PDF págs 6-7 | EEFF PDF pág 8 | M$ × 1000 |
+| Inmob Boulevard | EEFF PDF págs 3-4 | Análisis xlsx hoja "EERR" col E | Balance M$×1000 / EERR pesos |
+| Torre A | Análisis xlsx hoja "Estado de Situacion" col C | Análisis xlsx hoja "EERR" col E | pesos (directo) |
+
+---
+
 ## Pendiente
 
-- [ ] Confirmar fuente EEFF Torre A (ubicación desconocida)
-- [ ] Documentar mapeo Inmob Boulevard (similar pero con Propiedades de Inversión activas)
-- [ ] Confirmar si hay EEFF trimestrales para Boulevard y Torre A (o solo anuales)
 - [ ] Implementar herramienta `actualizar_balance_consolidado_pt`
