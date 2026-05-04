@@ -53,6 +53,7 @@ from tools.gestion_renta_tools import (
     agregar_aporte_rentas,
     agregar_aporte_apoquindo,
     info_siguiente_accion,
+    leer_cdg_historico,
 )
 from tools.eeff_tools import (
     listar_eeff_disponibles,
@@ -92,6 +93,7 @@ from tools.rentroll_tools import (
     enviar_emails_rent_roll,
     consolidar_rent_rolls,
     consolidar_absorcion,
+    buscar_en_rent_roll,
 )
 from tools.vacancia_tools import (
     actualizar_vacancia,
@@ -123,9 +125,34 @@ from tools.factsheet_tools import (
     actualizar_fs_tri,
     guardar_fs,
 )
+from tools.ask_tools import preguntar_usuario
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "preguntar_usuario",
+            "description": (
+                "Hace una pregunta directa al usuario y espera su respuesta. "
+                "Usar cuando: (1) no encuentras un archivo después de buscar en ubicaciones conocidas y derivadas, "
+                "(2) hay ambigüedad real que no puedes resolver con el contexto disponible, "
+                "(3) una operación falla repetidamente y no tienes más alternativas, "
+                "(4) necesitas un dato específico que no puedes derivar (ruta exacta, nombre, credencial). "
+                "IMPORTANTE: llámala sola o como última herramienta del turno. Una sola pregunta por llamada."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pregunta": {
+                        "type": "string",
+                        "description": "La pregunta específica para el usuario. Concisa y clara.",
+                    }
+                },
+                "required": ["pregunta"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -1552,6 +1579,54 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Consultas históricas ───────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_cdg_historico",
+            "description": (
+                "Lee una hoja de cualquier CDG histórico directamente desde el servidor, "
+                "sin copiar al WORK_DIR. Responde preguntas históricas sobre vacancia, NOI, "
+                "precios cuota, dividendos, balances, etc. de cualquier mes pasado. "
+                "Hojas útiles: 'Vacancia', 'NOI-RCSD', 'Input AP', 'Input PT', 'Input Ren', "
+                "'ER Viña', 'ER Curico', 'Rent Roll'. "
+                "Usa 'filtro' para buscar un activo o concepto específico dentro de la hoja."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes":    {"type": "integer", "description": "Mes del CDG (1-12)"},
+                    "año":    {"type": "integer", "description": "Año del CDG (ej: 2026)"},
+                    "hoja":   {"type": "string",  "description": "Nombre de la hoja a leer"},
+                    "filtro": {"type": "string",  "description": "Keyword para filtrar filas (opcional). Ej: 'Apoquindo', 'Viña', 'PT'"},
+                },
+                "required": ["mes", "año", "hoja"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_en_rent_roll",
+            "description": (
+                "Busca arrendatarios y condiciones de contrato en el Rent Roll JLL de un mes histórico. "
+                "Lee directamente desde SharePoint sin copiar el archivo. "
+                "Responde preguntas como: '¿quién ocupaba el local X en Apoquindo en febrero?', "
+                "'¿cuál era la renta de Y?', '¿cuándo vence el contrato de Z?'. "
+                "Filtra por activo (ej: 'Apoquindo', 'Parque Titanium') y/o por local/detalle."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes":    {"type": "integer", "description": "Mes del Rent Roll (1-12)"},
+                    "año":    {"type": "integer", "description": "Año del Rent Roll (ej: 2026)"},
+                    "activo": {"type": "string",  "description": "Filtrar por activo (ej: 'Apoquindo', 'PT', 'Titanium'). Opcional."},
+                    "local":  {"type": "string",  "description": "Filtrar por nombre/número de local o detalle. Opcional."},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
     # ── Fact Sheets ──────────────────────────────────────────────────────────
     {
         "type": "function",
@@ -1796,6 +1871,7 @@ TOOL_DEFINITIONS = [
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
+        "preguntar_usuario":            lambda a: preguntar_usuario(a["pregunta"]),
         "buscar_correos_con_planillas": lambda a: list_emails_with_attachments(a.get("limite", 20)),
         "buscar_correos_por_asunto":    lambda a: search_emails_by_subject(a["palabra_clave"], a.get("limite", 10)),
         "descargar_adjunto_correo":     lambda a: download_email_attachment(a["entry_id"], a["attachment_index"], a["nombre_archivo"]),
@@ -1903,6 +1979,9 @@ def _dispatch(name: str, args: dict) -> str:
         "comparar_periodos":             lambda a: comparar_periodos(a["fondo"], a["periodo_base"], a["periodo_actual"]),
         "buscar_ubicacion":              lambda a: buscar_ubicacion(a["concepto"]),
         "guardar_ubicacion":             lambda a: guardar_ubicacion(a["concepto"], a["ruta"], a.get("notas", "")),
+        # Consultas históricas
+        "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
+        "buscar_en_rent_roll":           lambda a: buscar_en_rent_roll(a["mes"], a["año"], a.get("activo"), a.get("local")),
         # Fact Sheets
         "listar_shapes_fs":              lambda a: listar_shapes_fs(a["fondo_key"], a["año"], a["mes"]),
         "leer_tabla_fs":                 lambda a: leer_tabla_fs(a["fondo_key"], a["año"], a["mes"], a["shape_name"]),
@@ -1928,6 +2007,7 @@ def _dispatch(name: str, args: dict) -> str:
 
 # ─── Selección dinámica de herramientas ───────────────────────────────────────
 _TOOLS_GENERAL = {
+    "preguntar_usuario",
     "buscar_correos_con_planillas", "buscar_correos_por_asunto",
     "descargar_adjunto_correo", "enviar_correo",
     "listar_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint",
@@ -1937,6 +2017,7 @@ _TOOLS_GENERAL = {
     "leer_contexto", "actualizar_contexto", "leer_historial",
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "buscar_ubicacion", "guardar_ubicacion",
+    "leer_cdg_historico", "buscar_en_rent_roll",
 }
 
 _TOOLS_CDG = {

@@ -16,9 +16,11 @@ _AGENT_AVATAR = "data:image/svg+xml;base64," + base64.b64encode(_AGENT_SVG).deco
 import random
 from agent import (
     client, MODEL, BASE_PROMPT, PROMPT_CDG, PROMPT_NOI, PROMPT_RENTROLL, PROMPT_CAJA,
-    _select_tools, _dispatch, _llm_call, get_intent_groups,
+    _select_tools, _dispatch, _llm_call, get_intent_groups, _trim_tool_messages,
     _MAX_TOOL_ITERS, _thinking_phrase,
 )
+from tools.ask_tools import set_streamlit_mode, _SENTINEL_PREFIX
+set_streamlit_mode(True)
 
 _MAX_HISTORY_TURNS = 3   # pares usuario/agente a mantener en contexto
 from tools.memory_tools import load_memory, guardar_tarea
@@ -362,26 +364,53 @@ for msg in st.session_state.messages:
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     user_msg_text = st.session_state.messages[-1]["content"]
 
-    recent_history = " ".join([m["content"] for m in st.session_state.messages[-5:-1] if m["role"] == "user"])
-    grupos = get_intent_groups(recent_history + " " + user_msg_text)
-    selected_tools = _select_tools(grupos)
-    
-    system_content = BASE_PROMPT
-    if "cdg" in grupos: system_content += "\n\n" + PROMPT_CDG
-    if "noi" in grupos: system_content += "\n\n" + PROMPT_NOI
-    if "rentroll" in grupos: system_content += "\n\n" + PROMPT_RENTROLL
-    if "caja" in grupos: system_content += "\n\n" + PROMPT_CAJA
-    
-    memory_block = load_memory()
-    if memory_block:
-        system_content += "\n\n---\n\n" + memory_block
-    
-    api_messages = [{"role": "system", "content": system_content}]
-    
-    history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
-    for m in history[-(_MAX_HISTORY_TURNS * 2):]:
-        api_messages.append({"role": m["role"], "content": m["content"]})
-    
+    import time
+    def stream_text(text):
+        words = text.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+            time.sleep(0.035)
+
+    def _serialize_messages(messages):
+        result = []
+        for m in messages:
+            if hasattr(m, "model_dump"):
+                result.append(m.model_dump())
+            else:
+                result.append(m)
+        return result
+
+    # ─── Retomar tarea interrumpida por preguntar_usuario ─────────────────────
+    if "pending_resume" in st.session_state:
+        resume = st.session_state.pop("pending_resume")
+        api_messages = resume["api_messages"]
+        api_messages.append({
+            "role": "tool",
+            "tool_call_id": resume["pending_tool_call_id"],
+            "content": user_msg_text,
+        })
+        grupos = set(resume["grupos"])
+        selected_tools = resume["selected_tools"]
+    else:
+        recent_history = " ".join([m["content"] for m in st.session_state.messages[-5:-1] if m["role"] == "user"])
+        grupos = get_intent_groups(recent_history + " " + user_msg_text)
+        selected_tools = _select_tools(grupos)
+
+        system_content = BASE_PROMPT
+        if "cdg" in grupos: system_content += "\n\n" + PROMPT_CDG
+        if "noi" in grupos: system_content += "\n\n" + PROMPT_NOI
+        if "rentroll" in grupos: system_content += "\n\n" + PROMPT_RENTROLL
+        if "caja" in grupos: system_content += "\n\n" + PROMPT_CAJA
+
+        memory_block = load_memory()
+        if memory_block:
+            system_content += "\n\n---\n\n" + memory_block
+
+        api_messages = [{"role": "system", "content": system_content}]
+        history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
+        for m in history[-(_MAX_HISTORY_TURNS * 2):]:
+            api_messages.append({"role": m["role"], "content": m["content"]})
+
     tools_used = []
     final_response = ""
 
@@ -405,6 +434,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     response_area.warning(final_response)
                     break
 
+                api_messages = _trim_tool_messages(api_messages)
                 _phrase = _thinking_phrase(grupos)
                 status_area.markdown(
                     f'<div class="status-badge"><div class="status-dot"></div>{_phrase}...</div>',
@@ -423,26 +453,16 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     if msg.content:
                         final_response = msg.content
                     else:
-                        # El modelo retornó contenido vacío tras tool calls — pedir resumen explícito
                         api_messages.append({"role": "user", "content": "Resume brevemente los resultados de lo que encontraste."})
                         followup = _llm_call(model=MODEL, messages=api_messages, tools=[], tool_choice="none")
                         final_response = followup.choices[0].message.content or "Sin respuesta del modelo."
-                        
+
                     status_area.empty()
-                    
-                    # Simular tipeo
-                    import time
-                    def stream_text(text):
-                        words = text.split(" ")
-                        for i, word in enumerate(words):
-                            yield word + (" " if i < len(words) - 1 else "")
-                            time.sleep(0.035)  # Aumentado para que sea más lento y fluido
-                            
                     with response_area:
                         st.write_stream(stream_text(final_response))
-                        
                     break
 
+                ask_user_triggered = False
                 for tool_call in msg.tool_calls:
                     name = tool_call.function.name
                     args = json.loads(tool_call.function.arguments)
@@ -453,12 +473,31 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         unsafe_allow_html=True,
                     )
                     result = _dispatch(name, args)
+
+                    # Agente pide ayuda al usuario — pausar y retomar en el próximo turno
+                    if result.startswith(_SENTINEL_PREFIX):
+                        pregunta = result[len(_SENTINEL_PREFIX):]
+                        st.session_state["pending_resume"] = {
+                            "api_messages": _serialize_messages(api_messages),
+                            "pending_tool_call_id": tool_call.id,
+                            "grupos": list(grupos),
+                            "selected_tools": selected_tools,
+                        }
+                        final_response = pregunta
+                        ask_user_triggered = True
+                        break
+
                     if name not in tools_used:
                         tools_used.append(name)
                     api_messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
 
+                if ask_user_triggered:
+                    status_area.empty()
+                    with response_area:
+                        st.write_stream(stream_text(final_response))
+                    break
+
         except RuntimeError as e:
-            # _llm_call agotó los 5 reintentos (429 persistente)
             status_area.empty()
             final_response = str(e)
             response_area.error(

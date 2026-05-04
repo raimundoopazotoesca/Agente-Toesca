@@ -819,6 +819,94 @@ def enviar_emails_rent_roll() -> str:
     return "Correos enviados:\n" + "\n".join(enviados)
 
 
+# ── Consulta histórica de arrendatarios ─────────────────────────────────────
+
+def buscar_en_rent_roll(mes: int, año: int, activo: str = None, local: str = None) -> str:
+    """
+    Busca arrendatarios y condiciones en el Rent Roll JLL de un mes histórico.
+    Responde preguntas como: '¿quién ocupaba el local X en Apoquindo en febrero?'
+    No requiere copiar el archivo; lee directamente desde SharePoint.
+    """
+    path = _find_file(año, mes, "jll")
+    if not path:
+        aamm = f"{str(año)[2:]}{mes:02d}"
+        return (
+            f"No se encontró el RR JLL para {MESES_ES[mes]} {año} "
+            f"({aamm} Rent Roll y NOI.xlsx) en SharePoint ni WORK_DIR"
+        )
+
+    rows, _ = _load_ws_rows(path, "Rent Roll")
+    if rows is None:
+        return f"El archivo {os.path.basename(path)} no tiene hoja 'Rent Roll'"
+
+    h = _find_header_row(rows)
+    if h is None:
+        return "No se encontró la fila de encabezados en el Rent Roll"
+
+    col_map, _ = _get_col_map(rows, h)
+
+    _COLS_QUERY = [
+        "Activo1", "Activo2", "Detalle Activo",
+        "Arrendatario", "Tipo Arrendatario",
+        "Renta Fija (UF/m2 /mes)", "Area Arrendable (m2)",
+        "Fecha Inicio", "Término del Contrato",
+    ]
+
+    results = []
+    for row in rows[h + 1:]:
+        rec = {}
+        for col in _COLS_QUERY:
+            idx = col_map.get(col)
+            if idx is not None and idx < len(row) and row[idx] is not None:
+                rec[col] = str(row[idx]).strip()
+
+        if not rec.get("Arrendatario"):
+            continue
+
+        if activo:
+            al = activo.lower()
+            if not any(al in str(rec.get(c, "")).lower() for c in ("Activo1", "Activo2", "Detalle Activo")):
+                continue
+
+        if local:
+            ll = local.lower()
+            if not any(ll in str(rec.get(c, "")).lower() for c in ("Detalle Activo", "Activo2")):
+                continue
+
+        results.append(rec)
+
+    if not results:
+        partes = [f"{MESES_ES[mes]} {año}"]
+        if activo:
+            partes.append(f"activo='{activo}'")
+        if local:
+            partes.append(f"local='{local}'")
+        return f"No se encontraron resultados en RR JLL para {', '.join(partes)}"
+
+    lines = [
+        f"Rent Roll JLL — {MESES_ES[mes]} {año}",
+        f"Archivo: {os.path.basename(path)}",
+        f"Resultados: {len(results)} fila(s)",
+        "",
+    ]
+    for rec in results[:40]:
+        parts = []
+        if rec.get("Activo2"):                  parts.append(f"Activo: {rec['Activo2']}")
+        if rec.get("Detalle Activo"):            parts.append(f"Local: {rec['Detalle Activo']}")
+        if rec.get("Arrendatario"):              parts.append(f"Arrendatario: {rec['Arrendatario']}")
+        if rec.get("Tipo Arrendatario"):         parts.append(f"Tipo: {rec['Tipo Arrendatario']}")
+        if rec.get("Renta Fija (UF/m2 /mes)"):  parts.append(f"Renta: {rec['Renta Fija (UF/m2 /mes)']} UF/m2/mes")
+        if rec.get("Area Arrendable (m2)"):      parts.append(f"m²: {rec['Area Arrendable (m2)']}")
+        if rec.get("Fecha Inicio"):              parts.append(f"Inicio: {rec['Fecha Inicio']}")
+        if rec.get("Término del Contrato"):      parts.append(f"Término: {rec['Término del Contrato']}")
+        lines.append("  " + " | ".join(parts))
+
+    if len(results) > 40:
+        lines.append(f"  ... y {len(results) - 40} fila(s) más. Usa 'activo' o 'local' para filtrar.")
+
+    return "\n".join(lines)
+
+
 # ── Consolidación de Rent Roll en CDG ────────────────────────────────────────
 
 # Columnas a copiar (por nombre). El orden no importa; se buscan por header.

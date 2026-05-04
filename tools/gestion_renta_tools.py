@@ -7,10 +7,12 @@ import glob
 import os
 import re
 import shutil
+import tempfile
 import zipfile
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from config import LOCAL_FILES_DIR, SHAREPOINT_DIR, RENTA_COMERCIAL_DIR, WORK_DIR
+import openpyxl
 
 
 # ─── Rutas base ───────────────────────────────────────────────────────────────
@@ -867,4 +869,71 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         lines.append(f"=> Faltan {n_faltan} archivo(s). No se puede iniciar hasta tenerlos todos.")
     else:
         lines.append("=> Todo listo para actualizar el CDG.")
+    return "\n".join(lines)
+
+
+# ── Consulta histórica de datos del CDG ──────────────────────────────────────
+
+def leer_cdg_historico(mes: int, año: int, hoja: str, filtro: str = None) -> str:
+    """
+    Lee una hoja de cualquier CDG histórico directamente desde el servidor
+    sin necesidad de copiar el archivo al WORK_DIR.
+    Útil para responder preguntas históricas: vacancia, NOI, precios cuota, etc.
+
+    Parámetros:
+        mes, año : período del CDG
+        hoja     : nombre exacto de la hoja ("Vacancia", "NOI-RCSD", "Input AP", ...)
+        filtro   : keyword para filtrar filas (busca en todas las celdas)
+    """
+    aamm = f"{str(año)[2:]}{mes:02d}"
+    nombre = f"{aamm} Control De Gestión Renta Comercial.xlsx"
+    ruta = os.path.join(RUTA_COMERCIAL, nombre)
+
+    if not os.path.exists(ruta):
+        return f"No se encontró el CDG '{nombre}' en {RUTA_COMERCIAL}"
+
+    try:
+        wb = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+    except PermissionError:
+        tmp = os.path.join(tempfile.gettempdir(), nombre)
+        shutil.copy2(ruta, tmp)
+        wb = openpyxl.load_workbook(tmp, read_only=True, data_only=True)
+
+    if hoja not in wb.sheetnames:
+        sugeridas = [s for s in wb.sheetnames if hoja.lower() in s.lower()]
+        wb.close()
+        if sugeridas:
+            return f"Hoja '{hoja}' no encontrada. Similares: {', '.join(sugeridas[:5])}"
+        primeras = wb.sheetnames[:20]
+        return f"Hoja '{hoja}' no encontrada en {nombre}. Primeras hojas: {', '.join(primeras)}"
+
+    ws = wb[hoja]
+    rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+
+    if not rows:
+        return f"Hoja '{hoja}' vacía en {nombre}"
+
+    if filtro:
+        fl = filtro.lower()
+        matched = [r for r in rows if any(fl in str(v).lower() for v in r if v is not None)]
+        if not matched:
+            return f"No se encontraron filas con '{filtro}' en hoja '{hoja}' de {nombre}"
+        rows_out = matched[:50]
+        header = f"CDG {nombre} — Hoja: {hoja} | Filtro: '{filtro}' ({len(matched)} fila(s))"
+        trailer = f"\n... y {len(matched) - 50} fila(s) más" if len(matched) > 50 else ""
+    else:
+        rows_out = rows[:80]
+        header = f"CDG {nombre} — Hoja: {hoja}"
+        trailer = f"\n... y {len(rows) - 80} fila(s) más. Usa 'filtro' para buscar datos específicos." if len(rows) > 80 else ""
+
+    lines = [header, ""]
+    for row in rows_out:
+        cells = [str(v).strip() for v in row if v is not None and str(v).strip() not in ("", "None")]
+        if cells:
+            lines.append("  |  ".join(cells[:12]))
+
+    if trailer:
+        lines.append(trailer)
+
     return "\n".join(lines)

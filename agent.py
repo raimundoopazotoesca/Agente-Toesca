@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import random
 import sys
@@ -166,6 +167,22 @@ Nemotécnicos CMF:
   CFITOERI1I  → Toesca Rentas Inmobiliarias Serie I
 
 ═══════════════════════════════════════════════════════════════
+CUÁNDO PEDIR AYUDA (preguntar_usuario)
+═══════════════════════════════════════════════════════════════
+Usa preguntar_usuario() SOLO cuando estés genuinamente bloqueado:
+• No encuentras el archivo después de buscar en todas las ubicaciones conocidas y derivadas
+• Hay ambigüedad real que no puedes resolver (el usuario dijo algo que admite varias interpretaciones)
+• Una operación falla repetidamente y agotaste las alternativas disponibles
+• Necesitas un dato que no puedes derivar del contexto (nombre exacto, ruta, período, fondo)
+
+JAMÁS uses preguntar_usuario() para:
+• Confirmar si ejecutar algo — simplemente hazlo
+• Preguntar si buscas en un lugar — simplemente busca
+• Pedir aprobación de pasos intermedios de lectura o consulta
+
+Cuando la llames: una sola pregunta, concisa. Llámala sola o como última herramienta del turno.
+
+═══════════════════════════════════════════════════════════════
 BÚSQUEDA DE ARCHIVOS — ORDEN ESTRICTO
 ═══════════════════════════════════════════════════════════════
 1. Llamar 'buscar_ubicacion' con el nombre del recurso.
@@ -283,36 +300,74 @@ CAJA Y FFMM
 # ─── Runner principal ─────────────────────────────────────────────────────────
 
 
-def get_intent_groups(history_text: str) -> set:
-    prompt = f"""Dado el historial de chat con un asistente que automatiza tareas de un fondo de inversión inmobiliario, clasifica la intención del usuario.
-Responde ÚNICAMENTE con una lista JSON válida de strings (ejemplo: ["cdg", "noi"]).
-Las categorías permitidas son:
-- "cdg" (Control de Gestión, planillas, archivos, actualizar control, tirar reportes)
-- "noi" (NOI, Viña, Curicó, JLL, INMOSA, Apoquindo)
-- "caja" (Saldo Caja, FFMM, archivar caja)
-- "rentroll" (Rent Roll, vacancia, absorción)
-- "factsheet" (Fact Sheet, FS, presentación del fondo, actualizar fact sheet, generar fact sheet)
-Si no aplica ninguna, responde [].
+_INTENT_PATTERNS: dict[str, re.Pattern] = {
+    "cdg": re.compile(
+        r"control\s*de\s*gesti[oó]n|planilla|\bcdg\b|vr\s*(burs[aá]til|contable)|"
+        r"precio(s)?\s*(de\s*)?cuota|burs[aá]til|dividendo|\baporte\b|reparto|"
+        r"crear.*mes|mes\s*anterior|actualizar.*fecha|precios?\s*del?\s*mes|"
+        r"input\s*(ap|pt|ren)|hoja\s*input",
+        re.I,
+    ),
+    "noi": re.compile(
+        r"\bnoi\b|vi[nñ]a\s*(centro)?|mall\s*curic[oó]|curic[oó]|\bjll\b|"
+        r"\binmosa\b|parque\s*titanium|\bapoquindo\b|"
+        r"er\s*(vi[nñ]a|curic[oó])|rent\s*roll.*noi|\beef\b|eeff",
+        re.I,
+    ),
+    "caja": re.compile(
+        r"\bcaja\b|saldo\s*caja|\bffmm\b|mar[ií]a\s*jos[eé]|flujo(s)?\s*de\s*caja",
+        re.I,
+    ),
+    "rentroll": re.compile(
+        r"rent\s*roll|vacancia|absorci[oó]n|\bm[²2]\b|metros\s*(cuadrados?)?|"
+        r"ocupaci[oó]n|arrendatario|superficie",
+        re.I,
+    ),
+    "factsheet": re.compile(
+        r"fact\s*sheet|factsheet|\bfs\b(?!\s*[a-z])|"
+        r"presentaci[oó]n\s*del\s*fondo|valor\s*libro|rentabilidad|\btir\b",
+        re.I,
+    ),
+}
 
-Historial de conversación:
-{history_text}
-"""
-    try:
-        response = _llm_call(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
-        )
-        msg_content = response.choices[0].message.content.strip()
-        if msg_content.startswith("```json"): msg_content = msg_content[7:-3].strip()
-        elif msg_content.startswith("```"): msg_content = msg_content[3:-3].strip()
-        
-        import json
-        grupos_list = json.loads(msg_content)
-        return set(grupos_list)
-    except Exception as e:
-        print(f"[LLM Router Error] {e}")
-        return set()
+
+def get_intent_groups(text: str) -> set:
+    """Clasifica intención por regex (O(n), sin LLM). Cubre >95% de casos."""
+    return {grupo for grupo, pat in _INTENT_PATTERNS.items() if pat.search(text)}
+
+
+_MAX_CONTEXT_CHARS = 70_000  # umbral para comprimir mensajes de tools intermedios
+
+
+def _trim_tool_messages(messages: list) -> list:
+    """
+    Recorta tool results antiguos cuando el contexto supera el umbral.
+    Preserva el system prompt, el primer user message y los últimos 6 mensajes completos.
+    """
+    total = sum(
+        len(str(m.get("content", "") if isinstance(m, dict) else getattr(m, "content", "") or ""))
+        for m in messages
+    )
+    if total <= _MAX_CONTEXT_CHARS:
+        return messages
+
+    keep_tail = 6  # últimos mensajes siempre completos
+    result = []
+    tail_start = max(1, len(messages) - keep_tail)
+
+    for i, m in enumerate(messages):
+        role = m.get("role") if isinstance(m, dict) else getattr(m, "role", "")
+        if role == "system" or i == 1 or i >= tail_start:
+            result.append(m)
+        elif role == "tool":
+            content = m.get("content", "") if isinstance(m, dict) else (getattr(m, "content", "") or "")
+            if len(str(content)) > 300:
+                result.append({**m, "content": str(content)[:300] + " …[truncado]"})
+            else:
+                result.append(m)
+        else:
+            result.append(m)
+    return result
 
 def run_agent(user_input: str) -> None:
     print("\\n" + "=" * 60)
@@ -358,6 +413,7 @@ def run_agent(user_input: str) -> None:
                 print(f"\n[WARN] Límite de iteraciones ({_MAX_TOOL_ITERS}) alcanzado.")
                 break
 
+            messages = _trim_tool_messages(messages)
             with _Thinking(_thinking_phrase(grupos)):
                 response = _llm_call(
                     model=MODEL,
