@@ -13,6 +13,7 @@
 ## Próximos pasos
 
 ### Urgente — Actualizaciones Críticas
+- [ ] **Automatizar todas las fechas de la planilla con hoja Pendientes.**
 - [x] **Enseñar a actualizar dividendos en input PT/AP/Ren:** `agregar_dividendo_input` soporta los 3 fondos vía `INPUT_CFG`; solo escribe fecha en col B, el resto lo calculan fórmulas Excel.
 - [ ] **Enseñar planillas balances consolidados:** Documentar e implementar la lógica de actualización de balances consolidados.
   - [x] Estructura PT mapeada: 3 hojas (Fondo PT, Inmob Boulevard, Torre A), 8 trimestres D-K, income statement YTD acumulado
