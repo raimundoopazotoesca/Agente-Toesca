@@ -51,6 +51,31 @@ Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Doc
 | `Consolidado Fondo PT` | Output (no editar) | Consolidado a nivel fondo |
 | `BC PT` | Output (no editar) | Balance simplificado → alimenta fact sheet |
 
+## Regla global: cuentas duplicadas en balance (aplica a TODOS los balances consolidados)
+
+Al leer cualquier fuente (EEFF o Análisis), puede aparecer una misma cuenta o monto en **ambos lados del balance** (activos y pasivos). Incluirlas inflaría el balance artificialmente sin representar valor real neto.
+
+**Criterio de exclusión:**
+- Si una cuenta activo y una cuenta pasivo tienen el **mismo monto exacto** y claramente representan la misma deuda/contrato visto desde dos lados → **excluir ambas del balance consolidado**
+- El ejemplo más común: intereses diferidos que aparecen como activo y como pasivo por el mismo valor
+- Pero aplica a cualquier tipo de cuenta duplicada, no solo intereses diferidos
+
+**Consecuencia aceptada:**
+```
+Total Activos planilla ≠ Total Activos fuente
+(diferencia = monto de las cuentas excluidas)
+```
+**Invariante que SIEMPRE debe cumplirse:**
+```
+Total Activos planilla = Total Pasivos + Patrimonio planilla
+```
+
+**Ante la duda:** no excluir por cuenta propia — consultar al usuario.
+
+Esta regla aplica a **todas las hojas de todos los balances consolidados** (PT, Rentas, Apoquindo y cualquier futuro).
+
+---
+
 ## Regla general: ¿EEFF o Análisis?
 
 Para cada sección (balance / EERR) de cada hoja, determinar la fuente mirando el mismo período del año anterior:
@@ -243,18 +268,7 @@ Validar: planilla fila 120 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESU
 
 > Para Torre A NO se usa el EEFF PDF — solo el Análisis xlsx.
 
-### Regla de intereses diferidos (CRÍTICO)
-
-El Análisis Torre A incluye en Activos NC:
-- "Intereses Diferidos Tramo A" + "Intereses Diferidos Tramo B" → total ~10.680 M pesos
-
-Estos tienen una contrapartida **exactamente igual** en el pasivo. Al consolidar:
-- **NO incluirlos** en el balance consolidado (ni en activos ni en pasivos)
-- Razón: solo inflan artificialmente ambos lados sin representar valor real
-- Síntoma de que aplicar: activos diferidos = pasivos diferidos exactamente
-
-Como consecuencia: `Total Activos planilla ≠ Total Activos análisis` (se diferencia en el monto excluido).
-**La regla que SIEMPRE debe cumplirse:** `Total Activos = Total Pasivos + Patrimonio` en la planilla.
+### Regla de cuentas duplicadas (ver regla global abajo)
 
 ### Criterio general
 
