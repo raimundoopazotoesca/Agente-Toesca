@@ -116,7 +116,7 @@ def _llm_call(**kwargs):
         if since < _MIN_CALL_INTERVAL:
             time.sleep(_MIN_CALL_INTERVAL - since)
 
-    for attempt in range(5):
+    for attempt in range(8):
         try:
             response = client.chat.completions.create(**kwargs)
             _last_call_at = time.time()
@@ -124,12 +124,12 @@ def _llm_call(**kwargs):
         except Exception as e:
             msg = str(e).lower()
             if "429" in msg or "quota" in msg or "rate" in msg or "resource" in msg:
-                wait = min((2 ** attempt) + random.uniform(0, 1), 60)
-                print(f"  [429] Rate limit — esperando {wait:.0f}s (intento {attempt + 1}/5)...")
+                wait = min((2 ** attempt) * 2 + random.uniform(0, 2), 120)
+                print(f"  [429] Rate limit — esperando {wait:.0f}s (intento {attempt + 1}/8)...")
                 time.sleep(wait)
             else:
                 raise
-    raise RuntimeError("Límite de reintentos alcanzado (5/5 intentos con error 429).")
+    raise RuntimeError("Límite de reintentos alcanzado (8/8 intentos con error 429).")
 
 
 BASE_PROMPT = """Eres un agente automatizador especializado en gestión de fondos inmobiliarios para Toesca Asset Management (Chile).
@@ -319,8 +319,8 @@ _INTENT_PATTERNS: dict[str, re.Pattern] = {
         re.I,
     ),
     "rentroll": re.compile(
-        r"rent\s*roll|vacancia|absorci[oó]n|\bm[²2]\b|metros\s*(cuadrados?)?|"
-        r"ocupaci[oó]n|arrendatario|superficie",
+        r"rent\s*roll|\brr\b|tres\s*a(sociados?)?\b|vacancia|absorci[oó]n|\bm[²2]\b|"
+        r"metros\s*(cuadrados?)?|ocupaci[oó]n|arrendatario|superficie",
         re.I,
     ),
     "factsheet": re.compile(

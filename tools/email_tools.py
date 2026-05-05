@@ -1,18 +1,21 @@
 """
 Herramientas de correo Outlook.
 Usa el Outlook Desktop instalado en la PC — sin contraseñas ni configuración extra.
-Requiere que Outlook esté abierto. Solo disponible en Windows.
+Si Outlook no está abierto, lo lanza automáticamente (Office16). Solo disponible en Windows.
 """
 import os
 import shutil
+import subprocess
+import time
 from config import WORK_DIR
 
 try:
     import win32com.client
+    import winreg
+    import platform
     _OUTLOOK_OK = True
 except ImportError:
     _OUTLOOK_OK = False
-
 
 def _not_available() -> str:
     return (
@@ -21,12 +24,89 @@ def _not_available() -> str:
     )
 
 
+def _try_launch_outlook():
+    """Intenta abrir Outlook, priorizando el Clásico para soporte COM."""
+    if platform.system() != "Windows":
+        print("Outlook only available on Windows.")
+        return False
+
+    # 1. Intentar Outlook Clásico por rutas conocidas (Prioridad máxima para COM)
+    print("Trying Classic Outlook via absolute paths...")
+    classic_paths = [
+        r"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE",
+        r"C:\Program Files (x86)\Microsoft Office\root\Office16\OUTLOOK.EXE",
+    ]
+    for path in classic_paths:
+        if os.path.exists(path):
+            try:
+                os.startfile(path)
+                print(f"Success: Launched Classic Outlook via {path}")
+                return True
+            except Exception:
+                continue
+
+    # 2. Intentar protocolo outlook: (Suele abrir el clásico, pero puede ser el nuevo)
+    print("Trying outlook: protocol...")
+    try:
+        os.startfile("outlook:")
+        print("Success: Launched via outlook: protocol")
+        return True
+    except Exception:
+        pass
+
+    # 3. Intentar olk.exe (Nuevo Outlook - Como fallback si el clásico no existe)
+    print("Trying New Outlook via olk.exe as fallback...")
+    try:
+        subprocess.run(["powershell", "-Command", "Start-Process 'olk.exe'"], check=True, capture_output=True)
+        print("Success: Launched via olk.exe")
+        return True
+    except subprocess.CalledProcessError:
+        pass
+
+    # 4. Intentar vía Registro (Nuevo Outlook)
+    print("Trying New Outlook via registry App Paths as fallback...")
+    try:
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\App Paths\olk.exe"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+            folder_path, _ = winreg.QueryValueEx(key, "Path")
+            if folder_path:
+                exe_path = os.path.join(folder_path, "olk.exe")
+                if os.path.exists(exe_path):
+                    os.startfile(exe_path)
+                    print("Success: Launched via registry path")
+                    return True
+    except Exception:
+        pass
+
+    print("ERROR: No se pudo abrir ninguna versión de Outlook.")
+    return False
+
+
 def _get_outlook():
-    """Conecta al Outlook que ya está abierto (evita abrir Outlook 2016)."""
+    """Conecta al Outlook activo; si no está abierto, lo lanza y espera."""
     try:
         return win32com.client.GetActiveObject("Outlook.Application")
     except Exception:
-        return win32com.client.Dispatch("Outlook.Application")
+        pass
+
+    # Intentar lanzar Outlook automáticamente
+    if not _try_launch_outlook():
+        raise RuntimeError("No se pudo iniciar Outlook automáticamente.")
+
+    # Esperar hasta 30 s a que esté disponible por COM (Solo funciona con Outlook Clásico)
+    print("Waiting for Outlook to respond via COM (this may time out if using New Outlook)...")
+    for _ in range(15):
+        time.sleep(2)
+        try:
+            return win32com.client.GetActiveObject("Outlook.Application")
+        except Exception:
+            pass
+
+    # Nota: El Nuevo Outlook NO soporta COM, así que es normal que falle aquí si solo está instalado el nuevo.
+    # Sin embargo, el usuario pidió que abriera automáticamente y siguiera el flujo.
+    # Si las herramientas de COM fallan después, el usuario verá el error de COM.
+    raise RuntimeError("Outlook se lanzó pero no respondió por COM tras 30 s. "
+                       "Nota: El 'Nuevo Outlook' (versión Store) no soporta automatización COM.")
 
 
 def _get_inbox():

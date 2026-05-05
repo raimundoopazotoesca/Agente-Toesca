@@ -126,6 +126,7 @@ from tools.factsheet_tools import (
     guardar_fs,
 )
 from tools.ask_tools import preguntar_usuario
+from tools.balance_consolidado_tools import actualizar_balance_consolidado_pt
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -1421,6 +1422,8 @@ TOOL_DEFINITIONS = [
             "description": (
                 "Envía los correos con los errores de Rent Roll a Nicole (JLL) y Sebastián (Tres A), "
                 "basándose en el resultado de la última revisión con 'revisar_rent_rolls'. "
+                "Usar SIEMPRE esta herramienta para enviar correos de Rent Roll — nunca usar 'enviar_correo' directamente. "
+                "El correo a Sebastián (Tres A) solo incluye errores de Viña Centro y Curicó, NUNCA datos de JLL. "
                 "Usar solo después de que el usuario confirme los errores."
             ),
             "parameters": {
@@ -1868,6 +1871,28 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # ── Balance Consolidado PT ────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_consolidado_pt",
+            "description": (
+                "Actualiza el Balance Consolidado Rentas PT para un trimestre. "
+                "Copia el último vF, desplaza columnas históricas, rellena 3 hojas: "
+                "Fondo PT (desde EEFF PDF en M$×1000), Inmob Boulevard (balance EEFF + EERR Análisis), "
+                "Torre A (balance y EERR desde Análisis xlsx). "
+                "Solo usar para meses fin de trimestre: 3, 6, 9, 12."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes":  {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año":  {"type": "integer", "description": "Año del período (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
@@ -1995,6 +2020,8 @@ def _dispatch(name: str, args: dict) -> str:
         "actualizar_fs_apoquindo":       lambda a: actualizar_fs_apoquindo(a["año"], a["mes"], a["datos_json"]),
         "actualizar_fs_tri":             lambda a: actualizar_fs_tri(a["año"], a["mes"], a["datos_json"]),
         "guardar_fs":                    lambda a: guardar_fs(a["fondo_key"], a["año"], a["mes"]),
+        # Balance Consolidado PT
+        "actualizar_balance_consolidado_pt": lambda a: actualizar_balance_consolidado_pt(a["mes"], a["año"]),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -2018,6 +2045,7 @@ _TOOLS_GENERAL = {
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "buscar_ubicacion", "guardar_ubicacion",
     "leer_cdg_historico", "buscar_en_rent_roll",
+    "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
 }
 
 _TOOLS_CDG = {

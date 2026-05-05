@@ -375,7 +375,10 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
         result = []
         for m in messages:
             if hasattr(m, "model_dump"):
-                result.append(m.model_dump())
+                d = m.model_dump()
+                if d.get("content") is None:
+                    d["content"] = ""
+                result.append(d)
             else:
                 result.append(m)
         return result

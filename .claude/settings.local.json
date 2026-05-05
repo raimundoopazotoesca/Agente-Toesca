@@ -11,7 +11,26 @@
       "Bash(git -C 'c:\\\\Users\\\\raimundo.opazo\\\\automation_agent' commit -m ' *)",
       "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" push)",
       "Bash(git pull *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(python -c \"from tools.registry import TOOL_DEFINITIONS, _dispatch, _select_tools; print\\('registry OK'\\); from tools.ask_tools import preguntar_usuario, set_streamlit_mode, _SENTINEL_PREFIX; print\\('ask_tools OK'\\); print\\('SENTINEL:', repr\\(_SENTINEL_PREFIX\\)\\)\")",
+      "Bash(python -c \"import agent; print\\('agent.py OK'\\)\")",
+      "Bash(python -m markitdown \"R:/Rentas/Control de Gestión Rentas Inmobiliarias/Renta Comercial/Balance Consolidado/2025/4Q/Nuevo Formato/12.2025- Balance Consolidado Rentas PT vActualizar.xlsx\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('agent.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('app.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('tools/registry.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('tools/gestion_renta_tools.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('tools/rentroll_tools.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('tools/ask_tools.py', doraise=True\\)\")",
+      "Bash(python -c \"from tools.registry import TOOL_DEFINITIONS, _dispatch; print\\(f'Tools: {len\\(TOOL_DEFINITIONS\\)}'\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('tools/balance_consolidado_tools.py', doraise=True\\)\")",
+      "Bash(python -m py_compile \"c:/Users/raimundo.opazo/automation_agent/tools/balance_consolidado_tools.py\")",
+      "Bash(iconv -f utf-8 -t cp1252 -c)",
+      "Bash(python -W ignore -c ' *)",
+      "Read(//c/Program Files/Microsoft Office/root/Office16/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Office/root/Office16/**)",
+      "Bash(reg query *)",
+      "Bash(xargs -I{} sh -c 'git show {}:agent.py 2>/dev/null | grep -m1 \"^MODEL\"')"
     ]
   }
 }
