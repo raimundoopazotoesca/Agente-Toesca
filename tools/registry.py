@@ -24,6 +24,7 @@ from tools.sharepoint_tools import (
     search_sharepoint_files,
     copy_from_sharepoint,
     save_to_sharepoint,
+    refresh_sharepoint_index,
 )
 from tools.local_tools import (
     list_local_excel_files,
@@ -274,6 +275,14 @@ TOOL_DEFINITIONS = [
                 },
                 "required": ["nombre_archivo"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_indice_sharepoint",
+            "description": "Escanea el SharePoint sincronizado y actualiza wiki/sharepoint/index.md con el árbol actual de archivos. Usar después de mover o reorganizar archivos.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -1956,9 +1965,8 @@ TOOL_DEFINITIONS = [
             "name": "actualizar_balance_consolidado_pt",
             "description": (
                 "Actualiza el Balance Consolidado Rentas PT para un trimestre. "
-                "Copia el último vF, desplaza columnas históricas, rellena 3 hojas: "
-                "Fondo PT (desde EEFF PDF en M$×1000), Inmob Boulevard (balance EEFF + EERR Análisis), "
-                "Torre A (balance y EERR desde Análisis xlsx). "
+                "Copia el último vF, desplaza columnas históricas, rellena 3 hojas "
+                "según la fuente inferida desde períodos pasados. "
                 "La regla general del wiki manda: decide EEFF vs Análisis mirando el mismo período del año anterior; "
                 "usa defaults documentados solo si no puede inferir la fuente. "
                 "Solo usar para meses fin de trimestre: 3, 6, 9, 12."
@@ -1985,6 +1993,7 @@ def _dispatch(name: str, args: dict) -> str:
         "buscar_en_sharepoint":         lambda a: search_sharepoint_files(a["keyword"], a.get("subcarpeta", "")),
         "copiar_de_sharepoint":         lambda a: copy_from_sharepoint(a["nombre_archivo"], a.get("subcarpeta", "")),
         "guardar_en_sharepoint":        lambda a: save_to_sharepoint(a["nombre_archivo"], a.get("subcarpeta_destino", "")),
+        "actualizar_indice_sharepoint": lambda a: refresh_sharepoint_index(),
         "listar_servidor_local":        lambda a: list_local_excel_files(a.get("subcarpeta", "")),
         "copiar_del_servidor":          lambda a: copy_from_local(a["nombre_archivo"], a.get("subcarpeta", "")),
         "guardar_en_servidor":          lambda a: save_to_local(a["nombre_archivo"], a.get("subcarpeta_destino", "")),
@@ -2127,7 +2136,7 @@ _TOOLS_GENERAL = {
     "preguntar_usuario",
     "buscar_correos_con_planillas", "buscar_correos_por_asunto",
     "descargar_adjunto_correo", "enviar_correo",
-    "listar_sharepoint", "buscar_en_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint",
+    "listar_sharepoint", "buscar_en_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint", "actualizar_indice_sharepoint",
     "listar_servidor_local", "copiar_del_servidor", "guardar_en_servidor",
     "leer_planilla", "validar_planilla", "actualizar_celda",
     "listar_planillas_en_trabajo",

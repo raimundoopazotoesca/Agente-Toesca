@@ -8,6 +8,10 @@ import shutil
 from datetime import datetime
 from config import SHAREPOINT_DIR, WORK_DIR
 
+_WIKI_INDEX = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "wiki", "sharepoint", "index.md"
+)
+
 
 def _check_dir() -> str | None:
     """Devuelve None si el directorio está disponible, o un mensaje de error."""
@@ -121,6 +125,63 @@ def copy_from_sharepoint(filename: str, subfolder: str = "") -> str:
 
     except Exception as e:
         return f"Error al copiar de SharePoint: {e}"
+
+
+def refresh_sharepoint_index() -> str:
+    """Escanea SharePoint y actualiza wiki/sharepoint/index.md con el árbol actual de archivos."""
+    err = _check_dir()
+    if err:
+        return err
+
+    try:
+        # Recolectar todos los archivos con ruta relativa
+        files: list[tuple[str, int, str]] = []
+        for root, dirs, filenames in os.walk(SHAREPOINT_DIR):
+            dirs.sort()
+            for name in sorted(filenames):
+                if name.startswith("~$"):
+                    continue
+                full = os.path.join(root, name)
+                rel = os.path.relpath(full, SHAREPOINT_DIR)
+                size = os.path.getsize(full)
+                mod = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%Y-%m-%d")
+                files.append((rel, size, mod))
+
+        now = datetime.now().strftime("%Y-%m-%d")
+        lines = [
+            f"# SharePoint — Índice de Archivos (auto-generado)\n",
+            f"\n**Base:** `{SHAREPOINT_DIR}`\n",
+            f"**Actualizado:** {now} | **Total:** {len(files)} archivos\n",
+            "\n---\n\n",
+            "## Árbol completo\n\n",
+            "```\n",
+        ]
+
+        # Árbol por carpeta raíz
+        current_parts: list[str] = []
+        for rel, size, mod in files:
+            parts = rel.split(os.sep)
+            # Imprimir carpetas nuevas
+            for i, part in enumerate(parts[:-1]):
+                if i >= len(current_parts) or current_parts[i] != part:
+                    indent = "  " * i
+                    lines.append(f"{indent}{part}/\n")
+                    current_parts = parts[:i + 1]
+            # Imprimir archivo
+            indent = "  " * (len(parts) - 1)
+            kb = size // 1024
+            lines.append(f"{indent}{parts[-1]}  ({kb:,} KB  {mod})\n")
+
+        lines.append("```\n")
+
+        os.makedirs(os.path.dirname(_WIKI_INDEX), exist_ok=True)
+        with open(_WIKI_INDEX, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
+        return f"Índice actualizado: {_WIKI_INDEX}\n{len(files)} archivos escaneados."
+
+    except Exception as e:
+        return f"Error al actualizar índice SharePoint: {e}"
 
 
 def save_to_sharepoint(filename: str, dest_subfolder: str = "") -> str:

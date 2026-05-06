@@ -3,6 +3,12 @@
 > Índice maestro de todas las páginas de la wiki. Actualizar en cada ingest.
 > Parsear con: `grep "^\|" wiki/index.md`
 
+## SharePoint
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[sharepoint/index]] | Árbol completo de los 238 archivos del SharePoint sincronizado, patrones de nombre y mapeo a tools | 2026-05-06 |
+
 ## Agente
 
 | Página | Descripción | Actualizado |
