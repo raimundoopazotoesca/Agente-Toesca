@@ -16,7 +16,7 @@
 |--------|-------------|---------|-------------|
 | [[fondos/ar-apoquindo]] | Toesca Rentas Inmobiliarias Apoquindo | 0 | 2026-05-01 |
 | [[fondos/ar-pt]] | Toesca Rentas Inmobiliarias PT | 0 | 2026-05-01 |
-| [[fondos/ar-rentas]] | Toesca Rentas Inmobiliarias | 0 | 2026-05-01 |
+| [[fondos/ar-rentas]] | Toesca Rentas Inmobiliarias | 1 | 2026-05-06 |
 
 ## Activos
 

@@ -17,7 +17,7 @@ import random
 from agent import (
     client, MODEL, BASE_PROMPT, PROMPT_CDG, PROMPT_NOI, PROMPT_RENTROLL, PROMPT_CAJA,
     _select_tools, _dispatch, _llm_call, get_intent_groups, _trim_tool_messages,
-    _MAX_TOOL_ITERS, _thinking_phrase,
+    _MAX_TOOL_ITERS, _thinking_phrase, _sanitize_messages_for_api,
 )
 from tools.ask_tools import set_streamlit_mode, _SENTINEL_PREFIX
 set_streamlit_mode(True)
@@ -205,67 +205,122 @@ css = Path("style.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 # ─── Botón sidebar ─────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-#toesca-sidebar-btn {
-    position: fixed; top: 12px; left: 12px; z-index: 99999;
-    width: 30px; height: 30px;
-    background: #141414; border: 1px solid #252525; border-radius: 5px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: #666; font-size: 13px; line-height: 1;
-    transition: color .15s, border-color .15s; user-select: none;
-}
-#toesca-sidebar-btn:hover { color: #e8e3dc; border-color: #555; }
-</style>
-<div id="toesca-sidebar-btn" title="Sidebar">&#9776;</div>
-""", unsafe_allow_html=True)
-
 st.iframe("""
 <script>
 (function() {
     var parentDoc = window.parent.document;
+    var frame = window.frameElement;
+    var buttonId = 'toesca-sidebar-btn';
+    var styleId = 'toesca-sidebar-style';
+
+    if (frame) {
+        frame.style.position = 'absolute';
+        frame.style.width = '0';
+        frame.style.height = '0';
+        frame.style.border = '0';
+        frame.style.visibility = 'hidden';
+    }
+
+    function ensureButton() {
+        if (!parentDoc.getElementById(styleId)) {
+            var style = parentDoc.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                #${buttonId} {
+                    position: fixed; top: 12px; left: 12px; z-index: 99999;
+                    width: 30px; height: 30px;
+                    background: #141414; border: 1px solid #252525; border-radius: 5px;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; color: #666; font-size: 13px; line-height: 1;
+                    transition: color .15s, border-color .15s; user-select: none;
+                    padding: 0; font-family: Arial, sans-serif;
+                }
+                #${buttonId}:hover { color: #e8e3dc; border-color: #555; }
+            `;
+            parentDoc.head.appendChild(style);
+        }
+
+        var btn = parentDoc.getElementById(buttonId);
+        if (!btn) {
+            btn = parentDoc.createElement('button');
+            btn.id = buttonId;
+            btn.type = 'button';
+            btn.title = 'Mostrar/ocultar barra lateral';
+            btn.setAttribute('aria-label', 'Mostrar/ocultar barra lateral');
+            btn.innerHTML = '&#9776;';
+            parentDoc.body.appendChild(btn);
+        }
+
+        btn.onclick = toggleSidebar;
+    }
+
+    function clickIfFound(selector) {
+        var matches = parentDoc.querySelectorAll(selector);
+        for (var k = 0; k < matches.length; k++) {
+            var el = matches[k];
+            var target = el.tagName === 'BUTTON' ? el : el.querySelector('button') || el;
+            if (target.id === buttonId || el.id === buttonId) continue;
+
+            target.click();
+            return true;
+        }
+        return false;
+    }
     
     function toggleSidebar() {
-        var ids = ['stSidebarCollapsedControl', 'stSidebarCollapseButton', 'collapsedControl', 'baseButton-headerNoPadding'];
-        for (var i=0; i<ids.length; i++) {
-            var el = parentDoc.querySelector('[data-testid="'+ids[i]+'"]');
-            if (el) {
-                var b = el.tagName === 'BUTTON' ? el : el.querySelector('button');
-                if (b) { b.click(); return; }
-                el.click(); return;
-            }
+        var selectors = [
+            '[data-testid="stSidebarCollapseButton"]',
+            '[data-testid="stSidebarCollapsedControl"]',
+            '[data-testid="collapsedControl"]',
+            'button[kind="headerNoPadding"]',
+            'button[data-testid="baseButton-headerNoPadding"]',
+            'button[data-testid="stBaseButton-headerNoPadding"]',
+            'button[aria-label*="sidebar" i]',
+            'button[aria-label*="barra lateral" i]',
+            'button[aria-label*="menu" i]',
+            'button[title*="sidebar" i]',
+            'button[title*="barra lateral" i]'
+        ];
+
+        for (var i = 0; i < selectors.length; i++) {
+            if (clickIfFound(selectors[i])) return;
         }
-        var buttons = parentDoc.querySelectorAll('button');
-        for (var j=0; j<buttons.length; j++) {
-            var aria = (buttons[j].getAttribute('aria-label') || '').toLowerCase();
-            var testid = (buttons[j].getAttribute('data-testid') || '').toLowerCase();
-            if (aria.includes('sidebar') || testid.includes('sidebar')) {
-                buttons[j].click();
+
+        var candidates = parentDoc.querySelectorAll('button, [role="button"], [data-testid]');
+        for (var j = 0; j < candidates.length; j++) {
+            if (candidates[j].id === buttonId) continue;
+
+            var aria = (candidates[j].getAttribute('aria-label') || '').toLowerCase();
+            var testid = (candidates[j].getAttribute('data-testid') || '').toLowerCase();
+            var title = (candidates[j].getAttribute('title') || '').toLowerCase();
+            var text = (candidates[j].textContent || '').toLowerCase();
+            var label = aria + ' ' + testid + ' ' + title + ' ' + text;
+
+            if (
+                label.includes('sidebar') ||
+                label.includes('barra lateral') ||
+                label.includes('collapse') ||
+                label.includes('expand') ||
+                label.includes('menu')
+            ) {
+                candidates[j].click();
                 return;
             }
         }
+
         var header = parentDoc.querySelector('header');
         if (header) {
             var btn = header.querySelector('button');
             if (btn) { btn.click(); return; }
         }
     }
-
-    function attachListener() {
-        var btn = parentDoc.getElementById('toesca-sidebar-btn');
-        if (btn && !btn.hasAttribute('data-listener')) {
-            btn.setAttribute('data-listener', 'true');
-            btn.addEventListener('click', toggleSidebar);
-        }
-    }
     
-    // Attempt attachment immediately and also observe mutations in case it re-renders
-    attachListener();
-    var observer = new MutationObserver(attachListener);
+    ensureButton();
+    var observer = new MutationObserver(ensureButton);
     observer.observe(parentDoc.body, { childList: true, subtree: true });
 })();
 </script>
-""", width="content", height="content")
+""", width="content", height=1)
 
 
 
@@ -372,16 +427,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
             time.sleep(0.035)
 
     def _serialize_messages(messages):
-        result = []
-        for m in messages:
-            if hasattr(m, "model_dump"):
-                d = m.model_dump()
-                if d.get("content") is None:
-                    d["content"] = ""
-                result.append(d)
-            else:
-                result.append(m)
-        return result
+        return _sanitize_messages_for_api(messages)
 
     # ─── Retomar tarea interrumpida por preguntar_usuario ─────────────────────
     if "pending_resume" in st.session_state:
@@ -466,6 +512,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     break
 
                 ask_user_triggered = False
+                direct_tool_response = False
                 for tool_call in msg.tool_calls:
                     name = tool_call.function.name
                     args = json.loads(tool_call.function.arguments)
@@ -494,7 +541,22 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         tools_used.append(name)
                     api_messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
 
+                    if name in {
+                        "verificar_archivos_cdg",
+                        "previsualizar_correos_solicitud_cdg",
+                        "enviar_correos_solicitud_cdg",
+                    }:
+                        final_response = result
+                        direct_tool_response = True
+                        break
+
                 if ask_user_triggered:
+                    status_area.empty()
+                    with response_area:
+                        st.write_stream(stream_text(final_response))
+                    break
+
+                if direct_tool_response:
                     status_area.empty()
                     with response_area:
                         st.write_stream(stream_text(final_response))

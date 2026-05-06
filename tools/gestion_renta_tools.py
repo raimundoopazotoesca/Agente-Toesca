@@ -4,6 +4,7 @@ Manipulación directa del XML del xlsx (sin cargar el workbook completo en openp
 para máxima velocidad con archivos de 14MB+ y 87 hojas.
 """
 import glob
+import json
 import os
 import re
 import shutil
@@ -732,6 +733,392 @@ def buscar_tir() -> str:
     return max(archivos, key=os.path.getmtime)
 
 
+MESES_ES_CDG = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
+}
+
+_SOLICITUDES_CDG_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "memory",
+    "solicitudes_archivos_cdg.json",
+)
+
+_CONTACTOS_SOLICITUD_CDG = {
+    "sebastian": {
+        "nombre": "Sebastián",
+        "email": "sebastian.bravo@tresasociados.cl",
+        "asunto": "Rent Rolls {periodo}",
+    },
+    "nicole": {
+        "nombre": "Nicole",
+        "email": "Nicole.Carvajal@jll.com",
+        "asunto": "Rent Roll y NOI {periodo}",
+    },
+    "valentina": {
+        "nombre": "Valentina",
+        "email": "valentina.bravo@tresasociados.cl",
+        "asunto": "EEFF {periodo}",
+    },
+    "leonardo": {
+        "nombre": "Leonardo",
+        "email": "lcantillana@grupoaraucana.cl",
+        "asunto": "EEFF INMOSA {periodo}",
+    },
+}
+
+
+def _load_solicitudes_cdg() -> dict:
+    if not os.path.isfile(_SOLICITUDES_CDG_FILE):
+        return {}
+    try:
+        with open(_SOLICITUDES_CDG_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_solicitudes_cdg(data: dict) -> None:
+    os.makedirs(os.path.dirname(_SOLICITUDES_CDG_FILE), exist_ok=True)
+    with open(_SOLICITUDES_CDG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _periodo_key(año: int, mes: int) -> str:
+    return f"{año}-{mes:02d}"
+
+
+def _dias_desde(fecha_iso: str) -> int:
+    try:
+        enviado = datetime.fromisoformat(fecha_iso).date()
+    except Exception:
+        return 0
+    return (date.today() - enviado).days
+
+
+def _grupos_solicitud_desde_faltantes(faltantes: list[tuple[str, str]]) -> dict:
+    grupos: dict[str, list[str]] = {}
+
+    def add(contacto: str, item_id: str):
+        grupos.setdefault(contacto, [])
+        if item_id not in grupos[contacto]:
+            grupos[contacto].append(item_id)
+
+    for nombre, _dest in faltantes:
+        n = nombre.lower()
+        if "rr jll" in n:
+            add("nicole", "rr_jll")
+        elif "rr tres a" in n and ("viña" in n or "vina" in n):
+            add("sebastian", "rr_vina")
+        elif "rr tres a" in n and "curic" in n:
+            add("sebastian", "rr_curico")
+        elif "eeff viña" in n or "eeff vina" in n:
+            add("valentina", "eeff_vina")
+        elif "eeff curic" in n:
+            add("valentina", "eeff_curico")
+        elif "eeff inmosa" in n:
+            add("leonardo", "eeff_inmosa")
+
+    return grupos
+
+
+def _extract_faltantes_contactables(resultado_verificacion: str) -> dict:
+    faltantes: list[tuple[str, str]] = []
+    in_missing = False
+    for line in resultado_verificacion.splitlines():
+        stripped = line.strip()
+        plain = re.sub(r"[*_`#]+", "", stripped).strip()
+        if "Archivos faltantes" in plain:
+            in_missing = True
+            continue
+        if not in_missing:
+            continue
+        if plain.startswith("=>") or "Estado" in plain or "Solicitud" in plain:
+            break
+        if (
+            not plain
+            or plain.startswith("(")
+            or plain.startswith("→")
+            or plain.startswith("↳")
+            or plain.startswith("->")
+            or "Subir a:" in plain
+        ):
+            continue
+        clean = plain.lstrip("❌✗xX-• ").strip()
+        if clean:
+            faltantes.append((clean, ""))
+    return _grupos_solicitud_desde_faltantes(faltantes)
+
+
+def _latest_solicitud(año: int, mes: int, item_ids: list[str] | None = None) -> dict | None:
+    data = _load_solicitudes_cdg()
+    eventos = data.get(_periodo_key(año, mes), {}).get("solicitudes", [])
+    if item_ids:
+        item_set = set(item_ids)
+        eventos = [e for e in eventos if item_set.intersection(e.get("items", []))]
+    if not eventos:
+        return None
+    return max(eventos, key=lambda e: e.get("fecha", ""))
+
+
+def _hay_solicitudes_previas(año: int, mes: int, grupos: dict) -> bool:
+    item_ids = [item for items in grupos.values() for item in items]
+    return _latest_solicitud(año, mes, item_ids) is not None
+
+
+def _aplicar_exclusiones_solicitud(grupos: dict, excluir: list[str] | None = None) -> tuple[dict, list[str]]:
+    if not excluir:
+        return grupos, []
+
+    contacto_aliases = {
+        "jll": "nicole",
+        "nicole": "nicole",
+        "rr_jll": "nicole",
+        "tres_a_rr": "sebastian",
+        "sebastian": "sebastian",
+        "rr_tres_a": "sebastian",
+        "valentina": "valentina",
+        "eeff_tres_a": "valentina",
+        "leonardo": "leonardo",
+        "inmosa": "leonardo",
+    }
+    item_aliases = {
+        "rr_jll": "rr_jll",
+        "rent_roll_jll": "rr_jll",
+        "jll": "rr_jll",
+        "rr_vina": "rr_vina",
+        "rr_viña": "rr_vina",
+        "rr_curico": "rr_curico",
+        "rr_curicó": "rr_curico",
+        "eeff_vina": "eeff_vina",
+        "eeff_viña": "eeff_vina",
+        "eeff_curico": "eeff_curico",
+        "eeff_curicó": "eeff_curico",
+        "eeff_inmosa": "eeff_inmosa",
+    }
+
+    contactos_excluidos = set()
+    items_excluidos = set()
+    for raw in excluir:
+        key = str(raw or "").strip().lower().replace(" ", "_").replace("-", "_")
+        if not key:
+            continue
+        if key in contacto_aliases:
+            contactos_excluidos.add(contacto_aliases[key])
+        if key in item_aliases:
+            items_excluidos.add(item_aliases[key])
+
+    filtrados: dict[str, list[str]] = {}
+    omitidos = []
+    for contacto_key, items in grupos.items():
+        if contacto_key in contactos_excluidos:
+            omitidos.append(_CONTACTOS_SOLICITUD_CDG[contacto_key]["nombre"])
+            continue
+        kept = [item for item in items if item not in items_excluidos]
+        if kept:
+            filtrados[contacto_key] = kept
+        elif items:
+            omitidos.append(_CONTACTOS_SOLICITUD_CDG[contacto_key]["nombre"])
+
+    return filtrados, omitidos
+
+
+def _solicitud_cdg_hint(año: int, mes: int, faltantes: list[tuple[str, str]]) -> list[str]:
+    grupos = _grupos_solicitud_desde_faltantes(faltantes)
+    if not grupos:
+        return []
+
+    item_ids = [item for items in grupos.values() for item in items]
+    latest = _latest_solicitud(año, mes, item_ids)
+    lines = ["", "## Solicitud de archivos faltantes"]
+    if latest:
+        dias = _dias_desde(latest.get("fecha", ""))
+        plural = "día" if dias == 1 else "días"
+        fecha_txt = latest.get("fecha", "")[:10]
+        lines.append(
+            f"📬 **Ya solicitamos estos archivos hace {dias} {plural}** ({fecha_txt}). "
+            "_¿Quieres que redacte un mail para hacer seguimiento?_"
+        )
+    else:
+        lines.append("📬 _¿Quieres que envíe un mail solicitándolos?_")
+    return lines
+
+
+def _join_names(names: list[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " y " + names[-1]
+
+
+def _mail_body_solicitud(contacto_key: str, items: list[str], año: int, mes: int, seguimiento: bool) -> str:
+    nombre = _CONTACTOS_SOLICITUD_CDG[contacto_key]["nombre"]
+    periodo = f"{MESES_ES_CDG[mes].lower()} {año}"
+
+    if contacto_key == "sebastian":
+        activos = []
+        if "rr_vina" in items:
+            activos.append("Viña Centro")
+        if "rr_curico" in items:
+            activos.append("Curicó")
+        objeto = f"el Rent Roll de {_join_names(activos)}" if len(activos) == 1 else f"los Rent Rolls de {_join_names(activos)}"
+        pronombre = "lo" if len(activos) == 1 else "los"
+    elif contacto_key == "nicole":
+        objeto = "el Rent Roll y NOI"
+        pronombre = "lo"
+    elif contacto_key == "valentina":
+        activos = []
+        if "eeff_vina" in items:
+            activos.append("Viña Centro")
+        if "eeff_curico" in items:
+            activos.append("Power Center Curicó")
+        objeto = f"el EEFF de {_join_names(activos)}" if len(activos) == 1 else f"los EEFF de {_join_names(activos)}"
+        pronombre = "lo" if len(activos) == 1 else "los"
+    else:
+        objeto = "el EEFF/ER-FC de INMOSA"
+        pronombre = "lo"
+
+    plural = "s" if pronombre == "los" else ""
+    if seguimiento:
+        return (
+            f"Hola {nombre},\n\n"
+            "¿Cómo estás?\n\n"
+            f"Te escribo para hacer seguimiento por {objeto} correspondiente{plural} a {periodo}. "
+            f"¿Me {pronombre} puedes mandar cuando puedas?\n\n"
+            "Gracias,\n"
+            "Raimundo Opazo"
+        )
+
+    return (
+        f"Hola {nombre},\n\n"
+        "¿Cómo estás?\n\n"
+        f"Quería saber si ya tienes {objeto} correspondiente{plural} a {periodo}, "
+        f"y si me {pronombre} puedes mandar.\n\n"
+        "Gracias,\n"
+        "Raimundo Opazo"
+    )
+
+
+def _correos_solicitud_cdg(
+    año: int,
+    mes: int,
+    seguimiento: bool | None = None,
+    excluir: list[str] | None = None,
+) -> tuple[dict, str, list[str]]:
+    resultado = verificar_archivos_cdg(año, mes)
+    grupos = _extract_faltantes_contactables(resultado)
+    if not grupos:
+        return {}, "No hay archivos faltantes con destinatario configurado.", []
+
+    grupos, omitidos = _aplicar_exclusiones_solicitud(grupos, excluir)
+    if not grupos:
+        if omitidos:
+            return {}, f"No quedan correos por enviar después de excluir: {', '.join(omitidos)}.", omitidos
+        return {}, "No hay correos por enviar.", []
+
+    if seguimiento is None:
+        seguimiento = _hay_solicitudes_previas(año, mes, grupos)
+
+    periodo = f"{MESES_ES_CDG[mes]} {año}"
+    correos = {}
+    for contacto_key, items in grupos.items():
+        cfg = _CONTACTOS_SOLICITUD_CDG[contacto_key]
+        asunto = cfg["asunto"].format(periodo=periodo)
+        if seguimiento:
+            asunto = "Seguimiento - " + asunto
+        correos[contacto_key] = {
+            "to": cfg["email"],
+            "nombre": cfg["nombre"],
+            "asunto": asunto,
+            "cuerpo": _mail_body_solicitud(contacto_key, items, año, mes, seguimiento),
+            "items": items,
+            "seguimiento": seguimiento,
+        }
+    return correos, "", omitidos
+
+
+def previsualizar_correos_solicitud_cdg(
+    año: int,
+    mes: int,
+    seguimiento: bool | None = None,
+    excluir: list[str] | None = None,
+) -> str:
+    """Muestra los correos que se enviarían para pedir archivos faltantes del CDG."""
+    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir)
+    if aviso:
+        return aviso
+
+    lines = [f"Correos a preparar para {MESES_ES_CDG[mes]} {año}:"]
+    if omitidos:
+        lines.append(f"Omitidos por instrucción: {', '.join(omitidos)}")
+    for c in correos.values():
+        lines.append("")
+        lines.append(f"Para: {c['to']}")
+        lines.append(f"Asunto: {c['asunto']}")
+        lines.append("")
+        lines.append(c["cuerpo"])
+    return "\n".join(lines)
+
+
+def enviar_correos_solicitud_cdg(
+    año: int,
+    mes: int,
+    seguimiento: bool | None = None,
+    excluir: list[str] | None = None,
+) -> str:
+    """Envía y registra los correos para solicitar archivos faltantes del CDG."""
+    from tools.email_tools import send_email
+
+    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir)
+    if aviso:
+        return aviso
+
+    data = _load_solicitudes_cdg()
+    periodo = _periodo_key(año, mes)
+    data.setdefault(periodo, {"solicitudes": []})
+
+    enviados = []
+    errores = []
+    now = datetime.now().isoformat(timespec="seconds")
+
+    for contacto_key, c in correos.items():
+        resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+        if resultado.startswith("Error") or "no disponibles" in resultado.lower():
+            errores.append(f"{c['nombre']} ({c['to']}): {resultado}")
+            continue
+
+        data[periodo]["solicitudes"].append({
+            "fecha": now,
+            "tipo": "seguimiento" if c["seguimiento"] else "solicitud",
+            "destinatario_key": contacto_key,
+            "destinatario": c["nombre"],
+            "email": c["to"],
+            "asunto": c["asunto"],
+            "items": c["items"],
+        })
+        enviados.append(f"{c['nombre']} ({c['to']}): {resultado}")
+
+    if enviados:
+        _save_solicitudes_cdg(data)
+
+    lines = []
+    if omitidos:
+        lines.append(f"Omitidos por instrucción: {', '.join(omitidos)}")
+    if enviados:
+        if lines:
+            lines.append("")
+        lines.append("Correos enviados y registrados:")
+        lines.extend(f"  - {e}" for e in enviados)
+    if errores:
+        if lines:
+            lines.append("")
+        lines.append("No se pudieron enviar:")
+        lines.extend(f"  - {e}" for e in errores)
+    return "\n".join(lines) if lines else "No se enviaron correos."
+
+
 def verificar_archivos_cdg(año: int, mes: int) -> str:
     """
     Verifica qué archivos necesarios para actualizar el CDG del mes indicado
@@ -869,29 +1256,35 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     n_total  = len(checklist)
     n_faltan = len(faltantes)
 
-    lines = [f"Verificación CDG {meses_es[mes]} {año}{sufijo}", ""]
+    lines = [
+        "# Verificación CDG",
+        f"**{meses_es[mes]} {año}**" + (f" · _{sufijo.strip(' ()')}_" if sufijo else ""),
+        "",
+    ]
 
-    lines.append(f"Archivos encontrados ({len(encontrados)}/{n_total}):")
+    lines.append(f"## ✅ Archivos encontrados `{len(encontrados)}/{n_total}`")
     for nombre, ruta in encontrados:
-        lines.append(f"  ✓  {nombre}")
-        lines.append(f"     {_sp(ruta)}")
+        lines.append(f"- ✅ **{nombre}**")
+        lines.append(f"  `{_sp(ruta)}`")
         lines.append("")
 
-    lines.append(f"Archivos faltantes ({n_faltan}/{n_total}):")
+    lines.append(f"## ❌ Archivos faltantes `{n_faltan}/{n_total}`")
     if faltantes:
         for nombre, dest in faltantes:
-            lines.append(f"  ✗  {nombre}")
+            lines.append(f"- ❌ **{nombre}**")
             if dest:
-                lines.append(f"     → Subir a: {_sp(dest)}")
+                lines.append(f"  ↳ _Subir a:_ `{_sp(dest)}`")
             lines.append("")
     else:
-        lines.append("  (ninguno)")
+        lines.append("- ✅ _Ninguno_")
         lines.append("")
 
+    lines.append("## Estado")
     if n_faltan:
-        lines.append(f"=> Faltan {n_faltan} archivo(s). No se puede iniciar hasta tenerlos todos.")
+        lines.append(f"🚫 **Faltan {n_faltan} archivo(s).** _No se puede iniciar hasta tenerlos todos._")
+        lines.extend(_solicitud_cdg_hint(año, mes, faltantes))
     else:
-        lines.append("=> Todo listo para actualizar el CDG.")
+        lines.append("✅ **Todo listo para actualizar el CDG.**")
     return "\n".join(lines)
 
 

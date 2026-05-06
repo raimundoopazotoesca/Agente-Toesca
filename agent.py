@@ -103,6 +103,43 @@ _MIN_CALL_INTERVAL  = 1.5     # segundos mínimos entre llamadas a la API (suavi
 _last_call_at: float = 0.0    # timestamp de la última llamada exitosa
 
 
+def _drop_api_nulls(value):
+    """Convierte objetos del SDK a dict/list simples y elimina campos None."""
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return {
+            key: _drop_api_nulls(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_drop_api_nulls(item) for item in value if item is not None]
+    return value
+
+
+def _sanitize_messages_for_api(messages: list) -> list:
+    """Normaliza historial para proveedores OpenAI-compatible que rechazan null."""
+    clean = []
+    for message in messages:
+        item = _drop_api_nulls(message)
+        if isinstance(item, dict) and item.get("role") in {"system", "user", "assistant", "tool"}:
+            item.setdefault("content", "")
+        clean.append(item)
+    return clean
+
+
+def _sanitize_kwargs_for_api(kwargs: dict) -> dict:
+    clean = {
+        key: _drop_api_nulls(value)
+        for key, value in kwargs.items()
+        if value is not None
+    }
+    if "messages" in kwargs:
+        clean["messages"] = _sanitize_messages_for_api(kwargs["messages"])
+    return clean
+
+
 def _llm_call(**kwargs):
     """
     Llama a la API con:
@@ -118,7 +155,7 @@ def _llm_call(**kwargs):
 
     for attempt in range(8):
         try:
-            response = client.chat.completions.create(**kwargs)
+            response = client.chat.completions.create(**_sanitize_kwargs_for_api(kwargs))
             _last_call_at = time.time()
             return response
         except Exception as e:
@@ -162,14 +199,46 @@ FONDOS Y ACTIVOS
 ═══════════════════════════════════════════════════════════════
 Toesca administra 3 fondos de inversión inmobiliaria:
 
-┌──────────────────────────────────────┬──────────────────────────────────────────────────┬──────────────┐
-│ Fondo                                │ Activos                                          │ Hoja CDG     │
-├──────────────────────────────────────┼──────────────────────────────────────────────────┼──────────────┤
-│ Toesca Rentas Inmobiliarias Apoquindo│ Apoquindo 4700, Apoquindo 4501, Apoquindo 3001   │ Input AP     │
-│ Toesca Rentas Inmobiliarias PT       │ PT Oficinas, PT Locales, PT Bodegas              │ Input PT     │
-│ Toesca Rentas Inmobiliarias          │ Viña Centro, Mall Curicó, INMOSA, SUCDEN,        │ Input Ren    │
-│                                      │ Machalí                                          │              │
-└──────────────────────────────────────┴──────────────────────────────────────────────────┴──────────────┘
+Fondos operativos y hojas CDG:
+  - Toesca Rentas Inmobiliarias Apoquindo -> hoja Input AP.
+    Activos principales: Apoquindo 4501 y Apoquindo 4700.
+  - Toesca Rentas Inmobiliarias PT -> hoja Input PT.
+    Activos principales: Parque Titanium, separado operativamente en PT Oficinas, PT Locales y PT Bodegas.
+  - Toesca Rentas Inmobiliarias -> hoja Input Ren.
+    Alias habituales: TRI, Rentas Inmobiliarias, Rentas.
+    Activos principales vigentes: Viña Centro, Power Center Paseo Curicó, INMOSA, SUCDEN/Bodegas Maipú,
+    Apoquindo 3001, participación en Toesca Rentas Inmobiliarias PT y participación en Toesca Rentas
+    Inmobiliarias Apoquindo.
+
+Estructura de Toesca Rentas Inmobiliarias según diagrama validado por el usuario el 2026-05-06:
+  - 100% Inmobiliaria Machalí Ltda -> Strip Center Paseo Machalí.
+    Estado: liquidado / ya no forma parte del fondo. No considerarlo como activo vigente ni en pesos actuales.
+  - 100% Inmobiliaria Chañarcillo Ltda -> Bodegas Maipú (Sucden).
+  - 100% Inmobiliaria Chañarcillo Ltda -> 68,5% de Apoquindo 3001.
+  - 100% Inmobiliaria VC SpA -> 100% Inmobiliaria Viña Centro SpA -> Mall Paseo Viña Centro.
+  - 80% Power Center Curicó SpA -> Power Center Paseo Curicó.
+  - 43% Inmobiliaria e Inversiones Senior Assist Chile S.A. -> 6 residencias de adulto mayor (INMOSA).
+  - 33,3% Fondo Toesca Rentas Inmobiliarias PT -> Torre A S.A. e Inmobiliaria Boulevard PT SpA
+    -> Torre A y Boulevard Parque Titanium.
+  - 30% Fondo Toesca Rentas Inmobiliarias Apoquindo -> Inmobiliaria Apoquindo SpA -> Apoquindo 4501 y 4700.
+
+Pesos de referencia del diagrama original, no actualizados:
+  - Machalí 4%; Bodegas Maipú/Sucden 5%; Apoquindo 3001 6%; Viña Centro 34%; Curicó 6%;
+    INMOSA 12%; Parque Titanium 16%; Apoquindo 4501/4700 17%.
+
+Pesos pro forma recalculados excluyendo Machalí liquidado (rebase sobre 96%; usar solo como referencia si
+no hay una fuente más reciente como CDG, fact sheet o EEFF):
+  - Bodegas Maipú/Sucden: 5/96 = 5,21%
+  - Apoquindo 3001: 6/96 = 6,25%
+  - Viña Centro: 34/96 = 35,42%
+  - Power Center Paseo Curicó: 6/96 = 6,25%
+  - INMOSA / Senior Assist Chile: 12/96 = 12,50%
+  - Parque Titanium vía Fondo Toesca Rentas Inmobiliarias PT: 16/96 = 16,67%
+  - Apoquindo 4501 y 4700 vía Fondo Toesca Rentas Inmobiliarias Apoquindo: 17/96 = 17,71%
+
+Regla: si el usuario pregunta por pesos, explicar si se está usando el peso histórico del diagrama, el peso
+pro forma sin Machalí, o una fuente actualizada leída desde CDG/fact sheet/EEFF. No presentar los pesos del
+diagrama como actuales.
 
 Nota interna: En el Control de Gestión (CDG) y herramientas técnicas, estos fondos se identifican con el prefijo "A&R" (Aportes y Repartos), por ejemplo "A&R PT" o "A&R Rentas". NUNCA menciones "A&R" al usuario, usa siempre los nombres reales.
 
@@ -246,7 +315,15 @@ Cuando el usuario pregunta '¿tienes todo?', '¿qué te falta?', '¿puedes actua
   → Copiar el resultado LITERALMENTE, sin resumir ni reformular.
   → El resultado tiene dos secciones: "Archivos encontrados" Y "Archivos faltantes".
   → NUNCA omitir la sección de encontrados — el usuario necesita ver ambas.
+  → Si hay archivos faltantes, la herramienta agregará la pregunta para enviar mails o hacer seguimiento.
 NUNCA inventes qué archivos están disponibles — si la herramienta no lo encontró, no está.
+
+Correos por archivos faltantes:
+  → Si el usuario confirma que quiere enviar los mails, usar enviar_correos_solicitud_cdg(año, mes).
+  → Si el usuario pide redactar/preparar/ver antes de enviar, usar previsualizar_correos_solicitud_cdg(año, mes).
+  → Si ya se habían solicitado archivos para ese período, usar el modo seguimiento automático de esas herramientas.
+  → Si el usuario excluye un contacto o archivo (ej: "no envíes JLL"), pasar excluir=["jll"] o el item correspondiente.
+  → Copiar literalmente el resultado de estas herramientas; no digas que se envió si la herramienta reporta error.
 
 ═══════════════════════════════════════════════════════════════
 PRECIOS BURSÁTILES Y VR CONTABLE:
@@ -523,7 +600,11 @@ def run_agent(user_input: str) -> None:
 
                 # Para verificar_archivos_cdg, usar el resultado directamente
                 # sin que el modelo lo resuma (evita que Gemini omita los [OK])
-                if name == "verificar_archivos_cdg":
+                if name in {
+                    "verificar_archivos_cdg",
+                    "previsualizar_correos_solicitud_cdg",
+                    "enviar_correos_solicitud_cdg",
+                }:
                     final_response = result
                     print(f"\nAgente: {result}")
                     _done = True

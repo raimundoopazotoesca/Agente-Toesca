@@ -41,6 +41,8 @@ from tools.gestion_renta_tools import (
     guardar_cdg,
     buscar_tir,
     verificar_archivos_cdg,
+    previsualizar_correos_solicitud_cdg,
+    enviar_correos_solicitud_cdg,
     actualizar_fecha_pendientes,
     agregar_vr_bursatil_pt,
     agregar_vr_bursatil_rentas,
@@ -425,6 +427,64 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "año": {"type": "integer", "description": "Año del CDG (ej: 2026)"},
                     "mes": {"type": "integer", "description": "Mes del CDG (1-12)"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "previsualizar_correos_solicitud_cdg",
+            "description": (
+                "Redacta, sin enviar, los correos para pedir los archivos faltantes del CDG "
+                "a los contactos configurados. Usar cuando el usuario pide ver/redactar/preparar "
+                "el mail de solicitud o de seguimiento. Si seguimiento no se informa, se decide "
+                "automáticamente según si ya existen solicitudes registradas para ese período."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del período (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes del período (1-12)"},
+                    "seguimiento": {
+                        "type": "boolean",
+                        "description": "True para redactar seguimiento; False para primera solicitud. Omitir para automático.",
+                    },
+                    "excluir": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
+                    },
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enviar_correos_solicitud_cdg",
+            "description": (
+                "Envía desde Outlook los correos para solicitar los archivos faltantes del CDG "
+                "y registra la fecha de envío para futuros seguimientos. Usar solo cuando el usuario "
+                "confirma explícitamente que quiere enviarlos. Si seguimiento no se informa, se decide "
+                "automáticamente según si ya existen solicitudes registradas para ese período."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del período (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes del período (1-12)"},
+                    "seguimiento": {
+                        "type": "boolean",
+                        "description": "True para enviar seguimiento; False para primera solicitud. Omitir para automático.",
+                    },
+                    "excluir": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
+                    },
                 },
                 "required": ["año", "mes"],
             },
@@ -1935,6 +1995,12 @@ def _dispatch(name: str, args: dict) -> str:
         "guardar_cdg":                  lambda a: guardar_cdg(a["nombre_archivo"]),
         "buscar_tir":                   lambda a: buscar_tir(),
         "verificar_archivos_cdg":       lambda a: verificar_archivos_cdg(a["año"], a["mes"]),
+        "previsualizar_correos_solicitud_cdg": lambda a: previsualizar_correos_solicitud_cdg(
+            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"),
+        ),
+        "enviar_correos_solicitud_cdg": lambda a: enviar_correos_solicitud_cdg(
+            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"),
+        ),
         "actualizar_fecha_pendientes":  lambda a: actualizar_fecha_pendientes(a["nombre_archivo"], a["año"], a["mes"]),
         "info_siguiente_accion":        lambda a: info_siguiente_accion(a["nombre_archivo"]),
         "obtener_precio_cuota":         lambda a: obtener_precio_cuota(a["nemotecnico"], a["año"], a["mes"]),
@@ -2068,10 +2134,12 @@ _TOOLS_GENERAL = {
     "buscar_ubicacion", "guardar_ubicacion",
     "leer_cdg_historico", "buscar_en_rent_roll",
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
+    "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
 }
 
 _TOOLS_CDG = {
     "crear_planilla_mes", "guardar_cdg", "verificar_archivos_cdg", "buscar_tir",
+    "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
     "actualizar_fecha_pendientes", "info_siguiente_accion",
     "agregar_vr_bursatil_pt", "agregar_vr_bursatil_rentas",
     "agregar_vr_contable_pt", "agregar_vr_contable_rentas", "agregar_vr_contable_apoquindo",

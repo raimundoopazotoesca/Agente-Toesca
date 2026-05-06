@@ -5,6 +5,13 @@
 
 ---
 
+## [2026-05-06] aprendizaje | Estructura TRI desde diagrama validado
+
+- Registrada estructura de Toesca Rentas Inmobiliarias con sociedades, participaciones y activos finales.
+- Machalí marcado como liquidado; no debe considerarse activo vigente.
+- Pesos históricos del diagrama rebajados pro forma excluyendo Machalí: base 96%.
+- Fuente: diagrama enviado por usuario y confirmaciones del usuario en conversación.
+
 ## [2026-05-04] aprendizaje | Balance Consolidado PT documentado
 
 - Mapeada hoja Fondo PT: clasificaciones, unidades (M$×1000), procedimiento inserción columna
