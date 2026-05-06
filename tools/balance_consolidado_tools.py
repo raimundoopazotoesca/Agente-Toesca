@@ -5,7 +5,7 @@ Entidades: Toesca Rentas PT (holding) + Inmobiliaria Boulevard + Torre A S.A.
 Planilla: {MM.YYYY}- Balance Consolidado Rentas PT vF.xlsx
 Resultado: {MM.YYYY}- Balance Consolidado Rentas PT vAgente.xlsx
 
-Fuentes por hoja:
+Defaults por hoja (solo fallback; manda la regla de periodos pasados):
   Fondo PT    → EEFF PDF (M$ × 1000)
   Inmob Blvd  → balance EEFF PDF (M$ × 1000) + EERR Análisis xlsx (pesos)
   Torre A     → balance + EERR Análisis xlsx (pesos directos)
@@ -102,14 +102,22 @@ def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
     return eeff_pdf, analisis_xlsx
 
 
-def _find_torre_a_file(mes: int, año: int) -> str | None:
+def _find_torre_a_files(mes: int, año: int) -> tuple[str | None, str | None]:
     ta_dir = os.path.join(TRI_EEFF_DIR, "Torre A")
+    eeff_pdf = analisis_xlsx = None
     if os.path.isdir(ta_dir):
         for f in os.listdir(ta_dir):
             fp = os.path.join(ta_dir, f)
-            if f.lower().endswith(".xlsx") and "torre a" in f.lower():
-                return fp
-    return None
+            fl = f.lower()
+            if fl.endswith(".pdf") and "torre a" in fl:
+                eeff_pdf = fp
+            elif fl.endswith(".xlsx") and "torre a" in fl:
+                analisis_xlsx = fp
+    return eeff_pdf, analisis_xlsx
+
+
+def _find_torre_a_file(mes: int, año: int) -> str | None:
+    return _find_torre_a_files(mes, año)[1]
 
 # ─── PDF parsing ──────────────────────────────────────────────────────────────
 
@@ -272,6 +280,58 @@ def _parse_eeff_boulevard_pdf(pdf_path: str) -> dict:
 
     return result
 
+
+def _parse_eeff_torre_a_pdf(pdf_path: str) -> dict:
+    """
+    Parsea EEFF Torre A PDF. Retorna valores en PESOS (M$ x 1000).
+    Usa posiciones de estados financieros 2025/2024: paginas 5-7 del PDF convertido.
+    """
+    from markitdown import MarkItDown
+    md = MarkItDown()
+    text = md.convert(pdf_path).text_content
+    pages = text.split("\x0c")
+
+    result = {}
+
+    def _m(v):
+        return v * 1000 if v is not None else 0
+
+    p5 = _collect_page_values(pages[5])
+    if len(p5) >= 13:
+        result["efectivo"] = _m(p5[0])
+        result["cxc_op"] = _m(p5[1])
+        result["cxc_er_pc"] = _m(p5[2])
+        result["prop_inv"] = _m(p5[8])
+        result["total_activo"] = _m(p5[12])
+
+    p6 = _collect_page_values(pages[6])
+    if len(p6) >= 23:
+        result["prest_corr"] = _m(p6[0])
+        result["cxp_op_pc"] = _m(p6[1])
+        result["pasivo_imp_corr"] = _m(p6[2])
+        result["otras_prov_corr"] = _m(p6[3])
+        result["prest_nc"] = _m(p6[10])
+        result["pasivo_imp_dif"] = _m(p6[11])
+        result["capital"] = _m(p6[18])
+        result["res_acum"] = _m(p6[19])
+        result["div_provisorios"] = _m(p6[20])
+        result["res_ej"] = _m(p6[21])
+        result["total_pat"] = _m(p6[22])
+
+    p7 = _collect_page_values(pages[7])
+    if len(p7) >= 11:
+        result["ingresos"] = _m(p7[0])
+        result["costo_ventas"] = _m(p7[1])
+        result["gastos_admin"] = _m(p7[3])
+        result["costos_financieros"] = _m(p7[4])
+        result["otras_ganancias"] = _m(p7[5])
+        result["otras_perdidas"] = _m(p7[6])
+        result["reajuste"] = _m(p7[7])
+        result["impuesto_renta"] = _m(p7[9])
+        result["resultado"] = _m(p7[10])
+
+    return result
+
 # ─── Análisis xlsx: Boulevard EERR ────────────────────────────────────────────
 
 def _read_analisis_eerr(xlsx_path: str, sheet_name: str = "EERR") -> dict:
@@ -320,6 +380,60 @@ def _read_torre_a_balance(xlsx_path: str) -> dict:
                 result[_norm_label(label_p)] = val_p
     wb.close()
     return result
+
+
+def _read_boulevard_balance(xlsx_path: str) -> dict:
+    """
+    Lee Estado de Situacion de Boulevard desde Analisis xlsx.
+    Retorna las mismas claves que el parser EEFF Boulevard, en pesos directos.
+    Excluye intereses diferidos duplicados activo/pasivo para no inflar el balance.
+    """
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    if "Estado de Situacion" not in wb.sheetnames:
+        wb.close()
+        return {}
+
+    ws = wb["Estado de Situacion"]
+    labels = {}
+    for row in ws.iter_rows(values_only=True):
+        if len(row) > 2 and isinstance(row[1], str) and row[2] is not None:
+            labels[_norm_label(row[1])] = row[2]
+        if len(row) > 9 and isinstance(row[8], str) and row[9] is not None:
+            labels[_norm_label(row[8])] = row[9]
+    wb.close()
+
+    def _v(label: str) -> float:
+        return labels.get(_norm_label(label), 0) or 0
+
+    intereses_duplicados = sum([
+        _v("1-1-03-01  INTERESES DIFERIDO TRAMO A"),
+        _v("1-1-03-02  INTERESES DIFERIDOS TRAMO B"),
+        _v("1-1-03-05  INTERES DEUDA DARKSTORE"),
+    ])
+
+    prest_nc = _v("OTROS PASIVOS FINANCIEROS") - intereses_duplicados
+
+    return {
+        "efectivo": _v("EFECTIVO Y EQUIVALENTE AL EFECTIVO"),
+        "cxc_op": _v("DEUDORES COMERCIALES Y OTRAS CUENTAS POR COBRAR"),
+        "cxc_er_pc": _v("1-1-02-12  CUENTA POR COBRAR APOQUINDO"),
+        "otras_cxc_nc": _v("CUENTAS POR COBRAR EMPRESAS RELACIONADAS"),
+        "prop_inv": _v("PROPIEDADES DE INVERSION"),
+        "act_imp_dif": _v("ACTIVO POR IMPUESTO DIFERIDO"),
+        "prest_corr": 0,
+        "cxp_op_pc": _v("CUENTAS POR PAGAR COMERCIALES Y OTRAS CUENTAS POR PAGAR"),
+        "cxp_er_pc": 0,
+        "otras_prov_corr": _v("OTRAS PROVISIONES CORRIENTES"),
+        "pasivo_imp_corr": _v("PASIVO POR IMPUESTOS CORRIENTES"),
+        "prest_nc": prest_nc,
+        "cxp_er_nc": _v("CUENTAS POR PAGAR EMPRESAS RELACIONADAS"),
+        "pasivo_imp_dif": _v("PASIVO POR IMPUESTO DIFERIDO"),
+        "capital": _v("3-1-01-01  CAPITAL EMITIDO"),
+        "res_acum": _v("3-1-03-01  RESULTADOS ACUMULADOS EJERCICIOS ANTERIORES"),
+        "res_ej": _v("RESULTADO DEL PERIODO"),
+        "total_activo": _v("TOTAL ACTIVOS") - intereses_duplicados,
+        "intereses_duplicados": intereses_duplicados,
+    }
 
 
 def _norm_label(s: str) -> str:
@@ -432,8 +546,10 @@ def _fill_boulevard(
         _w(42, balance_d.get("cxp_op_pc"))
         _w(44, balance_d.get("cxp_er_pc"))
         _w(46, balance_d.get("otras_prov_corr"))
+        _w(48, balance_d.get("pasivo_imp_corr"))
         _w(52, balance_d.get("prest_nc"))
         _w(55, balance_d.get("cxp_er_nc"))
+        _w(56, balance_d.get("pasivo_imp_dif"))
         _w(62, balance_d.get("capital"))
         _w(64, balance_d.get("res_acum"))
         _w(65, balance_d.get("res_ej"))
@@ -495,6 +611,40 @@ def _fill_torre_a(
 
 # ─── Leer mapa de EERR desde planilla (filas no-fórmula) ─────────────────────
 
+def _fill_torre_a_eeff(ws, d: dict, fill_balance: bool = True, fill_eerr: bool = True):
+    """Escribe Torre A desde EEFF PDF en col D (valores ya en pesos)."""
+    COL = 4
+
+    def _w(row, val):
+        ws.cell(row=row, column=COL).value = val if val else None
+
+    if fill_balance:
+        _w(7, d.get("efectivo"))
+        _w(12, d.get("cxc_op"))
+        _w(13, d.get("cxc_er_pc"))
+        _w(27, d.get("prop_inv"))
+        _w(40, d.get("prest_corr"))
+        _w(42, d.get("cxp_op_pc"))
+        _w(46, d.get("otras_prov_corr"))
+        _w(48, d.get("pasivo_imp_corr"))
+        _w(52, d.get("prest_nc"))
+        _w(56, d.get("pasivo_imp_dif"))
+        _w(62, d.get("capital"))
+        _w(64, d.get("res_acum"))
+        _w(65, d.get("res_ej"))
+        _w(66, d.get("div_provisorios"))
+
+    if fill_eerr:
+        _w(76, d.get("ingresos"))
+        _w(82, d.get("costos_financieros"))
+        _w(90, d.get("gastos_admin"))
+        _w(91, d.get("costo_ventas"))
+        _w(102, d.get("otras_ganancias"))
+        _w(103, d.get("reajuste"))
+        _w(107, d.get("otras_perdidas"))
+        _w(111, d.get("impuesto_renta"))
+
+
 def _get_eerr_row_map(wb_forms, sheet_name: str) -> dict:
     """
     Retorna {row_num: label} para filas de EERR (col D no tiene fórmula ni es header).
@@ -544,6 +694,15 @@ def _find_prior_year_col(ws_vals, target_period: date) -> int | None:
     return None
 
 
+def _historical_cols(ws_vals) -> list[int]:
+    """Columnas historicas D:K con fecha, ordenadas de mas reciente a mas antigua."""
+    cols = []
+    for col in range(4, 12):
+        if _cell_date_key(ws_vals.cell(row=2, column=col).value):
+            cols.append(col)
+    return cols
+
+
 def _numeric_inputs_for_section(ws_vals, ws_forms, col: int, section: str) -> list[float]:
     nums = []
     for row in SECTION_ROWS[section]:
@@ -566,30 +725,46 @@ def _infer_source_from_values(values: list[float]) -> str | None:
     return "eeff" if all(n % 1000 == 0 for n in rounded) else "analisis"
 
 
+def _infer_source_from_history(ws_vals, ws_forms, target_period: date, section: str):
+    """
+    La regla manda por periodos pasados:
+    1) mismo periodo del año anterior, si existe;
+    2) si no, cualquier periodo historico D:K con inputs suficientes.
+    """
+    prior_col = _find_prior_year_col(ws_vals, target_period)
+    if prior_col is not None:
+        values = _numeric_inputs_for_section(ws_vals, ws_forms, prior_col, section)
+        inferred = _infer_source_from_values(values)
+        if inferred is not None:
+            return inferred, prior_col, len(values), "mismo periodo ano anterior"
+
+    for col in _historical_cols(ws_vals):
+        values = _numeric_inputs_for_section(ws_vals, ws_forms, col, section)
+        inferred = _infer_source_from_values(values)
+        if inferred is not None:
+            return inferred, col, len(values), "historico disponible"
+
+    return None, None, 0, "sin historico con inputs"
+
+
 def _build_source_plan(wb_vals, wb_forms, target_period: date) -> tuple[dict, list[str]]:
-    """Wiki rule wins: infer EEFF vs Analisis from same period last year."""
+    """Wiki rule wins: infer EEFF vs Analisis from historical periods."""
     plan = dict(DEFAULT_SOURCE_PLAN)
     notes = []
 
     for sheet_name in HOJAS_INPUT:
-        prior_col = _find_prior_year_col(wb_vals[sheet_name], target_period)
-        if prior_col is None:
-            notes.append(f"  {sheet_name}: sin periodo comparable; uso defaults documentados")
-            continue
-
-        col_letter = get_column_letter(prior_col)
         for section in ("balance", "eerr"):
-            values = _numeric_inputs_for_section(
-                wb_vals[sheet_name], wb_forms[sheet_name], prior_col, section
+            inferred, col, n_values, basis = _infer_source_from_history(
+                wb_vals[sheet_name], wb_forms[sheet_name], target_period, section
             )
-            inferred = _infer_source_from_values(values)
             if inferred is None:
-                notes.append(f"  {sheet_name} {section}: sin inputs en {col_letter}; uso default")
+                notes.append(f"  {sheet_name} {section}: {basis}; uso default documentado")
                 continue
             plan[(sheet_name, section)] = inferred
+            col_letter = get_column_letter(col)
             notes.append(
                 f"  {sheet_name} {section}: {inferred} "
-                f"(periodo comparable en col {col_letter}, {len(values)} inputs)"
+                f"({basis}, col {col_letter}, {n_values} inputs)"
             )
 
     return plan, notes
@@ -605,14 +780,8 @@ def _warn_unsupported_sources(plan: dict) -> list[str]:
         unsupported.append("  Fondo PT balance: wiki indica Analisis, pero no hay lector implementado")
     if _source(plan, "Fondo PT", "eerr") != "eeff":
         unsupported.append("  Fondo PT EERR: wiki indica Analisis, pero no hay lector implementado")
-    if _source(plan, "Inmob Boulevard", "balance") != "eeff":
-        unsupported.append("  Inmob Boulevard balance: wiki indica Analisis, pero no hay lector implementado")
     if _source(plan, "Inmob Boulevard", "eerr") != "analisis":
         unsupported.append("  Inmob Boulevard EERR: wiki indica EEFF, pero no hay parser EERR PDF implementado")
-    if _source(plan, "Torre A", "balance") != "analisis":
-        unsupported.append("  Torre A balance: wiki indica EEFF, pero no hay parser EEFF implementado")
-    if _source(plan, "Torre A", "eerr") != "analisis":
-        unsupported.append("  Torre A EERR: wiki indica EEFF, pero no hay parser EEFF implementado")
     return unsupported
 
 # ─── Validación ───────────────────────────────────────────────────────────────
@@ -748,6 +917,7 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
     eeff_bvd, analisis_bvd = _find_boulevard_files(mes, año)
     eerr_bvd_map = _get_eerr_row_map(wb_forms, "Inmob Boulevard")
     bvd_balance_from_eeff = _source(source_plan, "Inmob Boulevard", "balance") == "eeff"
+    bvd_balance_from_analisis = _source(source_plan, "Inmob Boulevard", "balance") == "analisis"
     bvd_eerr_from_analisis = _source(source_plan, "Inmob Boulevard", "eerr") == "analisis"
 
     if eeff_bvd and bvd_balance_from_eeff:
@@ -760,9 +930,20 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
         except Exception as e:
             bvd_balance = {}
             lines.append(f"  ⚠ Error parseo PDF Boulevard: {e}")
-    elif not bvd_balance_from_eeff:
+    elif analisis_bvd and bvd_balance_from_analisis:
+        lines.append(f"Análisis Boulevard balance: {os.path.basename(analisis_bvd)}")
+        try:
+            bvd_balance = _read_boulevard_balance(analisis_bvd)
+            lines.append(f"  Efectivo: {bvd_balance.get('efectivo', 0):,.0f}")
+            lines.append(f"  Prop. Inversión: {bvd_balance.get('prop_inv', 0):,.0f}")
+            lines.append(f"  Total Activo ajustado: {bvd_balance.get('total_activo', 0):,.0f}")
+            lines.append(f"  Intereses duplicados excluidos: {bvd_balance.get('intereses_duplicados', 0):,.0f}")
+        except Exception as e:
+            bvd_balance = {}
+            lines.append(f"  ⚠ Error Análisis Boulevard balance: {e}")
+    elif bvd_balance_from_analisis:
         bvd_balance = {}
-        lines.append("⚠ Balance Boulevard no actualizado: regla wiki no pide EEFF y no hay lector de Analisis")
+        lines.append("⚠ No se encontró Análisis Boulevard — balance no actualizado")
     else:
         bvd_balance = {}
         lines.append("⚠ No se encontró EEFF PDF Boulevard — balance no actualizado")
@@ -788,16 +969,19 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
             bvd_balance,
             eerr_bvd,
             eerr_bvd_map,
-            fill_balance=bvd_balance_from_eeff,
+            fill_balance=bvd_balance_from_eeff or bvd_balance_from_analisis,
             fill_eerr=bvd_eerr_from_analisis,
         )
     lines.append("")
 
     # ── Torre A: Análisis xlsx ─────────────────────────────────────────────────
-    analisis_ta = _find_torre_a_file(mes, año)
+    eeff_ta, analisis_ta = _find_torre_a_files(mes, año)
     eerr_ta_map = _get_eerr_row_map(wb_forms, "Torre A")
     ta_balance_from_analisis = _source(source_plan, "Torre A", "balance") == "analisis"
     ta_eerr_from_analisis = _source(source_plan, "Torre A", "eerr") == "analisis"
+    ta_balance_from_eeff = _source(source_plan, "Torre A", "balance") == "eeff"
+    ta_eerr_from_eeff = _source(source_plan, "Torre A", "eerr") == "eeff"
+    ta_updated = False
 
     if analisis_ta and (ta_balance_from_analisis or ta_eerr_from_analisis):
         lines.append(f"Análisis Torre A: {os.path.basename(analisis_ta)}")
@@ -817,12 +1001,32 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
             lines.append(f"  Efectivo: {efectivo_ta:,.0f}" if efectivo_ta else "  Efectivo: no encontrado")
             prop_ta = ta_balance.get(_norm_label("PROPIEDADES DE INVERSION"))
             lines.append(f"  Prop. Inversión: {prop_ta:,.0f}" if prop_ta else "  Prop. Inversión: no encontrado")
+            ta_updated = True
         except Exception as e:
             lines.append(f"  ⚠ Error Análisis Torre A: {e}")
-    elif not (ta_balance_from_analisis or ta_eerr_from_analisis):
-        lines.append("⚠ Torre A no actualizada: regla wiki pide EEFF y no hay parser EEFF implementado")
-    else:
+    if eeff_ta and (ta_balance_from_eeff or ta_eerr_from_eeff):
+        lines.append(f"EEFF Torre A: {os.path.basename(eeff_ta)}")
+        try:
+            ta_eeff = _parse_eeff_torre_a_pdf(eeff_ta)
+            _fill_torre_a_eeff(
+                wb_forms["Torre A"],
+                ta_eeff,
+                fill_balance=ta_balance_from_eeff,
+                fill_eerr=ta_eerr_from_eeff,
+            )
+            lines.append(f"  Efectivo: {ta_eeff.get('efectivo', 0):,.0f}")
+            lines.append(f"  Prop. Inversión: {ta_eeff.get('prop_inv', 0):,.0f}")
+            lines.append(f"  Total Activo: {ta_eeff.get('total_activo', 0):,.0f}")
+            lines.append(f"  Resultado ejercicio: {ta_eeff.get('res_ej', 0):,.0f}")
+            ta_updated = True
+        except Exception as e:
+            lines.append(f"  ⚠ Error EEFF Torre A: {e}")
+    if not eeff_ta and (ta_balance_from_eeff or ta_eerr_from_eeff):
+        lines.append("⚠ No se encontró EEFF Torre A — hoja no actualizada")
+    if not analisis_ta and (ta_balance_from_analisis or ta_eerr_from_analisis):
         lines.append("⚠ No se encontró Análisis Torre A — hoja no actualizada")
+    if not ta_updated:
+        lines.append("⚠ Torre A no fue actualizada")
     lines.append("")
 
     # ── Validar en memoria (antes de guardar) ─────────────────────────────────

@@ -34,10 +34,11 @@ Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Doc
 **Torre A (balance + EERR):**
 ```
 SharePoint/TRI/EEFF/Torre A/
+  EEFF 31-12-{YYYY} Torre A.pdf           ← usar si los períodos pasados indican EEFF
   {MM}-{YYYY} - Análisis Torre A.xlsx      ← balance (hoja "Estado de Situacion") + EERR (hoja "EERR")
 ```
 Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas Inmobiliarias TRI/EEFF/Torre A/`
-> EEFF PDF de Torre A existe pero NO se usa — siempre usar el Análisis xlsx.
+> Manda la regla general de períodos pasados: si se usó Análisis, usar Análisis; si se usó EEFF, usar EEFF.
 
 ## Hojas del archivo
 
@@ -263,10 +264,10 @@ Validar: planilla fila 120 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESU
 
 | Sección | Fuente | Unidades |
 |---|---|---|
-| Balance | Análisis xlsx, hoja "Estado de Situacion", col C | pesos (usar directo, sin ×1000) |
-| EERR | Análisis xlsx, hoja "EERR", col E | pesos (usar directo) |
+| Balance | Según períodos pasados: Análisis xlsx o EEFF PDF | Análisis pesos directos / EEFF M$×1000 |
+| EERR | Según períodos pasados: Análisis xlsx o EEFF PDF | Análisis pesos directos / EEFF M$×1000 |
 
-> Para Torre A NO se usa el EEFF PDF — solo el Análisis xlsx.
+> Para Torre A también manda el histórico: si la planilla venía desde EEFF, usar EEFF; si venía desde Análisis, usar Análisis.
 
 ### Regla de cuentas duplicadas (ver regla global abajo)
 
@@ -303,7 +304,7 @@ Validar: planilla fila 114 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESU
 |---|---|---|---|
 | Fondo PT | EEFF PDF págs 6-7 | EEFF PDF pág 8 | M$ × 1000 |
 | Inmob Boulevard | EEFF PDF págs 3-4 | Análisis xlsx hoja "EERR" col E | Balance M$×1000 / EERR pesos |
-| Torre A | Análisis xlsx hoja "Estado de Situacion" col C | Análisis xlsx hoja "EERR" col E | pesos (directo) |
+| Torre A | Según períodos pasados: Análisis o EEFF | Según períodos pasados: Análisis o EEFF | Análisis pesos / EEFF M$×1000 |
 
 ---
 
@@ -311,3 +312,5 @@ Validar: planilla fila 114 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESU
 
 - [x] Implementada herramienta `actualizar_balance_consolidado_pt`.
 - [x] La regla general "EEFF o Análisis" manda sobre los defaults por hoja.
+- [x] Soporta Balance Boulevard desde Análisis xlsx cuando los períodos pasados indican pesos directos.
+- [x] Soporta Torre A desde EEFF PDF cuando los períodos pasados indican EEFF.
