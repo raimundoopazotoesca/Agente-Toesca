@@ -21,6 +21,7 @@ from tools.email_tools import (
 )
 from tools.sharepoint_tools import (
     list_sharepoint_files,
+    search_sharepoint_files,
     copy_from_sharepoint,
     save_to_sharepoint,
 )
@@ -231,6 +232,21 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "buscar_en_sharepoint",
+            "description": "Busca archivos recursivamente en SharePoint cuyo nombre contenga el keyword dado. Usar cuando no se sabe la subcarpeta exacta de un archivo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword":    {"type": "string", "description": "Texto a buscar en el nombre del archivo (ej: '2602', 'CDG', 'EEFF')"},
+                    "subcarpeta": {"type": "string", "description": "Subcarpeta raíz donde buscar (opcional, por defecto busca en todo SharePoint)"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "copiar_de_sharepoint",
             "description": "Copia un archivo de SharePoint al directorio de trabajo.",
             "parameters": {
@@ -377,7 +393,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "guardar_cdg",
             "description": (
-                "Guarda el CDG editado de vuelta en SharePoint (RENTA_COMERCIAL_DIR/{año}/). "
+                "Guarda el CDG editado de vuelta en SharePoint (Controles de Gestión/Renta Comercial/Controles de Gestión/{año}/). "
                 "SOLO puede guardar archivos vAgente — rechaza vF y vActualizar. "
                 "Llamar al terminar de actualizar el CDG."
             ),
@@ -397,9 +413,11 @@ TOOL_DEFINITIONS = [
             "description": (
                 "Verifica qué archivos necesarios para actualizar el CDG de un mes están disponibles "
                 "y cuáles faltan. Usar cuando el usuario pregunta: '¿tienes todo para el CDG?', "
-                "'¿qué archivos tienes?', '¿qué archivos te faltan?', '¿qué tienes actualizado?'. "
-                "El resultado incluye SIEMPRE dos secciones: 'Disponibles' (archivos encontrados) "
-                "y 'Faltan' (archivos no encontrados). SIEMPRE reportar ambas secciones al usuario. "
+                "'¿qué archivos tienes?', '¿qué archivos te faltan?', '¿qué te falta?', '¿puedes actualizar el CDG?'. "
+                "Retorna el resultado COMPLETO con dos secciones claramente separadas: "
+                "'Archivos encontrados (X/N)' con la ruta exacta de cada uno, "
+                "y 'Archivos faltantes (Y/N)' con los que no se encontraron. "
+                "SIEMPRE copiar el resultado ÍNTEGRO al usuario — nunca resumir ni omitir la sección de encontrados. "
                 "Incluye archivos de fin de trimestre si corresponde (mar/jun/sep/dic)."
             ),
             "parameters": {
@@ -798,7 +816,7 @@ TOOL_DEFINITIONS = [
                 "properties": {
                     "nombre_archivo":  {"type": "string"},
                     "fondo_key":       {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
-                    "rentabilidades":  {"type": "object", "description": "Dict con valores por serie y métrica"},
+                    "rentabilidades":  {"type": "string", "description": "JSON string con valores por serie y métrica. Ej: '{\"null\": {\"inicio\": 0.05, \"ytd\": 0.03, \"12m\": 0.048}}'"},
                 },
                 "required": ["nombre_archivo", "fondo_key", "rentabilidades"],
             },
@@ -849,7 +867,7 @@ TOOL_DEFINITIONS = [
             "name": "buscar_saldo_caja",
             "description": (
                 "Busca el archivo Saldo Caja + FFMM más reciente en SharePoint para el año/mes indicado. "
-                "Los archivos están en SALDO_CAJA_DIR/{año}/ con nombre AAMMDD Saldo Caja + FFMM Inmobiliario.xlsx. "
+                "Los archivos están en SharePoint (Controles de Gestión/Saldo Caja/{año}/) con nombre AAMMDD Saldo Caja + FFMM Inmobiliario.xlsx. "
                 "Retorna la ruta absoluta al archivo más reciente (que contiene todo el histórico)."
             ),
             "parameters": {
@@ -868,7 +886,7 @@ TOOL_DEFINITIONS = [
             "name": "archivar_saldo_caja",
             "description": (
                 "Guarda una copia del archivo Saldo Caja en la carpeta de archivo histórico "
-                "(SALDO_CAJA_DIR o WORK_DIR/saldo_caja/). No sobreescribe si ya existe. "
+                "(SharePoint/Controles de Gestión/Saldo Caja/). No sobreescribe si ya existe. "
                 "Llamar después de descargar el adjunto de María José Castro."
             ),
             "parameters": {
@@ -1902,6 +1920,7 @@ def _dispatch(name: str, args: dict) -> str:
         "descargar_adjunto_correo":     lambda a: download_email_attachment(a["entry_id"], a["attachment_index"], a["nombre_archivo"]),
         "enviar_correo":                lambda a: send_email(a["destinatario"], a["asunto"], a["cuerpo"], a.get("archivo_adjunto")),
         "listar_sharepoint":            lambda a: list_sharepoint_files(a.get("subcarpeta", "")),
+        "buscar_en_sharepoint":         lambda a: search_sharepoint_files(a["keyword"], a.get("subcarpeta", "")),
         "copiar_de_sharepoint":         lambda a: copy_from_sharepoint(a["nombre_archivo"], a.get("subcarpeta", "")),
         "guardar_en_sharepoint":        lambda a: save_to_sharepoint(a["nombre_archivo"], a.get("subcarpeta_destino", "")),
         "listar_servidor_local":        lambda a: list_local_excel_files(a.get("subcarpeta", "")),
@@ -1939,7 +1958,10 @@ def _dispatch(name: str, args: dict) -> str:
         "actualizar_fecha_ar":          lambda a: actualizar_fecha_ar(a["nombre_archivo"], a["fondo_key"], a["fecha_serial"]),
         "leer_rentabilidades_ar":              lambda a: leer_rentabilidades_ar(a["nombre_archivo"], a["fondo_key"]),
         "leer_rentabilidades_completas_fs":    lambda a: leer_rentabilidades_completas_fs(a["nombre_archivo"], a["fondo_key"]),
-        "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(a["nombre_archivo"], a["fondo_key"], a["rentabilidades"]),
+        "pegar_rentabilidades_datos_fs": lambda a: pegar_rentabilidades_datos_fs(
+            a["nombre_archivo"], a["fondo_key"],
+            {(None if k == "null" else k): v for k, v in json.loads(a["rentabilidades"]).items()}
+        ),
         "copiar_datos_tir_rentas":      lambda a: copiar_datos_tir_rentas(a["archivo_cg"], a["archivo_tir"]),
         "leer_tir_rentas_resumen":      lambda a: leer_tir_rentas_resumen(a["archivo_tir"]),
         # Caja
@@ -2037,7 +2059,7 @@ _TOOLS_GENERAL = {
     "preguntar_usuario",
     "buscar_correos_con_planillas", "buscar_correos_por_asunto",
     "descargar_adjunto_correo", "enviar_correo",
-    "listar_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint",
+    "listar_sharepoint", "buscar_en_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint",
     "listar_servidor_local", "copiar_del_servidor", "guardar_en_servidor",
     "leer_planilla", "validar_planilla", "actualizar_celda",
     "listar_planillas_en_trabajo",

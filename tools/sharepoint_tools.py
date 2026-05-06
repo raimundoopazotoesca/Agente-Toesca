@@ -65,6 +65,42 @@ def list_sharepoint_files(subfolder: str = "") -> str:
         return f"Error al listar SharePoint: {e}"
 
 
+def search_sharepoint_files(keyword: str, subfolder: str = "") -> str:
+    """Busca archivos recursivamente en SharePoint que contengan el keyword en su nombre."""
+    err = _check_dir()
+    if err:
+        return err
+
+    try:
+        base = os.path.join(SHAREPOINT_DIR, subfolder) if subfolder else SHAREPOINT_DIR
+        if not os.path.exists(base):
+            return f"La subcarpeta '{subfolder}' no existe en SharePoint."
+
+        keyword_lower = keyword.lower()
+        matches = []
+        for root, dirs, files in os.walk(base):
+            dirs.sort()
+            for name in sorted(files):
+                if keyword_lower in name.lower():
+                    rel = os.path.relpath(os.path.join(root, name), SHAREPOINT_DIR)
+                    size = os.path.getsize(os.path.join(root, name))
+                    mod = datetime.fromtimestamp(os.path.getmtime(os.path.join(root, name))).strftime("%Y-%m-%d %H:%M")
+                    matches.append((rel, name, size, mod))
+
+        if not matches:
+            return f"No se encontraron archivos con '{keyword}' en SharePoint."
+
+        result = f"Archivos encontrados con '{keyword}' en SharePoint:\n\n"
+        for rel, name, size, mod in matches:
+            subfolder_found = os.path.dirname(rel)
+            result += f"  {name}\n    subcarpeta: {subfolder_found}\n    {size:,} bytes  |  {mod}\n\n"
+        result += f"Total: {len(matches)} archivo(s)"
+        return result
+
+    except Exception as e:
+        return f"Error al buscar en SharePoint: {e}"
+
+
 def copy_from_sharepoint(filename: str, subfolder: str = "") -> str:
     """Copia un archivo de SharePoint al directorio de trabajo para procesarlo."""
     err = _check_dir()

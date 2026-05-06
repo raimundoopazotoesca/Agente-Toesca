@@ -123,17 +123,30 @@ def _llm_call(**kwargs):
             return response
         except Exception as e:
             msg = str(e).lower()
-            if "429" in msg or "quota" in msg or "rate" in msg or "resource" in msg:
+            is_retryable = (
+                "429" in msg or "503" in msg or "502" in msg or "overload" in msg
+                or "quota" in msg or "rate" in msg or "resource" in msg
+                or "unavailable" in msg or "high demand" in msg
+            )
+            if is_retryable:
                 wait = min((2 ** attempt) * 2 + random.uniform(0, 2), 120)
-                print(f"  [429] Rate limit — esperando {wait:.0f}s (intento {attempt + 1}/8)...")
+                code = "429" if "429" in msg else "503"
+                print(f"  [{code}] API no disponible — esperando {wait:.0f}s (intento {attempt + 1}/8)...")
                 time.sleep(wait)
             else:
                 raise
-    raise RuntimeError("Límite de reintentos alcanzado (8/8 intentos con error 429).")
+    raise RuntimeError("Límite de reintentos alcanzado (8/8 intentos con error de API).")
 
 
 BASE_PROMPT = """Eres un agente automatizador especializado en gestión de fondos inmobiliarios para Toesca Asset Management (Chile).
-Tienes acceso a correos Outlook, SharePoint sincronizado, servidor R:, y planillas Excel del Control de Gestión.
+Tienes acceso a correos Outlook, SharePoint sincronizado (OneDrive), y planillas Excel del Control de Gestión.
+
+═══════════════════════════════════════════════════════════════
+RESULTADOS DE HERRAMIENTAS — REGLA ABSOLUTA
+═══════════════════════════════════════════════════════════════
+JAMÁS inventes resultados de herramientas. Si no llamaste a una herramienta, no muestres resultados.
+Si llamaste a una herramienta, usa SOLO lo que retornó — no agregues ni cambies nada.
+Esto aplica especialmente a rutas de archivos: NUNCA generes una ruta que no vino de una herramienta.
 
 ═══════════════════════════════════════════════════════════════
 AUTONOMÍA — REGLA PRINCIPAL
@@ -215,15 +228,25 @@ Ejemplo: guardar_ubicacion("vacancia_pct_viña_row", "Hoja Vacancia fila 12, mis
 ═══════════════════════════════════════════════════════════════
 CDG CONTROL DE GESTIÓN RENTA COMERCIAL
 ═══════════════════════════════════════════════════════════════
-Directorio: variable de entorno RENTA_COMERCIAL_DIR (apunta directamente a la carpeta, NO buscar en SharePoint)
+Ubicación: SharePoint → Controles de Gestión/Renta Comercial/Controles de Gestión/{YYYY}/
 Patrón de nombre: {AAMM} Control De Gestión Renta Comercial.xlsx
   Ejemplos: "2603 Control De Gestión Renta Comercial.xlsx" (marzo 2026)
             "2602 Control De Gestión Renta Comercial.xlsx" (febrero 2026)
 
 Para abrir el CDG de un mes dado:
   1. Construir el nombre con el patrón → {AAMM} = año2d + mes2d (ej: marzo 2026 → "2603")
-  2. Buscar ese archivo directamente en RENTA_COMERCIAL_DIR (no explorar SharePoint)
-  3. Si no existe ahí, copiar al WORK_DIR con 'copiar_del_servidor'
+  2. Usar buscar_en_sharepoint(keyword="{AAMM}") para encontrar la ruta exacta
+  3. Copiar al WORK_DIR con copiar_de_sharepoint(nombre_archivo, subcarpeta)
+
+═══════════════════════════════════════════════════════════════
+VERIFICACIÓN DE ARCHIVOS — REGLA OBLIGATORIA
+═══════════════════════════════════════════════════════════════
+Cuando el usuario pregunta '¿tienes todo?', '¿qué te falta?', '¿puedes actualizar el CDG?' o similar:
+  → SIEMPRE llamar verificar_archivos_cdg(año, mes) PRIMERO.
+  → Copiar el resultado LITERALMENTE, sin resumir ni reformular.
+  → El resultado tiene dos secciones: "Archivos encontrados" Y "Archivos faltantes".
+  → NUNCA omitir la sección de encontrados — el usuario necesita ver ambas.
+NUNCA inventes qué archivos están disponibles — si la herramienta no lo encontró, no está.
 
 ═══════════════════════════════════════════════════════════════
 PRECIOS BURSÁTILES Y VR CONTABLE:
@@ -246,13 +269,14 @@ VR CONTABLE (solo fin de trimestre: mar/jun/sep/dic):
 ═══════════════════════════════════════════════════════════════
 FLUJO MENSUAL CDG
 ═══════════════════════════════════════════════════════════════
-1. crear_planilla_mes("{AAMM}") → copia desde mes anterior
-2. copiar_del_servidor → traer al WORK_DIR
-3. actualizar_fecha_pendientes(...) → B2 hoja Pendientes = 1º día del mes
-4. obtener_precios_mes(año, mes-1) → precios último día mes anterior
-5. agregar_vr_bursatil_pt(...) + agregar_vr_bursatil_rentas(...)
-6. Si fin de trimestre: agregar_vr_contable_*
-7. guardar_en_servidor(...)"""
+1. verificar_archivos_cdg(año, mes) → confirmar que están todos los archivos
+2. crear_planilla_mes("{AAMM}") → copia desde mes anterior en SharePoint
+3. copiar_de_sharepoint → traer al WORK_DIR
+4. actualizar_fecha_pendientes(...) → B2 hoja Pendientes = 1º día del mes
+5. obtener_precios_mes(año, mes-1) → precios último día mes anterior
+6. agregar_vr_bursatil_pt(...) + agregar_vr_bursatil_rentas(...)
+7. Si fin de trimestre: agregar_vr_contable_*
+8. guardar_cdg(...)"""
 
 PROMPT_NOI = """═══════════════════════════════════════════════════════════════
 NOI / EEFF POR ACTIVO
@@ -369,10 +393,56 @@ def _trim_tool_messages(messages: list) -> list:
             result.append(m)
     return result
 
+_VERIFICAR_CDG_RE = re.compile(
+    r"(tienes?\s+todo|qu[eé]\s+te\s+falta|qu[eé]\s+archivos?\s+(tienes?|te\s+faltan?)|"
+    r"puedes?\s+actualizar\s+(el\s+)?cdg|tenemos?\s+todo|est[aá](s|n)?\s+listo)"
+    r".*(?:cdg|control\s+de\s+gesti[oó]n)",
+    re.I,
+)
+
+_MES_NOMBRES = {
+    "enero":1,"febrero":2,"marzo":3,"abril":4,"mayo":5,"junio":6,
+    "julio":7,"agosto":8,"septiembre":9,"octubre":10,"noviembre":11,"diciembre":12,
+}
+
+
+def _try_verificar_cdg_directo(user_input: str):
+    """Llama verificar_archivos_cdg directamente si la query es un chequeo de disponibilidad."""
+    if not _VERIFICAR_CDG_RE.search(user_input):
+        return None
+    # Extraer año y mes de la query
+    import datetime
+    año = mes = None
+    m_año = re.search(r"\b(202\d)\b", user_input)
+    if m_año:
+        año = int(m_año.group(1))
+    for nombre, num in _MES_NOMBRES.items():
+        if nombre in user_input.lower():
+            mes = num
+            break
+    m_aamm = re.search(r"\b(\d{2})(\d{2})\b", user_input)
+    if m_aamm and not (año and mes):
+        año = 2000 + int(m_aamm.group(1))
+        mes = int(m_aamm.group(2))
+    if not (año and mes):
+        hoy = datetime.date.today()
+        año, mes = hoy.year, hoy.month
+    from tools.gestion_renta_tools import verificar_archivos_cdg
+    return verificar_archivos_cdg(año, mes)
+
+
 def run_agent(user_input: str) -> None:
     print("\\n" + "=" * 60)
     print(f"Instrucción: {user_input}")
     print("=" * 60)
+
+    # Intercepción directa para queries de verificación CDG — evita que Gemini alucine
+    resultado_verificacion = _try_verificar_cdg_directo(user_input)
+    if resultado_verificacion is not None:
+        print(f"\\nAgente: {resultado_verificacion}")
+        from tools.memory_tools import guardar_tarea
+        guardar_tarea(user_input, ["verificar_archivos_cdg"], resultado_verificacion[:200])
+        return
 
     grupos = get_intent_groups(user_input)
     selected_tools = _select_tools(grupos)
@@ -395,6 +465,7 @@ def run_agent(user_input: str) -> None:
 
     tools_used = []
     final_response = ""
+    _done = False  # flag para salir del while desde dentro del for
 
     n_selected = len(selected_tools)
     n_total = len(TOOL_DEFINITIONS)
@@ -404,6 +475,8 @@ def run_agent(user_input: str) -> None:
     try:
         iteration = 0
         while True:
+            if _done:
+                break
             iteration += 1
             if iteration > _MAX_TOOL_ITERS:
                 final_response = (
@@ -447,6 +520,14 @@ def run_agent(user_input: str) -> None:
                     "tool_call_id": tool_call.id,
                     "content":      result,
                 })
+
+                # Para verificar_archivos_cdg, usar el resultado directamente
+                # sin que el modelo lo resuma (evita que Gemini omita los [OK])
+                if name == "verificar_archivos_cdg":
+                    final_response = result
+                    print(f"\nAgente: {result}")
+                    _done = True
+                    break
 
     except RuntimeError as e:
         final_response = f"⚠️ {e}"

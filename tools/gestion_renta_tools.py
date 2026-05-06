@@ -11,24 +11,14 @@ import tempfile
 import zipfile
 from calendar import monthrange
 from datetime import date, datetime, timedelta
-from config import LOCAL_FILES_DIR, SHAREPOINT_DIR, RENTA_COMERCIAL_DIR, WORK_DIR
+from config import SHAREPOINT_DIR, WORK_DIR
 import openpyxl
 
 
-# ─── Rutas base ───────────────────────────────────────────────────────────────
-# RENTA_COMERCIAL_DIR: ruta directa a la carpeta Comercial (recomendado, configurable por plataforma)
-# Fallback: SHAREPOINT_DIR → LOCAL_FILES_DIR + subdirectorios estándar
-def _resolve_ruta_comercial() -> str:
-    if RENTA_COMERCIAL_DIR:
-        return RENTA_COMERCIAL_DIR
-    base = SHAREPOINT_DIR or LOCAL_FILES_DIR or ""
-    return os.path.join(
-        base, "Rentas",
-        "Control de Gestión Rentas Inmobiliarias",
-        "Control de Gestión Históricos", "Comercial",
-    )
-
-RUTA_COMERCIAL = _resolve_ruta_comercial()
+RUTA_COMERCIAL = os.path.join(
+    SHAREPOINT_DIR or "",
+    "Controles de Gestión", "Renta Comercial", "Controles de Gestión",
+)
 
 
 # ─── Config fija por hoja (derivada del análisis del xlsx 2603) ───────────────
@@ -464,7 +454,7 @@ def crear_planilla_mes(mes_code_nuevo: str) -> str:
 def guardar_cdg(nombre_archivo: str) -> str:
     """
     Guarda el CDG editado (debe ser un archivo vAgente) de vuelta en SharePoint,
-    en la misma carpeta donde van los CDG del año (RENTA_COMERCIAL_DIR/{YYYY}/).
+    en la misma carpeta donde van los CDG del año (SharePoint/Controles de Gestión/Renta Comercial/Controles de Gestión/{YYYY}/).
 
     PROHIBIDO editar/guardar archivos vF o vActualizar — solo vAgente.
     """
@@ -730,12 +720,13 @@ def info_siguiente_accion(nombre_archivo: str) -> str:
 def buscar_tir() -> str:
     """
     Busca el archivo Cálculo TIR Fondo Rentas más reciente en SharePoint
-    (Controles de Gestión/). Retorna la ruta absoluta o mensaje de error.
+    (busca recursivamente bajo Controles de Gestión/).
+    Retorna la ruta absoluta o mensaje de error.
     """
     carpeta = os.path.join(SHAREPOINT_DIR, "Controles de Gestión")
-    archivos = glob.glob(os.path.join(carpeta, "*TIR*Rentas*.xlsx"))
+    archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*Rentas*.xlsx"), recursive=True)
     if not archivos:
-        archivos = glob.glob(os.path.join(carpeta, "*TIR*.xlsx"))
+        archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*.xlsx"), recursive=True)
     if not archivos:
         return f"Error: no se encontró archivo TIR en {carpeta}"
     return max(archivos, key=os.path.getmtime)
@@ -757,27 +748,33 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
       - EEFF INMOSA
 
     Adicionales en fin de trimestre (mar/jun/sep/dic):
-      - EEFF A&R PT
-      - EEFF A&R Rentas (TRI)
-      - EEFF A&R Apoquindo
+      - EEFF PT (Toesca Rentas Inmobiliarias PT)
+      - EEFF Rentas/TRI (Toesca Rentas Inmobiliarias)
+      - EEFF Apoquindo (Fondo Toesca Rentas Apoquindo)
       - TIR Fondo Rentas
     """
     from tools.caja_tools import buscar_saldo_caja
-    from tools.noi_tools import buscar_rr_jll, buscar_er_inmosa, _find_eeff_file
-    from tools.rentroll_tools import _find_file
-    from tools.eeff_tools import buscar_pdf_eeff
+    from tools.noi_tools import buscar_rr_jll, buscar_er_inmosa, _find_eeff_file, _RR_JLL_BASE, _INMOSA_BASE, _TRES_A_DIRS
+    from tools.rentroll_tools import _find_file, _RR_JLL_DIR, _RR_TRESA_DIRS
+    from tools.eeff_tools import buscar_pdf_eeff, FONDO_RUTAS
 
     aamm = f"{str(año)[2:]}{mes:02d}"
     es_trimestre = mes in (3, 6, 9, 12)
     meses_es = {1:"Enero",2:"Febrero",3:"Marzo",4:"Abril",5:"Mayo",6:"Junio",
                 7:"Julio",8:"Agosto",9:"Septiembre",10:"Octubre",11:"Noviembre",12:"Diciembre"}
 
-    checklist = []  # lista de (nombre, ok: bool, detalle: str)
+    checklist = []  # lista de (nombre, ok, ruta_encontrada, donde_subir)
 
-    def chk(nombre, ruta_o_error):
+    def _sp(ruta: str) -> str:
+        """Convierte ruta absoluta a 'SP: ruta/relativa' para legibilidad."""
+        if SHAREPOINT_DIR and ruta and ruta.startswith(SHAREPOINT_DIR):
+            rel = ruta[len(SHAREPOINT_DIR):].lstrip(os.sep)
+            return f"SP: {rel}"
+        return ruta
+
+    def chk(nombre, ruta_o_error, donde_subir: str = ""):
         ok = bool(ruta_o_error and os.path.isfile(ruta_o_error))
-        detalle = os.path.basename(ruta_o_error) if ok else "FALTA"
-        checklist.append((nombre, ok, detalle))
+        checklist.append((nombre, ok, ruta_o_error if ok else None, donde_subir))
 
     _MESES_ABR = {"ene":1,"feb":2,"mar":3,"abr":4,"may":5,"jun":6,
                   "jul":7,"ago":8,"sep":9,"oct":10,"nov":11,"dic":12}
@@ -786,20 +783,16 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     mes_ant = mes - 1 if mes > 1 else 12
     año_ant = año if mes > 1 else año - 1
     aamm_ant = f"{str(año_ant)[2:]}{mes_ant:02d}"
-    carpeta_cdg = os.path.join(RENTA_COMERCIAL_DIR, str(año if mes > 1 else año_ant))
     cdg_prev = None
-    if os.path.isdir(carpeta_cdg):
-        candidatos_vf = sorted([
-            f for f in os.listdir(carpeta_cdg)
-            if f.startswith(aamm_ant) and f.endswith(".xlsx") and "vF" in f
-        ])
-        if candidatos_vf:
-            cdg_prev = os.path.join(carpeta_cdg, candidatos_vf[-1])
-    chk(f"CDG {aamm_ant} vF (mes anterior)", cdg_prev)
+    sp_cdg_root = os.path.join(SHAREPOINT_DIR, "Controles de Gestión")
+    patron = os.path.join(sp_cdg_root, "**", f"{aamm_ant}*vF*.xlsx")
+    candidatos_sp = glob.glob(patron, recursive=True)
+    if candidatos_sp:
+        cdg_prev = max(candidatos_sp, key=os.path.getmtime)
+    chk(f"CDG {aamm_ant} vF (mes anterior)", cdg_prev,
+        os.path.join(sp_cdg_root, "Renta Comercial", "Controles de Gestión", str(año_ant)))
 
     # ── Saldo Caja — necesita archivo del mes SIGUIENTE al CDG ───────────────
-    # Al copiar Caja se selecciona la hoja con fecha más cercana al cierre del mes;
-    # para que esa hoja exista, el archivo debe ser de mes+1 o posterior.
     mes_sig = mes + 1 if mes < 12 else 1
     año_sig = año if mes < 12 else año + 1
     aamm_sig = f"{str(año_sig)[2:]}{mes_sig:02d}"
@@ -811,15 +804,19 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         m_sc = re.match(r"(\d{2})(\d{2})\d{2}", os.path.basename(sc))
         if m_sc and (m_sc.group(1) + m_sc.group(2)) >= aamm_sig:
             sc_valido = sc
-    chk(f"Saldo Caja (necesita {meses_es[mes_sig]} {año_sig} o posterior)", sc_valido)
+    chk(f"Saldo Caja (necesita {meses_es[mes_sig]} {año_sig} o posterior)", sc_valido,
+        os.path.join(SHAREPOINT_DIR, "Controles de Gestión", "Saldo Caja", str(año_sig)))
 
     # ── RR JLL ────────────────────────────────────────────────────────────────
     rr_jll = buscar_rr_jll(año, mes)
-    chk(f"RR JLL {aamm}", rr_jll if not rr_jll.startswith("Error") else None)
+    chk(f"RR JLL {aamm}", rr_jll if not rr_jll.startswith("Error") else None,
+        os.path.join(_RR_JLL_DIR, str(año)))
 
     # ── RR Tres A ─────────────────────────────────────────────────────────────
-    chk(f"RR Tres A Viña {meses_es[mes]}", _find_file(año, mes, "vina"))
-    chk(f"RR Tres A Curicó {meses_es[mes]}", _find_file(año, mes, "curico"))
+    chk(f"RR Tres A Viña {meses_es[mes]}", _find_file(año, mes, "vina"),
+        os.path.join(_RR_TRESA_DIRS["vina"], str(año)))
+    chk(f"RR Tres A Curicó {meses_es[mes]}", _find_file(año, mes, "curico"),
+        os.path.join(_RR_TRESA_DIRS["curico"], str(año)))
 
     # ── EEFF Viña y Curicó — validar que el archivo sea del mes correcto ──────
     mes_str = f"{mes:02d}-{año}"
@@ -827,7 +824,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
                         (f"EEFF Curicó {mes_str}", "curico")]:
         path = _find_eeff_file(mall, año, mes)
         valido = path if (path and mes_str in os.path.basename(path)) else None
-        chk(label, valido)
+        chk(label, valido, os.path.join(_TRES_A_DIRS[mall], str(año)))
 
     # ── EEFF INMOSA — validar que el archivo cubra el mes del CDG ─────────────
     inmosa = buscar_er_inmosa(año, mes)
@@ -840,31 +837,57 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
             ultimo_mes = max(menciones, key=lambda x: x[0])[1]
             inmosa_valido = inmosa if ultimo_mes >= mes else None
         else:
-            inmosa_valido = inmosa  # sin meses en nombre, asumir válido
-    chk(f"EEFF INMOSA (necesita cubrir {meses_es[mes]})", inmosa_valido)
+            inmosa_valido = inmosa
+    chk(f"EEFF INMOSA (necesita cubrir {meses_es[mes]})", inmosa_valido,
+        os.path.join(_INMOSA_BASE, str(año)))
 
     # ── Fin de trimestre ──────────────────────────────────────────────────────
     # Los EEFF son del trimestre ANTERIOR (ej: CDG marzo → EEFF diciembre año-1)
+    _FONDO_DISPLAY = {
+        "A&R PT":        "EEFF PT (Toesca Rentas Inmobiliarias PT)",
+        "A&R Rentas":    "EEFF Rentas/TRI (Toesca Rentas Inmobiliarias)",
+        "A&R Apoquindo": "EEFF Apoquindo (Fondo Toesca Rentas Apoquindo)",
+    }
     if es_trimestre:
         trim_map = {3: (12, año - 1), 6: (3, año), 9: (6, año), 12: (9, año)}
         mes_eeff, año_eeff = trim_map[mes]
-        for fondo in ["A&R PT", "A&R Rentas", "A&R Apoquindo"]:
-            ruta_pdf = buscar_pdf_eeff(fondo, año_eeff, mes_eeff)
+        for fondo_key, label_base in _FONDO_DISPLAY.items():
+            ruta_pdf = buscar_pdf_eeff(fondo_key, año_eeff, mes_eeff)
             ok = os.path.isfile(ruta_pdf) if ruta_pdf else False
-            chk(f"EEFF {fondo} {mes_eeff:02d}-{año_eeff}", ruta_pdf if ok else None)
+            chk(f"{label_base} {mes_eeff:02d}-{año_eeff}",
+                ruta_pdf if ok else None,
+                os.path.join(FONDO_RUTAS[fondo_key], str(año_eeff)))
 
         tir = buscar_tir()
-        chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None)
+        chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None,
+            os.path.join(SHAREPOINT_DIR, "Controles de Gestión"))
 
     # ── Resumen ───────────────────────────────────────────────────────────────
     sufijo = " (fin de trimestre)" if es_trimestre else ""
-    n_faltan = sum(1 for _, ok, _ in checklist if not ok)
-    lines = [f"Verificación CDG {meses_es[mes]} {año}{sufijo}:", ""]
-    col_w = max((len(nombre) for nombre, _, _ in checklist), default=30) + 2
-    for nombre, ok, detalle in checklist:
-        estado = "✓" if ok else "✗"
-        lines.append(f"  {estado}  {nombre:<{col_w}} {detalle}")
-    lines.append("")
+    encontrados = [(n, r)    for n, ok, r, _  in checklist if ok]
+    faltantes   = [(n, dest) for n, ok, _, dest in checklist if not ok]
+    n_total  = len(checklist)
+    n_faltan = len(faltantes)
+
+    lines = [f"Verificación CDG {meses_es[mes]} {año}{sufijo}", ""]
+
+    lines.append(f"Archivos encontrados ({len(encontrados)}/{n_total}):")
+    for nombre, ruta in encontrados:
+        lines.append(f"  ✓  {nombre}")
+        lines.append(f"     {_sp(ruta)}")
+        lines.append("")
+
+    lines.append(f"Archivos faltantes ({n_faltan}/{n_total}):")
+    if faltantes:
+        for nombre, dest in faltantes:
+            lines.append(f"  ✗  {nombre}")
+            if dest:
+                lines.append(f"     → Subir a: {_sp(dest)}")
+            lines.append("")
+    else:
+        lines.append("  (ninguno)")
+        lines.append("")
+
     if n_faltan:
         lines.append(f"=> Faltan {n_faltan} archivo(s). No se puede iniciar hasta tenerlos todos.")
     else:

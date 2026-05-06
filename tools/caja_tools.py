@@ -24,13 +24,7 @@ import shutil
 import zipfile
 from calendar import monthrange
 from datetime import date, timedelta
-from config import WORK_DIR, SALDO_CAJA_DIR, SHAREPOINT_DIR
-
-# Carpeta de archivo: si no está configurada, usa WORK_DIR/saldo_caja/
-def _resolve_saldo_caja_dir() -> str:
-    if SALDO_CAJA_DIR:
-        return SALDO_CAJA_DIR
-    return os.path.join(WORK_DIR, "saldo_caja")
+from config import WORK_DIR, SHAREPOINT_DIR
 
 def _sharepoint_saldo_caja_dir() -> str:
     """Ruta SharePoint: Controles de Gestión/Saldo Caja/"""
@@ -304,8 +298,8 @@ def _limpiar_numero(val) -> float | None:
 def buscar_saldo_caja(año: int, mes: int) -> str:
     """
     Busca el archivo Saldo Caja + FFMM más reciente para el año indicado.
-    Busca primero en SharePoint (Controles de Gestión/Saldo Caja/{año}/)
-    y luego en SALDO_CAJA_DIR (R:). Los archivos tienen formato AAMMDD en el nombre.
+    Busca en SharePoint (Controles de Gestión/Saldo Caja/{año}/).
+    Los archivos tienen formato AAMMDD en el nombre.
     Retorna la ruta absoluta al archivo o un mensaje de error.
     """
     def fecha_key(nombre):
@@ -326,19 +320,13 @@ def buscar_saldo_caja(año: int, mes: int) -> str:
             return None
         return os.path.join(carpeta_año, sorted(archivos, key=fecha_key)[-1])
 
-    # 1. SharePoint
     sp_dir = _sharepoint_saldo_caja_dir()
     if sp_dir:
         resultado = _buscar_en(os.path.join(sp_dir, str(año)))
         if resultado:
             return resultado
 
-    # 2. SALDO_CAJA_DIR (R:)
-    resultado = _buscar_en(os.path.join(_resolve_saldo_caja_dir(), str(año)))
-    if resultado:
-        return resultado
-
-    return f"Error: no se encontró archivo Saldo Caja para {año} en SharePoint ni en servidor"
+    return f"Error: no se encontró archivo Saldo Caja para {año} en SharePoint"
 
 
 def listar_hojas_saldo_caja(archivo_saldo_caja: str) -> str:
@@ -660,8 +648,7 @@ def archivar_saldo_caja(nombre_archivo: str) -> str:
     Copia el archivo Saldo Caja desde WORK_DIR a la carpeta de archivo histórico.
     Si ya existe un archivo con ese nombre, no lo sobreescribe.
 
-    La carpeta de destino se configura con SALDO_CAJA_DIR en .env.
-    Por defecto usa WORK_DIR/saldo_caja/.
+    La carpeta de destino es SharePoint (Controles de Gestión/Saldo Caja/{año}/).
 
     Útil para guardar cada planilla que envía María José y tener un historial.
     """
@@ -674,7 +661,7 @@ def archivar_saldo_caja(nombre_archivo: str) -> str:
     m = re.match(r"(\d{2})(\d{2})\d{2}", base)
     año = (2000 + int(m.group(1))) if m else date.today().year
 
-    carpeta = os.path.join(_resolve_saldo_caja_dir(), str(año))
+    carpeta = os.path.join(_sharepoint_saldo_caja_dir(), str(año))
     os.makedirs(carpeta, exist_ok=True)
 
     dst = os.path.join(carpeta, base)
@@ -689,7 +676,7 @@ def listar_saldo_caja_archivados() -> str:
     """
     Lista todos los archivos Saldo Caja guardados, agrupados por año.
     """
-    carpeta = _resolve_saldo_caja_dir()
+    carpeta = _sharepoint_saldo_caja_dir()
     if not os.path.isdir(carpeta):
         return f"Carpeta de archivo vacía o no existe: {carpeta}"
 
