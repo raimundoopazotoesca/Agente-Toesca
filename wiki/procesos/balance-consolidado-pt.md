@@ -307,6 +307,7 @@ Validar: planilla fila 114 ("RESULTADO DEL PERIODO") = EERR análisis fila "RESU
 
 ---
 
-## Pendiente
+## Estado herramienta
 
-- [ ] Implementar herramienta `actualizar_balance_consolidado_pt`
+- [x] Implementada herramienta `actualizar_balance_consolidado_pt`.
+- [x] La regla general "EEFF o Análisis" manda sobre los defaults por hoja.

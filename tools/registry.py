@@ -1959,6 +1959,8 @@ TOOL_DEFINITIONS = [
                 "Copia el último vF, desplaza columnas históricas, rellena 3 hojas: "
                 "Fondo PT (desde EEFF PDF en M$×1000), Inmob Boulevard (balance EEFF + EERR Análisis), "
                 "Torre A (balance y EERR desde Análisis xlsx). "
+                "La regla general del wiki manda: decide EEFF vs Análisis mirando el mismo período del año anterior; "
+                "usa defaults documentados solo si no puede inferir la fuente. "
                 "Solo usar para meses fin de trimestre: 3, 6, 9, 12."
             ),
             "parameters": {
@@ -2135,6 +2137,7 @@ _TOOLS_GENERAL = {
     "leer_cdg_historico", "buscar_en_rent_roll",
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
     "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
+    "actualizar_balance_consolidado_pt",
 }
 
 _TOOLS_CDG = {
@@ -2151,6 +2154,7 @@ _TOOLS_CDG = {
     "pegar_rentabilidades_datos_fs", "copiar_datos_tir_rentas", "leer_tir_rentas_resumen",
     "actualizar_balance_input", "actualizar_fecha_bursatil_input",
     "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",
+    "actualizar_balance_consolidado_pt",
 }
 
 _TOOLS_NOI = {
