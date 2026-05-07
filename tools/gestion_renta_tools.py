@@ -867,6 +867,13 @@ def _hay_solicitudes_previas(año: int, mes: int, grupos: dict) -> bool:
     return _latest_solicitud(año, mes, item_ids) is not None
 
 
+def _contactos_con_solicitud_previa(año: int, mes: int) -> set[str]:
+    """Retorna el conjunto de destinatario_key que ya recibieron una solicitud para este periodo."""
+    data = _load_solicitudes_cdg()
+    eventos = data.get(_periodo_key(año, mes), {}).get("solicitudes", [])
+    return {e["destinatario_key"] for e in eventos if "destinatario_key" in e}
+
+
 def _aplicar_exclusiones_solicitud(grupos: dict, excluir: list[str] | None = None) -> tuple[dict, list[str]]:
     if not excluir:
         return grupos, []
@@ -1021,6 +1028,19 @@ def _correos_solicitud_cdg(
     if seguimiento is None:
         seguimiento = _hay_solicitudes_previas(año, mes, grupos)
 
+    # En seguimiento, solo contactar a quienes recibieron la solicitud original
+    if seguimiento:
+        previos = _contactos_con_solicitud_previa(año, mes)
+        omitidos_seg = [
+            _CONTACTOS_SOLICITUD_CDG[k]["nombre"]
+            for k in list(grupos.keys())
+            if k not in previos
+        ]
+        grupos = {k: v for k, v in grupos.items() if k in previos}
+        omitidos.extend(omitidos_seg)
+        if not grupos:
+            return {}, "No hay contactos previos a los que hacer seguimiento.", omitidos
+
     periodo = f"{MESES_ES_CDG[mes]} {año}"
     correos = {}
     for contacto_key, items in grupos.items():
@@ -1069,7 +1089,7 @@ def enviar_correos_solicitud_cdg(
     excluir: list[str] | None = None,
 ) -> str:
     """Envía y registra los correos para solicitar archivos faltantes del CDG."""
-    from tools.email_tools import send_email
+    from tools.email_tools import send_email, find_sent_email, reply_to_email
 
     correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir)
     if aviso:
@@ -1084,7 +1104,18 @@ def enviar_correos_solicitud_cdg(
     now = datetime.now().isoformat(timespec="seconds")
 
     for contacto_key, c in correos.items():
-        resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+        if c["seguimiento"]:
+            # Buscar el mail original enviado a este destinatario para responder en el mismo hilo
+            cfg = _CONTACTOS_SOLICITUD_CDG[contacto_key]
+            asunto_original = cfg["asunto"].format(periodo=f"{MESES_ES_CDG[mes]} {año}")
+            original_id = find_sent_email(c["to"], asunto_original)
+            if original_id:
+                resultado = reply_to_email(original_id, c["cuerpo"])
+            else:
+                resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+        else:
+            resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+
         if resultado.startswith("Error") or "no disponibles" in resultado.lower():
             errores.append(f"{c['nombre']} ({c['to']}): {resultado}")
             continue

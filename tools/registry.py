@@ -18,6 +18,8 @@ from tools.email_tools import (
     download_email_attachment,
     send_email,
     search_emails_by_subject,
+    find_sent_email,
+    reply_to_email,
 )
 from tools.sharepoint_tools import (
     list_sharepoint_files,

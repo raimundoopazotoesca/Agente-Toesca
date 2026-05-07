@@ -216,6 +216,54 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None) ->
         return f"Error al enviar correo: {e}"
 
 
+def find_sent_email(to_email: str, subject_keyword: str) -> str | None:
+    """
+    Busca en Elementos enviados el EntryID del correo más reciente enviado a `to_email`
+    cuyo asunto contenga `subject_keyword`. Retorna el EntryID o None si no encuentra.
+    """
+    if not _OUTLOOK_OK:
+        return None
+    try:
+        outlook = _get_outlook()
+        namespace = outlook.GetNamespace("MAPI")
+        sent = namespace.GetDefaultFolder(5)  # 5 = Sent Items
+        messages = sent.Items
+        messages.Sort("[SentOn]", True)
+        safe_kw = subject_keyword.replace("'", "''")
+        filtered = messages.Restrict(
+            f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{safe_kw}%'"
+        )
+        to_lower = to_email.lower()
+        for msg in filtered:
+            try:
+                recipients = msg.Recipients
+                for i in range(1, recipients.Count + 1):
+                    r = recipients.Item(i)
+                    if r.Address.lower() == to_lower:
+                        return msg.EntryID
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
+def reply_to_email(entry_id: str, body: str) -> str:
+    """Responde un correo existente (mismo hilo) con el cuerpo indicado."""
+    if not _OUTLOOK_OK:
+        return _not_available()
+    try:
+        outlook = _get_outlook()
+        namespace = outlook.GetNamespace("MAPI")
+        original = namespace.GetItemFromID(entry_id)
+        reply = original.Reply()
+        reply.Body = body
+        reply.Send()
+        return f"Respuesta enviada en el mismo hilo a {original.To}."
+    except Exception as e:
+        return f"Error al responder correo: {e}"
+
+
 def search_emails_by_subject(keyword: str, limit: int = 10) -> str:
     """Busca correos cuyo asunto contenga una palabra clave."""
     if not _OUTLOOK_OK:
