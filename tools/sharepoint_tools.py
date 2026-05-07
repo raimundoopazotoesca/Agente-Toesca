@@ -184,6 +184,78 @@ def refresh_sharepoint_index() -> str:
         return f"Error al actualizar índice SharePoint: {e}"
 
 
+def mover_en_sharepoint(origen: str, destino: str) -> str:
+    """
+    Mueve un archivo o carpeta de una ubicación a otra dentro de SharePoint.
+    origen y destino son rutas relativas a SHAREPOINT_DIR (usar / como separador).
+    Si el origen es una carpeta, mueve todo su contenido recursivamente.
+    Crea la carpeta destino si no existe.
+    """
+    err = _check_dir()
+    if err:
+        return err
+
+    src = os.path.join(SHAREPOINT_DIR, *origen.replace("\\", "/").split("/"))
+    dst_dir = os.path.join(SHAREPOINT_DIR, *destino.replace("\\", "/").split("/"))
+
+    if not os.path.exists(src):
+        return f"No encontrado: {origen}"
+
+    try:
+        os.makedirs(dst_dir, exist_ok=True)
+        if os.path.isfile(src):
+            dst_file = os.path.join(dst_dir, os.path.basename(src))
+            if os.path.exists(dst_file):
+                return f"Ya existe en destino: {dst_file}"
+            shutil.move(src, dst_file)
+            return f"Archivo movido: {origen} → {destino}/{os.path.basename(src)}"
+        elif os.path.isdir(src):
+            # Mover contenido recursivamente
+            import subprocess, sys
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["robocopy", src, dst_dir, "/E", "/MOVE", "/NFL", "/NDL", "/NJS", "/NJH", "/NC", "/NS"],
+                    capture_output=True
+                )
+            else:
+                for item in os.listdir(src):
+                    shutil.move(os.path.join(src, item), os.path.join(dst_dir, item))
+                shutil.rmtree(src, ignore_errors=True)
+            return f"Carpeta movida: {origen} → {destino}"
+        else:
+            return f"Tipo no reconocido: {origen}"
+    except Exception as e:
+        return f"Error al mover: {e}"
+
+
+def crear_carpeta_sharepoint(ruta: str) -> str:
+    """Crea una carpeta en SharePoint. ruta es relativa a SHAREPOINT_DIR."""
+    err = _check_dir()
+    if err:
+        return err
+    full = os.path.join(SHAREPOINT_DIR, *ruta.replace("\\", "/").split("/"))
+    if os.path.exists(full):
+        return f"Ya existe: {ruta}"
+    os.makedirs(full, exist_ok=True)
+    return f"Carpeta creada: {ruta}"
+
+
+def eliminar_carpeta_sharepoint(ruta: str) -> str:
+    """Elimina una carpeta VACÍA en SharePoint. Falla si tiene archivos."""
+    err = _check_dir()
+    if err:
+        return err
+    full = os.path.join(SHAREPOINT_DIR, *ruta.replace("\\", "/").split("/"))
+    if not os.path.exists(full):
+        return f"No existe: {ruta}"
+    archivos = [f for f in os.listdir(full) if os.path.isfile(os.path.join(full, f))]
+    subcarpetas = [f for f in os.listdir(full) if os.path.isdir(os.path.join(full, f))]
+    if archivos or subcarpetas:
+        return f"No vacía ({len(archivos)} archivos, {len(subcarpetas)} subcarpetas). Mueve el contenido primero."
+    os.rmdir(full)
+    return f"Carpeta eliminada: {ruta}"
+
+
 def save_to_sharepoint(filename: str, dest_subfolder: str = "") -> str:
     """Guarda un archivo del directorio de trabajo de vuelta en SharePoint."""
     err = _check_dir()

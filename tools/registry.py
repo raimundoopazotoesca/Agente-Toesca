@@ -28,6 +28,9 @@ from tools.sharepoint_tools import (
     copy_from_sharepoint,
     save_to_sharepoint,
     refresh_sharepoint_index,
+    mover_en_sharepoint,
+    crear_carpeta_sharepoint,
+    eliminar_carpeta_sharepoint,
 )
 from tools.local_tools import (
     list_local_excel_files,
@@ -137,7 +140,7 @@ from tools.balance_consolidado_tools import (
     actualizar_balance_consolidado_pt,
     actualizar_balance_consolidado_apoquindo,
 )
-from tools.raw_tools import ordenar_archivos_raw
+from tools.raw_tools import ordenar_archivos_raw, reemplazar_en_tool, reemplazar_en_wiki
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -2042,6 +2045,95 @@ TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "mover_en_sharepoint",
+            "description": (
+                "Mueve un archivo o carpeta de una ubicación a otra dentro de SharePoint. "
+                "Usar cuando el usuario pida reorganizar la estructura de carpetas. "
+                "origen y destino son rutas relativas a SHAREPOINT_DIR (ej: 'Fondos/Apoquindo/EEFF'). "
+                "Si el origen es carpeta, mueve todo su contenido recursivamente. "
+                "Después de reorganizar, llamar a reemplazar_en_tool para actualizar las rutas en el código "
+                "y a actualizar_indice_sharepoint para refrescar el wiki."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "origen":  {"type": "string", "description": "Ruta relativa a SHAREPOINT_DIR del archivo o carpeta a mover"},
+                    "destino": {"type": "string", "description": "Ruta relativa a SHAREPOINT_DIR del directorio destino"},
+                },
+                "required": ["origen", "destino"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "crear_carpeta_sharepoint",
+            "description": "Crea una carpeta en SharePoint. ruta es relativa a SHAREPOINT_DIR.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ruta": {"type": "string", "description": "Ruta relativa a SHAREPOINT_DIR (ej: 'Fondos/NuevaCarpeta')"},
+                },
+                "required": ["ruta"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "eliminar_carpeta_sharepoint",
+            "description": "Elimina una carpeta VACÍA en SharePoint. Falla si tiene archivos — mueve el contenido primero.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ruta": {"type": "string", "description": "Ruta relativa a SHAREPOINT_DIR de la carpeta vacía a eliminar"},
+                },
+                "required": ["ruta"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reemplazar_en_tool",
+            "description": (
+                "Busca y reemplaza texto en un archivo de código del agente (tools/*.py o cualquier .py del proyecto). "
+                "Usar para actualizar rutas de SharePoint en el código después de reorganizar carpetas. "
+                "Ejemplo: reemplazar 'Controles de Gestión' por 'Control de Gestión' en noi_tools.py."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del archivo (ej: 'noi_tools.py') o ruta relativa al proyecto"},
+                    "texto_viejo":    {"type": "string", "description": "Cadena exacta a buscar (sensible a mayúsculas)"},
+                    "texto_nuevo":    {"type": "string", "description": "Cadena de reemplazo"},
+                },
+                "required": ["nombre_archivo", "texto_viejo", "texto_nuevo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reemplazar_en_wiki",
+            "description": (
+                "Busca y reemplaza texto en un archivo del wiki del agente (wiki/**/*.md). "
+                "Usar para actualizar rutas o descripciones en el wiki después de reorganizar SharePoint."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre_archivo": {"type": "string", "description": "Nombre del archivo .md (ej: 'index.md') o ruta relativa al directorio wiki/"},
+                    "texto_viejo":    {"type": "string", "description": "Cadena exacta a buscar"},
+                    "texto_nuevo":    {"type": "string", "description": "Cadena de reemplazo"},
+                },
+                "required": ["nombre_archivo", "texto_viejo", "texto_nuevo"],
+            },
+        },
+    },
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
@@ -2184,7 +2276,12 @@ def _dispatch(name: str, args: dict) -> str:
         # Balance Consolidado PT
         "actualizar_balance_consolidado_pt": lambda a: actualizar_balance_consolidado_pt(a["mes"], a["año"]),
         "actualizar_balance_consolidado_apoquindo": lambda a: actualizar_balance_consolidado_apoquindo(a["mes"], a["año"]),
-        "ordenar_archivos_raw": lambda a: ordenar_archivos_raw(),
+        "ordenar_archivos_raw":        lambda _: ordenar_archivos_raw(),
+        "mover_en_sharepoint":         lambda a: mover_en_sharepoint(a["origen"], a["destino"]),
+        "crear_carpeta_sharepoint":    lambda a: crear_carpeta_sharepoint(a["ruta"]),
+        "eliminar_carpeta_sharepoint": lambda a: eliminar_carpeta_sharepoint(a["ruta"]),
+        "reemplazar_en_tool":          lambda a: reemplazar_en_tool(a["nombre_archivo"], a["texto_viejo"], a["texto_nuevo"]),
+        "reemplazar_en_wiki":          lambda a: reemplazar_en_wiki(a["nombre_archivo"], a["texto_viejo"], a["texto_nuevo"]),
     }
     fn = dispatch.get(name)
     if fn is None:

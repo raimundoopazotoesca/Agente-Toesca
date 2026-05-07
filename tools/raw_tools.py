@@ -1,4 +1,9 @@
 """
+Herramientas para organización de SharePoint:
+- ordenar_archivos_raw(): clasifica archivos en RAW/ al destino correcto
+- reemplazar_en_tool(): find-replace en archivos de código del agente
+- reemplazar_en_wiki(): find-replace en archivos del wiki
+
 Herramienta para procesar archivos subidos a la carpeta RAW de SharePoint.
 
 Flujo de uso:
@@ -27,6 +32,9 @@ import shutil
 from datetime import date
 
 from config import SHAREPOINT_DIR
+
+_TOOLS_DIR = os.path.join(os.path.dirname(__file__))
+_WIKI_DIR  = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
 
 RAW_DIR = os.path.join(SHAREPOINT_DIR, "RAW")
 
@@ -210,3 +218,85 @@ def ordenar_archivos_raw() -> str:
         lines.append("Sin cambios.")
 
     return "\n".join(lines)
+
+
+def reemplazar_en_tool(nombre_archivo: str, texto_viejo: str, texto_nuevo: str) -> str:
+    """
+    Busca y reemplaza texto en un archivo de herramienta del agente (tools/*.py)
+    o en cualquier archivo Python del proyecto.
+
+    nombre_archivo: nombre del archivo con extensión (ej: "noi_tools.py") o ruta relativa
+    texto_viejo: cadena exacta a buscar (sensible a mayúsculas)
+    texto_nuevo: cadena de reemplazo
+
+    Retorna cuántas ocurrencias se reemplazaron.
+    """
+    # Resolver ruta
+    if os.path.isabs(nombre_archivo) and os.path.isfile(nombre_archivo):
+        ruta = nombre_archivo
+    else:
+        ruta = os.path.join(_TOOLS_DIR, nombre_archivo)
+        if not os.path.isfile(ruta):
+            # Intentar en raíz del proyecto
+            ruta = os.path.join(os.path.dirname(_TOOLS_DIR), nombre_archivo)
+
+    if not os.path.isfile(ruta):
+        return f"Archivo no encontrado: {nombre_archivo}"
+
+    with open(ruta, "r", encoding="utf-8") as f:
+        contenido = f.read()
+
+    count = contenido.count(texto_viejo)
+    if count == 0:
+        return f"Texto no encontrado en {nombre_archivo}: {repr(texto_viejo)}"
+
+    nuevo_contenido = contenido.replace(texto_viejo, texto_nuevo)
+    with open(ruta, "w", encoding="utf-8") as f:
+        f.write(nuevo_contenido)
+
+    return f"{count} reemplazo(s) en {nombre_archivo}: {repr(texto_viejo)} → {repr(texto_nuevo)}"
+
+
+def reemplazar_en_wiki(nombre_archivo: str, texto_viejo: str, texto_nuevo: str) -> str:
+    """
+    Busca y reemplaza texto en un archivo del wiki del agente (wiki/**/*.md).
+
+    nombre_archivo: ruta relativa al directorio wiki/ (ej: "sharepoint/index.md") o nombre del .md
+    texto_viejo: cadena exacta a buscar
+    texto_nuevo: cadena de reemplazo
+    """
+    # Intentar ruta relativa dentro del wiki
+    candidatos = [
+        os.path.join(_WIKI_DIR, nombre_archivo),
+        os.path.join(_WIKI_DIR, nombre_archivo.replace("/", os.sep)),
+    ]
+    # Buscar recursivamente si no coincide directo
+    ruta = None
+    for c in candidatos:
+        if os.path.isfile(c):
+            ruta = c
+            break
+    if ruta is None:
+        for root, _, files in os.walk(_WIKI_DIR):
+            for fn in files:
+                if fn == nombre_archivo or fn == os.path.basename(nombre_archivo):
+                    ruta = os.path.join(root, fn)
+                    break
+            if ruta:
+                break
+
+    if ruta is None:
+        return f"Archivo wiki no encontrado: {nombre_archivo}"
+
+    with open(ruta, "r", encoding="utf-8") as f:
+        contenido = f.read()
+
+    count = contenido.count(texto_viejo)
+    if count == 0:
+        return f"Texto no encontrado en {nombre_archivo}: {repr(texto_viejo)}"
+
+    nuevo_contenido = contenido.replace(texto_viejo, texto_nuevo)
+    with open(ruta, "w", encoding="utf-8") as f:
+        f.write(nuevo_contenido)
+
+    return f"{count} reemplazo(s) en {nombre_archivo}: {repr(texto_viejo)} → {repr(texto_nuevo)}"
