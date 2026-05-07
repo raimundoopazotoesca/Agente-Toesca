@@ -48,15 +48,16 @@ El usuario solo tiene que decirle al agente que procese — el archivo ya está 
 **Remitentes y carpetas destino:**
 | Remitente | Email | Carpeta SharePoint |
 |---|---|---|
-| Nicole Carvajal (JLL) | nicole.carvajal@jll.com | `/Fondo Rentas/JLL/Recibidos/` |
+| Nicole Carvajal (JLL) | Nicole.Carvajal@jll.com | `/Fondo Rentas/JLL/Recibidos/` |
 | Valentina Bravo (TresA) | valentina.bravo@tresasociados.cl | `/Fondo Rentas/TresA/Recibidos/` |
-| Leonardo Cantillana (Araucana) | [confirmar email] | `/Fondo Rentas/INMOSA/Recibidos/` |
+| Leonardo Cantillana (Araucana) | lcantillana@grupoaraucana.cl | `/Fondo Rentas/INMOSA/Recibidos/` |
+| Sebastián Bravo (TresA — RR) | sebastian.bravo@tresasociados.cl | `/Fondo Rentas/TresA/Recibidos/` |
 
 ### Flujo 1B — Saldo Caja (María José Castro, lunes)
 
 ```
 Trigger: "When a new email arrives (V3)"
-   - Remitente: maria.jose@toesca.cl (confirmar email)
+   - Remitente: maria.castro@toesca.com
    - Solo con adjuntos: Sí
 
 Apply to each → Attachments:
@@ -70,7 +71,7 @@ Apply to each → Attachments:
    "💰 Saldo Caja recibido: @{item()?['name']}. Guardado en SharePoint."
 ```
 
-**Prerequisito:** confirmar emails exactos de Valentina, Leonardo y María José.
+**Emails confirmados — no hay pendientes.**
 
 ---
 
@@ -193,12 +194,14 @@ Condición: response.body.response contiene "[FALTA]"
 
 ---
 
-## Información pendiente de confirmar
+## Contactos confirmados
 
-| Dato | Estado |
-|---|---|
-| Email de Valentina Bravo (TresA) | ❓ confirmar |
-| Email de Leonardo Cantillana (Araucana) | ❓ confirmar |
-| Email de María José Castro | ❓ confirmar |
-| ¿Tienes Teams en la empresa? | ❓ confirmar |
-| ¿Prefieres notificación Teams o email? | ❓ confirmar |
+| Persona | Email | Flujo |
+|---|---|---|
+| Nicole Carvajal (JLL) | Nicole.Carvajal@jll.com | 1A |
+| Valentina Bravo (TresA) | valentina.bravo@tresasociados.cl | 1A |
+| Sebastián Bravo (TresA — RR) | sebastian.bravo@tresasociados.cl | 1A |
+| Leonardo Cantillana (Araucana) | lcantillana@grupoaraucana.cl | 1A |
+| María José Castro | maria.castro@toesca.com | 1B |
+
+Notificaciones: **Microsoft Teams** (cuenta corporativa confirmada).
