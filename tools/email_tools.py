@@ -122,16 +122,13 @@ def list_emails_with_attachments(limit: int = 20) -> str:
     try:
         inbox = _get_inbox()
         messages = inbox.Items
-        messages.Sort("[ReceivedTime]", True)  # Más recientes primero
+        messages.Sort("[ReceivedTime]", True)
+        filtered = messages.Restrict("[HasAttachments] = True")
 
         found = []
-        checked = 0
-
-        for msg in messages:
-            if checked >= limit * 5:  # Revisar hasta 5x el límite buscando con Excel
+        for msg in filtered:
+            if len(found) >= limit:
                 break
-            checked += 1
-
             try:
                 excel_atts = []
                 for att in msg.Attachments:
@@ -147,9 +144,6 @@ def list_emails_with_attachments(limit: int = 20) -> str:
                         "fecha": str(msg.ReceivedTime)[:19],
                         "adjuntos": excel_atts,
                     })
-
-                if len(found) >= limit:
-                    break
             except Exception:
                 continue
 
@@ -230,24 +224,27 @@ def search_emails_by_subject(keyword: str, limit: int = 10) -> str:
         inbox = _get_inbox()
         messages = inbox.Items
         messages.Sort("[ReceivedTime]", True)
+        safe_kw = keyword.replace("'", "''")
+        filtered = messages.Restrict(
+            f"@SQL=\"urn:schemas:httpmail:subject\" LIKE '%{safe_kw}%'"
+        )
 
         found = []
-        for msg in messages:
+        for msg in filtered:
             if len(found) >= limit:
                 break
             try:
-                if keyword.lower() in (msg.Subject or "").lower():
-                    excel_atts = [
-                        att.FileName for att in msg.Attachments
-                        if att.FileName.lower().endswith((".xlsx", ".xls"))
-                    ]
-                    found.append({
-                        "entry_id": msg.EntryID,
-                        "asunto": msg.Subject,
-                        "remitente": msg.SenderEmailAddress,
-                        "fecha": str(msg.ReceivedTime)[:19],
-                        "adjuntos_excel": excel_atts,
-                    })
+                excel_atts = [
+                    att.FileName for att in msg.Attachments
+                    if att.FileName.lower().endswith((".xlsx", ".xls"))
+                ]
+                found.append({
+                    "entry_id": msg.EntryID,
+                    "asunto": msg.Subject,
+                    "remitente": msg.SenderEmailAddress,
+                    "fecha": str(msg.ReceivedTime)[:19],
+                    "adjuntos_excel": excel_atts,
+                })
             except Exception:
                 continue
 

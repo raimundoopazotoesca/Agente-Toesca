@@ -130,7 +130,10 @@ from tools.factsheet_tools import (
     guardar_fs,
 )
 from tools.ask_tools import preguntar_usuario
-from tools.balance_consolidado_tools import actualizar_balance_consolidado_pt
+from tools.balance_consolidado_tools import (
+    actualizar_balance_consolidado_pt,
+    actualizar_balance_consolidado_apoquindo,
+)
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -1981,6 +1984,27 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_consolidado_apoquindo",
+            "description": (
+                "Actualiza el Balance Consolidado Rentas Apoquindo para un trimestre. "
+                "Copia el ultimo vF, desplaza columnas historicas y rellena las hojas "
+                "Fondo Apoquindo e Inmobilaria Apoquindo segun la fuente inferida desde periodos pasados. "
+                "La regla general del wiki manda: decide EEFF vs Analisis mirando el mismo periodo del ano anterior. "
+                "Solo usar para meses fin de trimestre: 3, 6, 9, 12."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes":  {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año":  {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
@@ -2121,6 +2145,7 @@ def _dispatch(name: str, args: dict) -> str:
         "guardar_fs":                    lambda a: guardar_fs(a["fondo_key"], a["año"], a["mes"]),
         # Balance Consolidado PT
         "actualizar_balance_consolidado_pt": lambda a: actualizar_balance_consolidado_pt(a["mes"], a["año"]),
+        "actualizar_balance_consolidado_apoquindo": lambda a: actualizar_balance_consolidado_apoquindo(a["mes"], a["año"]),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -2146,7 +2171,7 @@ _TOOLS_GENERAL = {
     "leer_cdg_historico", "buscar_en_rent_roll",
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
     "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
-    "actualizar_balance_consolidado_pt",
+    "actualizar_balance_consolidado_pt", "actualizar_balance_consolidado_apoquindo",
 }
 
 _TOOLS_CDG = {
@@ -2163,7 +2188,7 @@ _TOOLS_CDG = {
     "pegar_rentabilidades_datos_fs", "copiar_datos_tir_rentas", "leer_tir_rentas_resumen",
     "actualizar_balance_input", "actualizar_fecha_bursatil_input",
     "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",
-    "actualizar_balance_consolidado_pt",
+    "actualizar_balance_consolidado_pt", "actualizar_balance_consolidado_apoquindo",
 }
 
 _TOOLS_NOI = {

@@ -307,13 +307,17 @@ Para abrir el CDG de un mes dado:
   2. Usar buscar_en_sharepoint(keyword="{AAMM}") para encontrar la ruta exacta
   3. Copiar al WORK_DIR con copiar_de_sharepoint(nombre_archivo, subcarpeta)
 
-BALANCE CONSOLIDADO RENTAS PT:
+BALANCES CONSOLIDADOS RENTAS PT / APOQUINDO:
   La regla general del wiki MANDA sobre los defaults:
   1. Para cada hoja y seccion (balance / EERR), mirar el mismo periodo del ano anterior en la planilla.
   2. Si todos los inputs terminan en 000, la fuente es EEFF PDF en M$ y se multiplica por 1.000.
   3. Si algun input no termina en 000, la fuente es planilla Analisis en pesos directos.
-  4. Usar los defaults documentados solo si no hay periodo comparable o no hay inputs suficientes.
-  5. Si la regla pide una fuente que la herramienta aun no sabe parsear, detener esa seccion y reportarlo; no inventar datos.
+  4. Para PT y Apoquindo, usar primero la tabla fija por quarter definida en la herramienta/wiki; fue derivada del historico 2025.
+  5. Usar inferencia historica/defaults documentados solo si no hay tabla fija para esa hoja/seccion.
+  6. Si la regla pide una fuente que la herramienta aun no sabe parsear, detener esa seccion y reportarlo; no inventar datos.
+  Herramientas:
+    - actualizar_balance_consolidado_pt(mes, año)
+    - actualizar_balance_consolidado_apoquindo(mes, año)
 
 ═══════════════════════════════════════════════════════════════
 VERIFICACIÓN DE ARCHIVOS — REGLA OBLIGATORIA
@@ -414,7 +418,7 @@ _INTENT_PATTERNS: dict[str, re.Pattern] = {
         r"control\s*de\s*gesti[oó]n|planilla|\bcdg\b|vr\s*(burs[aá]til|contable)|"
         r"precio(s)?\s*(de\s*)?cuota|burs[aá]til|dividendo|\baporte\b|reparto|"
         r"crear.*mes|mes\s*anterior|actualizar.*fecha|precios?\s*del?\s*mes|"
-        r"input\s*(ap|pt|ren)|hoja\s*input|balance\s*consolidado|rentas\s*pt|"
+        r"input\s*(ap|pt|ren)|hoja\s*input|balance\s*consolidado|rentas\s*(pt|apoquindo)|"
         r"vagente|vf\b|analisis|an[aá]lisis",
         re.I,
     ),

@@ -22,6 +22,7 @@
   - [x] Regla detección fuente: valores terminan en 000 → EEFF; si no → Análisis
   - [x] Regla cuentas duplicadas: excluir cuentas con mismo monto exacto en ambos lados; aplica a todos los balances
   - [ ] Implementar herramienta de actualización
+- [x] **Enseñar planilla Balance Consolidado Rentas Apoquindo:** Proceso documentado en `wiki/procesos/balance-consolidado-apoquindo.md`; herramienta `actualizar_balance_consolidado_apoquindo` registrada.
 - [ ] **Terminar de enseñar FS PT:** Completar la automatización y validación del Fact Sheet de Parque Titanium.
 - [ ] **Enseñar a usar planilla resumen recaudación.**
 

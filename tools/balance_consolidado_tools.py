@@ -14,6 +14,7 @@ import glob as glob_module
 import os
 import re
 import shutil
+import unicodedata
 from calendar import monthrange
 from datetime import date, datetime
 
@@ -30,8 +31,10 @@ TRI_EEFF_DIR = os.path.join(
     SHAREPOINT_DIR, "Fondo Rentas Inmobiliarias TRI", "EEFF"
 )
 PT_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondo Rentas PT", "EEFF")
+APO_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondo Rentas Apoquindo", "EEFF")
 
 HOJAS_INPUT = ["Fondo PT", "Inmob Boulevard", "Torre A"]
+APO_HOJAS_INPUT = ["Fondo Apoquindo", "Inmobilaria Apoquindo"]
 
 # ─── Helpers de rutas ─────────────────────────────────────────────────────────
 
@@ -41,6 +44,10 @@ def _quarter_end(mes: int, año: int) -> date:
 
 def _mes_a_q(mes: int) -> int:
     return {3: 1, 6: 2, 9: 3, 12: 4}[mes]
+
+
+def _period_status_label(mes: int, año: int) -> str:
+    return f"Actualizado {_mes_a_q(mes)}Q{año % 100:02d}"
 
 
 def _find_quarter_folder(parent: str, mes: int) -> str | None:
@@ -78,6 +85,87 @@ def _find_eeff_fondo_pt(mes: int, año: int) -> str | None:
     pattern = os.path.join(PT_EEFF_DIR, "**", f"*{año}{mes:02d}*PT*.pdf")
     matches = glob_module.glob(pattern, recursive=True)
     return matches[0] if matches else None
+
+
+def _find_latest_vf_apoquindo(año: int, mes: int) -> str | None:
+    """Encuentra el archivo vF mas reciente de Balance Consolidado Rentas Apoquindo."""
+    año_dir = os.path.join(BALANCES_DIR, str(año))
+    q_dir = _find_quarter_folder(año_dir, mes)
+    if q_dir:
+        for f in os.listdir(q_dir):
+            if "Balance Consolidado Rentas Apoquindo" in f and "vF" in f and f.endswith(".xlsx"):
+                return os.path.join(q_dir, f)
+    pattern = os.path.join(BALANCES_DIR, "**", "*Balance Consolidado Rentas Apoquindo*vF*.xlsx")
+    matches = glob_module.glob(pattern, recursive=True)
+    return max(matches, key=os.path.getmtime) if matches else None
+
+
+def _find_eeff_fondo_apoquindo(mes: int, año: int) -> str | None:
+    año_dir = os.path.join(APO_EEFF_DIR, str(año))
+    q_dir = _find_quarter_folder(año_dir, mes)
+    if q_dir:
+        for f in os.listdir(q_dir):
+            fl = f.lower()
+            if fl.endswith(".pdf") and "apoquindo" in fl:
+                return os.path.join(q_dir, f)
+    if mes == 3:
+        prev_q_dir = _find_quarter_folder(os.path.join(APO_EEFF_DIR, str(año - 1)), 12)
+        if prev_q_dir:
+            for f in os.listdir(prev_q_dir):
+                fl = f.lower()
+                if fl.endswith(".pdf") and "apoquindo" in fl:
+                    return os.path.join(prev_q_dir, f)
+    pattern = os.path.join(APO_EEFF_DIR, "**", f"*Apoquindo*{año}*{mes:02d}*.pdf")
+    matches = glob_module.glob(pattern, recursive=True)
+    return matches[0] if matches else None
+
+
+def _find_eeff_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
+    apo_dir = os.path.join(TRI_EEFF_DIR, "Inmobiliaria Apoquindo")
+    if os.path.isdir(apo_dir):
+        for f in os.listdir(apo_dir):
+            fl = f.lower()
+            if fl.endswith(".pdf") and "apoquindo" in fl:
+                return os.path.join(apo_dir, f)
+    pattern = os.path.join(TRI_EEFF_DIR, "**", "*Inmobiliaria Apoquindo*.pdf")
+    matches = glob_module.glob(pattern, recursive=True)
+    return matches[0] if matches else None
+
+
+def _find_analisis_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
+    apo_dir = os.path.join(TRI_EEFF_DIR, "Inmobiliaria Apoquindo")
+    if not os.path.isdir(apo_dir):
+        return None
+
+    exact_candidates = []
+    undated_candidates = []
+    period_tokens = (
+        f"{mes:02d}-{año}",
+        f"{año}-{mes:02d}",
+        f"{año} {mes:02d}",
+        f"{mes:02d}.{año}",
+    )
+    for f in os.listdir(apo_dir):
+        fl = f.lower()
+        fnorm = _norm_label(f)
+        if fl.startswith("~$") or not fl.endswith((".xlsx", ".xlsm")):
+            continue
+        if "apoquindo" not in fnorm:
+            continue
+        if "anal" not in fnorm and "matriz" not in fnorm:
+            continue
+        full = os.path.join(apo_dir, f)
+        score = int(os.path.getmtime(full) // 1_000_000)
+        if any(token in f for token in period_tokens):
+            exact_candidates.append((score, full))
+        elif not re.search(r"\d{2}[-.]\d{4}|\d{4}[- ]\d{2}", f):
+            undated_candidates.append((score, full))
+
+    if exact_candidates:
+        return max(exact_candidates)[1]
+    if undated_candidates:
+        return max(undated_candidates)[1]
+    return None
 
 
 def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
@@ -119,6 +207,24 @@ def _find_torre_a_files(mes: int, año: int) -> tuple[str | None, str | None]:
 def _find_torre_a_file(mes: int, año: int) -> str | None:
     return _find_torre_a_files(mes, año)[1]
 
+
+def _period_from_filename(path: str) -> tuple[int, int] | None:
+    match = re.search(r"(\d{2})\.(\d{4})", os.path.basename(path))
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _load_readonly_workbook(path: str, data_only: bool = True):
+    try:
+        return openpyxl.load_workbook(path, read_only=True, data_only=data_only)
+    except (PermissionError, OSError):
+        os.makedirs(WORK_DIR, exist_ok=True)
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", os.path.basename(path))
+        tmp_path = os.path.join(WORK_DIR, f"_tmp_{safe_name}")
+        shutil.copy2(path, tmp_path)
+        return openpyxl.load_workbook(tmp_path, read_only=True, data_only=data_only)
+
 # ─── PDF parsing ──────────────────────────────────────────────────────────────
 
 def _collect_page_values(page_text: str) -> list:
@@ -134,6 +240,22 @@ def _collect_page_values(page_text: str) -> list:
             values.append(-int(s[1:-1].replace(".", "")))
         elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
             values.append(int(s.replace(".", "")))
+    return values
+
+
+def _collect_page_values_with_plain_thousands(page_text: str) -> list:
+    """Variante para PDFs Apoquindo: incluye montos de 3+ digitos sin punto."""
+    values = []
+    for line in page_text.split("\n"):
+        s = line.strip()
+        if s == "-":
+            values.append(None)
+        elif re.fullmatch(r"\(\d{1,3}(\.\d{3})*\)", s):
+            values.append(-int(s[1:-1].replace(".", "")))
+        elif re.fullmatch(r"\d{1,3}(\.\d{3})+", s):
+            values.append(int(s.replace(".", "")))
+        elif re.fullmatch(r"\d{3,}", s):
+            values.append(int(s))
     return values
 
 
@@ -332,27 +454,149 @@ def _parse_eeff_torre_a_pdf(pdf_path: str) -> dict:
 
     return result
 
+def _parse_eeff_fondo_apoquindo_pdf(pdf_path: str) -> dict:
+    """Parsea EEFF Fondo Apoquindo PDF. Retorna valores en pesos (M$ x 1000)."""
+    from markitdown import MarkItDown
+    md = MarkItDown()
+    text = md.convert(pdf_path).text_content
+    pages = text.split("\x0c")
+
+    result = {}
+
+    def _m(v):
+        return v * 1000 if v is not None else 0
+
+    p5 = _collect_page_values_with_plain_thousands(pages[5])
+    if len(p5) >= 19:
+        result["efectivo"] = _m(p5[0])
+        result["af_costo_nc"] = _m(p5[11])
+        result["total_activo"] = _m(p5[18])
+
+    p6 = _collect_page_values_with_plain_thousands(pages[6])
+    if len(p6) >= 23:
+        result["cxp_op_pc"] = _m(p6[3])
+        result["remu_soc_admin"] = _m(p6[4])
+        result["otros_doc_cxp"] = _m(p6[5])
+        result["total_pc"] = _m(p6[8])
+        result["otros_pasivos_nc"] = _m(p6[14])
+        result["total_pnc"] = _m(p6[15])
+        result["aportes"] = _m(p6[16])
+        result["otras_reservas"] = _m(p6[17])
+        result["res_acum"] = _m(p6[18])
+        result["res_ej"] = _m(p6[19])
+        result["div_provisorios"] = _m(p6[20])
+        result["total_pat"] = _m(p6[21])
+        result["total_pasivo_y_pat"] = _m(p6[22])
+
+    p7 = _collect_page_values_with_plain_thousands(pages[7])
+    eerr_map = {
+        0: "intereses",
+        4: "cambio_vr",
+        5: "venta_instrumentos",
+        9: "res_inv_met_part",
+        13: "remu_cv",
+        14: "comision_adm",
+        15: "honor_custodia",
+        20: "costos_finan",
+        22: "impuesto_ext",
+        23: "resultado",
+        24: "cobertura_flujo",
+        25: "ajustes_conversion",
+        26: "ajustes_inv_met_part",
+        27: "otros_ajustes_pat",
+        29: "total_resultado_integral",
+    }
+    for pos, key in eerr_map.items():
+        if len(p7) > pos:
+            result[key] = _m(p7[pos])
+
+    return result
+
+
+def _parse_eeff_inmobiliaria_apoquindo_pdf(pdf_path: str) -> dict:
+    """Parsea EEFF Inmobiliaria Apoquindo PDF. Retorna valores en pesos (M$ x 1000)."""
+    from markitdown import MarkItDown
+    md = MarkItDown()
+    text = md.convert(pdf_path).text_content
+    pages = text.split("\x0c")
+
+    result = {}
+
+    def _m(v):
+        return v * 1000 if v is not None else 0
+
+    p5 = _collect_page_values_with_plain_thousands(pages[5])
+    if len(p5) >= 15:
+        result["efectivo"] = _m(p5[0])
+        result["deudores"] = _m(p5[1])
+        result["act_imp_corr"] = _m(p5[2])
+        result["total_ac"] = _m(p5[3])
+        result["prop_inv"] = _m(p5[8])
+        result["act_imp_dif"] = _m(p5[9])
+        result["total_anc"] = _m(p5[10])
+        result["total_activo"] = _m(p5[14])
+
+    p6 = _collect_page_values_with_plain_thousands(pages[6])
+    if len(p6) >= 23:
+        result["otros_pf_corr"] = _m(p6[0])
+        result["cxp_op_pc"] = _m(p6[1])
+        result["total_pc"] = _m(p6[2])
+        result["otros_pf_nc"] = _m(p6[6])
+        result["cxp_er_nc"] = _m(p6[7])
+        result["otros_pasivos_nc"] = _m(p6[8])
+        result["total_pnc"] = _m(p6[9])
+        result["total_pasivos"] = _m(p6[14])
+        result["capital"] = _m(p6[16])
+        result["otras_reservas"] = 61000
+        result["ganancias_acum"] = _m(p6[17])
+        result["total_pat"] = _m(p6[18])
+        result["total_pasivo_y_pat"] = _m(p6[22])
+
+    p7 = _collect_page_values_with_plain_thousands(pages[7])
+    if len(p7) >= 14:
+        result["ingresos"] = _m(p7[0])
+        result["costo_ventas"] = _m(p7[1])
+        result["gasto_admin"] = _m(p7[3])
+        result["ingresos_fin"] = _m(p7[4])
+        result["costos_fin"] = _m(p7[5])
+        result["deterioro_cxc"] = _m(p7[6])
+        result["var_vr_prop_inv"] = _m(p7[7])
+        result["otros_egresos"] = _m(p7[8])
+        result["unidades_reajuste"] = _m(p7[9])
+        result["dif_cambio"] = _m(p7[10])
+        result["impuestos"] = _m(p7[12])
+        result["resultado"] = _m(p7[13])
+
+    p8 = _collect_page_values_with_plain_thousands(pages[8])
+    if len(p8) >= 4:
+        result["res_acum_inicio"] = _m(p8[3])
+
+    return result
+
+
 # ─── Análisis xlsx: Boulevard EERR ────────────────────────────────────────────
 
 def _read_analisis_eerr(xlsx_path: str, sheet_name: str = "EERR") -> dict:
     """
-    Lee la hoja EERR de un Análisis xlsx.
-    Retorna dict: label_normalizado → valor (pesos directo).
-    El label es col C (o col D según hoja), el valor es la columna D (col 4).
+    Lee la hoja EERR de un Analisis xlsx.
+    Retorna dict: label_normalizado -> valor (pesos directo).
+    Detecta pares label/valor en columnas adyacentes.
     """
-    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    wb = _load_readonly_workbook(xlsx_path, data_only=True)
     if sheet_name not in wb.sheetnames:
         wb.close()
         return {}
     ws = wb[sheet_name]
     result = {}
     for row in ws.iter_rows(values_only=True):
-        # Label está en col C (índice 2), valor en col D (índice 3)
-        label = row[2] if len(row) > 2 else None
-        val   = row[3] if len(row) > 3 else None
-        if label and isinstance(label, str) and label.strip() and val is not None:
-            key = _norm_label(label)
-            result[key] = val
+        for idx in range(0, max(len(row) - 1, 0)):
+            label = row[idx]
+            val = row[idx + 1]
+            if not (label and isinstance(label, str) and label.strip()):
+                continue
+            if not isinstance(val, (int, float)):
+                continue
+            result[_norm_label(label)] = val
     wb.close()
     return result
 
@@ -362,7 +606,7 @@ def _read_torre_a_balance(xlsx_path: str) -> dict:
     Lee Estado de Situacion de Torre A (cols B=label, C=valor, I=pasivo_label, J=pasivo_val).
     Retorna dict: label_normalizado → valor (pesos).
     """
-    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    wb = _load_readonly_workbook(xlsx_path, data_only=True)
     ws = wb["Estado de Situacion"]
     result = {}
     for row in ws.iter_rows(values_only=True):
@@ -436,12 +680,133 @@ def _read_boulevard_balance(xlsx_path: str) -> dict:
     }
 
 
+def _read_inmobiliaria_apoquindo_analisis(xlsx_path: str) -> tuple[dict, dict]:
+    """
+    Lee Analisis/Matriz de Inmobiliaria Apoquindo.
+
+    La version asistida trae columna K en BT con formulas de ayuda, pero esta
+    funcion reconstruye la logica desde columnas estandar de BT:
+      G=Activo, H=Pasivo, I=Perdida, J=Ganancia.
+    Para EERR usa la hoja EERR si existe; si no, calcula J-I desde BT.
+    """
+    wb = _load_readonly_workbook(xlsx_path, data_only=True)
+    if "BT" not in wb.sheetnames:
+        wb.close()
+        return {}, {}
+
+    ws_bt = wb["BT"]
+    bt_rows = []
+    by_code = {}
+    for row in ws_bt.iter_rows(min_row=1, values_only=True):
+        code = row[0] if len(row) > 0 else None
+        desc = row[1] if len(row) > 1 else None
+        if not code or not isinstance(code, str):
+            continue
+        code = code.strip()
+        desc = desc.strip() if isinstance(desc, str) else ""
+        item = {
+            "code": code,
+            "desc": desc,
+            "activo": row[6] if len(row) > 6 and isinstance(row[6], (int, float)) else 0,
+            "pasivo": row[7] if len(row) > 7 and isinstance(row[7], (int, float)) else 0,
+            "perdida": row[8] if len(row) > 8 and isinstance(row[8], (int, float)) else 0,
+            "ganancia": row[9] if len(row) > 9 and isinstance(row[9], (int, float)) else 0,
+        }
+        bt_rows.append(item)
+        by_code[code] = item
+
+    def _a(code: str) -> float:
+        return by_code.get(code, {}).get("activo", 0) or 0
+
+    def _p(code: str) -> float:
+        return by_code.get(code, {}).get("pasivo", 0) or 0
+
+    def _sum_a(prefixes=(), codes=()):
+        return sum(
+            item["activo"]
+            for item in bt_rows
+            if item["code"] in codes or any(item["code"].startswith(prefix) for prefix in prefixes)
+        )
+
+    def _sum_p(prefixes=(), codes=()):
+        return sum(
+            item["pasivo"]
+            for item in bt_rows
+            if item["code"] in codes or any(item["code"].startswith(prefix) for prefix in prefixes)
+        )
+
+    balance = {
+        # Columna K asistida: SUM(G9:G15)
+        "efectivo": _sum_a(prefixes=("11.02.",), codes=("11.03.50",)),
+        # Columna K asistida: SUM(G16:G22,G24)-H19
+        "deudores": (
+            _sum_a(
+                codes=(
+                    "11.05.10", "11.06.01", "11.07.10", "11.07.35",
+                    "11.07.40", "11.07.45", "11.08.01",
+                )
+            )
+            - _p("11.07.15")
+        ),
+        "act_imp_corr": _a("11.10.13"),
+        "cxc_er_nc": _a("11.08.02"),
+        "otros_activos_nc": _a("11.07.55"),
+        "prop_inv": _a("12.01.01"),
+        "act_imp_dif": _a("11.10.40"),
+        "otros_pf_corr": _p("21.01.01"),
+        # Columna K asistida: SUM(H31:H38)
+        "cxp_op_pc": _sum_p(
+            codes=(
+                "21.07.10", "21.10.01", "21.10.18", "21.10.20",
+                "21.11.02", "21.12.15", "21.13.10", "21.13.12",
+            )
+        ),
+        # Columna K asistida: H40+H46
+        "otros_pf_nc": _p("21.20.30") + _p("21.21.06"),
+        # Columna K asistida: SUM(H42:H45)
+        "cxp_er_nc_pasivo": _sum_p(codes=("21.21.01", "21.21.02", "21.21.03", "21.21.04")),
+        "otros_pasivos_nc": 0,
+        "pasivo_imp_dif": 0,
+        "capital": _p("24.01.10"),
+        "otras_reservas": _p("24.01.60"),
+        "res_acum": -_a("24.01.30") if _a("24.01.30") else _p("24.01.30"),
+        "dividendo": 0,
+    }
+
+    eerr = {}
+    if "EERR" in wb.sheetnames:
+        ws_eerr = wb["EERR"]
+        header = [ws_eerr.cell(row=4, column=c).value for c in range(1, ws_eerr.max_column + 1)]
+        total_col = next((i + 1 for i, v in enumerate(header) if isinstance(v, str) and "total" in v.lower()), None)
+        if total_col:
+            for r in range(5, ws_eerr.max_row + 1):
+                label = ws_eerr.cell(row=r, column=1).value
+                value = ws_eerr.cell(row=r, column=total_col).value
+                if isinstance(label, str) and isinstance(value, (int, float)):
+                    eerr[_norm_label(label)] = value
+
+    if not eerr:
+        for item in bt_rows:
+            if item["code"][:2] in ("51", "61", "62", "63", "64"):
+                label = f"{item['code']} - {item['desc']}"
+                eerr[_norm_label(label)] = (item["ganancia"] or 0) - (item["perdida"] or 0)
+
+    balance["res_ej"] = eerr.get(_norm_label("Total general"))
+    if balance["res_ej"] is None:
+        balance["res_ej"] = sum(v for k, v in eerr.items() if k != _norm_label("Total general"))
+
+    wb.close()
+    return balance, eerr
+
+
 def _norm_label(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
     return re.sub(r"\s+", " ", s.strip().lower())
 
 # ─── Column shift ─────────────────────────────────────────────────────────────
 
-def _shift_input_sheets(wb_vals, wb_forms):
+def _shift_input_sheets(wb_vals, wb_forms, hojas_input=None):
     """
     En cada hoja de input (Fondo PT, Inmob Boulevard, Torre A):
     copia valores D→E, E→F, ..., J→K. Limpia celdas valor en D.
@@ -451,7 +816,10 @@ def _shift_input_sheets(wb_vals, wb_forms):
     """
     D_COL, K_COL = 4, 11
 
-    for sheet_name in HOJAS_INPUT:
+    if hojas_input is None:
+        hojas_input = HOJAS_INPUT
+
+    for sheet_name in hojas_input:
         ws_v = wb_vals[sheet_name]
         ws_f = wb_forms[sheet_name]
 
@@ -519,6 +887,127 @@ def _fill_fondo_pt(ws, d: dict, fill_balance: bool = True, fill_eerr: bool = Tru
         _w(95, d.get("otros_gastos"))
         _w(99, d.get("costos_finan"))
         _w(101, d.get("impuesto_ext"))
+
+
+def _fill_fondo_apoquindo(ws, d: dict, fill_balance: bool = True, fill_eerr: bool = True):
+    """Escribe valores de Fondo Apoquindo en col D."""
+    COL = 4
+
+    def _w(row, val):
+        ws.cell(row=row, column=COL).value = val if val else None
+
+    if fill_balance:
+        _w(7, d.get("efectivo"))
+        _w(20, d.get("af_costo_nc"))
+        _w(34, d.get("cxp_op_pc"))
+        _w(35, d.get("remu_soc_admin"))
+        _w(36, d.get("otros_doc_cxp"))
+        _w(47, d.get("otros_pasivos_nc"))
+        _w(51, d.get("aportes"))
+        _w(52, d.get("otras_reservas"))
+        _w(53, d.get("res_acum"))
+        _w(54, d.get("res_ej"))
+        _w(55, d.get("div_provisorios"))
+
+    if fill_eerr:
+        _w(65, d.get("intereses"))
+        _w(69, d.get("cambio_vr"))
+        _w(70, d.get("venta_instrumentos"))
+        _w(74, d.get("res_inv_met_part"))
+        _w(80, d.get("remu_cv"))
+        _w(81, d.get("comision_adm"))
+        _w(82, d.get("honor_custodia"))
+        _w(88, d.get("costos_finan"))
+        _w(90, d.get("impuesto_ext"))
+        _w(95, d.get("cobertura_flujo"))
+        _w(96, d.get("ajustes_conversion"))
+        _w(97, d.get("ajustes_inv_met_part"))
+        _w(98, d.get("otros_ajustes_pat"))
+
+
+def _fill_inmobiliaria_apoquindo_eeff(
+    ws,
+    d: dict,
+    fill_balance: bool = True,
+    fill_eerr: bool = True,
+):
+    """Escribe Inmobilaria Apoquindo desde EEFF PDF en col D."""
+    COL = 4
+
+    def _w(row, val):
+        ws.cell(row=row, column=COL).value = val if val else None
+
+    if fill_balance:
+        _w(7, d.get("efectivo"))
+        _w(8, d.get("deudores"))
+        _w(9, d.get("act_imp_corr"))
+        _w(15, d.get("prop_inv"))
+        _w(17, d.get("act_imp_dif"))
+        _w(23, d.get("otros_pf_corr"))
+        _w(24, d.get("cxp_op_pc"))
+        _w(28, d.get("otros_pf_nc"))
+        _w(29, d.get("cxp_er_nc"))
+        _w(30, d.get("otros_pasivos_nc"))
+        _w(35, d.get("capital"))
+        _w(36, d.get("otras_reservas"))
+        _w(37, d.get("res_acum_inicio") or d.get("ganancias_acum"))
+        _w(39, d.get("resultado"))
+
+    if fill_eerr:
+        _w(49, d.get("ingresos"))
+        _w(52, d.get("costo_ventas"))
+        _w(57, d.get("gasto_admin"))
+        _w(79, d.get("ingresos_fin"))
+        _w(88, d.get("costos_fin"))
+        _w(75, d.get("deterioro_cxc"))
+        _w(84, d.get("var_vr_prop_inv"))
+        _w(73, d.get("otros_egresos"))
+        _w(82, d.get("unidades_reajuste"))
+        _w(83, d.get("dif_cambio"))
+        _w(92, d.get("impuestos"))
+
+
+def _fill_inmobiliaria_apoquindo_analisis(
+    ws,
+    balance_d: dict,
+    eerr_d: dict,
+    fill_balance: bool = True,
+    fill_eerr: bool = True,
+):
+    """Escribe Inmobilaria Apoquindo desde Analisis/Matriz en col D."""
+    COL = 4
+
+    def _w(row, val):
+        ws.cell(row=row, column=COL).value = val if val is not None else None
+
+    if fill_balance:
+        _w(7, balance_d.get("efectivo"))
+        _w(8, balance_d.get("deudores"))
+        _w(9, balance_d.get("act_imp_corr"))
+        _w(13, balance_d.get("cxc_er_nc"))
+        _w(14, balance_d.get("otros_activos_nc"))
+        _w(15, balance_d.get("prop_inv"))
+        _w(17, balance_d.get("act_imp_dif"))
+        _w(23, balance_d.get("otros_pf_corr"))
+        _w(24, balance_d.get("cxp_op_pc"))
+        _w(28, balance_d.get("otros_pf_nc"))
+        _w(29, balance_d.get("cxp_er_nc_pasivo"))
+        _w(30, balance_d.get("otros_pasivos_nc"))
+        _w(31, balance_d.get("pasivo_imp_dif"))
+        _w(35, balance_d.get("capital"))
+        _w(36, balance_d.get("otras_reservas"))
+        _w(37, balance_d.get("res_acum"))
+        _w(38, balance_d.get("dividendo"))
+        _w(39, balance_d.get("res_ej"))
+
+    if fill_eerr:
+        for row_num in range(49, 94):
+            label = ws.cell(row=row_num, column=2).value
+            if not isinstance(label, str):
+                continue
+            key = _norm_label(label)
+            if key in eerr_d:
+                _w(row_num, eerr_d[key])
 
 
 def _fill_boulevard(
@@ -672,6 +1161,121 @@ DEFAULT_SOURCE_PLAN = {
     ("Torre A", "eerr"): "analisis",
 }
 
+PT_SOURCE_BY_QUARTER = {
+    1: {
+        ("Fondo PT", "balance"): "eeff",
+        ("Fondo PT", "eerr"): "eeff",
+        ("Inmob Boulevard", "balance"): "analisis",
+        ("Inmob Boulevard", "eerr"): "analisis",
+        ("Torre A", "balance"): "analisis",
+        ("Torre A", "eerr"): "analisis",
+    },
+    2: {
+        ("Fondo PT", "balance"): "eeff",
+        ("Fondo PT", "eerr"): "eeff",
+        ("Inmob Boulevard", "balance"): "analisis",
+        ("Inmob Boulevard", "eerr"): "analisis",
+        ("Torre A", "balance"): "analisis",
+        ("Torre A", "eerr"): "analisis",
+    },
+    3: {
+        ("Fondo PT", "balance"): "eeff",
+        ("Fondo PT", "eerr"): "eeff",
+        ("Inmob Boulevard", "balance"): "analisis",
+        ("Inmob Boulevard", "eerr"): "analisis",
+        ("Torre A", "balance"): "analisis",
+        ("Torre A", "eerr"): "analisis",
+    },
+    4: {
+        ("Fondo PT", "balance"): "eeff",
+        ("Fondo PT", "eerr"): "eeff",
+        ("Inmob Boulevard", "balance"): "eeff",
+        ("Inmob Boulevard", "eerr"): "analisis",
+        ("Torre A", "balance"): "analisis",
+        ("Torre A", "eerr"): "analisis",
+    },
+}
+
+APO_DEFAULT_SOURCE_PLAN = {
+    ("Fondo Apoquindo", "balance"): "eeff",
+    ("Fondo Apoquindo", "eerr"): "eeff",
+    ("Inmobilaria Apoquindo", "balance"): "analisis",
+    ("Inmobilaria Apoquindo", "eerr"): "analisis",
+}
+
+APO_SOURCE_BY_QUARTER = {
+    q: {
+        ("Fondo Apoquindo", "balance"): "eeff",
+        ("Fondo Apoquindo", "eerr"): "eeff",
+        ("Inmobilaria Apoquindo", "balance"): "analisis",
+        ("Inmobilaria Apoquindo", "eerr"): "analisis",
+    }
+    for q in (1, 2, 3, 4)
+}
+
+RENTAS_NUEVO_SOURCE_BY_QUARTER = {
+    1: {
+        ("Inmosa", "balance"): "analisis",
+        ("Inmosa", "eerr"): "analisis",
+        ("Chañarcillo", "balance"): "analisis",
+        ("Chañarcillo", "eerr"): "analisis",
+        ("Curicó", "balance"): "analisis",
+        ("Curicó", "eerr"): "analisis",
+        ("Inmob VC", "balance"): "analisis",
+        ("Inmob VC", "eerr"): "analisis",
+        ("Viña Centro", "balance"): "analisis",
+        ("Viña Centro", "eerr"): "analisis",
+        ("Fondo Rentas", "balance"): "eeff",
+        ("Fondo Rentas", "eerr"): "eeff",
+    },
+    2: {
+        ("Inmosa", "balance"): "analisis",
+        ("Inmosa", "eerr"): "analisis",
+        ("Chañarcillo", "balance"): "analisis",
+        ("Chañarcillo", "eerr"): "analisis",
+        ("Curicó", "balance"): "analisis",
+        ("Curicó", "eerr"): "analisis",
+        ("Inmob VC", "balance"): "analisis",
+        ("Inmob VC", "eerr"): "analisis",
+        ("Viña Centro", "balance"): "analisis",
+        ("Viña Centro", "eerr"): "analisis",
+        ("Fondo Rentas", "balance"): "analisis",
+        ("Fondo Rentas", "eerr"): "eeff",
+        ("Machalí", "balance"): "analisis",
+        ("Machalí", "eerr"): "analisis",
+    },
+    3: {
+        ("Inmosa", "balance"): "analisis",
+        ("Inmosa", "eerr"): "analisis",
+        ("Chañarcillo", "balance"): "analisis",
+        ("Chañarcillo", "eerr"): "analisis",
+        ("Curicó", "balance"): "analisis",
+        ("Curicó", "eerr"): "analisis",
+        ("Inmob VC", "balance"): "analisis",
+        ("Inmob VC", "eerr"): "analisis",
+        ("Viña Centro", "balance"): "analisis",
+        ("Viña Centro", "eerr"): "analisis",
+        ("Fondo Rentas", "balance"): "analisis",
+        ("Fondo Rentas", "eerr"): "analisis",
+    },
+    4: {
+        ("Inmosa", "balance"): "eeff",
+        ("Inmosa", "eerr"): "analisis",
+        ("Chañarcillo", "balance"): "analisis",
+        ("Chañarcillo", "eerr"): "analisis",
+        ("Curicó", "balance"): "analisis",
+        ("Curicó", "eerr"): "analisis",
+        ("Inmob VC", "balance"): "analisis",
+        ("Inmob VC", "eerr"): "analisis",
+        ("Viña Centro", "balance"): "analisis",
+        ("Viña Centro", "eerr"): "analisis",
+        ("Fondo Rentas", "balance"): "eeff",
+        ("Fondo Rentas", "eerr"): "eeff",
+        ("Machalí", "balance"): "eeff",
+        ("Machalí", "eerr"): "analisis",
+    },
+}
+
 SECTION_ROWS = {
     "balance": range(5, 71),
     "eerr": range(73, 125),
@@ -747,13 +1351,35 @@ def _infer_source_from_history(ws_vals, ws_forms, target_period: date, section: 
     return None, None, 0, "sin historico con inputs"
 
 
-def _build_source_plan(wb_vals, wb_forms, target_period: date) -> tuple[dict, list[str]]:
+def _build_source_plan(
+    wb_vals,
+    wb_forms,
+    target_period: date,
+    hojas_input=None,
+    default_source_plan=None,
+    source_by_quarter=None,
+) -> tuple[dict, list[str]]:
     """Wiki rule wins: infer EEFF vs Analisis from historical periods."""
-    plan = dict(DEFAULT_SOURCE_PLAN)
+    if hojas_input is None:
+        hojas_input = HOJAS_INPUT
+    if default_source_plan is None:
+        default_source_plan = DEFAULT_SOURCE_PLAN
+    plan = dict(default_source_plan)
     notes = []
+    quarter = _mes_a_q(target_period.month)
 
-    for sheet_name in HOJAS_INPUT:
+    quarter_plan = (source_by_quarter or {}).get(quarter, {})
+    if quarter_plan:
+        for key, source in quarter_plan.items():
+            if key[0] in hojas_input:
+                plan[key] = source
+        notes.append(f"  Fuente definida por tabla fija Q{quarter} (derivada de historico 2025)")
+
+    for sheet_name in hojas_input:
         for section in ("balance", "eerr"):
+            if (sheet_name, section) in quarter_plan:
+                notes.append(f"  {sheet_name} {section}: {plan[(sheet_name, section)]} (tabla fija Q{quarter})")
+                continue
             inferred, col, n_values, basis = _infer_source_from_history(
                 wb_vals[sheet_name], wb_forms[sheet_name], target_period, section
             )
@@ -782,6 +1408,15 @@ def _warn_unsupported_sources(plan: dict) -> list[str]:
         unsupported.append("  Fondo PT EERR: wiki indica Analisis, pero no hay lector implementado")
     if _source(plan, "Inmob Boulevard", "eerr") != "analisis":
         unsupported.append("  Inmob Boulevard EERR: wiki indica EEFF, pero no hay parser EERR PDF implementado")
+    return unsupported
+
+
+def _warn_unsupported_sources_apoquindo(plan: dict) -> list[str]:
+    unsupported = []
+    if _source(plan, "Fondo Apoquindo", "balance") != "eeff":
+        unsupported.append("  Fondo Apoquindo balance: wiki indica Analisis, pero no hay lector implementado")
+    if _source(plan, "Fondo Apoquindo", "eerr") != "eeff":
+        unsupported.append("  Fondo Apoquindo EERR: wiki indica Analisis, pero no hay lector implementado")
     return unsupported
 
 # ─── Validación ───────────────────────────────────────────────────────────────
@@ -851,6 +1486,12 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
     if not vf_path:
         return "Error: no se encontró ningún archivo vF de Balance Consolidado Rentas PT"
 
+    if _period_from_filename(vf_path) == (mes, año):
+        return (
+            f"Balance Consolidado Rentas PT {mes:02d}.{año} ya existe como vF: "
+            f"{os.path.basename(vf_path)}. No se crea vAgente para un periodo ya cerrado."
+        )
+
     lines.append(f"Fuente vF: {os.path.basename(vf_path)}")
 
     # 2. Crear archivo vAgente
@@ -867,7 +1508,12 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
     wb_forms = openpyxl.load_workbook(dest_path, data_only=False)
 
     fecha_periodo = _quarter_end(mes, año)
-    source_plan, source_notes = _build_source_plan(wb_vals, wb_forms, fecha_periodo)
+    source_plan, source_notes = _build_source_plan(
+        wb_vals,
+        wb_forms,
+        fecha_periodo,
+        source_by_quarter=PT_SOURCE_BY_QUARTER,
+    )
     lines.append("Regla wiki EEFF/Analisis:")
     lines.extend(source_notes)
     unsupported_sources = _warn_unsupported_sources(source_plan)
@@ -881,9 +1527,12 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
 
     # 5. Fecha del período (último día del trimestre)
     fecha_dt = datetime(fecha_periodo.year, fecha_periodo.month, fecha_periodo.day)
+    status_label = _period_status_label(mes, año)
     for hn in HOJAS_INPUT:
+        wb_forms[hn].cell(row=2, column=2).value = status_label
         wb_forms[hn].cell(row=2, column=4).value = fecha_dt
     lines.append(f"Fecha período: {fecha_periodo}")
+    lines.append(f"Estado B2: {status_label}")
     lines.append("")
 
     # ── EEFF Fondo PT ─────────────────────────────────────────────────────────
@@ -1043,6 +1692,174 @@ def actualizar_balance_consolidado_pt(mes: int, año: int) -> str:
             lines.append(f"  {hn}: {'' if fecha else 'sin fecha'}{'' if val_key is not None else ', sin efectivo'}")
 
     # ── Guardar ────────────────────────────────────────────────────────────────
+    wb_forms.save(dest_path)
+    wb_forms.close()
+    wb_vals.close()
+    lines.append("")
+    lines.append(f"Archivo guardado en: {dest_path}")
+    lines.append("Abrir en Excel y verificar que las formulas recalculen correctamente.")
+
+    return "\n".join(lines)
+
+
+def actualizar_balance_consolidado_apoquindo(mes: int, año: int) -> str:
+    """
+    Actualiza el Balance Consolidado Rentas Apoquindo para el periodo dado.
+
+    Usa la misma logica de PT: copia vF, desplaza D:K, escribe fecha nueva,
+    infiere EEFF vs Analisis desde periodos pasados y rellena solo las fuentes
+    que la herramienta sabe parsear.
+    """
+    if mes not in (3, 6, 9, 12):
+        return f"Error: mes={mes} no es fin de trimestre (usar 3, 6, 9 o 12)"
+
+    lines = [f"=== Balance Consolidado Apoquindo {mes:02d}.{año} ===", ""]
+
+    vf_path = _find_latest_vf_apoquindo(año, mes)
+    if not vf_path:
+        for y in sorted(os.listdir(BALANCES_DIR), reverse=True):
+            ydir = os.path.join(BALANCES_DIR, y)
+            if os.path.isdir(ydir):
+                vf_path = _find_latest_vf_apoquindo(int(y) if y.isdigit() else año, mes)
+                if vf_path:
+                    break
+    if not vf_path:
+        return "Error: no se encontro ningun archivo vF de Balance Consolidado Rentas Apoquindo"
+
+    if _period_from_filename(vf_path) == (mes, año):
+        return (
+            f"Balance Consolidado Rentas Apoquindo {mes:02d}.{año} ya existe como vF: "
+            f"{os.path.basename(vf_path)}. No se crea vAgente para un periodo ya cerrado."
+        )
+
+    lines.append(f"Fuente vF: {os.path.basename(vf_path)}")
+
+    mm_yyyy = f"{mes:02d}.{año}"
+    dest_name = f"{mm_yyyy}- Balance Consolidado Rentas Apoquindo vAgente.xlsx"
+    dest_dir = os.path.dirname(vf_path)
+    dest_path = os.path.join(dest_dir, dest_name)
+    shutil.copy2(vf_path, dest_path)
+    lines.append(f"Archivo destino: {dest_name}")
+    lines.append("")
+
+    wb_vals = openpyxl.load_workbook(dest_path, data_only=True)
+    wb_forms = openpyxl.load_workbook(dest_path, data_only=False)
+
+    missing_sheets = [s for s in APO_HOJAS_INPUT if s not in wb_forms.sheetnames]
+    if missing_sheets:
+        wb_forms.close()
+        wb_vals.close()
+        return "Error: faltan hojas esperadas en la planilla: " + ", ".join(missing_sheets)
+
+    fecha_periodo = _quarter_end(mes, año)
+    source_plan, source_notes = _build_source_plan(
+        wb_vals,
+        wb_forms,
+        fecha_periodo,
+        hojas_input=APO_HOJAS_INPUT,
+        default_source_plan=APO_DEFAULT_SOURCE_PLAN,
+        source_by_quarter=APO_SOURCE_BY_QUARTER,
+    )
+    lines.append("Regla wiki EEFF/Analisis:")
+    lines.extend(source_notes)
+    unsupported_sources = _warn_unsupported_sources_apoquindo(source_plan)
+    if unsupported_sources:
+        lines.append("  Avisos de fuente no soportada:")
+        lines.extend(unsupported_sources)
+    lines.append("")
+
+    _shift_input_sheets(wb_vals, wb_forms, APO_HOJAS_INPUT)
+
+    fecha_dt = datetime(fecha_periodo.year, fecha_periodo.month, fecha_periodo.day)
+    status_label = _period_status_label(mes, año)
+    for hn in APO_HOJAS_INPUT:
+        wb_forms[hn].cell(row=2, column=2).value = status_label
+        wb_forms[hn].cell(row=2, column=4).value = fecha_dt
+    lines.append(f"Fecha periodo: {fecha_periodo}")
+    lines.append(f"Estado B2: {status_label}")
+    lines.append("")
+
+    fondo_balance_from_eeff = _source(source_plan, "Fondo Apoquindo", "balance") == "eeff"
+    fondo_eerr_from_eeff = _source(source_plan, "Fondo Apoquindo", "eerr") == "eeff"
+    pdf_fondo = _find_eeff_fondo_apoquindo(mes, año)
+    if pdf_fondo and (fondo_balance_from_eeff or fondo_eerr_from_eeff):
+        lines.append(f"EEFF Fondo Apoquindo: {os.path.basename(pdf_fondo)}")
+        try:
+            fondo_d = _parse_eeff_fondo_apoquindo_pdf(pdf_fondo)
+            _fill_fondo_apoquindo(
+                wb_forms["Fondo Apoquindo"],
+                fondo_d,
+                fill_balance=fondo_balance_from_eeff,
+                fill_eerr=fondo_eerr_from_eeff,
+            )
+            lines.append(f"  Efectivo: {fondo_d.get('efectivo', 0):,.0f}")
+            lines.append(f"  Act. fin. costo amortizado NC: {fondo_d.get('af_costo_nc', 0):,.0f}")
+            lines.append(f"  Total Activo: {fondo_d.get('total_activo', 0):,.0f}")
+            lines.append(f"  Resultado ejercicio: {fondo_d.get('res_ej', 0):,.0f}")
+        except Exception as e:
+            lines.append(f"  Error parseo PDF Fondo Apoquindo: {e}")
+    elif not (fondo_balance_from_eeff or fondo_eerr_from_eeff):
+        lines.append("Fondo Apoquindo no actualizado: regla wiki no pide EEFF y no hay lector de Analisis")
+    else:
+        lines.append("No se encontro EEFF PDF Fondo Apoquindo; hoja Fondo Apoquindo no actualizada")
+    lines.append("")
+
+    inmob_balance_from_eeff = _source(source_plan, "Inmobilaria Apoquindo", "balance") == "eeff"
+    inmob_eerr_from_eeff = _source(source_plan, "Inmobilaria Apoquindo", "eerr") == "eeff"
+    inmob_balance_from_analisis = _source(source_plan, "Inmobilaria Apoquindo", "balance") == "analisis"
+    inmob_eerr_from_analisis = _source(source_plan, "Inmobilaria Apoquindo", "eerr") == "analisis"
+    pdf_inmob = _find_eeff_inmobiliaria_apoquindo(mes, año)
+    analisis_inmob = _find_analisis_inmobiliaria_apoquindo(mes, año)
+    if analisis_inmob and (inmob_balance_from_analisis or inmob_eerr_from_analisis):
+        lines.append(f"Analisis Inmobiliaria Apoquindo: {os.path.basename(analisis_inmob)}")
+        try:
+            inmob_balance, inmob_eerr = _read_inmobiliaria_apoquindo_analisis(analisis_inmob)
+            _fill_inmobiliaria_apoquindo_analisis(
+                wb_forms["Inmobilaria Apoquindo"],
+                inmob_balance,
+                inmob_eerr,
+                fill_balance=inmob_balance_from_analisis,
+                fill_eerr=inmob_eerr_from_analisis,
+            )
+            lines.append(f"  Efectivo: {inmob_balance.get('efectivo', 0):,.0f}")
+            lines.append(f"  Deudores netos: {inmob_balance.get('deudores', 0):,.0f}")
+            lines.append(f"  Prop. inversion: {inmob_balance.get('prop_inv', 0):,.0f}")
+            lines.append(f"  Resultado ejercicio: {inmob_balance.get('res_ej', 0):,.0f}")
+        except Exception as e:
+            lines.append(f"  Error Analisis Inmobiliaria Apoquindo: {e}")
+    elif pdf_inmob and (inmob_balance_from_eeff or inmob_eerr_from_eeff):
+        lines.append(f"EEFF Inmobiliaria Apoquindo: {os.path.basename(pdf_inmob)}")
+        try:
+            inmob_d = _parse_eeff_inmobiliaria_apoquindo_pdf(pdf_inmob)
+            _fill_inmobiliaria_apoquindo_eeff(
+                wb_forms["Inmobilaria Apoquindo"],
+                inmob_d,
+                fill_balance=inmob_balance_from_eeff,
+                fill_eerr=inmob_eerr_from_eeff,
+            )
+            lines.append(f"  Efectivo: {inmob_d.get('efectivo', 0):,.0f}")
+            lines.append(f"  Prop. inversion: {inmob_d.get('prop_inv', 0):,.0f}")
+            lines.append(f"  Total Activo: {inmob_d.get('total_activo', 0):,.0f}")
+            lines.append(f"  Resultado ejercicio: {inmob_d.get('resultado', 0):,.0f}")
+        except Exception as e:
+            lines.append(f"  Error parseo PDF Inmobiliaria Apoquindo: {e}")
+    elif inmob_balance_from_analisis or inmob_eerr_from_analisis:
+        lines.append("Inmobilaria Apoquindo no actualizada: historico indica Analisis/Matriz y no se encontro archivo")
+    else:
+        lines.append("No se encontro EEFF PDF Inmobiliaria Apoquindo; hoja no actualizada")
+    lines.append("")
+
+    lines.append("=== Validaciones (en memoria) ===")
+    for hn in APO_HOJAS_INPUT:
+        ws_f = wb_forms[hn]
+        fecha = ws_f.cell(row=2, column=4).value
+        val_key = ws_f.cell(row=7, column=4).value
+        if fecha and val_key is not None:
+            fecha_txt = fecha.strftime("%d/%m/%Y") if hasattr(fecha, "strftime") else fecha
+            lines.append(f"  {hn}: fecha={fecha_txt}, efectivo={val_key:,.0f}")
+        else:
+            lines.append(f"  {hn}: {'' if fecha else 'sin fecha'}{'' if val_key is not None else ', sin efectivo'}")
+
     wb_forms.save(dest_path)
     wb_forms.close()
     wb_vals.close()

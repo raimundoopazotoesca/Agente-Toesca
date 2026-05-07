@@ -43,6 +43,8 @@
 | [[procesos/noi-rcsd]] | Actualización hoja NOI-RCSD | mensual | 2026-05-01 |
 | [[procesos/fact-sheets]] | Actualización Fact Sheets PPTX | mensual | 2026-05-01 |
 | [[procesos/balance-consolidado-pt]] | Balance Consolidado Rentas PT: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-04 |
+| [[procesos/balance-consolidado-apoquindo]] | Balance Consolidado Rentas Apoquindo: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-07 |
+| [[procesos/balance-consolidado-rentas-nuevo]] | Balance Consolidado Rentas Nuevo: fuente por quarter | trimestral | 2026-05-07 |
 
 ## Conceptos
 

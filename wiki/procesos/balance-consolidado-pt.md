@@ -95,6 +95,21 @@ Aplica sección por sección dentro de la misma hoja (ej: en Inmob Boulevard el 
 
 ---
 
+## Fuente fija por quarter
+
+Derivado del histórico 2025 de la planilla `12.2025- Balance Consolidado Rentas PT vF.xlsx`. La herramienta usa esta tabla primero y deja la inferencia histórica como respaldo.
+
+| Hoja | Sección | Q1 | Q2 | Q3 | Q4 |
+|---|---|---|---|---|---|
+| `Fondo PT` | Balance | EEFF | EEFF | EEFF | EEFF |
+| `Fondo PT` | EERR | EEFF | EEFF | EEFF | EEFF |
+| `Inmob Boulevard` | Balance | Análisis | Análisis | Análisis | EEFF |
+| `Inmob Boulevard` | EERR | Análisis | Análisis | Análisis | Análisis |
+| `Torre A` | Balance | Análisis | Análisis | Análisis | Análisis |
+| `Torre A` | EERR | Análisis | Análisis | Análisis | Análisis |
+
+---
+
 ## Procedimiento de actualización
 
 ### 1. Crear archivo del nuevo período
