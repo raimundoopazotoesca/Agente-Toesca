@@ -3,6 +3,13 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-05-07] feat | Balance Consolidado Rentas Nuevo — implementación parcial
+
+Implementada `actualizar_balance_consolidado_rentas_nuevo(mes, año)` en `tools/balance_consolidado_tools.py`.
+Balance de 4 entidades (Chañarcillo, Curicó, Inmob VC, Viña Centro) + EERR Inmosa desde Senior Assist.
+Copy de hojas PT/Apoquindo desde sus vAgente. Pendiente: EERR de 4 entidades, balance Inmosa Q1-Q3, Fondo Rentas PDF.
+Instrucciones completas en `wiki/procesos/balance-consolidado-rentas-nuevo.md`.
+
 ---
 
 ## [2026-05-07] reorganización | SharePoint restructurado + carpeta RAW + raw_tools

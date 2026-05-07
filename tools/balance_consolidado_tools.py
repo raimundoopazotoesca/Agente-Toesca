@@ -1419,6 +1419,209 @@ def _warn_unsupported_sources_apoquindo(plan: dict) -> list[str]:
         unsupported.append("  Fondo Apoquindo EERR: wiki indica Analisis, pero no hay lector implementado")
     return unsupported
 
+def _find_vf_with_fallback(finder, año: int, mes: int) -> str | None:
+    vf_path = finder(año, mes)
+    if vf_path:
+        return vf_path
+    if not os.path.isdir(BALANCES_DIR):
+        return None
+    for y in sorted(os.listdir(BALANCES_DIR), reverse=True):
+        ydir = os.path.join(BALANCES_DIR, y)
+        if os.path.isdir(ydir):
+            vf_path = finder(int(y) if y.isdigit() else año, mes)
+            if vf_path:
+                return vf_path
+    return None
+
+
+def _sp_path(path: str | None) -> str:
+    if not path:
+        return ""
+    if SHAREPOINT_DIR and path.startswith(SHAREPOINT_DIR):
+        rel = path[len(SHAREPOINT_DIR):].lstrip(os.sep)
+        return f"SP: {rel}"
+    return path
+
+
+def _check_required(encontrados: list[tuple[str, str]], faltantes: list[str], nombre: str, ruta: str | None):
+    if ruta and os.path.isfile(ruta):
+        encontrados.append((nombre, ruta))
+    else:
+        faltantes.append(nombre)
+
+
+def _format_balance_check(
+    title: str,
+    año: int,
+    mes: int,
+    encontrados: list[tuple[str, str]],
+    faltantes: list[str],
+    bloqueos: list[str] | None = None,
+    notas: list[str] | None = None,
+) -> str:
+    total = len(encontrados) + len(faltantes)
+    lines = [f"=== {title} {mes:02d}.{año} ===", ""]
+    lines.append(f"Archivos encontrados ({len(encontrados)}/{total})")
+    lines.extend(
+        f"  - {nombre}: {_sp_path(ruta)}" for nombre, ruta in encontrados
+    )
+    if not encontrados:
+        lines.append("  - Ninguno")
+    lines.append("")
+    lines.append(f"Archivos faltantes ({len(faltantes)}/{total})")
+    lines.extend(f"  - {nombre}" for nombre in faltantes)
+    if not faltantes:
+        lines.append("  - Ninguno")
+    if bloqueos:
+        lines.append("")
+        lines.append("Bloqueos")
+        lines.extend(bloqueos)
+    if notas:
+        lines.append("")
+        lines.append("Regla wiki EEFF/Analisis")
+        lines.extend(notas)
+    return "\n".join(lines)
+
+
+def verificar_archivos_balance_consolidado_pt(mes: int, año: int) -> str:
+    """Verifica los inputs necesarios antes de actualizar el Balance Consolidado PT."""
+    if mes not in (3, 6, 9, 12):
+        return f"Error: mes={mes} no es fin de trimestre (usar 3, 6, 9 o 12)"
+
+    encontrados: list[tuple[str, str]] = []
+    faltantes: list[str] = []
+    bloqueos: list[str] = []
+    notas: list[str] = []
+
+    vf_path = _find_vf_with_fallback(_find_latest_vf, año, mes)
+    _check_required(encontrados, faltantes, "Balance Consolidado Rentas PT vF base", vf_path)
+    if not vf_path:
+        return _format_balance_check("Balance Consolidado PT", año, mes, encontrados, faltantes, bloqueos, notas)
+    if _period_from_filename(vf_path) == (mes, año):
+        bloqueos.append(
+            f"  - El periodo ya existe como vF: {os.path.basename(vf_path)}. No se crea vAgente para un periodo cerrado."
+        )
+
+    wb_vals = _load_readonly_workbook(vf_path, data_only=True)
+    wb_forms = _load_readonly_workbook(vf_path, data_only=False)
+    try:
+        source_plan, notas = _build_source_plan(
+            wb_vals,
+            wb_forms,
+            _quarter_end(mes, año),
+            source_by_quarter=PT_SOURCE_BY_QUARTER,
+        )
+        bloqueos.extend(_warn_unsupported_sources(source_plan))
+    finally:
+        wb_forms.close()
+        wb_vals.close()
+
+    if _source(source_plan, "Fondo PT", "balance") == "eeff" or _source(source_plan, "Fondo PT", "eerr") == "eeff":
+        _check_required(encontrados, faltantes, "EEFF PDF Fondo PT", _find_eeff_fondo_pt(mes, año))
+
+    eeff_bvd, analisis_bvd = _find_boulevard_files(mes, año)
+    if _source(source_plan, "Inmob Boulevard", "balance") == "eeff":
+        _check_required(encontrados, faltantes, "EEFF PDF Boulevard", eeff_bvd)
+    if _source(source_plan, "Inmob Boulevard", "balance") == "analisis" or _source(source_plan, "Inmob Boulevard", "eerr") == "analisis":
+        _check_required(encontrados, faltantes, "Analisis Boulevard", analisis_bvd)
+
+    eeff_ta, analisis_ta = _find_torre_a_files(mes, año)
+    if _source(source_plan, "Torre A", "balance") == "eeff" or _source(source_plan, "Torre A", "eerr") == "eeff":
+        _check_required(encontrados, faltantes, "EEFF PDF Torre A", eeff_ta)
+    if _source(source_plan, "Torre A", "balance") == "analisis" or _source(source_plan, "Torre A", "eerr") == "analisis":
+        _check_required(encontrados, faltantes, "Analisis Torre A", analisis_ta)
+
+    return _format_balance_check("Balance Consolidado PT", año, mes, encontrados, faltantes, bloqueos, notas)
+
+
+def verificar_archivos_balance_consolidado_apoquindo(mes: int, año: int) -> str:
+    """Verifica los inputs necesarios antes de actualizar el Balance Consolidado Apoquindo."""
+    if mes not in (3, 6, 9, 12):
+        return f"Error: mes={mes} no es fin de trimestre (usar 3, 6, 9 o 12)"
+
+    encontrados: list[tuple[str, str]] = []
+    faltantes: list[str] = []
+    bloqueos: list[str] = []
+    notas: list[str] = []
+
+    vf_path = _find_vf_with_fallback(_find_latest_vf_apoquindo, año, mes)
+    _check_required(encontrados, faltantes, "Balance Consolidado Rentas Apoquindo vF base", vf_path)
+    if not vf_path:
+        return _format_balance_check("Balance Consolidado Apoquindo", año, mes, encontrados, faltantes, bloqueos, notas)
+    if _period_from_filename(vf_path) == (mes, año):
+        bloqueos.append(
+            f"  - El periodo ya existe como vF: {os.path.basename(vf_path)}. No se crea vAgente para un periodo cerrado."
+        )
+
+    wb_vals = _load_readonly_workbook(vf_path, data_only=True)
+    wb_forms = _load_readonly_workbook(vf_path, data_only=False)
+    try:
+        missing_sheets = [s for s in APO_HOJAS_INPUT if s not in wb_forms.sheetnames]
+        if missing_sheets:
+            bloqueos.append("  - Faltan hojas esperadas en la planilla: " + ", ".join(missing_sheets))
+            source_plan = dict(APO_DEFAULT_SOURCE_PLAN)
+        else:
+            source_plan, notas = _build_source_plan(
+                wb_vals,
+                wb_forms,
+                _quarter_end(mes, año),
+                hojas_input=APO_HOJAS_INPUT,
+                default_source_plan=APO_DEFAULT_SOURCE_PLAN,
+                source_by_quarter=APO_SOURCE_BY_QUARTER,
+            )
+            bloqueos.extend(_warn_unsupported_sources_apoquindo(source_plan))
+    finally:
+        wb_forms.close()
+        wb_vals.close()
+
+    if _source(source_plan, "Fondo Apoquindo", "balance") == "eeff" or _source(source_plan, "Fondo Apoquindo", "eerr") == "eeff":
+        _check_required(encontrados, faltantes, "EEFF PDF Fondo Apoquindo", _find_eeff_fondo_apoquindo(mes, año))
+
+    pdf_inmob = _find_eeff_inmobiliaria_apoquindo(mes, año)
+    analisis_inmob = _find_analisis_inmobiliaria_apoquindo(mes, año)
+    if _source(source_plan, "Inmobilaria Apoquindo", "balance") == "eeff" or _source(source_plan, "Inmobilaria Apoquindo", "eerr") == "eeff":
+        _check_required(encontrados, faltantes, "EEFF PDF Inmobiliaria Apoquindo", pdf_inmob)
+    if _source(source_plan, "Inmobilaria Apoquindo", "balance") == "analisis" or _source(source_plan, "Inmobilaria Apoquindo", "eerr") == "analisis":
+        _check_required(encontrados, faltantes, "Analisis Inmobiliaria Apoquindo", analisis_inmob)
+
+    return _format_balance_check("Balance Consolidado Apoquindo", año, mes, encontrados, faltantes, bloqueos, notas)
+
+
+def _balance_check_is_complete(check_result: str) -> bool:
+    return "Archivos faltantes (0/" in check_result and "\nBloqueos\n" not in check_result
+
+
+def actualizar_balance_consolidado_pt_si_completo(mes: int, año: int) -> str:
+    """Verifica archivos y actualiza PT solo si no hay faltantes ni bloqueos."""
+    check_result = verificar_archivos_balance_consolidado_pt(mes, año)
+    if not _balance_check_is_complete(check_result):
+        return check_result + "\n\nNo actualice el balance porque hay archivos faltantes o bloqueos."
+    return check_result + "\n\n" + actualizar_balance_consolidado_pt(mes, año)
+
+
+def actualizar_balance_consolidado_apoquindo_si_completo(mes: int, año: int) -> str:
+    """Verifica archivos y actualiza Apoquindo solo si no hay faltantes ni bloqueos."""
+    check_result = verificar_archivos_balance_consolidado_apoquindo(mes, año)
+    if not _balance_check_is_complete(check_result):
+        return check_result + "\n\nNo actualice el balance porque hay archivos faltantes o bloqueos."
+    return check_result + "\n\n" + actualizar_balance_consolidado_apoquindo(mes, año)
+
+
+def actualizar_balance_consolidado_rentas_si_completo(mes: int, año: int) -> str:
+    """Actualiza Balance Consolidado Rentas Nuevo para el trimestre mes/año."""
+    return actualizar_balance_consolidado_rentas_nuevo(mes, año)
+
+
+def actualizar_balances_consolidados_si_completos(mes: int, año: int) -> str:
+    """Actualiza PT, Apoquindo y Rentas, verificando cada fondo antes de ejecutar."""
+    resultados = [
+        actualizar_balance_consolidado_pt_si_completo(mes, año),
+        actualizar_balance_consolidado_apoquindo_si_completo(mes, año),
+        actualizar_balance_consolidado_rentas_si_completo(mes, año),
+    ]
+    return ("\n\n" + "=" * 72 + "\n\n").join(resultados)
+
+
 # ─── Validación ───────────────────────────────────────────────────────────────
 
 def _validate_sheet(ws_vals, sheet_name: str) -> list[str]:
@@ -1865,6 +2068,538 @@ def actualizar_balance_consolidado_apoquindo(mes: int, año: int) -> str:
     wb_vals.close()
     lines.append("")
     lines.append(f"Archivo guardado en: {dest_path}")
+    lines.append("Abrir en Excel y verificar que las formulas recalculen correctamente.")
+
+    return "\n".join(lines)
+
+
+# ─── Balance Consolidado Rentas Nuevo ─────────────────────────────────────────
+
+RAW_DIR = os.path.join(SHAREPOINT_DIR, "RAW")
+RENTAS_TRI_ACTIVOS_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "Activos")
+
+RENTAS_NUEVO_HOJAS_INPUT = [
+    "Inmosa",
+    "Chañarcillo",
+    "Curicó",
+    "Inmob VC",
+    "Viña Centro",
+    "Fondo Rentas",
+]
+
+# Balance maps verified against Dec 2025 planilla.
+# type='A' → A - P; type='P' → P - A
+
+CHANAR_BALANCE_MAP = {
+    7:  ("A", ["1-1-01-"]),
+    12: ("A", ["1-1-02-02", "1-1-02-07", "1-1-02-14", "1-1-02-15", "1-1-02-16"]),
+    27: ("A", ["1-2-01-", "1-2-03-01"]),
+    31: ("A", ["1-1-04-03"]),
+    32: ("A", ["1-1-03-"]),
+    42: ("P", ["2-1-01-08", "2-1-01-09", "2-1-01-11", "2-1-01-12"]),
+    44: ("P", ["2-1-01-04"]),
+    46: ("P", ["2-1-05-"]),
+    48: ("P", ["2-1-06-05"]),
+    52: ("P", ["2-1-03-01", "2-1-03-13"]),
+    55: ("P", ["2-1-03-07", "2-1-03-08", "2-1-03-09", "2-1-03-10", "2-1-03-11", "2-1-03-12"]),
+    56: ("P", ["2-1-06-04"]),
+    57: ("P", ["2-1-04-04", "2-1-04-06", "2-1-04-07"]),
+    62: ("P", ["3-1-01-01"]),
+    63: ("P", ["3-1-05-"]),
+    64: ("P", ["3-1-03-"]),
+}
+
+CURICO_BALANCE_MAP = {
+    7:  ("A", ["1-1-01-", "1-1-02-012", "1-1-05-062", "1-1-05-066"]),
+    12: ("A", ["1-1-04-010", "1-1-04-011", "1-1-05-064", "1-1-10-010"]),
+    15: ("A", ["1-1-06-020", "1-1-09-012"]),
+    26: ("A", ["1-2-01-002", "1-2-01-005", "1-2-03-010", "1-2-03-011"]),
+    # R31/R56 handled separately via _apply_curico_impdif (A(1-2-04-001) - P(2-2-06-010))
+    32: ("A", ["1-3-06-010", "1-3-06-011", "1-1-05-013", "1-1-05-012"]),
+    40: ("P", ["2-1-05-010"]),
+    41: ("P", ["2-1-05-014"]),
+    42: ("P", ["2-1-04-010", "2-1-04-020", "2-1-04-030", "2-1-04-042"]),
+    46: ("P", ["2-1-08-020", "2-1-08-040", "2-1-08-041"]),
+    47: ("P", ["2-1-09-010"]),
+    52: ("P", ["2-1-05-011"]),
+    53: ("P", ["2-1-05-031", "2-1-05-032", "2-1-05-041", "2-1-05-051"]),
+    55: ("P", ["2-1-06-"]),
+    62: ("P", ["2-3-01-001"]),
+    63: ("P", ["2-3-02-002"]),
+    64: ("P", ["2-3-02-001"]),
+}
+
+INMOB_VC_BALANCE_MAP = {
+    7:  ("A", ["1-1-01-01", "1-1-01-11"]),
+    25: ("A", ["1-2-03-02", "1-2-03-03"]),
+    31: ("A", ["1-1-04-03"]),
+    42: ("P", ["2-1-01-08", "2-1-01-10"]),
+    44: ("P", ["2-1-02-01", "1-1-02-06"]),  # 1-1-02-06 holds a P balance despite 1-x class
+    46: ("P", ["2-1-05-02"]),
+    52: ("P", ["2-1-01-05"]),
+    55: ("P", ["2-2-01-02"]),
+    56: ("P", ["2-1-06-04"]),
+    62: ("P", ["3-1-01-01"]),
+    64: ("P", ["3-1-03-01"]),
+}
+
+VINA_BALANCE_MAP = {
+    7:  ("A", ["1-1-01-020", "1-1-01-022", "1-1-01-023", "1-1-03-030"]),
+    9:  ("A", ["1-1-10-031"]),
+    11: ("A", ["1-1-10-032"]),
+    12: ("A", ["1-1-04-", "1-1-05-010", "1-1-05-012", "1-1-05-013", "1-1-06-020"]),
+    15: ("A", ["1-1-09-020", "1-1-10-010", "1-1-10-030", "1-1-06-012"]),
+    22: ("A", ["1-1-10-033"]),
+    26: ("A", ["1-2-01-001", "1-2-01-010", "1-2-01-040"]),
+    31: ("A", ["1-1-20-010"]),
+    32: ("A", ["1-1-06-093", "1-1-06-094"]),
+    41: ("P", ["2-1-40-025", "2-1-06-011"]),
+    42: ("P", ["2-1-04-010", "2-1-04-042", "2-1-08-070"]),
+    46: ("P", ["2-1-08-071"]),
+    48: ("P", ["2-1-09-037", "2-1-09-020", "2-1-09-010", "2-1-09-060"]),
+    52: ("P", ["2-1-40-024"]),
+    53: ("P", ["2-1-40-026"]),
+    54: ("P", ["2-2-03-111", "2-2-03-112", "2-2-03-113", "2-2-03-114"]),
+    55: ("P", ["2-1-04-050", "2-2-03-020"]),
+    56: ("P", ["2-2-06-010"]),
+    62: ("P", ["2-3-01-001"]),
+    64: ("P", ["2-3-02-001"]),
+    66: ("P", ["2-3-01-071"]),
+}
+
+# INMOSA EERR via Senior Assist xlsx (dot-notation codes).
+# Value = G - Pd per code; positive = income, negative = expense.
+INMOSA_SA_EERR_MAP = {
+    76:  ["3.1.1010.20.01"],
+    77:  ["3.1.1010.20.06"],
+    78:  ["3.1.1010.20.02"],
+    82:  ["4.5.1030.10.02"],
+    83:  ["4.5.1030.10.03"],
+    84:  ["4.5.1030.10.05"],
+    85:  ["4.5.1030.10.06"],
+    86:  ["4.5.1030.10.07"],
+    87:  ["4.5.1030.20.03"],
+    88:  ["4.5.1030.20.04"],
+    89:  ["4.5.1030.20.06"],
+    90:  ["4.5.1030.20.09"],
+    91:  ["4.5.1030.20.11"],
+    92:  ["4.5.1030.20.12"],
+    94:  ["4.5.1030.30.01"],
+    95:  ["4.5.1030.30.02"],
+    96:  ["4.5.1030.30.04"],
+    97:  ["4.5.1030.30.07"],
+    98:  ["4.5.1030.50.03"],
+    105: ["4.5.1030.50.05"],
+    106: ["4.5.1070.10.02"],
+    107: ["4.5.1050.10.01"],
+    108: ["4.5.1070.10.04"],
+    109: ["4.5.1070.10.05"],
+    110: ["4.5.1070.10.06"],
+    111: ["3.5.1050.10.02"],
+    112: ["4.5.1090.10.01"],
+    113: ["4.5.1090.10.02"],
+    114: ["4.5.2110.10.02"],
+    115: ["3.5.1090.10.01"],
+    120: ["4.5.1070.10.08"],
+}
+
+
+# ─── Source finders ───────────────────────────────────────────────────────────
+
+def _find_vf_rentas_nuevo(año: int, mes: int) -> str | None:
+    año_dir = os.path.join(BALANCES_DIR, str(año))
+    q_dir = _find_quarter_folder(año_dir, mes)
+    if q_dir:
+        for f in os.listdir(q_dir):
+            if "Rentas Nuevo" in f and "vF" in f and f.endswith(".xlsx"):
+                return os.path.join(q_dir, f)
+    pattern = os.path.join(BALANCES_DIR, "**", "*Rentas Nuevo*vF*.xlsx")
+    hits = glob_module.glob(pattern, recursive=True)
+    return max(hits, key=os.path.getmtime) if hits else None
+
+
+def _find_analisis_chanar_rn(mes: int, año: int) -> str | None:
+    for pat in [
+        os.path.join(RAW_DIR, f"{mes:02d}-{año}*Ch*arcillo*.xlsx"),
+        os.path.join(RAW_DIR, f"{mes:02d}-{año}*Cha*.xlsx"),
+    ]:
+        hits = glob_module.glob(pat)
+        if hits:
+            return sorted(hits)[-1]
+    return None
+
+
+def _find_analisis_inmob_vc_rn(mes: int, año: int) -> str | None:
+    for pat in [
+        os.path.join(RAW_DIR, f"{mes:02d}-{año}*Inmobiliaria*VC*.xlsx"),
+        os.path.join(RAW_DIR, f"{mes:02d}-{año}*VC*.xlsx"),
+    ]:
+        hits = glob_module.glob(pat)
+        if hits:
+            return sorted(hits)[-1]
+    return None
+
+
+def _find_curico_informe_rn(mes: int, año: int) -> str | None:
+    base = os.path.join(RENTAS_TRI_ACTIVOS_DIR, "Curicó", "EEFF")
+    for y in (año, año - 1):
+        ydir = os.path.join(base, str(y))
+        if not os.path.isdir(ydir):
+            continue
+        for pat in [
+            os.path.join(ydir, f"{mes:02d}-{año}*INFORME*CURIC*.xlsx"),
+            os.path.join(ydir, f"*{año}*CURIC*.xlsx"),
+        ]:
+            hits = glob_module.glob(pat)
+            if hits:
+                return sorted(hits)[-1]
+    return None
+
+
+def _find_vina_trial_balance_rn(mes: int, año: int) -> str | None:
+    for pat in [
+        os.path.join(RAW_DIR, f"{mes:02d}-{año}*INFORME*EFF*VI*A*CENTRO*.xlsx"),
+        os.path.join(RAW_DIR, f"*{mes:02d}*{año}*VI*A*CENTRO*.xlsx"),
+        os.path.join(RAW_DIR, f"*VI*A*CENTRO*{año}*.xlsx"),
+    ]:
+        hits = glob_module.glob(pat)
+        if hits:
+            return sorted(hits)[-1]
+    return None
+
+
+def _find_senior_assist_rn(mes: int, año: int) -> str | None:
+    for pat in [
+        os.path.join(RAW_DIR, f"*{año}*Senior*Assist*.xlsx"),
+        os.path.join(RAW_DIR, f"Balance*{año}*Senior*.xlsx"),
+        os.path.join(RAW_DIR, f"Balance*General*{año}*.xlsx"),
+    ]:
+        hits = glob_module.glob(pat)
+        if hits:
+            return sorted(hits)[-1]
+    return None
+
+
+# ─── Trial balance reader ─────────────────────────────────────────────────────
+
+def _read_trial_balance_rn(xlsx_path: str, sheet_name: str | None = None) -> dict:
+    """
+    Read a 9-column trial balance (Cuenta|Deb|Cred|Deudor|Acreedor|Activo|Pasivo|Perdida|Ganancia).
+    Returns: {code: {'A': activo, 'P': pasivo, 'Pd': perdida, 'G': ganancia}}
+    Col indices (0-based): 0=code+name, 5=Activo, 6=Pasivo, 7=Perdida, 8=Ganancia.
+    """
+    wb = _load_readonly_workbook(xlsx_path, data_only=True)
+    try:
+        if sheet_name and sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        elif sheet_name:
+            norm = _norm_label(sheet_name)
+            matched = next((sn for sn in wb.sheetnames if _norm_label(sn) == norm), None)
+            ws = wb[matched] if matched else wb.worksheets[0]
+        else:
+            ws = wb.worksheets[0]
+
+        result = {}
+        for row in ws.iter_rows(values_only=True):
+            if not row or row[0] is None:
+                continue
+            raw = str(row[0]).strip()
+            m = re.match(r"^(\d[\d\.\-]*\d)", raw)
+            if not m:
+                continue
+            code = m.group(1)
+
+            def _n(v):
+                if v is None:
+                    return 0.0
+                if isinstance(v, (int, float)):
+                    return float(v)
+                try:
+                    return float(str(v).replace(".", "").replace(",", "."))
+                except ValueError:
+                    return 0.0
+
+            a  = _n(row[5]) if len(row) > 5 else 0.0
+            p  = _n(row[6]) if len(row) > 6 else 0.0
+            pd = _n(row[7]) if len(row) > 7 else 0.0
+            g  = _n(row[8]) if len(row) > 8 else 0.0
+
+            if a or p or pd or g:
+                result[code] = {"A": a, "P": p, "Pd": pd, "G": g}
+        return result
+    finally:
+        wb.close()
+
+
+def _tb_sum(tb: dict, prefixes: list, field: str) -> float:
+    return sum(
+        vals.get(field, 0.0)
+        for code, vals in tb.items()
+        if any(code.startswith(pfx) for pfx in prefixes)
+    )
+
+
+def _apply_balance_map_rn(ws, tb: dict, bmap: dict, col: int):
+    for row, (typ, prefixes) in bmap.items():
+        if typ == "A":
+            val = _tb_sum(tb, prefixes, "A") - _tb_sum(tb, prefixes, "P")
+        else:
+            val = _tb_sum(tb, prefixes, "P") - _tb_sum(tb, prefixes, "A")
+        ws.cell(row=row, column=col).value = val if val != 0 else None
+
+
+def _apply_curico_impdif(ws, tb: dict, col: int):
+    """R31/R56: net deferred tax = A(1-2-04-001) - P(2-2-06-010). R31 if >0, R56 if <0."""
+    net = _tb_sum(tb, ["1-2-04-001"], "A") - _tb_sum(tb, ["2-2-06-010"], "P")
+    ws.cell(row=31, column=col).value = net if net > 0 else None
+    ws.cell(row=56, column=col).value = -net if net < 0 else None
+
+
+def _apply_eerr_sa_map_rn(ws, tb: dict, col: int):
+    """Fill INMOSA EERR rows using Senior Assist dot-notation codes. Value = G - Pd."""
+    for row, codes in INMOSA_SA_EERR_MAP.items():
+        total = sum(tb[c].get("G", 0.0) - tb[c].get("Pd", 0.0) for c in codes if c in tb)
+        ws.cell(row=row, column=col).value = total if total != 0 else None
+
+
+# ─── Sheet lookup helper ──────────────────────────────────────────────────────
+
+def _find_ws_rn(wb, target: str):
+    """Return worksheet by normalized name (exact then partial match)."""
+    norm = _norm_label(target)
+    for sn in wb.sheetnames:
+        if _norm_label(sn) == norm:
+            return wb[sn]
+    for sn in wb.sheetnames:
+        sn_n = _norm_label(sn)
+        if norm in sn_n or sn_n in norm:
+            return wb[sn]
+    return None
+
+
+# ─── Column shift (single-workbook variant for Rentas Nuevo) ──────────────────
+
+def _shift_one_sheet_rn(ws_vals, ws_forms):
+    """Shift cols D:K right using cached values from ws_vals, write into ws_forms."""
+    D, K = 4, 11
+    max_row = max(
+        (c.row for row in ws_vals.iter_rows() for c in row if c.value is not None),
+        default=130,
+    )
+    max_row = max(max_row, 130)
+    for r in range(2, max_row + 1):
+        vals = [ws_vals.cell(row=r, column=c).value for c in range(D, K + 1)]
+        forms = [ws_forms.cell(row=r, column=c).value for c in range(D, K + 1)]
+        d_is_formula = isinstance(forms[0], str) and forms[0].startswith("=")
+        for dst in range(K, D, -1):
+            ws_forms.cell(row=r, column=dst).value = vals[dst - D - 1]
+        if not d_is_formula:
+            ws_forms.cell(row=r, column=D).value = None
+
+
+# ─── PT / Apoquindo sheet copy ────────────────────────────────────────────────
+
+def _copy_vals_sheet_rn(src_path: str, src_sheet: str, wb_dst, dst_sheet: str) -> bool:
+    """Copy all non-formula values from src_sheet to dst_sheet."""
+    try:
+        wb_src = openpyxl.load_workbook(src_path, data_only=True)
+    except Exception:
+        return False
+    ws_src = _find_ws_rn(wb_src, src_sheet)
+    ws_dst = _find_ws_rn(wb_dst, dst_sheet)
+    if ws_src is None or ws_dst is None:
+        wb_src.close()
+        return False
+    for row in ws_src.iter_rows():
+        for cell in row:
+            val = cell.value
+            if isinstance(val, str) and val.startswith("="):
+                continue
+            ws_dst.cell(row=cell.row, column=cell.column).value = val
+    wb_src.close()
+    return True
+
+
+# ─── Main function ────────────────────────────────────────────────────────────
+
+def actualizar_balance_consolidado_rentas_nuevo(mes: int, año: int) -> str:
+    """
+    Actualiza Balance Consolidado Rentas Nuevo para el trimestre mes/año.
+
+    Input sheets (trial balance): Inmosa, Chañarcillo, Curicó, Inmob VC, Viña Centro, Fondo Rentas
+    Copy sheets: Resumen PT, Consolidado Fondo PT, Resumen  Apoquindo, Consolidado Apoquindo
+    Output sheets (no tocar): Resumen, Consolidado Fondo Rentas , Resumen Viña, Consolidado Viña
+    """
+    if mes not in (3, 6, 9, 12):
+        return f"Error: mes={mes} no es fin de trimestre (usar 3, 6, 9 o 12)"
+
+    lines = [f"=== Balance Consolidado Rentas Nuevo {mes:02d}.{año} ===", ""]
+
+    vf_path = _find_vf_rentas_nuevo(año, mes)
+    if not vf_path:
+        return f"Error: no se encontro archivo vF de Balance Consolidado Rentas Nuevo para {mes:02d}.{año}"
+
+    lines.append(f"Fuente vF: {_sp_path(vf_path)}")
+
+    mm_yyyy = f"{mes:02d}.{año}"
+    dest_name = f"{mm_yyyy}- Balance Consolidado Rentas Nuevo vAgente.xlsx"
+    dest_dir = os.path.dirname(vf_path)
+    dest_path = os.path.join(dest_dir, dest_name)
+    shutil.copy2(vf_path, dest_path)
+    lines.append(f"Destino: {dest_name}")
+    lines.append("")
+
+    wb_vals  = openpyxl.load_workbook(dest_path, data_only=True)
+    wb_forms = openpyxl.load_workbook(dest_path, data_only=False)
+
+    fecha_periodo = _quarter_end(mes, año)
+    fecha_dt = datetime(fecha_periodo.year, fecha_periodo.month, fecha_periodo.day)
+    status_label = _period_status_label(mes, año)
+    col = 4  # D
+
+    # Shift D:K on all input sheets + PT/Apo copy targets
+    all_shift = RENTAS_NUEVO_HOJAS_INPUT + [
+        "Resumen PT", "Consolidado Fondo PT",
+        "Resumen  Apoquindo", "Consolidado Apoquindo",
+    ]
+    for sn_target in all_shift:
+        ws_v = _find_ws_rn(wb_vals, sn_target)
+        ws_f = _find_ws_rn(wb_forms, sn_target)
+        if ws_v and ws_f:
+            _shift_one_sheet_rn(ws_v, ws_f)
+            ws_f.cell(row=2, column=col).value = fecha_dt
+            ws_f.cell(row=2, column=2).value = status_label
+
+    lines.append(f"Columnas D:K desplazadas. Fecha: {fecha_periodo}  Estado: {status_label}")
+    lines.append("")
+
+    quarter = _mes_a_q(mes)
+    qplan = RENTAS_NUEVO_SOURCE_BY_QUARTER.get(quarter, {})
+
+    # ── Chañarcillo ──────────────────────────────────────────────────────────────
+    chanar_path = _find_analisis_chanar_rn(mes, año)
+    lines.append(f"Chanarcillo: {_sp_path(chanar_path) if chanar_path else 'NO ENCONTRADO'}")
+    ws_chanar = _find_ws_rn(wb_forms, "Chañarcillo")
+    if chanar_path and ws_chanar:
+        try:
+            tb = _read_trial_balance_rn(chanar_path, "Bce Tributario")
+            if qplan.get(("Chañarcillo", "balance")) == "analisis":
+                _apply_balance_map_rn(ws_chanar, tb, CHANAR_BALANCE_MAP, col)
+                lines.append(f"  Balance: {len(tb)} cuentas OK")
+            lines.append("  EERR: TODO (mapa filas pendiente)")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+    elif not chanar_path:
+        lines.append("  No actualizado: archivo no encontrado")
+    lines.append("")
+
+    # ── Curicó ───────────────────────────────────────────────────────────────────
+    curico_path = _find_curico_informe_rn(mes, año)
+    lines.append(f"Curico: {_sp_path(curico_path) if curico_path else 'NO ENCONTRADO'}")
+    ws_curico = _find_ws_rn(wb_forms, "Curicó")
+    if curico_path and ws_curico:
+        try:
+            curico_sheet = f"Acum {mes:02d}-{año}"
+            tb = _read_trial_balance_rn(curico_path, curico_sheet)
+            if qplan.get(("Curicó", "balance")) == "analisis":
+                _apply_balance_map_rn(ws_curico, tb, CURICO_BALANCE_MAP, col)
+                _apply_curico_impdif(ws_curico, tb, col)
+                lines.append(f"  Balance: {len(tb)} cuentas OK (ImpDif neto aplicado)")
+            lines.append("  EERR: TODO (mapa filas pendiente)")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+    elif not curico_path:
+        lines.append("  No actualizado: archivo no encontrado")
+    lines.append("")
+
+    # ── Inmob VC ─────────────────────────────────────────────────────────────────
+    inmob_vc_path = _find_analisis_inmob_vc_rn(mes, año)
+    lines.append(f"Inmob VC: {_sp_path(inmob_vc_path) if inmob_vc_path else 'NO ENCONTRADO'}")
+    ws_inmob_vc = _find_ws_rn(wb_forms, "Inmob VC")
+    if inmob_vc_path and ws_inmob_vc:
+        try:
+            tb = _read_trial_balance_rn(inmob_vc_path, "Bce Tributario")
+            if qplan.get(("Inmob VC", "balance")) == "analisis":
+                _apply_balance_map_rn(ws_inmob_vc, tb, INMOB_VC_BALANCE_MAP, col)
+                lines.append(f"  Balance: {len(tb)} cuentas OK")
+            lines.append("  EERR: TODO (mapa filas pendiente)")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+    elif not inmob_vc_path:
+        lines.append("  No actualizado: archivo no encontrado")
+    lines.append("")
+
+    # ── Viña Centro ──────────────────────────────────────────────────────────────
+    vina_path = _find_vina_trial_balance_rn(mes, año)
+    lines.append(f"Vina Centro: {_sp_path(vina_path) if vina_path else 'NO ENCONTRADO'}")
+    ws_vina = _find_ws_rn(wb_forms, "Viña Centro")
+    if vina_path and ws_vina:
+        try:
+            tb = _read_trial_balance_rn(vina_path, "BALANCE ACUMULADO")
+            if qplan.get(("Viña Centro", "balance")) == "analisis":
+                _apply_balance_map_rn(ws_vina, tb, VINA_BALANCE_MAP, col)
+                efectivo = (
+                    _tb_sum(tb, ["1-1-01-020", "1-1-01-022", "1-1-01-023", "1-1-03-030"], "A")
+                    - _tb_sum(tb, ["1-1-01-020", "1-1-01-022", "1-1-01-023", "1-1-03-030"], "P")
+                )
+                lines.append(f"  Balance: {len(tb)} cuentas OK (efectivo={efectivo:,.0f})")
+            lines.append("  EERR: TODO (mapa filas pendiente)")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+    elif not vina_path:
+        lines.append("  No actualizado: archivo no encontrado")
+    lines.append("")
+
+    # ── Inmosa ───────────────────────────────────────────────────────────────────
+    sa_path = _find_senior_assist_rn(mes, año)
+    lines.append(f"Inmosa: {_sp_path(sa_path) if sa_path else 'NO ENCONTRADO'}")
+    ws_inmosa = _find_ws_rn(wb_forms, "Inmosa")
+    if sa_path and ws_inmosa:
+        try:
+            tb = _read_trial_balance_rn(sa_path)  # only sheet
+            inmosa_bal_src = qplan.get(("Inmosa", "balance"), "eeff")
+            if inmosa_bal_src == "analisis":
+                lines.append("  Balance: TODO (mapa SA dot-notation pendiente)")
+            else:
+                lines.append(f"  Balance Q{quarter}: eeff (PDF, pendiente implementacion)")
+            if qplan.get(("Inmosa", "eerr")) == "analisis":
+                _apply_eerr_sa_map_rn(ws_inmosa, tb, col)
+                lines.append(f"  EERR: {len(INMOSA_SA_EERR_MAP)} filas escritas desde Senior Assist")
+        except Exception as e:
+            lines.append(f"  Error: {e}")
+    elif not sa_path:
+        lines.append("  No actualizado: Senior Assist no encontrado")
+    lines.append("")
+
+    # ── Fondo Rentas ─────────────────────────────────────────────────────────────
+    fondo_src = qplan.get(("Fondo Rentas", "balance"), "eeff")
+    lines.append(f"Fondo Rentas: TODO (fuente={fondo_src}, parser PDF pendiente)")
+    lines.append("")
+
+    # ── Copiar hojas PT y Apoquindo ───────────────────────────────────────────────
+    lines.append("=== Copiar hojas PT y Apoquindo ===")
+    for src_kw, copy_pairs in (
+        ("Rentas PT", [("Resumen", "Resumen PT"), ("Consolidado Fondo PT", "Consolidado Fondo PT")]),
+        ("Apoquindo", [("Resumen", "Resumen  Apoquindo"), ("Consolidado Apoquindo", "Consolidado Apoquindo")]),
+    ):
+        src_hits = glob_module.glob(os.path.join(dest_dir, f"*{src_kw}*vAgente*.xlsx"))
+        if not src_hits:
+            src_hits = glob_module.glob(os.path.join(WORK_DIR, f"*{src_kw}*vAgente*.xlsx"))
+        if src_hits:
+            src_file = max(src_hits, key=os.path.getmtime)
+            results = []
+            for src_sn, dst_sn in copy_pairs:
+                ok = _copy_vals_sheet_rn(src_file, src_sn, wb_forms, dst_sn)
+                results.append(f"{src_sn}:{'OK' if ok else 'err'}")
+            lines.append(f"  {src_kw}: {os.path.basename(src_file)} — {', '.join(results)}")
+        else:
+            lines.append(f"  {src_kw} vAgente no encontrado en {_sp_path(dest_dir)} ni en WORK_DIR")
+    lines.append("")
+
+    wb_vals.close()
+    wb_forms.save(dest_path)
+    wb_forms.close()
+    lines.append(f"Guardado: {_sp_path(dest_path)}")
     lines.append("Abrir en Excel y verificar que las formulas recalculen correctamente.")
 
     return "\n".join(lines)

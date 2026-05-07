@@ -19,6 +19,7 @@ from tools.email_tools import (
     download_email_attachment,
     send_email,
     search_emails_by_subject,
+    check_replies_from_contact,
     find_sent_email,
     reply_to_email,
 )
@@ -139,6 +140,13 @@ from tools.ask_tools import preguntar_usuario
 from tools.balance_consolidado_tools import (
     actualizar_balance_consolidado_pt,
     actualizar_balance_consolidado_apoquindo,
+    actualizar_balance_consolidado_rentas_nuevo,
+    verificar_archivos_balance_consolidado_pt,
+    verificar_archivos_balance_consolidado_apoquindo,
+    actualizar_balance_consolidado_pt_si_completo,
+    actualizar_balance_consolidado_apoquindo_si_completo,
+    actualizar_balance_consolidado_rentas_si_completo,
+    actualizar_balances_consolidados_si_completos,
 )
 from tools.raw_tools import ordenar_archivos_raw, reemplazar_en_tool, reemplazar_en_wiki
 
@@ -185,7 +193,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "buscar_correos_por_asunto",
-            "description": "Busca correos cuyo asunto contenga una palabra o frase.",
+            "description": (
+                "Busca correos cuyo asunto contenga una palabra o frase. "
+                "No usar para preguntas tipo 'X respondio el mail?' si hay un contacto/persona; "
+                "en ese caso usar revisar_respuestas_contacto."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -193,6 +205,40 @@ TOOL_DEFINITIONS = [
                     "limite": {"type": "integer", "description": "Número máximo de resultados"},
                 },
                 "required": ["palabra_clave"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "revisar_respuestas_contacto",
+            "description": (
+                "Revisa Outlook por contacto/remitente/destinatario si una persona respondio "
+                "despues del ultimo correo enviado a esa persona. Usar para preguntas como "
+                "'Cantillana respondio el mail que le mandaste?' o seguimientos personales. "
+                "No requiere saber el asunto; evita buscar por temas CDG salvo que el usuario lo pida."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contacto": {
+                        "type": "string",
+                        "description": "Nombre, apellido o alias del contacto. Ej: 'Cantillana'.",
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Email opcional si se conoce. Ej: lcantillana@grupoaraucana.cl.",
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Maximo de respuestas a mostrar (por defecto 5).",
+                    },
+                    "scan_limit": {
+                        "type": "integer",
+                        "description": "Cantidad de correos recientes a revisar en enviados/entrada (por defecto 500).",
+                    },
+                },
+                "required": ["contacto"],
             },
         },
     },
@@ -2036,6 +2082,118 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "verificar_archivos_balance_consolidado_pt",
+            "description": (
+                "Verifica archivos requeridos para actualizar el Balance Consolidado Rentas PT "
+                "del trimestre indicado. Retorna encontrados, faltantes, bloqueos y regla de fuentes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "verificar_archivos_balance_consolidado_apoquindo",
+            "description": (
+                "Verifica archivos requeridos para actualizar el Balance Consolidado Rentas Apoquindo "
+                "del trimestre indicado. Retorna encontrados, faltantes, bloqueos y regla de fuentes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_consolidado_pt_si_completo",
+            "description": (
+                "Verifica archivos del Balance Consolidado Rentas PT y solo ejecuta la actualización "
+                "si no hay faltantes ni bloqueos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_consolidado_apoquindo_si_completo",
+            "description": (
+                "Verifica archivos del Balance Consolidado Rentas Apoquindo y solo ejecuta la actualización "
+                "si no hay faltantes ni bloqueos."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balance_consolidado_rentas_si_completo",
+            "description": (
+                "Actualiza el Balance Consolidado Rentas Nuevo para un trimestre. "
+                "Llena hojas input (Chañarcillo, Curicó, Inmob VC, Viña Centro desde trial balance xlsx; "
+                "Inmosa EERR desde Senior Assist; Fondo Rentas pendiente). "
+                "Copia Resumen PT y Apoquindo desde sus vAgente. "
+                "No toca hojas output (Resumen, Consolidado Fondo Rentas, Resumen Viña, Consolidado Viña). "
+                "Pendiente: EERR para Chañarcillo/Curicó/Inmob VC/Viña; balance Inmosa SA; Fondo Rentas PDF."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_balances_consolidados_si_completos",
+            "description": (
+                "Verifica y actualiza PT y Apoquindo si están completos, e informa que Rentas aún no tiene "
+                "actualizador automático registrado."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mes": {"type": "integer", "description": "Mes de cierre trimestral: 3, 6, 9 o 12"},
+                    "año": {"type": "integer", "description": "Año del periodo (ej: 2026)"},
+                },
+                "required": ["mes", "año"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "ordenar_archivos_raw",
             "description": (
                 "Revisa la carpeta RAW de SharePoint y mueve cada archivo al lugar correcto según su nombre. "
@@ -2140,6 +2298,9 @@ def _dispatch(name: str, args: dict) -> str:
         "preguntar_usuario":            lambda a: preguntar_usuario(a["pregunta"]),
         "buscar_correos_con_planillas": lambda a: list_emails_with_attachments(a.get("limite", 20)),
         "buscar_correos_por_asunto":    lambda a: search_emails_by_subject(a["palabra_clave"], a.get("limite", 10)),
+        "revisar_respuestas_contacto":  lambda a: check_replies_from_contact(
+            a["contacto"], a.get("email"), a.get("limite", 5), a.get("scan_limit", 500),
+        ),
         "descargar_adjunto_correo":     lambda a: download_email_attachment(a["entry_id"], a["attachment_index"], a["nombre_archivo"]),
         "enviar_correo":                lambda a: send_email(a["destinatario"], a["asunto"], a["cuerpo"], a.get("archivo_adjunto")),
         "listar_sharepoint":            lambda a: list_sharepoint_files(a.get("subcarpeta", "")),
@@ -2276,6 +2437,13 @@ def _dispatch(name: str, args: dict) -> str:
         # Balance Consolidado PT
         "actualizar_balance_consolidado_pt": lambda a: actualizar_balance_consolidado_pt(a["mes"], a["año"]),
         "actualizar_balance_consolidado_apoquindo": lambda a: actualizar_balance_consolidado_apoquindo(a["mes"], a["año"]),
+        "actualizar_balance_consolidado_rentas_nuevo": lambda a: actualizar_balance_consolidado_rentas_nuevo(a["mes"], a["año"]),
+        "verificar_archivos_balance_consolidado_pt": lambda a: verificar_archivos_balance_consolidado_pt(a["mes"], a["año"]),
+        "verificar_archivos_balance_consolidado_apoquindo": lambda a: verificar_archivos_balance_consolidado_apoquindo(a["mes"], a["año"]),
+        "actualizar_balance_consolidado_pt_si_completo": lambda a: actualizar_balance_consolidado_pt_si_completo(a["mes"], a["año"]),
+        "actualizar_balance_consolidado_apoquindo_si_completo": lambda a: actualizar_balance_consolidado_apoquindo_si_completo(a["mes"], a["año"]),
+        "actualizar_balance_consolidado_rentas_si_completo": lambda a: actualizar_balance_consolidado_rentas_si_completo(a["mes"], a["año"]),
+        "actualizar_balances_consolidados_si_completos": lambda a: actualizar_balances_consolidados_si_completos(a["mes"], a["año"]),
         "ordenar_archivos_raw":        lambda _: ordenar_archivos_raw(),
         "mover_en_sharepoint":         lambda a: mover_en_sharepoint(a["origen"], a["destino"]),
         "crear_carpeta_sharepoint":    lambda a: crear_carpeta_sharepoint(a["ruta"]),
@@ -2296,6 +2464,7 @@ def _dispatch(name: str, args: dict) -> str:
 _TOOLS_GENERAL = {
     "preguntar_usuario",
     "buscar_correos_con_planillas", "buscar_correos_por_asunto",
+    "revisar_respuestas_contacto",
     "descargar_adjunto_correo", "enviar_correo",
     "listar_sharepoint", "buscar_en_sharepoint", "copiar_de_sharepoint", "guardar_en_sharepoint", "actualizar_indice_sharepoint",
     "listar_servidor_local", "copiar_del_servidor", "guardar_en_servidor",
@@ -2308,6 +2477,9 @@ _TOOLS_GENERAL = {
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
     "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
     "actualizar_balance_consolidado_pt", "actualizar_balance_consolidado_apoquindo",
+    "verificar_archivos_balance_consolidado_pt", "verificar_archivos_balance_consolidado_apoquindo",
+    "actualizar_balance_consolidado_pt_si_completo", "actualizar_balance_consolidado_apoquindo_si_completo",
+    "actualizar_balance_consolidado_rentas_si_completo", "actualizar_balances_consolidados_si_completos",
 }
 
 _TOOLS_CDG = {
@@ -2325,6 +2497,9 @@ _TOOLS_CDG = {
     "actualizar_balance_input", "actualizar_fecha_bursatil_input",
     "actualizar_fecha_contable_input", "agregar_dividendo_input", "inspeccionar_dividendos_input",
     "actualizar_balance_consolidado_pt", "actualizar_balance_consolidado_apoquindo",
+    "verificar_archivos_balance_consolidado_pt", "verificar_archivos_balance_consolidado_apoquindo",
+    "actualizar_balance_consolidado_pt_si_completo", "actualizar_balance_consolidado_apoquindo_si_completo",
+    "actualizar_balance_consolidado_rentas_si_completo", "actualizar_balances_consolidados_si_completos",
 }
 
 _TOOLS_NOI = {
