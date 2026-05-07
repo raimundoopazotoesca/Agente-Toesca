@@ -2143,6 +2143,36 @@ INMOB_VC_BALANCE_MAP = {
     64: ("P", ["3-1-03-01"]),
 }
 
+# EERR map Inmob VC — codes extracted from col B labels in planilla, verified Dec 2025.
+INMOB_VC_EERR_MAP = {
+    76:  ["4-1-01-01"],   # INGRESOS POR ARRIENDO
+    77:  ["4-3-01-01"],   # OTROS INGRESOS (operacionales)
+    81:  ["4-2-01-02"],   # INTERESES PAGARE
+    82:  ["4-2-01-03"],   # INTERESES POR PRESTAMOS BANCARIOS
+    83:  ["5-1-01-01"],   # REPARACION Y MANTENCION
+    84:  ["5-1-01-02"],   # SEGUROS
+    85:  ["5-1-01-03"],   # ASESORIAS LEGALES
+    86:  ["5-1-01-05"],   # HONORARIOS AUDITORIA
+    87:  ["5-1-01-06"],   # IMPUESTO TIMBRE
+    88:  ["5-1-01-07"],   # PATENTES
+    89:  ["5-1-01-08"],   # ASESORIAS EXTERNAS
+    90:  ["5-1-01-10"],   # OTROS GASTOS
+    91:  ["5-1-01-11"],   # CONTRIBUCIONES
+    92:  ["5-1-01-13"],   # COMISIONES BANCARIAS
+    93:  ["5-1-01-14"],   # ASESORIAS CONTABLES
+    94:  ["5-1-01-15"],   # GASTOS NOTARIALES
+    95:  ["5-1-01-18"],   # GASTOS DEUDORES INCOBRABLES
+    96:  ["5-1-01-19"],   # PROPORCIONALIDAD IVA
+    97:  ["5-1-01-20"],   # GASTOS COMUNES
+    104: ["5-2-01-02"],   # RESULTADOS METODO DE LA PARTICIPACION
+    105: ["5-2-01-03"],   # FLUCTUACION VALOR CUOTA FONDOS MUTUOS
+    106: ["5-2-01-04"],   # REAJUSTE UF
+    107: ["5-2-01-10"],   # REAJUSTES PAGARE
+    108: ["5-3-01-01"],   # CUADRE PESOS
+    109: ["5-2-01-05"],   # REAJUSTE IMPUESTOS
+    112: ["5-1-01-16"],   # IMPUESTO RENTA
+}
+
 VINA_BALANCE_MAP = {
     7:  ("A", ["1-1-01-020", "1-1-01-022", "1-1-01-023", "1-1-03-030"]),
     9:  ("A", ["1-1-10-031"]),
@@ -2355,9 +2385,11 @@ def _apply_curico_impdif(ws, tb: dict, col: int):
     ws.cell(row=56, column=col).value = -net if net < 0 else None
 
 
-def _apply_eerr_sa_map_rn(ws, tb: dict, col: int):
-    """Fill INMOSA EERR rows using Senior Assist dot-notation codes. Value = G - Pd."""
-    for row, codes in INMOSA_SA_EERR_MAP.items():
+def _apply_eerr_sa_map_rn(ws, tb: dict, col: int, eerr_map: dict | None = None):
+    """Fill EERR rows using {row: [codes]} map. Value = G - Pd per code."""
+    if eerr_map is None:
+        eerr_map = INMOSA_SA_EERR_MAP
+    for row, codes in eerr_map.items():
         total = sum(tb[c].get("G", 0.0) - tb[c].get("Pd", 0.0) for c in codes if c in tb)
         ws.cell(row=row, column=col).value = total if total != 0 else None
 
@@ -2522,7 +2554,9 @@ def actualizar_balance_consolidado_rentas_nuevo(mes: int, año: int) -> str:
             if qplan.get(("Inmob VC", "balance")) == "analisis":
                 _apply_balance_map_rn(ws_inmob_vc, tb, INMOB_VC_BALANCE_MAP, col)
                 lines.append(f"  Balance: {len(tb)} cuentas OK")
-            lines.append("  EERR: TODO (mapa filas pendiente)")
+            if qplan.get(("Inmob VC", "eerr")) == "analisis":
+                _apply_eerr_sa_map_rn(ws_inmob_vc, tb, col, INMOB_VC_EERR_MAP)
+                lines.append(f"  EERR: {len(INMOB_VC_EERR_MAP)} filas escritas")
         except Exception as e:
             lines.append(f"  Error: {e}")
     elif not inmob_vc_path:
