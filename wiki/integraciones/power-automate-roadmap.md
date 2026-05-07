@@ -212,11 +212,10 @@ Condición: response.body.response contiene "[FALTA]"
 
 ## Orden de implementación recomendado
 
-1. **Hoy:** Crear Flujo 1B (Saldo Caja) — más fácil, impacto inmediato los lunes
-2. **Esta semana:** Crear Flujos 1A (Nicole / Valentina / Leonardo) + confirmar emails
-3. **Esta semana:** Crear Flujos 2A y 2B (recordatorios) — 30 minutos total
-4. **Próxima semana:** Instalar ngrok o gateway (Fase 3)
-5. **Después:** Flujos 4A y 4B
+1. **Hoy:** Instalar ngrok o gateway (Fase 3) — desbloquea todo lo demás
+2. **Después de Fase 3:** Agregar paso HTTP a Flujos 1A/1B → se convierten en Flujo 4C (ordenar automático)
+3. **Después:** Flujos 4A y 4B (verificación CDG, solicitud archivos faltantes)
+4. **Opcional / al final:** Flujos 2A y 2B (recordatorios) — solo útiles si el agente puede actuar en respuesta
 
 ---
 
