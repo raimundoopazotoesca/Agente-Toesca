@@ -30,7 +30,31 @@
       "Read(//c/Program Files/Microsoft Office/root/Office16/**)",
       "Read(//c/Program Files \\(x86\\)/Microsoft Office/root/Office16/**)",
       "Bash(reg query *)",
-      "Bash(xargs -I{} sh -c 'git show {}:agent.py 2>/dev/null | grep -m1 \"^MODEL\"')"
+      "Bash(xargs -I{} sh -c 'git show {}:agent.py 2>/dev/null | grep -m1 \"^MODEL\"')",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\raimundo.opazo\\\\OneDrive - Toesca\\\\Inmobiliario Toesca - Documentos\" -Recurse -File)",
+      "Bash(Select-Object FullName, Length, LastWriteTime)",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object Count)",
+      "PowerShell(cmd /c \"dir `\"C:\\\\Users\\\\raimundo.opazo\\\\automation_agent\\\\wiki`\" /s /b 2>&1\")",
+      "Bash(python -c \"import tools.gestion_renta_tools; import tools.email_tools; print\\('OK'\\)\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" -Recurse -File)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(python -c \"import flask; print\\(flask.__version__\\)\")",
+      "PowerShell(pip install flask --quiet)",
+      "PowerShell(winget list ngrok)",
+      "Bash(ngrok version *)",
+      "PowerShell(winget install Cloudflare.cloudflared)",
+      "Read(//c/temp/**)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\raimundo.opazo\\\\OneDrive - Toesca\\\\Inmobiliario Toesca - Documentos\\\\Fondo Rentas\" -Recurse -Depth 2 -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -Property FullName, Name)",
+      "Bash(ConvertTo-Json)",
+      "Read(//c/Users/raimundo.opazo/OneDrive - Toesca/**)",
+      "Read(//c/Users/raimundo.opazo/**)",
+      "Bash(xargs grep -l \"consolidado\")",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\raimundo.opazo\\\\OneDrive - Toesca\\\\Inmobiliario Toesca - Documentos\\\\Fondo Rentas\\\\RAW\" -Recurse)",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell($sp = $env:SHAREPOINT_DIR; if \\(-not $sp\\) { $sp = \"C:\\\\Users\\\\raimundo.opazo\\\\OneDrive - Toesca\\\\Inmobiliario Toesca - Documentos\" }; Get-ChildItem $sp -Depth 1 | Select-Object Name | Format-Table -AutoSize)"
     ]
   }
 }

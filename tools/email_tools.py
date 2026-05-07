@@ -7,7 +7,24 @@ import os
 import shutil
 import subprocess
 import time
+import unicodedata
 from config import WORK_DIR
+
+DEFAULT_CC = "Inmobiliario Toesca"
+CANTILLANA_CC = "mlagos@grupoaraucana.cl"
+
+KNOWN_EMAIL_CONTACTS = {
+    "cantillana": "lcantillana@grupoaraucana.cl",
+    "leonardo": "lcantillana@grupoaraucana.cl",
+    "leonardo cantillana": "lcantillana@grupoaraucana.cl",
+    "nicole": "Nicole.Carvajal@jll.com",
+    "carvajal": "Nicole.Carvajal@jll.com",
+    "nicole carvajal": "Nicole.Carvajal@jll.com",
+    "valentina": "valentina.bravo@tresasociados.cl",
+    "valentina bravo": "valentina.bravo@tresasociados.cl",
+    "sebastian": "sebastian.bravo@tresasociados.cl",
+    "sebastian bravo": "sebastian.bravo@tresasociados.cl",
+}
 
 try:
     import win32com.client
@@ -22,6 +39,47 @@ def _not_available() -> str:
         "Herramientas de email no disponibles en este sistema.\n"
         "Requiere Windows + Outlook Desktop instalado (pywin32)."
     )
+
+
+def with_default_cc(cc: str = None) -> str:
+    """Agrega la copia obligatoria a Inmobiliario Toesca sin duplicar destinatarios."""
+    recipients = []
+    seen = set()
+    for raw in (cc or "", DEFAULT_CC):
+        for part in str(raw or "").split(";"):
+            recipient = part.strip()
+            key = recipient.lower()
+            if recipient and key not in seen:
+                recipients.append(recipient)
+                seen.add(key)
+    return "; ".join(recipients)
+
+
+def _recipient_is_cantillana(to: str | None) -> bool:
+    normalized = _norm(to)
+    return "cantillana" in normalized or "lcantillana@grupoaraucana.cl" in str(to or "").casefold()
+
+
+def cc_for_recipient(to: str | None, cc: str = None) -> str:
+    """Devuelve el CC base y agrega copia extra cuando el destinatario es Cantillana."""
+    recipients = []
+    seen = set()
+
+    for raw in (cc or "", DEFAULT_CC):
+        for part in str(raw or "").split(";"):
+            recipient = part.strip()
+            key = recipient.lower()
+            if recipient and key not in seen:
+                recipients.append(recipient)
+                seen.add(key)
+
+    if _recipient_is_cantillana(to):
+        key = CANTILLANA_CC.lower()
+        if key not in seen:
+            recipients.append(CANTILLANA_CC)
+            seen.add(key)
+
+    return "; ".join(recipients)
 
 
 def _try_launch_outlook():
@@ -115,6 +173,147 @@ def _get_inbox():
     return namespace.GetDefaultFolder(6)  # 6 = Bandeja de entrada
 
 
+def _norm(text: str | None) -> str:
+    text = str(text or "").casefold()
+    text = "".join(
+        ch for ch in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(ch)
+    )
+    return " ".join(text.replace("_", " ").replace("-", " ").split())
+
+
+def _contact_matchers(contacto: str, email: str | None = None) -> tuple[set[str], set[str]]:
+    emails = {str(email).strip().casefold()} if email else set()
+    emails = {e for e in emails if e}
+    terms = {_norm(contacto)}
+    terms = {t for t in terms if t}
+
+    normalized_contact = _norm(contacto)
+    for alias, alias_email in KNOWN_EMAIL_CONTACTS.items():
+        alias_norm = _norm(alias)
+        if alias_norm and alias_norm in normalized_contact:
+            emails.add(alias_email.casefold())
+            terms.add(alias_norm)
+
+    for email_value in list(emails):
+        local_part = email_value.split("@", 1)[0]
+        terms.add(_norm(local_part.replace(".", " ")))
+
+    return emails, terms
+
+
+def _smtp_from_address_entry(address_entry):
+    try:
+        exchange_user = address_entry.GetExchangeUser()
+        smtp = getattr(exchange_user, "PrimarySmtpAddress", None)
+        if smtp:
+            return smtp
+    except Exception:
+        pass
+    try:
+        exchange_dl = address_entry.GetExchangeDistributionList()
+        smtp = getattr(exchange_dl, "PrimarySmtpAddress", None)
+        if smtp:
+            return smtp
+    except Exception:
+        pass
+    return None
+
+
+def _sender_values(msg) -> list[str]:
+    values = []
+    for attr in ("SenderName", "SenderEmailAddress"):
+        try:
+            value = getattr(msg, attr, None)
+            if value:
+                values.append(str(value))
+        except Exception:
+            pass
+    try:
+        smtp = _smtp_from_address_entry(msg.Sender)
+        if smtp:
+            values.append(str(smtp))
+    except Exception:
+        pass
+    return values
+
+
+def _recipient_values(recipient) -> list[str]:
+    values = []
+    for attr in ("Name", "Address"):
+        try:
+            value = getattr(recipient, attr, None)
+            if value:
+                values.append(str(value))
+        except Exception:
+            pass
+    try:
+        smtp = _smtp_from_address_entry(recipient.AddressEntry)
+        if smtp:
+            values.append(str(smtp))
+    except Exception:
+        pass
+    return values
+
+
+def _values_match(values: list[str], emails: set[str], terms: set[str]) -> bool:
+    normalized_values = [_norm(v) for v in values]
+    lowered_values = [str(v or "").casefold() for v in values]
+
+    for email in emails:
+        if any(email in value for value in lowered_values):
+            return True
+
+    for term in terms:
+        if term and any(term in value for value in normalized_values):
+            return True
+
+    return False
+
+
+def _sender_matches(msg, emails: set[str], terms: set[str]) -> bool:
+    return _values_match(_sender_values(msg), emails, terms)
+
+
+def _recipients_match(msg, emails: set[str], terms: set[str]) -> bool:
+    try:
+        recipients = msg.Recipients
+        for i in range(1, recipients.Count + 1):
+            if _values_match(_recipient_values(recipients.Item(i)), emails, terms):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _mail_summary(msg, date_attr: str) -> dict:
+    try:
+        date_value = getattr(msg, date_attr)
+    except Exception:
+        date_value = ""
+    excel_atts = []
+    try:
+        for att in msg.Attachments:
+            if att.FileName.lower().endswith((".xlsx", ".xls")):
+                excel_atts.append(att.FileName)
+    except Exception:
+        pass
+    return {
+        "entry_id": getattr(msg, "EntryID", ""),
+        "asunto": getattr(msg, "Subject", "") or "Sin asunto",
+        "fecha": str(date_value)[:19],
+        "conversation_id": getattr(msg, "ConversationID", "") or "",
+        "adjuntos_excel": excel_atts,
+    }
+
+
+def _subject_key(subject: str) -> str:
+    subject = _norm(subject)
+    while subject.startswith(("re ", "fw ", "fwd ")):
+        subject = subject.split(" ", 1)[1]
+    return subject
+
+
 def list_emails_with_attachments(limit: int = 20) -> str:
     if not _OUTLOOK_OK:
         return _not_available()
@@ -196,8 +395,8 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc
         mail.To = to
         mail.Subject = subject
         mail.Body = body
-        if cc:
-            mail.CC = cc
+        cc = cc_for_recipient(to, cc)
+        mail.CC = cc
 
         if attachment_path:
             if not os.path.isabs(attachment_path):
@@ -260,8 +459,8 @@ def reply_to_email(entry_id: str, body: str, cc: str = None) -> str:
         original = namespace.GetItemFromID(entry_id)
         reply = original.Reply()
         reply.Body = body
-        if cc:
-            reply.CC = cc
+        cc = cc_for_recipient(getattr(original, "To", None), cc)
+        reply.CC = cc
         reply.Send()
         suffix = f" (CC: {cc})" if cc else ""
         return f"Respuesta enviada en el mismo hilo a {original.To}{suffix}."
@@ -316,3 +515,131 @@ def search_emails_by_subject(keyword: str, limit: int = 10) -> str:
 
     except Exception as e:
         return f"Error al buscar correos: {e}"
+
+
+def check_replies_from_contact(contacto: str, email: str = None, limit: int = 5, scan_limit: int = 500) -> str:
+    """
+    Revisa si un contacto respondio despues del ultimo correo enviado a ese contacto.
+
+    La busqueda se hace por destinatario/remitente, no por asunto. Esto evita mezclar
+    preguntas personales de seguimiento con flujos especificos como CDG.
+    """
+    if not _OUTLOOK_OK:
+        return _not_available()
+
+    try:
+        outlook = _get_outlook()
+        namespace = outlook.GetNamespace("MAPI")
+        inbox = namespace.GetDefaultFolder(6)
+        sent = namespace.GetDefaultFolder(5)
+        emails, terms = _contact_matchers(contacto, email)
+        limit = max(1, min(int(limit or 5), 20))
+        scan_limit = max(50, min(int(scan_limit or 500), 2000))
+
+        if not emails and not terms:
+            return "Error: indica un contacto o email para revisar respuestas."
+
+        sent_items = sent.Items
+        sent_items.Sort("[SentOn]", True)
+        last_sent = None
+        scanned = 0
+        for msg in sent_items:
+            scanned += 1
+            if scanned > scan_limit:
+                break
+            try:
+                if _recipients_match(msg, emails, terms):
+                    last_sent = msg
+                    break
+            except Exception:
+                continue
+
+        inbox_items = inbox.Items
+        inbox_items.Sort("[ReceivedTime]", True)
+        replies = []
+        recent_from_contact = []
+        scanned = 0
+        sent_time = getattr(last_sent, "SentOn", None) if last_sent else None
+        sent_conversation = getattr(last_sent, "ConversationID", "") if last_sent else ""
+        sent_subject_key = _subject_key(getattr(last_sent, "Subject", "") if last_sent else "")
+
+        for msg in inbox_items:
+            scanned += 1
+            if scanned > scan_limit:
+                break
+            try:
+                if not _sender_matches(msg, emails, terms):
+                    continue
+
+                summary = _mail_summary(msg, "ReceivedTime")
+                recent_from_contact.append(summary)
+
+                received_time = getattr(msg, "ReceivedTime", None)
+                is_after_sent = True
+                if sent_time and received_time:
+                    try:
+                        is_after_sent = received_time > sent_time
+                    except Exception:
+                        is_after_sent = str(received_time) > str(sent_time)
+
+                if last_sent and not is_after_sent:
+                    continue
+
+                same_thread = False
+                if sent_conversation and summary["conversation_id"] == sent_conversation:
+                    same_thread = True
+                elif sent_subject_key and sent_subject_key in _subject_key(summary["asunto"]):
+                    same_thread = True
+                summary["mismo_hilo"] = same_thread
+                replies.append(summary)
+
+                if len(replies) >= limit and len(recent_from_contact) >= limit:
+                    break
+            except Exception:
+                continue
+
+        lines = [f"Revision de respuestas de {contacto}"]
+        if emails:
+            lines.append(f"Emails considerados: {', '.join(sorted(emails))}")
+
+        if last_sent:
+            sent_summary = _mail_summary(last_sent, "SentOn")
+            lines.extend([
+                "",
+                "Ultimo correo enviado encontrado:",
+                f"- Fecha: {sent_summary['fecha']}",
+                f"- Asunto: {sent_summary['asunto']}",
+                f"- entry_id: {sent_summary['entry_id']}",
+            ])
+        else:
+            lines.extend([
+                "",
+                f"No encontre correos enviados a {contacto} en los ultimos {scan_limit} enviados revisados.",
+            ])
+
+        if replies:
+            lines.extend(["", f"Respuestas posteriores encontradas ({len(replies)}):"])
+            for i, reply in enumerate(replies[:limit], 1):
+                hilo = "si" if reply.get("mismo_hilo") else "no / no confirmado"
+                lines.append(f"{i}. Fecha: {reply['fecha']}")
+                lines.append(f"   Asunto: {reply['asunto']}")
+                lines.append(f"   Mismo hilo del enviado: {hilo}")
+                lines.append(f"   entry_id: {reply['entry_id']}")
+                if reply["adjuntos_excel"]:
+                    lines.append(f"   Excel: {', '.join(reply['adjuntos_excel'])}")
+        elif last_sent:
+            lines.append("")
+            lines.append("No encontre respuestas posteriores a ese correo en la bandeja de entrada revisada.")
+
+        if not replies and recent_from_contact:
+            lines.extend(["", f"Ultimos correos recibidos de {contacto} encontrados en la revision:"])
+            for i, msg in enumerate(recent_from_contact[:limit], 1):
+                lines.append(f"{i}. {msg['fecha']} | {msg['asunto']} | entry_id: {msg['entry_id']}")
+        elif not replies and not recent_from_contact:
+            lines.append("")
+            lines.append(f"Tampoco encontre correos recibidos de {contacto} en los ultimos {scan_limit} correos revisados.")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error al revisar respuestas de {contacto}: {e}"

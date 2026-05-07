@@ -5,6 +5,7 @@ import random
 import sys
 import threading
 import itertools
+import unicodedata
 from openai import OpenAI
 from dotenv import load_dotenv
 from config import GEMINI_API_KEY
@@ -185,6 +186,11 @@ JAMÁS inventes resultados de herramientas. Si no llamaste a una herramienta, no
 Si llamaste a una herramienta, usa SOLO lo que retornó — no agregues ni cambies nada.
 Esto aplica especialmente a rutas de archivos: NUNCA generes una ruta que no vino de una herramienta.
 Si el usuario pregunta dónde está o dónde subir un archivo: llamar leer_wiki("sharepoint/index") primero.
+
+SEGUIMIENTO DE CORREOS:
+Si el usuario pregunta si una persona respondió un mail enviado (ej. "¿Cantillana respondió?"),
+busca por contacto con revisar_respuestas_contacto. No inventes ni asumas un asunto. No busques por "CDG",
+"Control de Gestión" u otro tema salvo que el usuario lo mencione explícitamente en esa pregunta.
 
 ═══════════════════════════════════════════════════════════════
 AUTONOMÍA — REGLA PRINCIPAL
@@ -501,6 +507,43 @@ _MES_NOMBRES = {
 }
 
 
+def _norm_text(text: str) -> str:
+    text = str(text or "").casefold()
+    text = "".join(
+        ch for ch in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(ch)
+    )
+    return " ".join(text.replace("_", " ").replace("-", " ").split())
+
+
+_RESPUESTA_MAIL_RE = re.compile(
+    r"(respondi[oó]|respondio|contest[oó]|contesto|respuesta).*(mail|correo)|"
+    r"(mail|correo).*(respondi[oó]|respondio|contest[oó]|contesto|respuesta)",
+    re.I,
+)
+
+
+def _try_revisar_respuesta_contacto_directo(user_input: str):
+    """Resuelve seguimientos personales de correo por contacto, sin mezclar asuntos de otros flujos."""
+    if not _RESPUESTA_MAIL_RE.search(user_input):
+        return None
+
+    from tools.email_tools import KNOWN_EMAIL_CONTACTS, check_replies_from_contact
+
+    normalized = _norm_text(user_input)
+    for alias in sorted(KNOWN_EMAIL_CONTACTS, key=len, reverse=True):
+        if _norm_text(alias) in normalized:
+            return check_replies_from_contact(alias, KNOWN_EMAIL_CONTACTS[alias])
+
+    m = re.search(r"^\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ.' -]{2,60}?)\s+(?:respondi[oó]|respondio|contest[oó]|contesto)\b", user_input, re.I)
+    if m:
+        contacto = m.group(1).strip(" ¿?.,;:")
+        if contacto:
+            return check_replies_from_contact(contacto)
+
+    return None
+
+
 def _try_verificar_cdg_directo(user_input: str):
     """Llama verificar_archivos_cdg directamente si la query es un chequeo de disponibilidad."""
     if not _VERIFICAR_CDG_RE.search(user_input):
@@ -530,6 +573,13 @@ def run_agent(user_input: str) -> str:
     print("\\n" + "=" * 60)
     print(f"Instrucción: {user_input}")
     print("=" * 60)
+
+    resultado_respuesta_contacto = _try_revisar_respuesta_contacto_directo(user_input)
+    if resultado_respuesta_contacto is not None:
+        print(f"\nAgente: {resultado_respuesta_contacto}")
+        from tools.memory_tools import guardar_tarea
+        guardar_tarea(user_input, ["revisar_respuestas_contacto"], resultado_respuesta_contacto[:200])
+        return resultado_respuesta_contacto
 
     # Intercepción directa para queries de verificación CDG — evita que Gemini alucine
     resultado_verificacion = _try_verificar_cdg_directo(user_input)
@@ -619,6 +669,7 @@ def run_agent(user_input: str) -> str:
                 # Para verificar_archivos_cdg, usar el resultado directamente
                 # sin que el modelo lo resuma (evita que Gemini omita los [OK])
                 if name in {
+                    "revisar_respuestas_contacto",
                     "verificar_archivos_cdg",
                     "previsualizar_correos_solicitud_cdg",
                     "enviar_correos_solicitud_cdg",

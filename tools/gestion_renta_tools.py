@@ -1044,6 +1044,8 @@ def _correos_solicitud_cdg(
 
     periodo = f"{MESES_ES_CDG[mes]} {año}"
     correos = {}
+    from tools.email_tools import cc_for_recipient
+
     for contacto_key, items in grupos.items():
         cfg = _CONTACTOS_SOLICITUD_CDG[contacto_key]
         asunto = cfg["asunto"].format(periodo=periodo)
@@ -1051,7 +1053,7 @@ def _correos_solicitud_cdg(
             asunto = "Seguimiento - " + asunto
         correos[contacto_key] = {
             "to": cfg["email"],
-            "cc": cfg.get("cc"),
+            "cc": cc_for_recipient(cfg["email"], cfg.get("cc")),
             "nombre": cfg["nombre"],
             "asunto": asunto,
             "cuerpo": _mail_body_solicitud(contacto_key, items, año, mes, seguimiento),
@@ -1078,6 +1080,8 @@ def previsualizar_correos_solicitud_cdg(
     for c in correos.values():
         lines.append("")
         lines.append(f"Para: {c['to']}")
+        if c.get("cc"):
+            lines.append(f"CC: {c['cc']}")
         lines.append(f"Asunto: {c['asunto']}")
         lines.append("")
         lines.append(c["cuerpo"])

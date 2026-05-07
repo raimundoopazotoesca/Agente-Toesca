@@ -23,6 +23,40 @@
         "items": [
           "eeff_inmosa"
         ]
+      },
+      {
+        "fecha": "2026-05-07T11:16:06",
+        "tipo": "seguimiento",
+        "destinatario_key": "nicole",
+        "destinatario": "Nicole",
+        "email": "Nicole.Carvajal@jll.com",
+        "asunto": "Seguimiento - Rent Roll y NOI Marzo 2026",
+        "items": [
+          "rr_jll"
+        ]
+      },
+      {
+        "fecha": "2026-05-07T11:16:06",
+        "tipo": "seguimiento",
+        "destinatario_key": "valentina",
+        "destinatario": "Valentina",
+        "email": "valentina.bravo@tresasociados.cl",
+        "asunto": "Seguimiento - EEFF Marzo 2026",
+        "items": [
+          "eeff_vina",
+          "eeff_curico"
+        ]
+      },
+      {
+        "fecha": "2026-05-07T11:16:06",
+        "tipo": "seguimiento",
+        "destinatario_key": "leonardo",
+        "destinatario": "Leonardo",
+        "email": "lcantillana@grupoaraucana.cl",
+        "asunto": "Seguimiento - EEFF INMOSA Marzo 2026",
+        "items": [
+          "eeff_inmosa"
+        ]
       }
     ]
   }

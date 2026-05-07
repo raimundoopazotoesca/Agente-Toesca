@@ -11,6 +11,7 @@ from datetime import datetime
 import streamlit as st
 
 MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory")
+WIKI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
 DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca.db")
 UBICACIONES_FILE = os.path.join(MEMORY_DIR, "ubicaciones.json")
 
@@ -248,3 +249,15 @@ def buscar_ubicacion(concepto: str) -> str:
         if v["notas"]:
             lines.append(f"    Notas: {v['notas']}")
     return "\n".join(lines)
+
+
+def leer_wiki(pagina: str) -> str:
+    """Lee una página de la wiki del agente. Ejemplos: 'sharepoint/index', 'index', 'log'."""
+    nombre = pagina.strip().rstrip(".md")
+    if not nombre.endswith(".md"):
+        nombre += ".md"
+    ruta = os.path.join(WIKI_DIR, nombre)
+    if not os.path.exists(ruta):
+        return f"Página wiki no encontrada: {nombre}. Páginas disponibles en wiki/: {os.listdir(WIKI_DIR)}"
+    with open(ruta, encoding="utf-8") as f:
+        return f.read()

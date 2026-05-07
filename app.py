@@ -18,6 +18,7 @@ from agent import (
     client, MODEL, BASE_PROMPT, PROMPT_CDG, PROMPT_NOI, PROMPT_RENTROLL, PROMPT_CAJA,
     _select_tools, _dispatch, _llm_call, get_intent_groups, _trim_tool_messages,
     _MAX_TOOL_ITERS, _thinking_phrase, _sanitize_messages_for_api,
+    _try_revisar_respuesta_contacto_directo,
 )
 from tools.ask_tools import set_streamlit_mode, _SENTINEL_PREFIX
 set_streamlit_mode(True)
@@ -329,6 +330,13 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
+if "show_balance_quick_actions" not in st.session_state:
+    st.session_state.show_balance_quick_actions = False
+
+
+def _queue_quick_action(instruction: str):
+    st.session_state.pending_input = instruction
+    st.rerun()
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -340,16 +348,47 @@ with st.sidebar:
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
 
     st.markdown('<p class="sidebar-section">Acciones rápidas</p>', unsafe_allow_html=True)
-    for icon, label in [
-        ("📊", "Crear planilla del mes"),
-        ("💰", "Actualizar NOI completo"),
-        ("🏦", "Copiar saldo caja al CDG"),
-        ("📋", "Revisar rent rolls"),
-        ("📈", "Obtener precios bursátiles"),
-    ]:
-        if st.button(f"{icon}  {label}", key=f"qa_{label}"):
-            st.session_state.pending_input = label
-            st.rerun()
+
+    if st.button("📊  Actualizar CDG", key="qa_actualizar_cdg"):
+        _queue_quick_action(
+            "Actualizar CDG. Primero llama verificar_archivos_cdg(año, mes). "
+            "Si hay archivos faltantes, detente y muestra el resultado completo con encontrados y faltantes. "
+            "Si no falta nada, actualiza el CDG siguiendo el flujo mensual completo y guarda el archivo vAgente. "
+            "Si el periodo no esta claro, preguntame mes y año antes de ejecutar."
+        )
+
+    if st.button("📚  Actualizar balances consolidados", key="qa_balances_toggle"):
+        st.session_state.show_balance_quick_actions = not st.session_state.show_balance_quick_actions
+        st.rerun()
+
+    if st.session_state.show_balance_quick_actions:
+        balance_actions = [
+            (
+                "Balance consolidado Apoquindo",
+                "Actualizar Balance Consolidado Apoquindo. Si el periodo no esta claro, preguntame mes y año. "
+                "Despues usa actualizar_balance_consolidado_apoquindo_si_completo(mes, año), que debe verificar faltantes primero "
+                "y solo actualizar si no falta nada."
+            ),
+            (
+                "Balance consolidado PT",
+                "Actualizar Balance Consolidado PT. Si el periodo no esta claro, preguntame mes y año. "
+                "Despues usa actualizar_balance_consolidado_pt_si_completo(mes, año), que debe verificar faltantes primero "
+                "y solo actualizar si no falta nada."
+            ),
+            (
+                "Balance consolidado Rentas",
+                "Actualizar Balance Consolidado Rentas. Si el periodo no esta claro, preguntame mes y año. "
+                "Despues usa actualizar_balance_consolidado_rentas_si_completo(mes, año) y reporta honestamente el estado."
+            ),
+            (
+                "Todos",
+                "Actualizar todos los balances consolidados. Si el periodo no esta claro, preguntame mes y año. "
+                "Despues usa actualizar_balances_consolidados_si_completos(mes, año), verificando cada balance antes de actualizarlo."
+            ),
+        ]
+        for label, instruction in balance_actions:
+            if st.button(f"   {label}", key=f"qa_{label}"):
+                _queue_quick_action(instruction)
 
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
     st.markdown('<p class="sidebar-section">Fondos</p>', unsafe_allow_html=True)
@@ -425,6 +464,15 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
             time.sleep(0.035)
+
+    if "pending_resume" not in st.session_state:
+        direct_response = _try_revisar_respuesta_contacto_directo(user_msg_text)
+        if direct_response is not None:
+            with st.chat_message("assistant", avatar=_AGENT_AVATAR):
+                st.write_stream(stream_text(direct_response))
+            st.session_state.messages.append({"role": "assistant", "content": direct_response})
+            guardar_tarea(user_msg_text, ["revisar_respuestas_contacto"], direct_response[:200])
+            st.rerun()
 
     def _serialize_messages(messages):
         return _sanitize_messages_for_api(messages)
@@ -542,6 +590,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     api_messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
 
                     if name in {
+                        "revisar_respuestas_contacto",
                         "verificar_archivos_cdg",
                         "previsualizar_correos_solicitud_cdg",
                         "enviar_correos_solicitud_cdg",

@@ -15,6 +15,7 @@
 - **Balance Inmob VC** → `RAW/MM-AAAA*Inmobiliaria*VC*.xlsx` hoja `Bce Tributario` → `INMOB_VC_BALANCE_MAP` (11 filas)
 - **Balance Viña Centro** → `RAW/*INFORME*EFF*VI*A*CENTRO*.xlsx` hoja `BALANCE ACUMULADO` → `VINA_BALANCE_MAP` (21 filas)
 - **EERR Inmosa** → `RAW/*Senior*Assist*.xlsx` (única hoja) → `INMOSA_SA_EERR_MAP` (31 filas, dot-notation)
+- **EERR Inmob VC** → misma fuente que balance → `INMOB_VC_EERR_MAP` (26 filas, verificado Dec 2025). Nota: labels col B del planilla contienen el código de cuenta directamente (`4-2-01-02  INTERESES PAGARE`).
 - Copia PT: busca `*Rentas PT*vAgente*.xlsx` en misma carpeta que vF, luego en WORK_DIR. Copia `Resumen` → `Resumen PT`, `Consolidado Fondo PT` → `Consolidado Fondo PT`
 - Copia Apoquindo: busca `*Apoquindo*vAgente*.xlsx`. Copia `Resumen` → `Resumen  Apoquindo` (2 espacios), `Consolidado Apoquindo` → `Consolidado Apoquindo`
 
@@ -24,7 +25,7 @@
 |---|---|---|
 | **EERR Chañarcillo** | Mapear cuentas del trial balance a filas 73-124 de la hoja Chañarcillo | Media |
 | **EERR Curicó** | Ídem para Curicó | Media |
-| **EERR Inmob VC** | Ídem para Inmob VC (entidad chica, pocas líneas) | Baja |
+| ~~**EERR Inmob VC**~~ | ✓ Implementado — 26 filas, verificado Dec 2025 | — |
 | **EERR Viña Centro** | Ídem para Viña Centro | Media |
 | **Balance Inmosa Q1-Q3** | Mapear cuentas dot-notation del Senior Assist a filas 5-70 de la hoja Inmosa | Media |
 | **Balance + EERR Fondo Rentas** | Parser PDF EEFF del fondo (M$ × 1000). Q1/Q4=EEFF, Q2/Q3=Analisis | Alta |
@@ -45,16 +46,19 @@ tools/balance_consolidado_tools.py  → función actualizar_balance_consolidado_
 
 ### 2. Para implementar un EERR map de una entidad
 
+**Atajo clave:** los labels en col B del planilla YA contienen el código de cuenta al inicio (`4-2-01-02  INTERESES PAGARE`). Solo hay que extraer el código y verificar contra el trial balance.
+
 Pasos:
 1. Abrir con openpyxl el planilla vF: `{SHAREPOINT_DIR}/Control de Gestión/Balances Consolidados/2025/4Q/12.2025- Balance Consolidado Rentas Nuevo vF.xlsx`
 2. Abrir la hoja de la entidad (ej: `Chañarcillo`)
-3. Leer col B filas 73 a 124 → son los labels de cada línea EERR
+3. Leer col B filas 73 a 124 → extraer código de cuenta del inicio del label (regex `^[\d\-]+`)
 4. Abrir el archivo fuente de la entidad (ej: `RAW/12-2025 Análisis Chañarcillo.xlsx`, hoja `Bce Tributario`)
 5. Usar `_read_trial_balance_rn` para leer el trial balance
-6. Para cada label en col B del planilla, identificar el/los código(s) de cuenta del trial balance que corresponden
-7. Verificar contra el valor histórico en col D (o E si D está vacía)
-8. Construir un dict `CHANAR_EERR_MAP = {fila: [prefixes], ...}` similar a `INMOSA_SA_EERR_MAP`
-9. Agregar función `_apply_eerr_chanar_rn(ws, tb, col)` que llame a `_apply_eerr_sa_map_rn`-style pero con el tipo correcto (G - Pd)
+6. Verificar que `G - Pd` del código coincide con el valor histórico en col D del planilla
+7. Construir `CHANAR_EERR_MAP = {fila: [codigo], ...}`
+8. En la función principal, reemplazar `lines.append("  EERR: TODO...")` con `_apply_eerr_sa_map_rn(ws_chanar, tb, col, CHANAR_EERR_MAP)`
+
+**No crear función nueva** — `_apply_eerr_sa_map_rn` ya acepta `eerr_map` como parámetro opcional.
 
 **Formato del trial balance Chañarcillo/Curicó/Inmob VC:** códigos dash-notation (`3-1-01-01`)
 **Formato del trial balance Viña Centro:** mismos dash-notation, hoja `BALANCE ACUMULADO`
