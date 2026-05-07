@@ -46,6 +46,12 @@
 | [[procesos/balance-consolidado-apoquindo]] | Balance Consolidado Rentas Apoquindo: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-07 |
 | [[procesos/balance-consolidado-rentas-nuevo]] | Balance Consolidado Rentas Nuevo: fuente por quarter | trimestral | 2026-05-07 |
 
+## Integraciones
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[integraciones/power-automate]] | Servidor HTTP Flask, flujos PA recomendados, framework de evaluación | 2026-05-07 |
+
 ## Conceptos
 
 | Página | Descripción | Actualizado |

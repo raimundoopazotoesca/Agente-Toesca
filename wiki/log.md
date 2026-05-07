@@ -5,6 +5,14 @@
 
 ---
 
+## [2026-05-07] integración | Power Automate — servidor HTTP + flujos recomendados
+
+- `run_agent()` ahora retorna `str` (antes era `None`)
+- Agregado `start_server()` en `agent.py` — Flask en puerto 5000 vía `python agent.py --server`
+- Endpoints: `POST /run {"instruction": "..."}` y `GET /health`
+- Wiki: `integraciones/power-automate.md` con flujos PA y framework de evaluación
+- Flask 3.1.3 instalado
+
 ## [2026-05-06] aprendizaje | Estructura TRI desde diagrama validado
 
 - Registrada estructura de Toesca Rentas Inmobiliarias con sociedades, participaciones y activos finales.

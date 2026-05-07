@@ -184,6 +184,7 @@ RESULTADOS DE HERRAMIENTAS — REGLA ABSOLUTA
 JAMÁS inventes resultados de herramientas. Si no llamaste a una herramienta, no muestres resultados.
 Si llamaste a una herramienta, usa SOLO lo que retornó — no agregues ni cambies nada.
 Esto aplica especialmente a rutas de archivos: NUNCA generes una ruta que no vino de una herramienta.
+Si el usuario pregunta dónde está o dónde subir un archivo: llamar leer_wiki("sharepoint/index") primero.
 
 ═══════════════════════════════════════════════════════════════
 AUTONOMÍA — REGLA PRINCIPAL
@@ -381,7 +382,11 @@ ARCHIVOS FUENTE PARA NOI:
   RR JLL (Nicole Carvajal): "{AAMM} Rent Roll y NOI.xlsx" — hoja "NOI PT"
   EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx" — del MES del CDG
   EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx" — del MES del CDG
-  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA — del MES del CDG"""
+  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA — del MES del CDG
+
+RUTAS SHAREPOINT: Para saber la ruta exacta de cualquier archivo en SharePoint,
+  llamar leer_wiki("sharepoint/index") — contiene árbol completo y patrones de nombre.
+  NUNCA inventar rutas — si no está en la wiki, usar buscar_en_sharepoint()."""
 
 PROMPT_RENTROLL = """═══════════════════════════════════════════════════════════════
 VACANCIA Y RENT ROLL
@@ -521,7 +526,7 @@ def _try_verificar_cdg_directo(user_input: str):
     return verificar_archivos_cdg(año, mes)
 
 
-def run_agent(user_input: str) -> None:
+def run_agent(user_input: str) -> str:
     print("\\n" + "=" * 60)
     print(f"Instrucción: {user_input}")
     print("=" * 60)
@@ -532,7 +537,7 @@ def run_agent(user_input: str) -> None:
         print(f"\\nAgente: {resultado_verificacion}")
         from tools.memory_tools import guardar_tarea
         guardar_tarea(user_input, ["verificar_archivos_cdg"], resultado_verificacion[:200])
-        return
+        return resultado_verificacion
 
     grupos = get_intent_groups(user_input)
     selected_tools = _select_tools(grupos)
@@ -635,6 +640,8 @@ def run_agent(user_input: str) -> None:
         resumen = final_response[:200] if final_response else "Tarea completada."
         guardar_tarea(user_input, tools_used, resumen)
 
+    return final_response
+
 
 def main() -> None:
     print("=" * 60)
@@ -665,5 +672,37 @@ def main() -> None:
             print(f"\nError inesperado: {e}")
 
 
+def start_server(port: int = 5000) -> None:
+    try:
+        from flask import Flask, request, jsonify
+    except ImportError:
+        print("Flask no instalado. Ejecuta: pip install flask")
+        return
+
+    app = Flask(__name__)
+
+    @app.post("/run")
+    def api_run():
+        data = request.get_json(silent=True) or {}
+        instruction = data.get("instruction", "").strip()
+        if not instruction:
+            return jsonify({"error": "Campo 'instruction' requerido"}), 400
+        result = run_agent(instruction)
+        return jsonify({"response": result or ""})
+
+    @app.get("/health")
+    def health():
+        return jsonify({"status": "ok"})
+
+    print(f"Servidor HTTP en http://localhost:{port}")
+    print("  POST /run  — body: {\"instruction\": \"...\"}")
+    print("  GET  /health")
+    app.run(host="0.0.0.0", port=port)
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--server":
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
+        start_server(port)
+    else:
+        main()
