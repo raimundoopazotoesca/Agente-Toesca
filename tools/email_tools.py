@@ -186,8 +186,8 @@ def download_email_attachment(entry_id: str, attachment_index: int, filename: st
         return f"Error al descargar adjunto: {e}"
 
 
-def send_email(to: str, subject: str, body: str, attachment_path: str = None) -> str:
-    """Envía un correo desde Outlook con o sin adjunto."""
+def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc: str = None) -> str:
+    """Envía un correo desde Outlook con o sin adjunto y opcionalmente con CC."""
     if not _OUTLOOK_OK:
         return _not_available()
     try:
@@ -196,9 +196,10 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None) ->
         mail.To = to
         mail.Subject = subject
         mail.Body = body
+        if cc:
+            mail.CC = cc
 
         if attachment_path:
-            # Resolver ruta relativa al WORK_DIR si no es absoluta
             if not os.path.isabs(attachment_path):
                 attachment_path = os.path.join(WORK_DIR, attachment_path)
             if os.path.exists(attachment_path):
@@ -210,7 +211,8 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None) ->
 
         if attachment_path and os.path.exists(attachment_path):
             return f"Correo enviado a {to} con adjunto '{os.path.basename(attachment_path)}'."
-        return f"Correo enviado exitosamente a {to}."
+        suffix = f" (CC: {cc})" if cc else ""
+        return f"Correo enviado exitosamente a {to}{suffix}."
 
     except Exception as e:
         return f"Error al enviar correo: {e}"
@@ -248,7 +250,7 @@ def find_sent_email(to_email: str, subject_keyword: str) -> str | None:
     return None
 
 
-def reply_to_email(entry_id: str, body: str) -> str:
+def reply_to_email(entry_id: str, body: str, cc: str = None) -> str:
     """Responde un correo existente (mismo hilo) con el cuerpo indicado."""
     if not _OUTLOOK_OK:
         return _not_available()
@@ -258,8 +260,11 @@ def reply_to_email(entry_id: str, body: str) -> str:
         original = namespace.GetItemFromID(entry_id)
         reply = original.Reply()
         reply.Body = body
+        if cc:
+            reply.CC = cc
         reply.Send()
-        return f"Respuesta enviada en el mismo hilo a {original.To}."
+        suffix = f" (CC: {cc})" if cc else ""
+        return f"Respuesta enviada en el mismo hilo a {original.To}{suffix}."
     except Exception as e:
         return f"Error al responder correo: {e}"
 

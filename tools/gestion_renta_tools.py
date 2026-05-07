@@ -759,6 +759,7 @@ _CONTACTOS_SOLICITUD_CDG = {
     "valentina": {
         "nombre": "Valentina",
         "email": "valentina.bravo@tresasociados.cl",
+        "cc": "alejandra.rebolledo@tresasociados.cl",
         "asunto": "EEFF {periodo}",
     },
     "leonardo": {
@@ -1050,6 +1051,7 @@ def _correos_solicitud_cdg(
             asunto = "Seguimiento - " + asunto
         correos[contacto_key] = {
             "to": cfg["email"],
+            "cc": cfg.get("cc"),
             "nombre": cfg["nombre"],
             "asunto": asunto,
             "cuerpo": _mail_body_solicitud(contacto_key, items, año, mes, seguimiento),
@@ -1110,11 +1112,11 @@ def enviar_correos_solicitud_cdg(
             asunto_original = cfg["asunto"].format(periodo=f"{MESES_ES_CDG[mes]} {año}")
             original_id = find_sent_email(c["to"], asunto_original)
             if original_id:
-                resultado = reply_to_email(original_id, c["cuerpo"])
+                resultado = reply_to_email(original_id, c["cuerpo"], cc=c.get("cc"))
             else:
-                resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+                resultado = send_email(c["to"], c["asunto"], c["cuerpo"], cc=c.get("cc"))
         else:
-            resultado = send_email(c["to"], c["asunto"], c["cuerpo"])
+            resultado = send_email(c["to"], c["asunto"], c["cuerpo"], cc=c.get("cc"))
 
         if resultado.startswith("Error") or "no disponibles" in resultado.lower():
             errores.append(f"{c['nombre']} ({c['to']}): {resultado}")
