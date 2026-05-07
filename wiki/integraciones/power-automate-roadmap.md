@@ -48,10 +48,10 @@ El usuario solo tiene que decirle al agente que procese — el archivo ya está 
 **Remitentes y carpetas destino:**
 | Remitente | Email | Carpeta SharePoint |
 |---|---|---|
-| Nicole Carvajal (JLL) | Nicole.Carvajal@jll.com | `/Fondo Rentas/JLL/Recibidos/` |
-| Valentina Bravo (TresA) | valentina.bravo@tresasociados.cl | `/Fondo Rentas/TresA/Recibidos/` |
-| Leonardo Cantillana (Araucana) | lcantillana@grupoaraucana.cl | `/Fondo Rentas/INMOSA/Recibidos/` |
-| Sebastián Bravo (TresA — RR) | sebastian.bravo@tresasociados.cl | `/Fondo Rentas/TresA/Recibidos/` |
+| Nicole Carvajal (JLL) | Nicole.Carvajal@jll.com | `/RAW/` |
+| Valentina Bravo (TresA) | valentina.bravo@tresasociados.cl | `/RAW/` |
+| Leonardo Cantillana (Araucana) | lcantillana@grupoaraucana.cl | `/RAW/` |
+| Sebastián Bravo (TresA — RR) | sebastian.bravo@tresasociados.cl | `/RAW/` |
 
 ### Flujo 1B — Saldo Caja (María José Castro, lunes)
 
@@ -64,7 +64,7 @@ Apply to each → Attachments:
    Filtro: nombre contiene "Saldo Caja" O "FFMM"
 
    "Create file" [SharePoint]
-   - Folder: /Controles de Gestión/Saldo Caja/Recibidos/
+   - Folder: /RAW/
    - File name: @{item()?['name']}
 
    "Post message" [Teams]:
@@ -167,6 +167,32 @@ Acción: "HTTP" [conector HTTP]
 Acción: "Post message" [Teams]
    "✅ RR JLL procesado por el agente."
 ```
+
+### Flujo 4C — Archivo llega a RAW → agente ordena automáticamente
+
+```
+Trigger: "When a new email arrives (V3)" [cualquier remitente de la lista]
+   - Solo con adjuntos: Sí
+
+Apply to each → Attachments:
+   "Create file" [SharePoint]
+   - Folder: /RAW/
+   - File name: @{item()?['name']}
+   - File content: @{item()?['contentBytes']}
+
+Acción: "HTTP" [conector HTTP]
+   - Método: POST
+   - URI: https://<tu-url-ngrok>/run
+   - Headers: Content-Type: application/json
+   - Body: {"instruction": "Ordena los archivos de la carpeta RAW"}
+
+Acción: "Post message" [Teams]
+   "✅ @{item()?['name']} recibido y ordenado automáticamente."
+```
+
+> Este flujo requiere Fase 3 (ngrok o gateway). Los flujos 1A/1B ya guardan en RAW — solo hay que agregarles el paso HTTP cuando esté disponible la conectividad.
+
+---
 
 ### Flujo 4B — Verificación CDG + solicitud de archivos faltantes (día 10)
 
