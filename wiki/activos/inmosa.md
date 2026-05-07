@@ -19,7 +19,7 @@ actualizado: 2026-05-01
 ## Fuente de datos
 
 **Archivo**: ER-FC INMOSA
-**Ubicación**: SharePoint → Fondo Rentas / Flujos INMOSA
+**Ubicación**: SharePoint → `Fondos/Rentas TRI/Activos/INMOSA/Flujos`
 **Función**: `actualizar_noi_inmosa`
 
 ## Vínculos

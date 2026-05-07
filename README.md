@@ -49,7 +49,7 @@ GEMINI_API_KEY=tu_clave_de_google_ai_studio
 SHAREPOINT_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos
 
 # Ruta completa a la carpeta Comercial (con subcarpetas 2025/, 2026/, etc.)
-RENTA_COMERCIAL_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos/Rentas/Control de Gestión Rentas Inmobiliarias/Control de Gestión Históricos/Comercial
+RENTA_COMERCIAL_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos/Control de Gestión/CDG Mensual
 ```
 
 > **Cómo encontrar la ruta exacta en Mac:**
@@ -91,7 +91,7 @@ Editar `.env`:
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 
 # Ruta de la carpeta Comercial (SharePoint o R:)
-RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Documentos\Rentas\Control de Gestión Rentas Inmobiliarias\Control de Gestión Históricos\Comercial
+RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
 
 # Opcional: servidor local R:
 # LOCAL_FILES_DIR=R:\Planillas

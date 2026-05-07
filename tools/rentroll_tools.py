@@ -25,6 +25,12 @@ import openpyxl
 
 from config import WORK_DIR, SHAREPOINT_DIR
 from tools.email_tools import send_email
+from tools.sharepoint_paths import (
+    RR_JLL_DIR,
+    TRI_ACTIVOS_DIR,
+    TRI_CURICO_RENT_ROLL_DIR,
+    TRI_VINA_RENT_ROLL_DIR,
+)
 
 # ── Rutas SharePoint Rent Rolls ──────────────────────────────────────────────
 _RR_JLL_DIR = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
@@ -35,6 +41,13 @@ _RR_TRESA_DIRS = {
 }
 
 # ── Constantes de proveedores ────────────────────────────────────────────────
+_RR_JLL_DIR = RR_JLL_DIR
+_TRI_ACTIVOS = TRI_ACTIVOS_DIR
+_RR_TRESA_DIRS = {
+    "vina": TRI_VINA_RENT_ROLL_DIR,
+    "curico": TRI_CURICO_RENT_ROLL_DIR,
+}
+
 NICOLE_EMAIL = "nicole.carvajal@jll.com"
 SEBASTIAN_EMAIL = "sebastian.bravo@tresasociados.cl"
 

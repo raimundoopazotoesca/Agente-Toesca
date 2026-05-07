@@ -16,7 +16,7 @@ actualizado: 2026-05-01
 | `tools/local_tools.py` | local | Listar/copiar desde/hacia servidor `R:` |
 | `tools/excel_tools.py` | excel | Leer, validar, actualizar celdas |
 | `tools/gestion_renta_tools.py` | gestión_renta | Planilla mensual CDG Rentas Comerciales |
-| `tools/eeff_tools.py` | eeff | Leer PDFs de EEFF desde `R:\Rentas\Fondos` |
+| `tools/eeff_tools.py` | eeff | Leer PDFs de EEFF desde `Fondos/Rentas TRI`, `Fondos/Rentas PT` y `Fondos/Rentas Apoquindo` |
 | `tools/datos_fs_tools.py` | datos_fs | Rentabilidad del fondo, TIR, hoja DATOS FS |
 | `tools/caja_tools.py` | caja | Hoja Caja del CDG: copiar desde Saldo Caja, archivar |
 | `tools/input_tools.py` | input | Hojas Input AP/PT/Ren: balance trimestral, fechas, dividendos |

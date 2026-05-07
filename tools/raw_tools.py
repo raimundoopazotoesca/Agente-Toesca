@@ -19,11 +19,11 @@ Estructura destino (bajo SHAREPOINT_DIR):
   Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/
   Control de Gestión/CDG Mensual/{YYYY}/
   Control de Gestión/Saldo Caja/{YYYY}/
-  Fondos/Apoquindo/EEFF/{YYYY}/{Qt}/
-  Fondos/Parque Titanium/EEFF/{YYYY}/{Qt}/
+  Fondos/Rentas Apoquindo/EEFF/{YYYY}/{Qt}/
+  Fondos/Rentas PT/EEFF/{YYYY}/{Qt}/
   Fondos/Rentas TRI/EEFF/Fondo/{YYYY}/{Qt}/
-  Fondos/Apoquindo/Fact Sheets/{YYYY}/{Mes}/
-  Fondos/Parque Titanium/Fact Sheets/{YYYY}/
+  Fondos/Rentas Apoquindo/Fact Sheets/{YYYY}/{Mes}/
+  Fondos/Rentas PT/Fact Sheets/{YYYY}/
   Fondos/Rentas TRI/Fact Sheets/{YYYY}/{Mes}/
 """
 import os
@@ -103,6 +103,23 @@ def _classify(filename: str) -> str | None:
         año = _infer_year_from_name(n)
         return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "Flujos", str(año))
 
+    # ── Fuentes contables Rentas TRI (balance consolidado) ───────────────────
+    if re.search(r"An[aá]lisis.*Ch.*arcillo", n, re.IGNORECASE) and nl.endswith(".xlsx"):
+        año = _infer_year_from_name(n)
+        return _sp("Fondos", "Rentas TRI", "Sociedades", "Chañarcillo", "Analisis", str(año))
+
+    if re.search(r"An[aá]lisis.*Inmobiliaria.*VC", n, re.IGNORECASE) and nl.endswith(".xlsx"):
+        año = _infer_year_from_name(n)
+        return _sp("Fondos", "Rentas TRI", "Sociedades", "Inmobiliaria VC", "Analisis", str(año))
+
+    if "senior assist" in nl and nl.endswith(".xlsx"):
+        año = _infer_year_from_name(n)
+        return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "Contabilidad", str(año))
+
+    if nl.endswith(".pdf") and "inmosa" in nl and ("eeff" in nl or "final" in nl):
+        año = _infer_year_from_name(n)
+        return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "EEFF", str(año))
+
     # ── CDG mensual ────────────────────────────────────────────────────────────
     m = re.match(r"(\d{4})\s*Control De Gesti", n, re.IGNORECASE)
     if m:
@@ -120,7 +137,7 @@ def _classify(filename: str) -> str | None:
         m2 = re.search(r"(\d{4})\s+(\d{2})", n)
         mes = int(m2.group(2)) if m2 else date.today().month
         qt = _Q_FROM_MES[mes]
-        return _sp("Fondos", "Apoquindo", "EEFF", str(año), qt)
+        return _sp("Fondos", "Rentas Apoquindo", "EEFF", str(año), qt)
 
     # ── EEFF PT (PDF trimestral) ───────────────────────────────────────────────
     if nl.endswith(".pdf") and "rentas pt" in nl and "toesca" in nl:
@@ -131,7 +148,7 @@ def _classify(filename: str) -> str | None:
         else:
             mes = date.today().month
         qt = _Q_FROM_MES[mes]
-        return _sp("Fondos", "Parque Titanium", "EEFF", str(año), qt)
+        return _sp("Fondos", "Rentas PT", "EEFF", str(año), qt)
 
     # ── EEFF TRI (PDF trimestral) ──────────────────────────────────────────────
     if nl.endswith(".pdf") and "toesca rentas inmobiliarias" in nl and "apoquindo" not in nl and "pt" not in nl:
@@ -146,16 +163,16 @@ def _classify(filename: str) -> str | None:
         m2 = re.match(r"(\d{4})", n)
         if m2:
             año, mes = _aamm_to_year_mes(m2.group(1))
-            return _sp("Fondos", "Apoquindo", "Fact Sheets", str(año), _MESES_ES[mes])
-        return _sp("Fondos", "Apoquindo", "Fact Sheets")
+            return _sp("Fondos", "Rentas Apoquindo", "Fact Sheets", str(año), _MESES_ES[mes])
+        return _sp("Fondos", "Rentas Apoquindo", "Fact Sheets")
 
     # ── Fact Sheet PT ──────────────────────────────────────────────────────────
     if re.search(r"Fact Sheet.*PT", n, re.IGNORECASE) and nl.endswith(".pptx"):
         m2 = re.match(r"(\d{4})", n)
         if m2:
             año, _ = _aamm_to_year_mes(m2.group(1))
-            return _sp("Fondos", "Parque Titanium", "Fact Sheets", str(año))
-        return _sp("Fondos", "Parque Titanium", "Fact Sheets")
+            return _sp("Fondos", "Rentas PT", "Fact Sheets", str(año))
+        return _sp("Fondos", "Rentas PT", "Fact Sheets")
 
     # ── Fact Sheet TRI ─────────────────────────────────────────────────────────
     if re.search(r"Fact Sheet.*Toesca Rentas Inmobiliarias", n, re.IGNORECASE) and nl.endswith(".pptx"):
@@ -204,18 +221,25 @@ def ordenar_archivos_raw() -> str:
 
         shutil.move(src, dst)
         rel = dst.replace(SHAREPOINT_DIR, "").lstrip(os.sep)
-        movidos.append(f"  ✓ {nombre} → {rel}")
+        movidos.append((nombre, rel))
 
     lines = []
+    lines.append("## 📁 RAW procesado")
+    lines.append("")
     if movidos:
-        lines.append(f"Archivos movidos ({len(movidos)}):")
-        lines.extend(movidos)
+        lines.append(f"### ✅ Archivos movidos `{len(movidos)}`")
+        for nombre, rel in movidos:
+            lines.append(f"- **{nombre}**")
+            lines.append(f"  → `{rel}`")
+        lines.append("")
     if no_reconocidos:
-        lines.append(f"\nArchivos no reconocidos ({len(no_reconocidos)}) — quedan en RAW:")
+        lines.append(f"### ⚠️ Archivos no reconocidos `{len(no_reconocidos)}`")
+        lines.append("_Quedan en RAW para revisión manual._")
         for f in no_reconocidos:
-            lines.append(f"  ? {f}")
+            lines.append(f"- `{f}`")
+        lines.append("")
     if not movidos and not no_reconocidos:
-        lines.append("Sin cambios.")
+        lines.append("✅ **Sin cambios.**")
 
     return "\n".join(lines)
 

@@ -21,17 +21,28 @@ from datetime import date, datetime
 import openpyxl
 from openpyxl.utils import get_column_letter
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.sharepoint_paths import (
+    APO_EEFF_DIR as CANON_APO_EEFF_DIR,
+    BALANCES_CONSOLIDADOS_DIR,
+    PT_EEFF_DIR as CANON_PT_EEFF_DIR,
+    RAW_DIR as CANON_RAW_DIR,
+    TRI_ACTIVOS_DIR,
+    TRI_BOULEVARD_DIR,
+    TRI_CHANARCILLO_DIR,
+    TRI_EEFF_FONDO_DIR,
+    TRI_INMOB_APOQUINDO_DIR,
+    TRI_INMOB_VC_DIR,
+    TRI_INMOSA_CONTABILIDAD_DIR,
+    TRI_INMOSA_EEFF_DIR,
+    TRI_TORRE_A_DIR,
+)
 
 # ─── Rutas base ────────────────────────────────────────────────────────────────
 
-BALANCES_DIR = os.path.join(
-    SHAREPOINT_DIR, "Control de Gestión", "Balances Consolidados"
-)
-TRI_EEFF_DIR = os.path.join(
-    SHAREPOINT_DIR, "Fondos", "Rentas TRI", "EEFF"
-)
-PT_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Parque Titanium", "EEFF")
-APO_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Apoquindo", "EEFF")
+BALANCES_DIR = BALANCES_CONSOLIDADOS_DIR
+TRI_EEFF_DIR = os.path.dirname(TRI_EEFF_FONDO_DIR)
+PT_EEFF_DIR = CANON_PT_EEFF_DIR
+APO_EEFF_DIR = CANON_APO_EEFF_DIR
 
 HOJAS_INPUT = ["Fondo PT", "Inmob Boulevard", "Torre A"]
 APO_HOJAS_INPUT = ["Fondo Apoquindo", "Inmobilaria Apoquindo"]
@@ -121,19 +132,19 @@ def _find_eeff_fondo_apoquindo(mes: int, año: int) -> str | None:
 
 
 def _find_eeff_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
-    apo_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Inmobiliaria Apoquindo")
+    apo_dir = os.path.join(TRI_INMOB_APOQUINDO_DIR, "EEFF")
     if os.path.isdir(apo_dir):
         for f in os.listdir(apo_dir):
             fl = f.lower()
             if fl.endswith(".pdf") and "apoquindo" in fl:
                 return os.path.join(apo_dir, f)
-    pattern = os.path.join(TRI_EEFF_DIR, "**", "*Inmobiliaria Apoquindo*.pdf")
+    pattern = os.path.join(TRI_INMOB_APOQUINDO_DIR, "**", "*Inmobiliaria Apoquindo*.pdf")
     matches = glob_module.glob(pattern, recursive=True)
     return matches[0] if matches else None
 
 
 def _find_analisis_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
-    apo_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Inmobiliaria Apoquindo")
+    apo_dir = os.path.join(TRI_INMOB_APOQUINDO_DIR, "Analisis")
     if not os.path.isdir(apo_dir):
         return None
 
@@ -165,11 +176,17 @@ def _find_analisis_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
         return max(exact_candidates)[1]
     if undated_candidates:
         return max(undated_candidates)[1]
+    recursive_hits = glob_module.glob(
+        os.path.join(TRI_INMOB_APOQUINDO_DIR, "Analisis", "**", "*Apoquindo*.xls*"),
+        recursive=True,
+    )
+    if recursive_hits:
+        return max(recursive_hits, key=os.path.getmtime)
     return None
 
 
 def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
-    bvd_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Boulevard")
+    bvd_dir = TRI_BOULEVARD_DIR
     eeff_pdf = analisis_xlsx = None
     if os.path.isdir(bvd_dir):
         for f in os.listdir(bvd_dir):
@@ -187,11 +204,17 @@ def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
                 fp = os.path.join(bvd_dir, f)
                 if f.lower().endswith(".xlsx") and "boulevard" in f.lower():
                     analisis_xlsx = fp
+    if eeff_pdf is None:
+        hits = glob_module.glob(os.path.join(bvd_dir, "**", "*Boulevard*.pdf"), recursive=True)
+        eeff_pdf = hits[0] if hits else None
+    if analisis_xlsx is None:
+        hits = glob_module.glob(os.path.join(bvd_dir, "**", "*Boulevard*.xlsx"), recursive=True)
+        analisis_xlsx = hits[0] if hits else None
     return eeff_pdf, analisis_xlsx
 
 
 def _find_torre_a_files(mes: int, año: int) -> tuple[str | None, str | None]:
-    ta_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Torre A")
+    ta_dir = TRI_TORRE_A_DIR
     eeff_pdf = analisis_xlsx = None
     if os.path.isdir(ta_dir):
         for f in os.listdir(ta_dir):
@@ -201,6 +224,12 @@ def _find_torre_a_files(mes: int, año: int) -> tuple[str | None, str | None]:
                 eeff_pdf = fp
             elif fl.endswith(".xlsx") and "torre a" in fl:
                 analisis_xlsx = fp
+    if eeff_pdf is None:
+        hits = glob_module.glob(os.path.join(ta_dir, "**", "*Torre A*.pdf"), recursive=True)
+        eeff_pdf = hits[0] if hits else None
+    if analisis_xlsx is None:
+        hits = glob_module.glob(os.path.join(ta_dir, "**", "*Torre A*.xlsx"), recursive=True)
+        analisis_xlsx = hits[0] if hits else None
     return eeff_pdf, analisis_xlsx
 
 
@@ -2075,8 +2104,8 @@ def actualizar_balance_consolidado_apoquindo(mes: int, año: int) -> str:
 
 # ─── Balance Consolidado Rentas Nuevo ─────────────────────────────────────────
 
-RAW_DIR = os.path.join(SHAREPOINT_DIR, "RAW")
-RENTAS_TRI_ACTIVOS_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "Activos")
+RAW_DIR = CANON_RAW_DIR
+RENTAS_TRI_ACTIVOS_DIR = TRI_ACTIVOS_DIR
 
 RENTAS_NUEVO_HOJAS_INPUT = [
     "Inmosa",
@@ -2249,6 +2278,14 @@ def _find_vf_rentas_nuevo(año: int, mes: int) -> str | None:
 
 
 def _find_analisis_chanar_rn(mes: int, año: int) -> str | None:
+    for base_dir in [os.path.join(TRI_CHANARCILLO_DIR, "Analisis"), TRI_CHANARCILLO_DIR]:
+        for pat in [
+            os.path.join(base_dir, "**", f"{mes:02d}-{año}*Ch*arcillo*.xlsx"),
+            os.path.join(base_dir, "**", f"{mes:02d}-{año}*Cha*.xlsx"),
+        ]:
+            hits = glob_module.glob(pat, recursive=True)
+            if hits:
+                return sorted(hits)[-1]
     for pat in [
         os.path.join(RAW_DIR, f"{mes:02d}-{año}*Ch*arcillo*.xlsx"),
         os.path.join(RAW_DIR, f"{mes:02d}-{año}*Cha*.xlsx"),
@@ -2260,6 +2297,14 @@ def _find_analisis_chanar_rn(mes: int, año: int) -> str | None:
 
 
 def _find_analisis_inmob_vc_rn(mes: int, año: int) -> str | None:
+    for base_dir in [os.path.join(TRI_INMOB_VC_DIR, "Analisis"), TRI_INMOB_VC_DIR]:
+        for pat in [
+            os.path.join(base_dir, "**", f"{mes:02d}-{año}*Inmobiliaria*VC*.xlsx"),
+            os.path.join(base_dir, "**", f"{mes:02d}-{año}*VC*.xlsx"),
+        ]:
+            hits = glob_module.glob(pat, recursive=True)
+            if hits:
+                return sorted(hits)[-1]
     for pat in [
         os.path.join(RAW_DIR, f"{mes:02d}-{año}*Inmobiliaria*VC*.xlsx"),
         os.path.join(RAW_DIR, f"{mes:02d}-{año}*VC*.xlsx"),
@@ -2287,6 +2332,19 @@ def _find_curico_informe_rn(mes: int, año: int) -> str | None:
 
 
 def _find_vina_trial_balance_rn(mes: int, año: int) -> str | None:
+    base = os.path.join(RENTAS_TRI_ACTIVOS_DIR, "Viña Centro", "EEFF")
+    for y in (año, año - 1):
+        ydir = os.path.join(base, str(y))
+        if not os.path.isdir(ydir):
+            continue
+        for pat in [
+            os.path.join(ydir, f"{mes:02d}-{año}*INFORME*EFF*VI*A*CENTRO*.xlsx"),
+            os.path.join(ydir, f"*{mes:02d}*{año}*VI*A*CENTRO*.xlsx"),
+            os.path.join(ydir, f"*VI*A*CENTRO*{año}*.xlsx"),
+        ]:
+            hits = glob_module.glob(pat)
+            if hits:
+                return sorted(hits)[-1]
     for pat in [
         os.path.join(RAW_DIR, f"{mes:02d}-{año}*INFORME*EFF*VI*A*CENTRO*.xlsx"),
         os.path.join(RAW_DIR, f"*{mes:02d}*{año}*VI*A*CENTRO*.xlsx"),
@@ -2299,6 +2357,15 @@ def _find_vina_trial_balance_rn(mes: int, año: int) -> str | None:
 
 
 def _find_senior_assist_rn(mes: int, año: int) -> str | None:
+    for base_dir in [TRI_INMOSA_CONTABILIDAD_DIR, TRI_INMOSA_EEFF_DIR]:
+        for pat in [
+            os.path.join(base_dir, "**", f"*{año}*Senior*Assist*.xlsx"),
+            os.path.join(base_dir, "**", f"Balance*{año}*Senior*.xlsx"),
+            os.path.join(base_dir, "**", f"Balance*General*{año}*.xlsx"),
+        ]:
+            hits = glob_module.glob(pat, recursive=True)
+            if hits:
+                return sorted(hits)[-1]
     for pat in [
         os.path.join(RAW_DIR, f"*{año}*Senior*Assist*.xlsx"),
         os.path.join(RAW_DIR, f"Balance*{año}*Senior*.xlsx"),

@@ -14,9 +14,9 @@ Instrucciones completas en `wiki/procesos/balance-consolidado-rentas-nuevo.md`.
 
 ## [2026-05-07] reorganización | SharePoint restructurado + carpeta RAW + raw_tools
 
-- Nueva estructura: `Fondos/{Apoquindo|Parque Titanium|Rentas TRI}/` agrupa EEFF, Fact Sheets y activos por fondo
+- Nueva estructura: `Fondos/{Rentas Apoquindo|Rentas PT|Rentas TRI|Renta Residencial}/` agrupa EEFF, Fact Sheets y activos por fondo
 - Activos de TRI (Viña, Curicó, INMOSA) ahora en `Fondos/Rentas TRI/Activos/{activo}/{EEFF|Rent Roll}/`
-- CDG mensual: `Controles de Gestión/.../` → `Control de Gestión/CDG Mensual/`
+- CDG mensual: estructura canonica en `Control de Gestión/CDG Mensual/`
 - Saldo Caja, Balances, TIR bajo `Control de Gestión/`
 - Carpeta `RAW/` creada: usuario sube archivos, agente llama `ordenar_archivos_raw()` para clasificarlos
 - Código actualizado: 7 tool files + registry.py + raw_tools.py (nuevo)
@@ -41,8 +41,8 @@ Instrucciones completas en `wiki/procesos/balance-consolidado-rentas-nuevo.md`.
 
 - Mapeada hoja Fondo PT: clasificaciones, unidades (M$×1000), procedimiento inserción columna
 - Verificado cruce EEFF 4Q2025 → planilla: Total Activo, Patrimonio, Resultado cuadran
-- Fuente EEFF: SharePoint/Fondo Rentas PT/EEFF/{año}/{TT}/
-- Fuente planilla vF: SharePoint/Controles de Gestión/Renta Comercial/Balances Consolidados/
+- Fuente EEFF: SharePoint/Fondos/Rentas PT/EEFF/{año}/{TT}/
+- Fuente planilla vF: SharePoint/Control de Gestión/Balances Consolidados/
 - Pendiente: mapeo Inmob Boulevard, Torre A (fuente desconocida), EEFF trimestrales
 
 ## [2026-05-01] init | Wiki creada

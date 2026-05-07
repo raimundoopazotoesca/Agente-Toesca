@@ -10,11 +10,11 @@
 - Finds vF, copia como vAgente en la misma carpeta (misma carpeta del vF, no WORK_DIR)
 - Desplaza columnas D:K en hojas input + PT/Apo
 - Escribe fecha (`datetime`) y estado en fila 2 col D y col B respectivamente
-- **Balance Chañarcillo** → `RAW/MM-AAAA*Ch*arcillo*.xlsx` hoja `Bce Tributario` → `CHANAR_BALANCE_MAP` (16 filas)
+- **Balance Chañarcillo** → `Fondos/Rentas TRI/Sociedades/Chañarcillo/Analisis/YYYY/MM-AAAA*Ch*arcillo*.xlsx` hoja `Bce Tributario` → `CHANAR_BALANCE_MAP` (16 filas)
 - **Balance Curicó** → `Fondos/Rentas TRI/Activos/Curicó/EEFF/YYYY/MM-AAAA*INFORME*CURIC*.xlsx` hoja `Acum MM-AAAA` → `CURICO_BALANCE_MAP` (16 filas) + `_apply_curico_impdif` (R31/R56 neto)
-- **Balance Inmob VC** → `RAW/MM-AAAA*Inmobiliaria*VC*.xlsx` hoja `Bce Tributario` → `INMOB_VC_BALANCE_MAP` (11 filas)
-- **Balance Viña Centro** → `RAW/*INFORME*EFF*VI*A*CENTRO*.xlsx` hoja `BALANCE ACUMULADO` → `VINA_BALANCE_MAP` (21 filas)
-- **EERR Inmosa** → `RAW/*Senior*Assist*.xlsx` (única hoja) → `INMOSA_SA_EERR_MAP` (31 filas, dot-notation)
+- **Balance Inmob VC** → `Fondos/Rentas TRI/Sociedades/Inmobiliaria VC/Analisis/YYYY/MM-AAAA*Inmobiliaria*VC*.xlsx` hoja `Bce Tributario` → `INMOB_VC_BALANCE_MAP` (11 filas)
+- **Balance Viña Centro** → `Fondos/Rentas TRI/Activos/Viña Centro/EEFF/YYYY/*INFORME*EFF*VI*A*CENTRO*.xlsx` hoja `BALANCE ACUMULADO` → `VINA_BALANCE_MAP` (21 filas)
+- **EERR Inmosa** → `Fondos/Rentas TRI/Activos/INMOSA/Contabilidad/YYYY/*Senior*Assist*.xlsx` (única hoja) → `INMOSA_SA_EERR_MAP` (31 filas, dot-notation)
 - **EERR Inmob VC** → misma fuente que balance → `INMOB_VC_EERR_MAP` (26 filas, verificado Dec 2025). Nota: labels col B del planilla contienen el código de cuenta directamente (`4-2-01-02  INTERESES PAGARE`).
 - Copia PT: busca `*Rentas PT*vAgente*.xlsx` en misma carpeta que vF, luego en WORK_DIR. Copia `Resumen` → `Resumen PT`, `Consolidado Fondo PT` → `Consolidado Fondo PT`
 - Copia Apoquindo: busca `*Apoquindo*vAgente*.xlsx`. Copia `Resumen` → `Resumen  Apoquindo` (2 espacios), `Consolidado Apoquindo` → `Consolidado Apoquindo`
@@ -52,7 +52,7 @@ Pasos:
 1. Abrir con openpyxl el planilla vF: `{SHAREPOINT_DIR}/Control de Gestión/Balances Consolidados/2025/4Q/12.2025- Balance Consolidado Rentas Nuevo vF.xlsx`
 2. Abrir la hoja de la entidad (ej: `Chañarcillo`)
 3. Leer col B filas 73 a 124 → extraer código de cuenta del inicio del label (regex `^[\d\-]+`)
-4. Abrir el archivo fuente de la entidad (ej: `RAW/12-2025 Análisis Chañarcillo.xlsx`, hoja `Bce Tributario`)
+4. Abrir el archivo fuente de la entidad (ej: `Fondos/Rentas TRI/Sociedades/Chañarcillo/Analisis/2025/12-2025 Análisis Chañarcillo.xlsx`, hoja `Bce Tributario`)
 5. Usar `_read_trial_balance_rn` para leer el trial balance
 6. Verificar que `G - Pd` del código coincide con el valor histórico en col D del planilla
 7. Construir `CHANAR_EERR_MAP = {fila: [codigo], ...}`
@@ -67,7 +67,7 @@ Pasos:
 
 ### 3. Para implementar Balance Inmosa Q1-Q3
 
-El archivo Senior Assist (`RAW/*Senior*Assist*.xlsx`, única hoja) usa dot-notation (`1.1.1010.10.01`).
+El archivo Senior Assist (`Fondos/Rentas TRI/Activos/INMOSA/Contabilidad/YYYY/*Senior*Assist*.xlsx`, única hoja) usa dot-notation (`1.1.1010.10.01`).
 Headers (fila 10): Cuenta | Descripción | Debe | Haber | Deudor | Acreedor | **Activo** | **Pasivo** | Perdida | (col 10 = Ganancia)
 
 Crear `INMOSA_SA_BALANCE_MAP = {fila: (tipo, [codigos_dot]),...}` donde filas son las del planilla (5-70 hoja Inmosa).
@@ -75,7 +75,7 @@ Verificar contra col D del vF histórico.
 
 ### 4. Para implementar Fondo Rentas
 
-- Q1/Q4: EEFF PDF (M$ × 1000). Buscar en `{SHAREPOINT_DIR}/Fondos/Rentas TRI/EEFF/YYYY/...` con MarkItDown
+- Q1/Q4: EEFF PDF (M$ × 1000). Buscar en `{SHAREPOINT_DIR}/Fondos/Rentas TRI/EEFF/Fondo/{YYYY}/{Q}/...` con MarkItDown
 - Q2/Q3: Análisis xlsx (todavía sin identificar fuente exacta)
 - El parser debe extraer balance y EERR. Ver `_parse_eeff_fondo_pt_pdf` como referencia
 

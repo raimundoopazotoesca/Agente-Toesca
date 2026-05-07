@@ -41,8 +41,9 @@ Luego ejecutar:
 
 ## Archivos involucrados
 
-- CDG en `RENTA_COMERCIAL_DIR` (servidor R:)
-- EEFF en `FONDOS_DIR/FI Toesca Rentas .../` (servidor R:)
+- CDG en `Control de Gestión/CDG Mensual/{YYYY}/`
+- EEFF de fondos en `Fondos/Rentas TRI|Rentas PT|Rentas Apoquindo/EEFF/`
+- Fuentes operativas en `Fondos/Rentas TRI/Activos/...`
 - Trabajo en `WORK_DIR`
 
 ## Vínculos

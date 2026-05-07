@@ -33,9 +33,9 @@ actualizado: 2026-05-01
 | `LOCAL_FILES_DIR` | `R:\` |
 | `WORK_DIR` | `C:\Users\raimundo.opazo\automation_agent\work` |
 | `SHAREPOINT_DIR` | `C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos` |
-| `RENTA_COMERCIAL_DIR` | `R:\Rentas\Control de Gestión Rentas Inmobiliarias\Control de Gestión Históricos\Comercial` |
-| `FONDOS_DIR` | `R:\Rentas\Fondos` |
-| `SALDO_CAJA_DIR` | `R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja` |
+| `RENTA_COMERCIAL_DIR` | `C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual` |
+| `FONDOS_DIR` | Canonico en codigo: `tools/sharepoint_paths.py` bajo `Fondos/` |
+| `SALDO_CAJA_DIR` | `C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\Saldo Caja` |
 
 ## Compatibilidad
 

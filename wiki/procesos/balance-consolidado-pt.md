@@ -11,33 +11,33 @@ Planilla trimestral que consolida los EEFF de las 3 entidades que componen el Fo
 
 **Planillas vF (fuente para actualizar):**
 ```
-SharePoint/Controles de Gestión/Renta Comercial/Balances Consolidados/{año}/{TQ}/
+SharePoint/Control de Gestión/Balances Consolidados/{año}/{TQ}/
   {MM}.{YYYY}- Balance Consolidado Rentas PT vF.xlsx
 ```
-Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Controles de Gestión/Renta Comercial/Balances Consolidados/`
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Control de Gestión/Balances Consolidados/`
 
 **EEFF Fondo PT (balance):**
 ```
-SharePoint/Fondo Rentas PT/EEFF/{YYYY}/{TT}/
+SharePoint/Fondos/Rentas PT/EEFF/{YYYY}/{TT}/
   EEFF {AAAAMM} Toesca FI Rentas PT Final.pdf
 ```
-Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas PT/EEFF/`
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondos/Rentas PT/EEFF/`
 
 **Boulevard (balance + EERR):**
 ```
-SharePoint/TRI/EEFF/Boulevard/
+SharePoint/Fondos/Rentas TRI/Sociedades/Boulevard/
   EEFF 31-12-{YYYY} Boulevard.pdf          ← balance sheet (anual)
   {MM}-{YYYY} - Análisis Inmobiliaria Boulevard PT.xlsx  ← EERR (hoja "EERR")
 ```
-Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas Inmobiliarias TRI/EEFF/Boulevard/`
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondos/Rentas TRI/Sociedades/Boulevard/`
 
 **Torre A (balance + EERR):**
 ```
-SharePoint/TRI/EEFF/Torre A/
+SharePoint/Fondos/Rentas TRI/Sociedades/Torre A/
   EEFF 31-12-{YYYY} Torre A.pdf           ← usar si los períodos pasados indican EEFF
   {MM}-{YYYY} - Análisis Torre A.xlsx      ← balance (hoja "Estado de Situacion") + EERR (hoja "EERR")
 ```
-Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondo Rentas Inmobiliarias TRI/EEFF/Torre A/`
+Ruta local: `C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondos/Rentas TRI/Sociedades/Torre A/`
 > Manda la regla general de períodos pasados: si se usó Análisis, usar Análisis; si se usó EEFF, usar EEFF.
 
 ## Hojas del archivo

@@ -59,7 +59,7 @@ tools/
   local_tools.py      # listar/copiar desde/hacia servidor R:
   excel_tools.py      # leer, validar, actualizar celdas
   gestion_renta_tools.py  # planilla mensual CDG Rentas Comerciales
-  eeff_tools.py       # leer PDFs de EEFF desde R:\Rentas\Fondos
+  eeff_tools.py       # leer PDFs de EEFF desde SharePoint/Fondos
   datos_fs_tools.py   # rentabilidad del fondo, TIR, hoja DATOS FS
   caja_tools.py       # hoja Caja del CDG: copiar desde Saldo Caja, archivar
   input_tools.py      # hojas Input AP/PT/Ren: balance trimestral, fechas, dividendos
@@ -77,18 +77,18 @@ GEMINI_API_KEY=...
 LOCAL_FILES_DIR=R:\
 WORK_DIR=C:\Users\raimundo.opazo\automation_agent\work
 SHAREPOINT_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos
-RENTA_COMERCIAL_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Control de Gestión Históricos\Comercial
-FONDOS_DIR=R:\Rentas\Fondos
-SALDO_CAJA_DIR=R:\Rentas\Control de Gestión Rentas Inmobiliarias\Saldo Caja
+RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
+FONDOS_DIR=
+SALDO_CAJA_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\Saldo Caja
 ```
 
 ## Fondos gestionados
 
-| Fondo (Nombre Real) | Clave `fondo_key` (Uso Interno/Excel) | Carpeta en R:\Rentas\Fondos |
+| Fondo (Nombre Real) | Clave `fondo_key` (Uso Interno/Excel) | Carpeta SharePoint |
 |---|---|---|
-| Toesca Rentas Inmobiliarias Apoquindo | `A&R Apoquindo` | `FI Toesca Rentas Apoquindo` |
-| Toesca Rentas Inmobiliarias PT | `A&R PT` | `FI Toesca Rentas PT` |
-| Toesca Rentas Inmobiliarias | `A&R Rentas` | `FI Toesca Rentas` |
+| Toesca Rentas Inmobiliarias Apoquindo | `A&R Apoquindo` | `Fondos\Rentas Apoquindo` |
+| Toesca Rentas Inmobiliarias PT | `A&R PT` | `Fondos\Rentas PT` |
+| Toesca Rentas Inmobiliarias | `A&R Rentas` | `Fondos\Rentas TRI` |
 
 ## Nemotécnicos
 
@@ -134,7 +134,7 @@ Activos y fuentes de datos:
 
 | Activo | Filas NOI-RCSD | Fuente | Función |
 |---|---|---|---|
-| INMOSA | 287-295 | ER-FC INMOSA (SharePoint Fondo Rentas/Flujos INMOSA) | `actualizar_noi_inmosa` |
+| INMOSA | 287-295 | ER-FC INMOSA (`Fondos/Rentas TRI/Activos/INMOSA/Flujos`) | `actualizar_noi_inmosa` |
 | Parque Titanium | 335-379 | hoja 'NOI PT' del RR JLL (WORK_DIR) | `actualizar_noi_pt` |
 | Viña Centro | 196-214 | INFORME EEFF Viña Centro (SharePoint TresA/Viña Centro) | `actualizar_er_vina` |
 | Fondo Apoquindo | 426-456 | hoja 'NOI PT' del RR JLL (WORK_DIR) | `actualizar_noi_apoquindo` |
@@ -167,7 +167,7 @@ Hardcoded en `_NOI_CURICO_MAP` / `_NOI_VINA_MAP`. NOI fila 7 = row de fechas (co
 
 ### Archivos EEFF Viña disponibles
 
-`C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Fondo Rentas\Informes TresA\Viña Centro`
+`C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Fondos\Rentas TRI\Activos\Viña Centro\EEFF`
 
 ## Arquitectura XML directo en XLSX
 

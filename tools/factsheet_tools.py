@@ -14,13 +14,14 @@ import shutil
 from datetime import date, datetime
 from calendar import monthrange
 
-from config import SHAREPOINT_DIR, WORK_DIR
+from config import WORK_DIR
+from tools.sharepoint_paths import APO_FACT_SHEETS_DIR, PT_FACT_SHEETS_DIR, TRI_FACT_SHEETS_DIR
 
-# ── Paths dentro de SHAREPOINT_DIR ─────────────────────────────────────────
+# ── Paths canonicos dentro de SHAREPOINT_DIR ───────────────────────────────
 _FS_DIRS = {
-    "PT":        os.path.join("Fondos", "Parque Titanium", "Fact Sheets"),
-    "Apoquindo": os.path.join("Fondos", "Apoquindo", "Fact Sheets"),
-    "TRI":       os.path.join("Fondos", "Rentas TRI", "Fact Sheets"),
+    "PT":        PT_FACT_SHEETS_DIR,
+    "Apoquindo": APO_FACT_SHEETS_DIR,
+    "TRI":       TRI_FACT_SHEETS_DIR,
 }
 
 _FS_SUFFIXES = ("vActualizar.pptx", "vRevisar.pptx", "vF.pptx")
@@ -40,14 +41,9 @@ _MESES_ES = {
 
 # ── Helpers internos ────────────────────────────────────────────────────────
 
-def _sp(subfolder: str) -> str:
-    """Devuelve ruta absoluta dentro de SHAREPOINT_DIR."""
-    return os.path.join(SHAREPOINT_DIR, subfolder)
-
-
 def _fs_folder(fondo_key: str, año: int | None = None, mes: int | None = None) -> str:
     """Ruta a la carpeta de Fact Sheets del fondo."""
-    base = _sp(_FS_DIRS[fondo_key])
+    base = _FS_DIRS[fondo_key]
     if not año:
         return base
     if fondo_key == "PT":

@@ -2,7 +2,7 @@
 Herramientas para actualizar la hoja NOI-RCSD del CDG Rentas Comerciales.
 
 Activos y fuentes:
-  INMOSA (filas 287-295)      : ER-FC INMOSA (SharePoint: Fondo Rentas/Flujos INMOSA)
+  INMOSA (filas 287-295)      : ER-FC INMOSA (SharePoint: Fondos/Rentas TRI/Activos/INMOSA/Flujos)
   Parque Titanium (335-379)   : hoja 'NOI PT' del RR JLL (en WORK_DIR)
   Viña Centro                 : INFORME EEFF VINA CENTRO → crea col en ER Viña → NOI auto
   Fondo Apoquindo (426-456)   : hoja 'NOI PT' del RR JLL (en WORK_DIR)
@@ -34,6 +34,13 @@ from typing import Optional
 import openpyxl
 
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.sharepoint_paths import (
+    RR_JLL_DIR,
+    TRI_ACTIVOS_DIR,
+    TRI_CURICO_EEFF_DIR,
+    TRI_INMOSA_FLUJOS_DIR,
+    TRI_VINA_EEFF_DIR,
+)
 
 # ── Rutas base ─────────────────────────────────────────────────────────────────
 _TRI_ACTIVOS = os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "Activos")
@@ -43,6 +50,13 @@ _TRES_A_DIRS = {
 }
 _RR_JLL_BASE = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
 _INMOSA_BASE = os.path.join(_TRI_ACTIVOS, "INMOSA", "Flujos")
+_TRI_ACTIVOS = TRI_ACTIVOS_DIR
+_TRES_A_DIRS = {
+    "vina": TRI_VINA_EEFF_DIR,
+    "curico": TRI_CURICO_EEFF_DIR,
+}
+_RR_JLL_BASE = RR_JLL_DIR
+_INMOSA_BASE = TRI_INMOSA_FLUJOS_DIR
 
 # Sheet XML paths within the CDG xlsx (derived from workbook.xml.rels)
 _ER_VINA_XML   = "xl/worksheets/sheet54.xml"

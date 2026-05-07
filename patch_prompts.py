@@ -120,7 +120,7 @@ ARCHIVOS FUENTE PARA NOI:
   RR JLL (Nicole Carvajal): "{AAMM} Rent Roll y NOI.xlsx" — hoja "NOI PT"
   EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx" — del MES del CDG
   EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx" — del MES del CDG
-  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA — del MES del CDG"""
+  ER-FC INMOSA: SharePoint → Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/ — del MES del CDG"""
 '''
 
 PROMPT_RENTROLL_STR = '''PROMPT_RENTROLL = """═══════════════════════════════════════════════════════════════

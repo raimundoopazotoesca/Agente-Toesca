@@ -25,15 +25,14 @@ import zipfile
 from calendar import monthrange
 from datetime import date, timedelta
 from config import WORK_DIR, SHAREPOINT_DIR
-
-def _sharepoint_saldo_caja_dir() -> str:
-    """Ruta SharePoint: Control de Gestión/Saldo Caja/"""
-    if SHAREPOINT_DIR:
-        return os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Saldo Caja")
-    return ""
-
+from tools.sharepoint_paths import SALDO_CAJA_DIR
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _sharepoint_saldo_caja_dir() -> str:
+    """Ruta SharePoint canonica: Control de Gestion/Saldo Caja/."""
+    return SALDO_CAJA_DIR if SHAREPOINT_DIR else ""
+
 
 def _resolve_path(nombre_archivo: str) -> str:
     if os.path.isabs(nombre_archivo):

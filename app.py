@@ -357,6 +357,12 @@ with st.sidebar:
             "Si el periodo no esta claro, preguntame mes y año antes de ejecutar."
         )
 
+    if st.button("📥  Digerir RAW files", key="qa_digerir_raw"):
+        _queue_quick_action(
+            "Digerir RAW files. Revisa que hay en la carpeta RAW de SharePoint y ordenalo de forma inteligente. "
+            "Llama ordenar_archivos_raw() y muestra el resultado completo, incluyendo archivos movidos y no reconocidos."
+        )
+
     if st.button("📚  Actualizar balances consolidados", key="qa_balances_toggle"):
         st.session_state.show_balance_quick_actions = not st.session_state.show_balance_quick_actions
         st.rerun()
@@ -403,12 +409,14 @@ with st.sidebar:
 
 # ─── Procesar input inicial ──────────────────────────────────────────────────
 _pending = st.session_state.get("pending_input")
+chat_input = st.chat_input("Escribe una instrucción...")
+user_input = chat_input or _pending
+is_internal_action = bool(_pending and not chat_input)
+
 if _pending:
     st.session_state.pending_input = None
 
-user_input = st.chat_input("Escribe una instrucción...") or _pending
-
-if user_input:
+if user_input and not is_internal_action:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
 # ─── Área principal (Renderizar historial o Welcome) ─────────────────────────
@@ -437,7 +445,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 2. Componente dinámico: Segundo elemento en el DOM. Cambia el CSS si hay mensajes.
-if st.session_state.messages:
+has_chat_activity = bool(st.session_state.messages) or bool(user_input)
+if has_chat_activity:
     st.markdown("""
     <style>
     .welcome-container { padding: 0rem 2rem 1.5rem 2rem !important; }
@@ -455,21 +464,18 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # ─── Generar respuesta del asistente si corresponde ───────────────────────────
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    user_msg_text = st.session_state.messages[-1]["content"]
-
-    import time
-    def stream_text(text):
-        words = text.split(" ")
-        for i, word in enumerate(words):
-            yield word + (" " if i < len(words) - 1 else "")
-            time.sleep(0.035)
+should_generate_response = bool(user_input) and (
+    is_internal_action
+    or (st.session_state.messages and st.session_state.messages[-1]["role"] == "user")
+)
+if should_generate_response:
+    user_msg_text = user_input
 
     if "pending_resume" not in st.session_state:
         direct_response = _try_revisar_respuesta_contacto_directo(user_msg_text)
         if direct_response is not None:
             with st.chat_message("assistant", avatar=_AGENT_AVATAR):
-                st.write_stream(stream_text(direct_response))
+                st.markdown(direct_response)
             st.session_state.messages.append({"role": "assistant", "content": direct_response})
             guardar_tarea(user_msg_text, ["revisar_respuestas_contacto"], direct_response[:200])
             st.rerun()
@@ -507,6 +513,8 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
         history = [m for m in st.session_state.messages if m["role"] in ("user", "assistant")]
         for m in history[-(_MAX_HISTORY_TURNS * 2):]:
             api_messages.append({"role": m["role"], "content": m["content"]})
+        if is_internal_action:
+            api_messages.append({"role": "user", "content": user_msg_text})
 
     tools_used = []
     final_response = ""
@@ -556,7 +564,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
                     status_area.empty()
                     with response_area:
-                        st.write_stream(stream_text(final_response))
+                        st.markdown(final_response)
                     break
 
                 ask_user_triggered = False
@@ -592,6 +600,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     if name in {
                         "revisar_respuestas_contacto",
                         "verificar_archivos_cdg",
+                        "ordenar_archivos_raw",
                         "previsualizar_correos_solicitud_cdg",
                         "enviar_correos_solicitud_cdg",
                     }:
@@ -602,13 +611,13 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 if ask_user_triggered:
                     status_area.empty()
                     with response_area:
-                        st.write_stream(stream_text(final_response))
+                        st.markdown(final_response)
                     break
 
                 if direct_tool_response:
                     status_area.empty()
                     with response_area:
-                        st.write_stream(stream_text(final_response))
+                        st.markdown(final_response)
                     break
 
         except RuntimeError as e:

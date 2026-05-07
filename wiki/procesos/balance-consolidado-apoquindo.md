@@ -12,21 +12,21 @@ Planilla trimestral que consolida:
 Planillas vF:
 
 ```text
-SharePoint/Controles de Gestion/Renta Comercial/Balances Consolidados/{YYYY}/{TQ}/
+SharePoint/Control de Gestion/Balances Consolidados/{YYYY}/{TQ}/
   {MM}.{YYYY}- Balance Consolidado Rentas Apoquindo vF.xlsx
 ```
 
 EEFF Fondo Apoquindo:
 
 ```text
-SharePoint/Fondo Rentas Apoquindo/EEFF/{YYYY}/{TT}/
+SharePoint/Fondos/Rentas Apoquindo/EEFF/{YYYY}/{TT}/
   Toesca Rentas Inmobiliarias Apoquindo {YYYY} {MM}*.pdf
 ```
 
 EEFF Inmobiliaria Apoquindo:
 
 ```text
-SharePoint/Fondo Rentas Inmobiliarias TRI/EEFF/Inmobiliaria Apoquindo/
+SharePoint/Fondos/Rentas TRI/Sociedades/Inmobiliaria Apoquindo/EEFF/{YYYY}/
   EEFF Inmobiliaria Apoquindo {MM}-{YYYY}*.pdf
 ```
 

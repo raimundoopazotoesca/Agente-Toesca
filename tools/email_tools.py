@@ -598,46 +598,47 @@ def check_replies_from_contact(contacto: str, email: str = None, limit: int = 5,
             except Exception:
                 continue
 
-        lines = [f"Revision de respuestas de {contacto}"]
+        lines = [f"## 📬 Revisión de respuestas: **{contacto}**"]
         if emails:
-            lines.append(f"Emails considerados: {', '.join(sorted(emails))}")
+            lines.append(f"**Emails considerados:** `{', '.join(sorted(emails))}`")
 
         if last_sent:
             sent_summary = _mail_summary(last_sent, "SentOn")
             lines.extend([
                 "",
-                "Ultimo correo enviado encontrado:",
-                f"- Fecha: {sent_summary['fecha']}",
-                f"- Asunto: {sent_summary['asunto']}",
-                f"- entry_id: {sent_summary['entry_id']}",
+                "### ✉️ Último correo enviado encontrado",
+                f"- **Fecha:** {sent_summary['fecha']}",
+                f"- **Asunto:** {sent_summary['asunto']}",
+                f"- **Entry ID:** `{sent_summary['entry_id']}`",
             ])
         else:
             lines.extend([
                 "",
-                f"No encontre correos enviados a {contacto} en los ultimos {scan_limit} enviados revisados.",
+                "### ⚠️ Sin correo enviado encontrado",
+                f"No encontré correos enviados a **{contacto}** en los últimos `{scan_limit}` enviados revisados.",
             ])
 
         if replies:
-            lines.extend(["", f"Respuestas posteriores encontradas ({len(replies)}):"])
+            lines.extend(["", f"### ✅ Respuestas posteriores encontradas `{len(replies)}`"])
             for i, reply in enumerate(replies[:limit], 1):
-                hilo = "si" if reply.get("mismo_hilo") else "no / no confirmado"
-                lines.append(f"{i}. Fecha: {reply['fecha']}")
-                lines.append(f"   Asunto: {reply['asunto']}")
-                lines.append(f"   Mismo hilo del enviado: {hilo}")
-                lines.append(f"   entry_id: {reply['entry_id']}")
+                hilo = "sí" if reply.get("mismo_hilo") else "no / no confirmado"
+                lines.append(f"{i}. **{reply['fecha']}**")
+                lines.append(f"   - **Asunto:** {reply['asunto']}")
+                lines.append(f"   - **Mismo hilo del enviado:** {hilo}")
+                lines.append(f"   - **Entry ID:** `{reply['entry_id']}`")
                 if reply["adjuntos_excel"]:
-                    lines.append(f"   Excel: {', '.join(reply['adjuntos_excel'])}")
+                    lines.append(f"   - 📎 **Excel:** {', '.join(reply['adjuntos_excel'])}")
         elif last_sent:
             lines.append("")
-            lines.append("No encontre respuestas posteriores a ese correo en la bandeja de entrada revisada.")
+            lines.append("🚫 **No encontré respuestas posteriores** a ese correo en la bandeja de entrada revisada.")
 
         if not replies and recent_from_contact:
-            lines.extend(["", f"Ultimos correos recibidos de {contacto} encontrados en la revision:"])
+            lines.extend(["", f"### 📥 Últimos correos recibidos de **{contacto}**"])
             for i, msg in enumerate(recent_from_contact[:limit], 1):
-                lines.append(f"{i}. {msg['fecha']} | {msg['asunto']} | entry_id: {msg['entry_id']}")
+                lines.append(f"{i}. **{msg['fecha']}** · {msg['asunto']} · `{msg['entry_id']}`")
         elif not replies and not recent_from_contact:
             lines.append("")
-            lines.append(f"Tampoco encontre correos recibidos de {contacto} en los ultimos {scan_limit} correos revisados.")
+            lines.append(f"🚫 Tampoco encontré correos recibidos de **{contacto}** en los últimos `{scan_limit}` correos revisados.")
 
         return "\n".join(lines)
 

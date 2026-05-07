@@ -12,7 +12,7 @@ actualizado: 2026-05-01
 
 | Activo | Filas en NOI-RCSD | Fuente | Función |
 |--------|------------------|--------|---------|
-| [[activos/inmosa\|INMOSA]] | 287–295 | ER-FC INMOSA (SharePoint Fondo Rentas/Flujos INMOSA) | `actualizar_noi_inmosa` |
+| [[activos/inmosa\|INMOSA]] | 287–295 | ER-FC INMOSA (`Fondos/Rentas TRI/Activos/INMOSA/Flujos`) | `actualizar_noi_inmosa` |
 | [[activos/parque-titanium\|Parque Titanium]] | 335–379 | hoja 'NOI PT' del RR JLL (WORK_DIR) | `actualizar_noi_pt` |
 | [[activos/vina-centro\|Viña Centro]] | 196–214 | INFORME EEFF Viña Centro (SharePoint TresA/Viña Centro) | `actualizar_er_vina` |
 | [[activos/apoquindo\|Fondo Apoquindo]] | 426–456 | hoja 'NOI PT' del RR JLL (WORK_DIR) | `actualizar_noi_apoquindo` |

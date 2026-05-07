@@ -13,13 +13,11 @@ import zipfile
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.sharepoint_paths import CDG_MENSUAL_DIR, CALCULO_TIR_DIR, SALDO_CAJA_DIR
 import openpyxl
 
 
-RUTA_COMERCIAL = os.path.join(
-    SHAREPOINT_DIR or "",
-    "Control de Gestión", "CDG Mensual",
-)
+RUTA_COMERCIAL = CDG_MENSUAL_DIR
 
 
 # ─── Config fija por hoja (derivada del análisis del xlsx 2603) ───────────────
@@ -724,7 +722,7 @@ def buscar_tir() -> str:
     (busca en Control de Gestión/Cálculo TIR/).
     Retorna la ruta absoluta o mensaje de error.
     """
-    carpeta = os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Cálculo TIR")
+    carpeta = CALCULO_TIR_DIR
     archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*Rentas*.xlsx"), recursive=True)
     if not archivos:
         archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*.xlsx"), recursive=True)
@@ -1074,15 +1072,18 @@ def previsualizar_correos_solicitud_cdg(
     if aviso:
         return aviso
 
-    lines = [f"Correos a preparar para {MESES_ES_CDG[mes]} {año}:"]
+    lines = [f"## 📬 Correos a preparar — **{MESES_ES_CDG[mes]} {año}**"]
     if omitidos:
-        lines.append(f"Omitidos por instrucción: {', '.join(omitidos)}")
+        lines.append(f"⚠️ **Omitidos por instrucción:** {', '.join(omitidos)}")
     for c in correos.values():
         lines.append("")
-        lines.append(f"Para: {c['to']}")
+        lines.append(f"### ✉️ {c['nombre']}")
+        lines.append(f"- **Para:** `{c['to']}`")
         if c.get("cc"):
-            lines.append(f"CC: {c['cc']}")
-        lines.append(f"Asunto: {c['asunto']}")
+            lines.append(f"- **CC:** `{c['cc']}`")
+        lines.append(f"- **Asunto:** {c['asunto']}")
+        lines.append("")
+        lines.append("**Cuerpo:**")
         lines.append("")
         lines.append(c["cuerpo"])
     return "\n".join(lines)
@@ -1140,20 +1141,20 @@ def enviar_correos_solicitud_cdg(
     if enviados:
         _save_solicitudes_cdg(data)
 
-    lines = []
+    lines = [f"## 📬 Solicitud de archivos CDG — **{MESES_ES_CDG[mes]} {año}**"]
     if omitidos:
-        lines.append(f"Omitidos por instrucción: {', '.join(omitidos)}")
+        lines.append(f"⚠️ **Omitidos por instrucción:** {', '.join(omitidos)}")
     if enviados:
-        if lines:
-            lines.append("")
-        lines.append("Correos enviados y registrados:")
-        lines.extend(f"  - {e}" for e in enviados)
+        lines.append("")
+        lines.append(f"### ✅ Correos enviados y registrados `{len(enviados)}`")
+        lines.extend(f"- {e}" for e in enviados)
     if errores:
-        if lines:
-            lines.append("")
-        lines.append("No se pudieron enviar:")
-        lines.extend(f"  - {e}" for e in errores)
-    return "\n".join(lines) if lines else "No se enviaron correos."
+        lines.append("")
+        lines.append(f"### ❌ No se pudieron enviar `{len(errores)}`")
+        lines.extend(f"- {e}" for e in errores)
+    if not enviados and not errores and not omitidos:
+        lines.append("🚫 **No se enviaron correos.**")
+    return "\n".join(lines)
 
 
 def verificar_archivos_cdg(año: int, mes: int) -> str:
@@ -1208,7 +1209,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     año_ant = año if mes > 1 else año - 1
     aamm_ant = f"{str(año_ant)[2:]}{mes_ant:02d}"
     cdg_prev = None
-    sp_cdg_root = os.path.join(SHAREPOINT_DIR, "Control de Gestión", "CDG Mensual")
+    sp_cdg_root = CDG_MENSUAL_DIR
     patron = os.path.join(sp_cdg_root, "**", f"{aamm_ant}*vF*.xlsx")
     candidatos_sp = glob.glob(patron, recursive=True)
     if candidatos_sp:
@@ -1229,7 +1230,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         if m_sc and (m_sc.group(1) + m_sc.group(2)) >= aamm_sig:
             sc_valido = sc
     chk(f"Saldo Caja (necesita {meses_es[mes_sig]} {año_sig} o posterior)", sc_valido,
-        os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Saldo Caja", str(año_sig)))
+        os.path.join(SALDO_CAJA_DIR, str(año_sig)))
 
     # ── RR JLL ────────────────────────────────────────────────────────────────
     rr_jll = buscar_rr_jll(año, mes)
@@ -1284,7 +1285,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
 
         tir = buscar_tir()
         chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None,
-            os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Cálculo TIR"))
+            CALCULO_TIR_DIR)
 
     # ── Resumen ───────────────────────────────────────────────────────────────
     sufijo = " (fin de trimestre)" if es_trimestre else ""

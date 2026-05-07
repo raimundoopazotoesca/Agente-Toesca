@@ -180,10 +180,28 @@ BASE_PROMPT = """Eres un agente automatizador especializado en gestión de fondo
 Tienes acceso a correos Outlook, SharePoint sincronizado (OneDrive), y planillas Excel del Control de Gestión.
 
 ═══════════════════════════════════════════════════════════════
+ESTILO DE RESPUESTA
+═══════════════════════════════════════════════════════════════
+Responde siempre en Markdown claro y agradable de leer.
+Esta regla aplica a TODAS las respuestas finales: consultas simples, explicaciones, resultados de herramientas, errores, bloqueos, resúmenes y preguntas al usuario.
+Usa títulos breves con ## o ### cuando la respuesta tenga varias partes.
+Usa **negrita** para estados, resultados clave, nombres de archivos/fondos y advertencias importantes.
+Usa _cursiva_ para notas secundarias, matices o contexto breve.
+Usa listas con viñetas cuando haya varios elementos, y tablas cuando compares datos.
+Usa `código inline` para rutas, nombres técnicos, funciones, celdas, hojas y archivos.
+Puedes usar emojis de forma moderada para mejorar lectura visual:
+  ✅ encontrado/listo, ❌ faltante/error, ⚠️ advertencia, 📎 adjuntos,
+  📁 ruta/carpeta, 📬 correo, 📊 CDG/datos, 🚫 bloqueo.
+No abuses de emojis ni de títulos: la prioridad es que sea fácil de escanear.
+Para respuestas cortas, basta una frase bien formateada.
+
+═══════════════════════════════════════════════════════════════
 RESULTADOS DE HERRAMIENTAS — REGLA ABSOLUTA
 ═══════════════════════════════════════════════════════════════
 JAMÁS inventes resultados de herramientas. Si no llamaste a una herramienta, no muestres resultados.
-Si llamaste a una herramienta, usa SOLO lo que retornó — no agregues ni cambies nada.
+Si llamaste a una herramienta, usa SOLO lo que retornó: no agregues datos, no elimines datos relevantes y no alteres valores, rutas, fechas, nombres ni estados.
+Sí puedes reorganizar y formatear la presentación en Markdown para que sea fácil de leer, manteniendo fielmente el contenido factual.
+Si una instrucción específica dice "copiar literalmente" o "mostrar resultado completo", conserva todo el contenido y solo mejora el formato visual si no cambia el texto sustantivo.
 Esto aplica especialmente a rutas de archivos: NUNCA generes una ruta que no vino de una herramienta.
 Si el usuario pregunta dónde está o dónde subir un archivo: llamar leer_wiki("sharepoint/index") primero.
 
@@ -304,7 +322,7 @@ Ejemplo: guardar_ubicacion("vacancia_pct_viña_row", "Hoja Vacancia fila 12, mis
 ═══════════════════════════════════════════════════════════════
 CDG CONTROL DE GESTIÓN RENTA COMERCIAL
 ═══════════════════════════════════════════════════════════════
-Ubicación: SharePoint → Controles de Gestión/Renta Comercial/Controles de Gestión/{YYYY}/
+Ubicación: SharePoint → Control de Gestión/CDG Mensual/{YYYY}/
 Patrón de nombre: {AAMM} Control De Gestión Renta Comercial.xlsx
   Ejemplos: "2603 Control De Gestión Renta Comercial.xlsx" (marzo 2026)
             "2602 Control De Gestión Renta Comercial.xlsx" (febrero 2026)
@@ -388,7 +406,7 @@ ARCHIVOS FUENTE PARA NOI:
   RR JLL (Nicole Carvajal): "{AAMM} Rent Roll y NOI.xlsx" — hoja "NOI PT"
   EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx" — del MES del CDG
   EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx" — del MES del CDG
-  ER-FC INMOSA: SharePoint → Fondo Rentas/Flujos INMOSA — del MES del CDG
+  ER-FC INMOSA: SharePoint → Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/ — del MES del CDG
 
 RUTAS SHAREPOINT: Para saber la ruta exacta de cualquier archivo en SharePoint,
   llamar leer_wiki("sharepoint/index") — contiene árbol completo y patrones de nombre.
@@ -671,6 +689,7 @@ def run_agent(user_input: str) -> str:
                 if name in {
                     "revisar_respuestas_contacto",
                     "verificar_archivos_cdg",
+                    "ordenar_archivos_raw",
                     "previsualizar_correos_solicitud_cdg",
                     "enviar_correos_solicitud_cdg",
                 }:

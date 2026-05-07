@@ -2210,7 +2210,7 @@ TOOL_DEFINITIONS = [
             "description": (
                 "Mueve un archivo o carpeta de una ubicación a otra dentro de SharePoint. "
                 "Usar cuando el usuario pida reorganizar la estructura de carpetas. "
-                "origen y destino son rutas relativas a SHAREPOINT_DIR (ej: 'Fondos/Apoquindo/EEFF'). "
+                "origen y destino son rutas relativas a SHAREPOINT_DIR (ej: 'Fondos/Rentas Apoquindo/EEFF'). "
                 "Si el origen es carpeta, mueve todo su contenido recursivamente. "
                 "Después de reorganizar, llamar a reemplazar_en_tool para actualizar las rutas en el código "
                 "y a actualizar_indice_sharepoint para refrescar el wiki."
@@ -2260,7 +2260,7 @@ TOOL_DEFINITIONS = [
             "description": (
                 "Busca y reemplaza texto en un archivo de código del agente (tools/*.py o cualquier .py del proyecto). "
                 "Usar para actualizar rutas de SharePoint en el código después de reorganizar carpetas. "
-                "Ejemplo: reemplazar 'Controles de Gestión' por 'Control de Gestión' en noi_tools.py."
+                "Ejemplo: reemplazar una ruta SharePoint antigua por la ruta canonica en noi_tools.py."
             ),
             "parameters": {
                 "type": "object",
@@ -2473,6 +2473,7 @@ _TOOLS_GENERAL = {
     "leer_contexto", "actualizar_contexto", "leer_historial",
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
+    "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
     "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
