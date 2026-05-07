@@ -46,6 +46,12 @@
 | [[procesos/balance-consolidado-apoquindo]] | Balance Consolidado Rentas Apoquindo: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-07 |
 | [[procesos/balance-consolidado-rentas-nuevo]] | Balance Consolidado Rentas Nuevo: fuente por quarter | trimestral | 2026-05-07 |
 
+## Proyecto
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[costos]] | Costos acumulados del proyecto: API, infraestructura | 2026-05-07 |
+
 ## Integraciones
 
 | Página | Descripción | Actualizado |
