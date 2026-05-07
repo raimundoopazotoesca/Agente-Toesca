@@ -51,6 +51,7 @@
 | Página | Descripción | Actualizado |
 |--------|-------------|-------------|
 | [[integraciones/power-automate]] | Servidor HTTP Flask, flujos PA recomendados, framework de evaluación | 2026-05-07 |
+| [[integraciones/power-automate-roadmap]] | Roadmap por fases: configuración exacta de cada flujo PA, orden de implementación | 2026-05-07 |
 
 ## Conceptos
 
