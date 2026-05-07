@@ -18,7 +18,7 @@ import openpyxl
 
 RUTA_COMERCIAL = os.path.join(
     SHAREPOINT_DIR or "",
-    "Controles de Gestión", "Renta Comercial", "Controles de Gestión",
+    "Control de Gestión", "CDG Mensual",
 )
 
 
@@ -455,7 +455,7 @@ def crear_planilla_mes(mes_code_nuevo: str) -> str:
 def guardar_cdg(nombre_archivo: str) -> str:
     """
     Guarda el CDG editado (debe ser un archivo vAgente) de vuelta en SharePoint,
-    en la misma carpeta donde van los CDG del año (SharePoint/Controles de Gestión/Renta Comercial/Controles de Gestión/{YYYY}/).
+    en la misma carpeta donde van los CDG del año (SharePoint/Control de Gestión/CDG Mensual/{YYYY}/).
 
     PROHIBIDO editar/guardar archivos vF o vActualizar — solo vAgente.
     """
@@ -721,10 +721,10 @@ def info_siguiente_accion(nombre_archivo: str) -> str:
 def buscar_tir() -> str:
     """
     Busca el archivo Cálculo TIR Fondo Rentas más reciente en SharePoint
-    (busca recursivamente bajo Controles de Gestión/).
+    (busca en Control de Gestión/Cálculo TIR/).
     Retorna la ruta absoluta o mensaje de error.
     """
-    carpeta = os.path.join(SHAREPOINT_DIR, "Controles de Gestión")
+    carpeta = os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Cálculo TIR")
     archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*Rentas*.xlsx"), recursive=True)
     if not archivos:
         archivos = glob.glob(os.path.join(carpeta, "**", "*TIR*.xlsx"), recursive=True)
@@ -1204,13 +1204,13 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     año_ant = año if mes > 1 else año - 1
     aamm_ant = f"{str(año_ant)[2:]}{mes_ant:02d}"
     cdg_prev = None
-    sp_cdg_root = os.path.join(SHAREPOINT_DIR, "Controles de Gestión")
+    sp_cdg_root = os.path.join(SHAREPOINT_DIR, "Control de Gestión", "CDG Mensual")
     patron = os.path.join(sp_cdg_root, "**", f"{aamm_ant}*vF*.xlsx")
     candidatos_sp = glob.glob(patron, recursive=True)
     if candidatos_sp:
         cdg_prev = max(candidatos_sp, key=os.path.getmtime)
     chk(f"CDG {aamm_ant} vF (mes anterior)", cdg_prev,
-        os.path.join(sp_cdg_root, "Renta Comercial", "Controles de Gestión", str(año_ant)))
+        os.path.join(sp_cdg_root, str(año_ant)))
 
     # ── Saldo Caja — necesita archivo del mes SIGUIENTE al CDG ───────────────
     mes_sig = mes + 1 if mes < 12 else 1
@@ -1225,7 +1225,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         if m_sc and (m_sc.group(1) + m_sc.group(2)) >= aamm_sig:
             sc_valido = sc
     chk(f"Saldo Caja (necesita {meses_es[mes_sig]} {año_sig} o posterior)", sc_valido,
-        os.path.join(SHAREPOINT_DIR, "Controles de Gestión", "Saldo Caja", str(año_sig)))
+        os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Saldo Caja", str(año_sig)))
 
     # ── RR JLL ────────────────────────────────────────────────────────────────
     rr_jll = buscar_rr_jll(año, mes)
@@ -1280,7 +1280,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
 
         tir = buscar_tir()
         chk("TIR Fondo Rentas", tir if not tir.startswith("Error") else None,
-            os.path.join(SHAREPOINT_DIR, "Controles de Gestión"))
+            os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Cálculo TIR"))
 
     # ── Resumen ───────────────────────────────────────────────────────────────
     sufijo = " (fin de trimestre)" if es_trimestre else ""

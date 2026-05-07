@@ -27,9 +27,9 @@ from datetime import date, timedelta
 from config import WORK_DIR, SHAREPOINT_DIR
 
 def _sharepoint_saldo_caja_dir() -> str:
-    """Ruta SharePoint: Controles de Gestión/Saldo Caja/"""
+    """Ruta SharePoint: Control de Gestión/Saldo Caja/"""
     if SHAREPOINT_DIR:
-        return os.path.join(SHAREPOINT_DIR, "Controles de Gestión", "Saldo Caja")
+        return os.path.join(SHAREPOINT_DIR, "Control de Gestión", "Saldo Caja")
     return ""
 
 
@@ -298,7 +298,7 @@ def _limpiar_numero(val) -> float | None:
 def buscar_saldo_caja(año: int, mes: int) -> str:
     """
     Busca el archivo Saldo Caja + FFMM más reciente para el año indicado.
-    Busca en SharePoint (Controles de Gestión/Saldo Caja/{año}/).
+    Busca en SharePoint (Control de Gestión/Saldo Caja/{año}/).
     Los archivos tienen formato AAMMDD en el nombre.
     Retorna la ruta absoluta al archivo o un mensaje de error.
     """
@@ -648,7 +648,7 @@ def archivar_saldo_caja(nombre_archivo: str) -> str:
     Copia el archivo Saldo Caja desde WORK_DIR a la carpeta de archivo histórico.
     Si ya existe un archivo con ese nombre, no lo sobreescribe.
 
-    La carpeta de destino es SharePoint (Controles de Gestión/Saldo Caja/{año}/).
+    La carpeta de destino es SharePoint (Control de Gestión/Saldo Caja/{año}/).
 
     Útil para guardar cada planilla que envía María José y tener un historial.
     """

@@ -17,12 +17,10 @@ from calendar import monthrange
 from config import SHAREPOINT_DIR, WORK_DIR
 
 # ── Paths dentro de SHAREPOINT_DIR ─────────────────────────────────────────
-_INMOBILIARIO = "Inmobiliario Toesca - Documentos"
-
 _FS_DIRS = {
-    "PT":        os.path.join(_INMOBILIARIO, "Fondo Rentas PT", "Facts Sheet"),
-    "Apoquindo": os.path.join(_INMOBILIARIO, "Fondo Rentas Apoquindo", "Facts Sheet"),
-    "TRI":       os.path.join(_INMOBILIARIO, "Fondo Rentas Inmobiliarias TRI", "Facts Sheet"),
+    "PT":        os.path.join("Fondos", "Parque Titanium", "Fact Sheets"),
+    "Apoquindo": os.path.join("Fondos", "Apoquindo", "Fact Sheets"),
+    "TRI":       os.path.join("Fondos", "Rentas TRI", "Fact Sheets"),
 }
 
 _FS_SUFFIXES = ("vActualizar.pptx", "vRevisar.pptx", "vF.pptx")

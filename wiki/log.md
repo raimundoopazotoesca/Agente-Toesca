@@ -5,6 +5,16 @@
 
 ---
 
+## [2026-05-07] reorganización | SharePoint restructurado + carpeta RAW + raw_tools
+
+- Nueva estructura: `Fondos/{Apoquindo|Parque Titanium|Rentas TRI}/` agrupa EEFF, Fact Sheets y activos por fondo
+- Activos de TRI (Viña, Curicó, INMOSA) ahora en `Fondos/Rentas TRI/Activos/{activo}/{EEFF|Rent Roll}/`
+- CDG mensual: `Controles de Gestión/.../` → `Control de Gestión/CDG Mensual/`
+- Saldo Caja, Balances, TIR bajo `Control de Gestión/`
+- Carpeta `RAW/` creada: usuario sube archivos, agente llama `ordenar_archivos_raw()` para clasificarlos
+- Código actualizado: 7 tool files + registry.py + raw_tools.py (nuevo)
+- Bug corregido en `factsheet_tools.py`: eliminado `_INMOBILIARIO` que causaba double-nesting
+
 ## [2026-05-07] integración | Power Automate — servidor HTTP + flujos recomendados
 
 - `run_agent()` ahora retorna `str` (antes era `None`)

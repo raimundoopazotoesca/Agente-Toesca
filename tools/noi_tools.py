@@ -36,13 +36,13 @@ import openpyxl
 from config import SHAREPOINT_DIR, WORK_DIR
 
 # ── Rutas base ─────────────────────────────────────────────────────────────────
-_TRES_A_BASE = os.path.join(SHAREPOINT_DIR, "EEFF Proveedores", "Informes TresA")
+_TRI_ACTIVOS = os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "Activos")
 _TRES_A_DIRS = {
-    "vina":   os.path.join(_TRES_A_BASE, "Viña Centro"),
-    "curico": os.path.join(_TRES_A_BASE, "Curico"),
+    "vina":   os.path.join(_TRI_ACTIVOS, "Viña Centro", "EEFF"),
+    "curico": os.path.join(_TRI_ACTIVOS, "Curicó", "EEFF"),
 }
 _RR_JLL_BASE = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
-_INMOSA_BASE = os.path.join(SHAREPOINT_DIR, "EEFF Proveedores", "Flujos INMOSA (Residencias Adulto Mayor)")
+_INMOSA_BASE = os.path.join(_TRI_ACTIVOS, "INMOSA", "Flujos")
 
 # Sheet XML paths within the CDG xlsx (derived from workbook.xml.rels)
 _ER_VINA_XML   = "xl/worksheets/sheet54.xml"
@@ -866,7 +866,7 @@ def actualizar_noi_apo3001(nombre_cdg: str, nombre_rr_jll: str,
 def buscar_er_inmosa(año: int, mes: int) -> str:
     """
     Busca el archivo ER-FC INMOSA más reciente del año en SharePoint.
-    Los archivos están en EEFF Proveedores/Flujos INMOSA/{año}/ y se nombran
+    Los archivos están en Fondos/Rentas TRI/Activos/INMOSA/Flujos/{año}/ y se nombran
     'ER-FC INMOSA {año} {meses}.xlsx'. Cada mes se sube uno nuevo — el más
     reciente contiene los datos del mes indicado.
     Retorna la ruta absoluta o mensaje de error.

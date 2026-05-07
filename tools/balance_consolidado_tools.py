@@ -25,13 +25,13 @@ from config import SHAREPOINT_DIR, WORK_DIR
 # ─── Rutas base ────────────────────────────────────────────────────────────────
 
 BALANCES_DIR = os.path.join(
-    SHAREPOINT_DIR, "Controles de Gestión", "Renta Comercial", "Balances Consolidados"
+    SHAREPOINT_DIR, "Control de Gestión", "Balances Consolidados"
 )
 TRI_EEFF_DIR = os.path.join(
-    SHAREPOINT_DIR, "Fondo Rentas Inmobiliarias TRI", "EEFF"
+    SHAREPOINT_DIR, "Fondos", "Rentas TRI", "EEFF"
 )
-PT_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondo Rentas PT", "EEFF")
-APO_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondo Rentas Apoquindo", "EEFF")
+PT_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Parque Titanium", "EEFF")
+APO_EEFF_DIR = os.path.join(SHAREPOINT_DIR, "Fondos", "Apoquindo", "EEFF")
 
 HOJAS_INPUT = ["Fondo PT", "Inmob Boulevard", "Torre A"]
 APO_HOJAS_INPUT = ["Fondo Apoquindo", "Inmobilaria Apoquindo"]
@@ -121,7 +121,7 @@ def _find_eeff_fondo_apoquindo(mes: int, año: int) -> str | None:
 
 
 def _find_eeff_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
-    apo_dir = os.path.join(TRI_EEFF_DIR, "Inmobiliaria Apoquindo")
+    apo_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Inmobiliaria Apoquindo")
     if os.path.isdir(apo_dir):
         for f in os.listdir(apo_dir):
             fl = f.lower()
@@ -133,7 +133,7 @@ def _find_eeff_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
 
 
 def _find_analisis_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
-    apo_dir = os.path.join(TRI_EEFF_DIR, "Inmobiliaria Apoquindo")
+    apo_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Inmobiliaria Apoquindo")
     if not os.path.isdir(apo_dir):
         return None
 
@@ -169,7 +169,7 @@ def _find_analisis_inmobiliaria_apoquindo(mes: int, año: int) -> str | None:
 
 
 def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
-    bvd_dir = os.path.join(TRI_EEFF_DIR, "Boulevard")
+    bvd_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Boulevard")
     eeff_pdf = analisis_xlsx = None
     if os.path.isdir(bvd_dir):
         for f in os.listdir(bvd_dir):
@@ -191,7 +191,7 @@ def _find_boulevard_files(mes: int, año: int) -> tuple[str | None, str | None]:
 
 
 def _find_torre_a_files(mes: int, año: int) -> tuple[str | None, str | None]:
-    ta_dir = os.path.join(TRI_EEFF_DIR, "Torre A")
+    ta_dir = os.path.join(TRI_EEFF_DIR, "Activos", "Torre A")
     eeff_pdf = analisis_xlsx = None
     if os.path.isdir(ta_dir):
         for f in os.listdir(ta_dir):

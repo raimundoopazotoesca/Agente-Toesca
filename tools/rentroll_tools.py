@@ -28,9 +28,10 @@ from tools.email_tools import send_email
 
 # ── Rutas SharePoint Rent Rolls ──────────────────────────────────────────────
 _RR_JLL_DIR = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
+_TRI_ACTIVOS = os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "Activos")
 _RR_TRESA_DIRS = {
-    "vina":   os.path.join(SHAREPOINT_DIR, "Rent Rolls", "Tres Asociados", "Mall Viña Centro"),
-    "curico": os.path.join(SHAREPOINT_DIR, "Rent Rolls", "Tres Asociados", "Curicó"),
+    "vina":   os.path.join(_TRI_ACTIVOS, "Viña Centro", "Rent Roll"),
+    "curico": os.path.join(_TRI_ACTIVOS, "Curicó", "Rent Roll"),
 }
 
 # ── Constantes de proveedores ────────────────────────────────────────────────

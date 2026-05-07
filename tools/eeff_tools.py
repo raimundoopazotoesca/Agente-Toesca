@@ -3,9 +3,9 @@ Herramientas para leer EEFF (Estados Financieros) de fondos en PDF.
 Extrae valor cuota libro y dividendos/aportes para alimentar la planilla.
 
 Estructura en SharePoint:
-  Fondo Rentas Apoquindo/EEFF/{YYYY}/{T}T/
-  Fondo Rentas PT/EEFF/{YYYY}/{T}T/
-  Fondo Rentas Inmobiliarias TRI/EEFF/TRI/{YYYY}/{T}T/
+  Fondos/Apoquindo/EEFF/{YYYY}/{T}T/
+  Fondos/Parque Titanium/EEFF/{YYYY}/{T}T/
+  Fondos/Rentas TRI/EEFF/Fondo/{YYYY}/{T}T/
 """
 import os
 import re
@@ -13,9 +13,9 @@ from config import SHAREPOINT_DIR
 
 # Rutas base por fondo en SharePoint
 FONDO_RUTAS = {
-    "A&R Apoquindo": os.path.join(SHAREPOINT_DIR, "Fondo Rentas Apoquindo", "EEFF"),
-    "A&R PT":        os.path.join(SHAREPOINT_DIR, "Fondo Rentas PT", "EEFF"),
-    "A&R Rentas":    os.path.join(SHAREPOINT_DIR, "Fondo Rentas Inmobiliarias TRI", "EEFF", "TRI"),
+    "A&R Apoquindo": os.path.join(SHAREPOINT_DIR, "Fondos", "Apoquindo", "EEFF"),
+    "A&R PT":        os.path.join(SHAREPOINT_DIR, "Fondos", "Parque Titanium", "EEFF"),
+    "A&R Rentas":    os.path.join(SHAREPOINT_DIR, "Fondos", "Rentas TRI", "EEFF", "Fondo"),
 }
 
 # Series por fondo (sincronizado con gestion_renta_tools.SHEET_CFG)

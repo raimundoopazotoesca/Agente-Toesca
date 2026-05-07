@@ -11,6 +11,7 @@ from tools.memory_tools import (
     comparar_periodos,
     guardar_ubicacion,
     buscar_ubicacion,
+    leer_wiki,
 )
 
 from tools.email_tools import (
@@ -136,6 +137,7 @@ from tools.balance_consolidado_tools import (
     actualizar_balance_consolidado_pt,
     actualizar_balance_consolidado_apoquindo,
 )
+from tools.raw_tools import ordenar_archivos_raw
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -409,7 +411,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "guardar_cdg",
             "description": (
-                "Guarda el CDG editado de vuelta en SharePoint (Controles de Gestión/Renta Comercial/Controles de Gestión/{año}/). "
+                "Guarda el CDG editado de vuelta en SharePoint (Control de Gestión/CDG Mensual/{año}/). "
                 "SOLO puede guardar archivos vAgente — rechaza vF y vActualizar. "
                 "Llamar al terminar de actualizar el CDG."
             ),
@@ -510,7 +512,7 @@ TOOL_DEFINITIONS = [
             "name": "buscar_tir",
             "description": (
                 "Busca el archivo Cálculo TIR Fondo Rentas más reciente en SharePoint "
-                "(Controles de Gestión/). Necesario solo en fin de trimestre."
+                "(Control de Gestión/Cálculo TIR/). Necesario solo en fin de trimestre."
             ),
             "parameters": {"type": "object", "properties": {}},
         },
@@ -941,7 +943,7 @@ TOOL_DEFINITIONS = [
             "name": "buscar_saldo_caja",
             "description": (
                 "Busca el archivo Saldo Caja + FFMM más reciente en SharePoint para el año/mes indicado. "
-                "Los archivos están en SharePoint (Controles de Gestión/Saldo Caja/{año}/) con nombre AAMMDD Saldo Caja + FFMM Inmobiliario.xlsx. "
+                "Los archivos están en SharePoint (Control de Gestión/Saldo Caja/{año}/) con nombre AAMMDD Saldo Caja + FFMM Inmobiliario.xlsx. "
                 "Retorna la ruta absoluta al archivo más reciente (que contiene todo el histórico)."
             ),
             "parameters": {
@@ -960,7 +962,7 @@ TOOL_DEFINITIONS = [
             "name": "archivar_saldo_caja",
             "description": (
                 "Guarda una copia del archivo Saldo Caja en la carpeta de archivo histórico "
-                "(SharePoint/Controles de Gestión/Saldo Caja/). No sobreescribe si ya existe. "
+                "(SharePoint/Control de Gestión/Saldo Caja/). No sobreescribe si ya existe. "
                 "Llamar después de descargar el adjunto de María José Castro."
             ),
             "parameters": {
@@ -1413,7 +1415,7 @@ TOOL_DEFINITIONS = [
             "name": "buscar_er_inmosa",
             "description": (
                 "Busca el archivo ER-FC INMOSA más reciente del año en SharePoint "
-                "(EEFF Proveedores/Flujos INMOSA/{año}/). "
+                "(Fondos/Rentas TRI/Activos/INMOSA/Flujos/{año}/). "
                 "Cada mes se sube un archivo nuevo. Retorna la ruta absoluta."
             ),
             "parameters": {
@@ -1671,6 +1673,27 @@ TOOL_DEFINITIONS = [
                     "notas":    {"type": "string", "description": "Info adicional: hoja relevante, convención de nombre, columnas clave, etc."},
                 },
                 "required": ["concepto", "ruta"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leer_wiki",
+            "description": (
+                "Lee una página de la wiki del agente. "
+                "USAR para consultar rutas SharePoint, convenciones de nombres, procesos o cualquier "
+                "información documentada en la wiki antes de responder preguntas de ubicación de archivos. "
+                "Páginas útiles: 'sharepoint/index' (árbol completo con rutas y patrones de nombre), "
+                "'index' (índice general), 'log' (historial de cambios). "
+                "Si el usuario pregunta dónde subir un archivo, leer 'sharepoint/index' primero."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pagina": {"type": "string", "description": "Nombre de la página, ej: 'sharepoint/index', 'index', 'log'"},
+                },
+                "required": ["pagina"],
             },
         },
     },
@@ -2007,6 +2030,18 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "ordenar_archivos_raw",
+            "description": (
+                "Revisa la carpeta RAW de SharePoint y mueve cada archivo al lugar correcto según su nombre. "
+                "Llamar cuando el usuario avise que subió archivos a la carpeta RAW. "
+                "Retorna un resumen con los archivos movidos y los no reconocidos (que quedan en RAW para revisión manual)."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 def _dispatch(name: str, args: dict) -> str:
     dispatch = {
@@ -2129,6 +2164,7 @@ def _dispatch(name: str, args: dict) -> str:
         "comparar_periodos":             lambda a: comparar_periodos(a["fondo"], a["periodo_base"], a["periodo_actual"]),
         "buscar_ubicacion":              lambda a: buscar_ubicacion(a["concepto"]),
         "guardar_ubicacion":             lambda a: guardar_ubicacion(a["concepto"], a["ruta"], a.get("notas", "")),
+        "leer_wiki":                     lambda a: leer_wiki(a["pagina"]),
         # Consultas históricas
         "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
         "buscar_en_rent_roll":           lambda a: buscar_en_rent_roll(a["mes"], a["año"], a.get("activo"), a.get("local")),
@@ -2148,6 +2184,7 @@ def _dispatch(name: str, args: dict) -> str:
         # Balance Consolidado PT
         "actualizar_balance_consolidado_pt": lambda a: actualizar_balance_consolidado_pt(a["mes"], a["año"]),
         "actualizar_balance_consolidado_apoquindo": lambda a: actualizar_balance_consolidado_apoquindo(a["mes"], a["año"]),
+        "ordenar_archivos_raw": lambda a: ordenar_archivos_raw(),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -2169,7 +2206,7 @@ _TOOLS_GENERAL = {
     "listar_planillas_en_trabajo",
     "leer_contexto", "actualizar_contexto", "leer_historial",
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
-    "buscar_ubicacion", "guardar_ubicacion",
+    "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "leer_cdg_historico", "buscar_en_rent_roll",
     "enviar_emails_rent_roll",  # siempre disponible para confirmaciones de seguimiento
     "previsualizar_correos_solicitud_cdg", "enviar_correos_solicitud_cdg",
