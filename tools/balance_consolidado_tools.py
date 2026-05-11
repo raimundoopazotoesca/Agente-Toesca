@@ -2172,6 +2172,42 @@ INMOB_VC_BALANCE_MAP = {
     64: ("P", ["3-1-03-01"]),
 }
 
+# EERR map Chañarcillo — codes from col B labels, totals verified Dec 2025 vs source TB.
+# Resultado del período = 470,785,569 calza con D119 historico.
+CHANAR_EERR_MAP = {
+    76:  ["4-1-01-01"],   # INGRESOS POR ARRIENDO
+    77:  ["4-3-01-01"],   # OTROS INGRESOS
+    81:  ["4-2-01-02"],   # INTERESES PAGARE
+    82:  ["4-2-01-03"],   # INTERESES POR PRESTAMOS BANCARIOS
+    83:  ["5-1-01-01"],   # REPARACION Y MANTENCION
+    84:  ["5-1-01-02"],   # SEGUROS
+    85:  ["5-1-01-03"],   # ASESORIAS LEGALES
+    86:  ["5-1-01-04"],   # GASTOS LEGALES
+    87:  ["5-1-01-05"],   # HONORARIOS AUDITORIA
+    88:  ["5-1-01-06"],   # IMPUESTO TIMBRE
+    89:  ["5-1-01-07"],   # PATENTES
+    90:  ["5-1-01-08"],   # ASESORIAS EXTERNAS
+    91:  ["5-1-01-10"],   # OTROS GASTOS
+    92:  ["5-1-01-11"],   # CONTRIBUCIONES
+    93:  ["5-1-01-12"],   # GASTOS ESTRUCTURACION PASIVOS FINANCIEROS
+    94:  ["5-1-01-13"],   # COMISIONES BANCARIAS
+    95:  ["5-1-01-14"],   # ASESORIAS CONTABLES
+    96:  ["5-1-01-15"],   # GASTOS NOTARIALES
+    97:  ["5-1-01-18"],   # GASTOS DEUDORES INCOBRABLES
+    98:  ["5-1-01-19"],   # PROPORCIONALIDAD IVA
+    99:  ["5-1-01-20"],   # GASTOS COMUNES
+    105: ["5-2-01-03"],   # FLUCTUACION VALOR CUOTA FONDOS MUTUOS
+    106: ["5-2-01-04"],   # REAJUSTE UF
+    107: ["5-2-01-07"],   # INTERES DEPOSITO A PLAZO
+    108: ["5-2-01-08"],   # ACTUALIZACION REMANENTE IVA
+    109: ["5-2-01-10"],   # REAJUSTES PAGARE
+    110: ["5-2-01-12"],   # REAJUSTE UF PROPIEDADES DE INVERSION
+    111: ["5-2-01-13"],   # DIFERENCIA TIPO DE CAMBIO USD
+    112: ["5-3-01-01"],   # CUADRE PESOS
+    113: ["5-4-01-01"],   # MULTAS
+    116: ["5-1-01-16"],   # IMPUESTO RENTA
+}
+
 # EERR map Inmob VC — codes extracted from col B labels in planilla, verified Dec 2025.
 INMOB_VC_EERR_MAP = {
     76:  ["4-1-01-01"],   # INGRESOS POR ARRIENDO
@@ -2585,7 +2621,9 @@ def actualizar_balance_consolidado_rentas_nuevo(mes: int, año: int) -> str:
             if qplan.get(("Chañarcillo", "balance")) == "analisis":
                 _apply_balance_map_rn(ws_chanar, tb, CHANAR_BALANCE_MAP, col)
                 lines.append(f"  Balance: {len(tb)} cuentas OK")
-            lines.append("  EERR: TODO (mapa filas pendiente)")
+            if qplan.get(("Chañarcillo", "eerr")) == "analisis":
+                _apply_eerr_sa_map_rn(ws_chanar, tb, col, CHANAR_EERR_MAP)
+                lines.append(f"  EERR: {len(CHANAR_EERR_MAP)} filas escritas")
         except Exception as e:
             lines.append(f"  Error: {e}")
     elif not chanar_path:

@@ -173,6 +173,31 @@ def _get_inbox():
     return namespace.GetDefaultFolder(6)  # 6 = Bandeja de entrada
 
 
+def _current_user_smtp() -> str | None:
+    """SMTP del usuario logueado en Outlook (cuenta por defecto)."""
+    try:
+        outlook = _get_outlook()
+        namespace = outlook.GetNamespace("MAPI")
+        try:
+            smtp = _smtp_from_address_entry(namespace.CurrentUser.AddressEntry)
+            if smtp:
+                return str(smtp).casefold()
+        except Exception:
+            pass
+        try:
+            accounts = namespace.Accounts
+            for i in range(1, accounts.Count + 1):
+                acc = accounts.Item(i)
+                smtp = getattr(acc, "SmtpAddress", None)
+                if smtp:
+                    return str(smtp).casefold()
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return None
+
+
 def _norm(text: str | None) -> str:
     text = str(text or "").casefold()
     text = "".join(
@@ -385,10 +410,52 @@ def download_email_attachment(entry_id: str, attachment_index: int, filename: st
         return f"Error al descargar adjunto: {e}"
 
 
+def _resolve_recipient(to: str) -> tuple[str, str | None]:
+    """Resuelve nombres conocidos (ej. 'nicole') al email correcto.
+    Retorna (to_resuelto, error). Si error no es None, no enviar."""
+    raw = str(to or "").strip()
+    if not raw:
+        return raw, "destinatario vacío"
+    # Si ya contiene '@' en cada parte, asumir email(s) válidos
+    parts = [p.strip() for p in raw.split(";") if p.strip()]
+    resolved = []
+    for part in parts:
+        if "@" in part:
+            resolved.append(part)
+            continue
+        key = _norm(part)
+        match = None
+        for alias in sorted(KNOWN_EMAIL_CONTACTS, key=len, reverse=True):
+            if _norm(alias) == key or _norm(alias) in key:
+                match = KNOWN_EMAIL_CONTACTS[alias]
+                break
+        if not match:
+            return raw, (
+                f"destinatario '{part}' no es un email ni un alias conocido. "
+                f"Alias disponibles: {', '.join(sorted(set(KNOWN_EMAIL_CONTACTS)))}"
+            )
+        resolved.append(match)
+    return "; ".join(resolved), None
+
+
 def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc: str = None) -> str:
     """Envía un correo desde Outlook con o sin adjunto y opcionalmente con CC."""
     if not _OUTLOOK_OK:
         return _not_available()
+    to_resolved, err = _resolve_recipient(to)
+    if err:
+        return f"Error: {err}. NO se envió el correo."
+    if to_resolved != to:
+        print(f"[send_email] destinatario '{to}' resuelto a '{to_resolved}'")
+    to = to_resolved
+    own_smtp = _current_user_smtp()
+    if own_smtp:
+        to_lower = to.casefold()
+        if own_smtp in to_lower:
+            return (
+                f"Error: el destinatario '{to}' coincide con tu propia cuenta ({own_smtp}). "
+                "NO se envió el correo. Indica un destinatario distinto."
+            )
     try:
         outlook = _get_outlook()
         mail = outlook.CreateItem(0)  # 0 = MailItem

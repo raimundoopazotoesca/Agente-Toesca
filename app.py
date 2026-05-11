@@ -396,6 +396,13 @@ with st.sidebar:
             if st.button(f"   {label}", key=f"qa_{label}"):
                 _queue_quick_action(instruction)
 
+    if st.button("🔄  Re-mapear SharePoint", key="qa_remapear_sharepoint"):
+        _queue_quick_action(
+            "Re-mapear el índice de SharePoint porque hubo cambios manuales. "
+            "Llama actualizar_indice_sharepoint() y reporta cuántos archivos y carpetas "
+            "quedaron indexados, además de la ruta del index.md actualizado."
+        )
+
     st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
     st.markdown('<p class="sidebar-section">Fondos</p>', unsafe_allow_html=True)
     for f in ["Toesca Rentas Inmobiliarias", "Toesca Rentas Inmobiliarias PT", "Toesca Rentas Inmobiliarias Apoquindo"]:

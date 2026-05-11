@@ -16,6 +16,7 @@
 - **Balance Viña Centro** → `Fondos/Rentas TRI/Activos/Viña Centro/EEFF/YYYY/*INFORME*EFF*VI*A*CENTRO*.xlsx` hoja `BALANCE ACUMULADO` → `VINA_BALANCE_MAP` (21 filas)
 - **EERR Inmosa** → `Fondos/Rentas TRI/Activos/INMOSA/Contabilidad/YYYY/*Senior*Assist*.xlsx` (única hoja) → `INMOSA_SA_EERR_MAP` (31 filas, dot-notation)
 - **EERR Inmob VC** → misma fuente que balance → `INMOB_VC_EERR_MAP` (26 filas, verificado Dec 2025). Nota: labels col B del planilla contienen el código de cuenta directamente (`4-2-01-02  INTERESES PAGARE`).
+- **EERR Chañarcillo** → misma fuente que balance (`Bce Tributario`) → `CHANAR_EERR_MAP` (31 filas, verificado Dec 2025: resultado del período 470.785.569 calza con D119). **Atención:** los valores históricos de col D estaban desplazados una fila (label "5-1-01-12 ESTRUCTURACION" tenía valor de COMISIONES, etc.). El map usa el código del label, no el patrón histórico — los valores en filas 93-99 cambiarán respecto al histórico.
 - Copia PT: busca `*Rentas PT*vAgente*.xlsx` en misma carpeta que vF, luego en WORK_DIR. Copia `Resumen` → `Resumen PT`, `Consolidado Fondo PT` → `Consolidado Fondo PT`
 - Copia Apoquindo: busca `*Apoquindo*vAgente*.xlsx`. Copia `Resumen` → `Resumen  Apoquindo` (2 espacios), `Consolidado Apoquindo` → `Consolidado Apoquindo`
 
@@ -23,13 +24,41 @@
 
 | Pendiente | Descripción | Dificultad |
 |---|---|---|
-| **EERR Chañarcillo** | Mapear cuentas del trial balance a filas 73-124 de la hoja Chañarcillo | Media |
-| **EERR Curicó** | Ídem para Curicó | Media |
+| ~~**EERR Chañarcillo**~~ | ✓ Implementado Dec 2025 — 31 filas, totales calzan (resultado 470.785.569) | — |
+| **EERR Curicó** | Mapear cuentas del trial balance a filas 73-124 hoja Curicó. Hoja fuente `Acum MM-AAAA` | Media |
 | ~~**EERR Inmob VC**~~ | ✓ Implementado — 26 filas, verificado Dec 2025 | — |
-| **EERR Viña Centro** | Ídem para Viña Centro | Media |
+| **EERR Viña Centro** | Mapear cuentas del trial balance a filas 73-124 hoja Viña Centro. Hoja fuente `BALANCE ACUMULADO` | Media |
 | **Balance Inmosa Q1-Q3** | Mapear cuentas dot-notation del Senior Assist a filas 5-70 de la hoja Inmosa | Media |
 | **Balance + EERR Fondo Rentas** | Parser PDF EEFF del fondo (M$ × 1000). Q1/Q4=EEFF, Q2/Q3=Analisis | Alta |
 | **Balance + EERR Machalí** | Entidad nueva, fuente Q2/Q4=Analisis/EEFF, Q1/Q3 sin evidencia suficiente | Alta |
+| **Bug `_copy_vals_sheet_rn`** | Falla con `MergedCell.value is read-only` al copiar Resumen PT/Apoquindo. Saltar celdas merged en la copia | Baja |
+
+---
+
+## Próxima sesión — orden de trabajo sugerido
+
+**Estado actual (2026-05-11):** Balance de las 5 entidades core + EERR de Inmosa SA, Inmob VC y Chañarcillo están implementados. Falta EERR de Curicó y Viña, balance Q1-Q3 de Inmosa, todo Fondo Rentas y todo Machalí, y un bug menor en la copia de hojas PT/Apoquindo.
+
+1. **EERR Curicó (Media)** — receta lista, replicar el patrón de Chañarcillo:
+   - Leer códigos de col B filas 73-124 hoja `Curicó` del vF
+   - Fuente: `Acum {MM-AAAA}` del archivo Curicó (mismo que ya usa el balance)
+   - Verificar `G - Pd` por código contra col D histórica (cuidado: en Curicó puede repetirse el patrón de desalineación visto en Chañarcillo)
+   - Construir `CURICO_EERR_MAP`, integrar con `_apply_eerr_sa_map_rn(ws_curico, tb, col, CURICO_EERR_MAP)`
+   - Verificar que resultado del período calza con D119
+
+2. **EERR Viña Centro (Media)** — mismo patrón:
+   - Fuente: hoja `BALANCE ACUMULADO` (no `BALANCE CLASIFICADO`)
+   - Construir `VINA_EERR_MAP`, integrar igual
+
+3. **Bug `_copy_vals_sheet_rn` (Baja)** — `tools/balance_consolidado_tools.py:2553`. Saltar celdas merged:
+   ```python
+   if isinstance(ws_dst.cell(...), MergedCell): continue
+   ```
+   Esto desbloquea la ejecución end-to-end de Rentas Nuevo.
+
+4. **Balance Inmosa Q1-Q3 (Media)** — dot-notation Senior Assist → filas 5-70. Más laborioso porque cambia formato de códigos.
+
+5. **Fondo Rentas / Machalí (Alta)** — requieren parser PDF + identificar fuentes Análisis para Q2/Q3. Dejar para el final.
 
 ---
 

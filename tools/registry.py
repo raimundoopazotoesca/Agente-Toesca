@@ -262,11 +262,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "enviar_correo",
-            "description": "Envía un correo desde Outlook con o sin archivo adjunto.",
+            "description": "Envía un correo desde Outlook con o sin archivo adjunto. NUNCA inventes un destinatario: usa un email completo (con @) o uno de los alias conocidos: nicole, cantillana/leonardo, valentina, sebastian. Si el usuario menciona un contacto que no está en esa lista, pregúntale el email antes de llamar a esta tool.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "destinatario":    {"type": "string", "description": "Dirección de correo"},
+                    "destinatario":    {"type": "string", "description": "Email completo (ej. nicole.carvajal@jll.com) o alias conocido (ej. 'nicole'). NO usar el email del propio usuario."},
                     "asunto":          {"type": "string", "description": "Asunto del correo"},
                     "cuerpo":          {"type": "string", "description": "Texto del mensaje"},
                     "archivo_adjunto": {"type": "string", "description": "Nombre del archivo a adjuntar (opcional)"},
