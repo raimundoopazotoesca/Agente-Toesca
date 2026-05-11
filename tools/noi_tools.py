@@ -891,8 +891,16 @@ def buscar_er_inmosa(año: int, mes: int) -> str:
     for d in search_dirs:
         if not os.path.isdir(d):
             continue
-        archivos = [f for f in os.listdir(d) if f.lower().endswith(".xlsx")
-                    and "inmosa" in f.lower()]
+        # Reconoce ambos naming patterns del ER-FC INMOSA:
+        # - "ER-FC INMOSA ..." (naming antiguo)
+        # - "EEFF y FC Senior Assist ..." (naming nuevo desde 2026; mismo archivo)
+        # Excluye Balance General (va en Contabilidad, no es ER-FC).
+        def _is_erfc(fn: str) -> bool:
+            fl = fn.lower()
+            if not fl.endswith(".xlsx") or "balance" in fl:
+                return False
+            return "inmosa" in fl or "senior assist" in fl
+        archivos = [f for f in os.listdir(d) if _is_erfc(f)]
         if archivos:
             # El más reciente por fecha de modificación
             return max((os.path.join(d, f) for f in archivos), key=os.path.getmtime)

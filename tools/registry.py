@@ -521,6 +521,11 @@ TOOL_DEFINITIONS = [
                         "items": {"type": "string"},
                         "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
                     },
+                    "solo": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Si se especifica, SOLO se incluye a estos contactos. Ej: ['nicole'] para enviar únicamente a Nicole. Toma precedencia sobre excluir.",
+                    },
                 },
                 "required": ["año", "mes"],
             },
@@ -549,6 +554,11 @@ TOOL_DEFINITIONS = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
+                    },
+                    "solo": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Si se especifica, SOLO se envía a estos contactos. Ej: ['nicole']. Toma precedencia sobre excluir.",
                     },
                 },
                 "required": ["año", "mes"],
@@ -2321,10 +2331,10 @@ def _dispatch(name: str, args: dict) -> str:
         "buscar_tir":                   lambda a: buscar_tir(),
         "verificar_archivos_cdg":       lambda a: verificar_archivos_cdg(a["año"], a["mes"]),
         "previsualizar_correos_solicitud_cdg": lambda a: previsualizar_correos_solicitud_cdg(
-            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"),
+            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"), a.get("solo"),
         ),
         "enviar_correos_solicitud_cdg": lambda a: enviar_correos_solicitud_cdg(
-            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"),
+            a["año"], a["mes"], a.get("seguimiento"), a.get("excluir"), a.get("solo"),
         ),
         "actualizar_fecha_pendientes":  lambda a: actualizar_fecha_pendientes(a["nombre_archivo"], a["año"], a["mes"]),
         "info_siguiente_accion":        lambda a: info_siguiente_accion(a["nombre_archivo"]),

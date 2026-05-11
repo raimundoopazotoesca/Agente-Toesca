@@ -98,8 +98,10 @@ def _classify(filename: str) -> str | None:
         año = _infer_year_from_name(n)
         return _sp("Fondos", "Rentas TRI", "Activos", "Viña Centro", "EEFF", str(año))
 
-    # ── ER-FC INMOSA ───────────────────────────────────────────────────────────
-    if re.search(r"ER-FC INMOSA", n, re.IGNORECASE):
+    # ── ER-FC INMOSA (estado de resultado + flujo de caja) ────────────────────
+    # Incluye nombres alternos como "EEFF y FC Senior Assist" — mismo archivo, distinto naming.
+    if (re.search(r"ER-FC INMOSA", n, re.IGNORECASE)
+            or (re.search(r"\b(EEFF|ER)\b.*\bFC\b", n, re.IGNORECASE) and "senior assist" in nl)):
         año = _infer_year_from_name(n)
         return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "Flujos", str(año))
 
@@ -112,7 +114,9 @@ def _classify(filename: str) -> str | None:
         año = _infer_year_from_name(n)
         return _sp("Fondos", "Rentas TRI", "Sociedades", "Inmobiliaria VC", "Analisis", str(año))
 
-    if "senior assist" in nl and nl.endswith(".xlsx"):
+    # Balance General de Senior Assist (INMOSA) → Contabilidad
+    # Solo aplica si el nombre menciona "Balance"; si no, ya cayó en ER-FC arriba.
+    if "senior assist" in nl and "balance" in nl and nl.endswith(".xlsx"):
         año = _infer_year_from_name(n)
         return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "Contabilidad", str(año))
 

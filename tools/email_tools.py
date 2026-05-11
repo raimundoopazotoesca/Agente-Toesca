@@ -618,19 +618,25 @@ def check_replies_from_contact(contacto: str, email: str = None, limit: int = 5,
                 f"No encontré correos enviados a **{contacto}** en los últimos `{scan_limit}` enviados revisados.",
             ])
 
-        if replies:
-            lines.extend(["", f"### ✅ Respuestas posteriores encontradas `{len(replies)}`"])
-            for i, reply in enumerate(replies[:limit], 1):
-                hilo = "sí" if reply.get("mismo_hilo") else "no / no confirmado"
-                lines.append(f"{i}. **{reply['fecha']}**")
-                lines.append(f"   - **Asunto:** {reply['asunto']}")
-                lines.append(f"   - **Mismo hilo del enviado:** {hilo}")
-                lines.append(f"   - **Entry ID:** `{reply['entry_id']}`")
+        same_thread_replies = [r for r in replies if r.get("mismo_hilo")]
+        other_replies = [r for r in replies if not r.get("mismo_hilo")]
+
+        if same_thread_replies:
+            lines.extend(["", f"### ✅ Respuestas en el mismo hilo `{len(same_thread_replies)}`"])
+            for reply in same_thread_replies[:limit]:
+                lines.append(f"- **{reply['fecha']}** · {reply['asunto']}")
                 if reply["adjuntos_excel"]:
-                    lines.append(f"   - 📎 **Excel:** {', '.join(reply['adjuntos_excel'])}")
+                    lines.append(f"  - 📎 **Excel:** {', '.join(reply['adjuntos_excel'])}")
+                lines.append(f"  - Entry ID: `{reply['entry_id']}`")
         elif last_sent:
             lines.append("")
-            lines.append("🚫 **No encontré respuestas posteriores** a ese correo en la bandeja de entrada revisada.")
+            lines.append("🚫 **No respondió en el mismo hilo** al correo enviado.")
+
+        if other_replies:
+            lines.extend(["", f"### 📩 Otros correos recibidos de **{contacto}** (hilo distinto) `{len(other_replies)}`"])
+            for reply in other_replies[:limit]:
+                lines.append(f"- **{reply['fecha']}** · {reply['asunto']}")
+                lines.append(f"  - Entry ID: `{reply['entry_id']}`")
 
         if not replies and recent_from_contact:
             lines.extend(["", f"### 📥 Últimos correos recibidos de **{contacto}**"])

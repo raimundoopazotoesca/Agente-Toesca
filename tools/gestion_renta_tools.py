@@ -1012,11 +1012,23 @@ def _correos_solicitud_cdg(
     mes: int,
     seguimiento: bool | None = None,
     excluir: list[str] | None = None,
+    solo: list[str] | None = None,
 ) -> tuple[dict, str, list[str]]:
     resultado = verificar_archivos_cdg(año, mes)
     grupos = _extract_faltantes_contactables(resultado)
     if not grupos:
         return {}, "No hay archivos faltantes con destinatario configurado.", []
+
+    # Aplicar filtro "solo" — excluir todo lo que no esté en la lista
+    if solo:
+        contacto_aliases = {
+            "jll": "nicole", "nicole": "nicole", "rr_jll": "nicole",
+            "sebastian": "sebastian", "tres_a": "sebastian", "valentina": "valentina",
+            "leonardo": "leonardo", "inmosa": "leonardo", "cantillana": "leonardo",
+        }
+        solo_keys = {contacto_aliases.get(s.lower(), s.lower()) for s in solo}
+        excluir_auto = [k for k in grupos if k not in solo_keys]
+        excluir = list(set((excluir or []) + excluir_auto))
 
     grupos, omitidos = _aplicar_exclusiones_solicitud(grupos, excluir)
     if not grupos:
@@ -1066,9 +1078,10 @@ def previsualizar_correos_solicitud_cdg(
     mes: int,
     seguimiento: bool | None = None,
     excluir: list[str] | None = None,
+    solo: list[str] | None = None,
 ) -> str:
     """Muestra los correos que se enviarían para pedir archivos faltantes del CDG."""
-    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir)
+    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir, solo)
     if aviso:
         return aviso
 
@@ -1094,11 +1107,12 @@ def enviar_correos_solicitud_cdg(
     mes: int,
     seguimiento: bool | None = None,
     excluir: list[str] | None = None,
+    solo: list[str] | None = None,
 ) -> str:
     """Envía y registra los correos para solicitar archivos faltantes del CDG."""
     from tools.email_tools import send_email, find_sent_email, reply_to_email
 
-    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir)
+    correos, aviso, omitidos = _correos_solicitud_cdg(año, mes, seguimiento, excluir, solo)
     if aviso:
         return aviso
 
@@ -1251,19 +1265,10 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         valido = path if (path and mes_str in os.path.basename(path)) else None
         chk(label, valido, os.path.join(_TRES_A_DIRS[mall], str(año)))
 
-    # ── EEFF INMOSA — validar que el archivo cubra el mes del CDG ─────────────
+    # ── EEFF INMOSA — validar que exista el archivo (el nombre no siempre refleja el mes real) ──
     inmosa = buscar_er_inmosa(año, mes)
-    inmosa_valido = None
-    if not inmosa.startswith("Error"):
-        nombre_lower = os.path.basename(inmosa).lower()
-        menciones = [(nombre_lower.find(abr), m)
-                     for abr, m in _MESES_ABR.items() if abr in nombre_lower]
-        if menciones:
-            ultimo_mes = max(menciones, key=lambda x: x[0])[1]
-            inmosa_valido = inmosa if ultimo_mes >= mes else None
-        else:
-            inmosa_valido = inmosa
-    chk(f"EEFF INMOSA (necesita cubrir {meses_es[mes]})", inmosa_valido,
+    inmosa_valido = inmosa if not inmosa.startswith("Error") else None
+    chk(f"EEFF INMOSA", inmosa_valido,
         os.path.join(_INMOSA_BASE, str(año)))
 
     # ── Fin de trimestre ──────────────────────────────────────────────────────
