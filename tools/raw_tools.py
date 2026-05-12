@@ -73,9 +73,9 @@ def _classify(filename: str) -> str | None:
     nl = n.lower()
 
     # ── Rent Roll JLL ──────────────────────────────────────────────────────────
-    m = re.match(r"(\d{4})\s*Rent Roll y NOI", n, re.IGNORECASE)
+    m = re.match(r"(\d{2})[.\-_ ]?(\d{2})\s*Rent Roll y NOI", n, re.IGNORECASE)
     if m:
-        año, mes = _aamm_to_year_mes(m.group(1))
+        año, mes = _aamm_to_year_mes(m.group(1) + m.group(2))
         return _sp("Rent Rolls", "JLL", str(año))
 
     # ── Rent Roll Tres Asociados — Viña ────────────────────────────────────────
@@ -125,9 +125,9 @@ def _classify(filename: str) -> str | None:
         return _sp("Fondos", "Rentas TRI", "Activos", "INMOSA", "EEFF", str(año))
 
     # ── CDG mensual ────────────────────────────────────────────────────────────
-    m = re.match(r"(\d{4})\s*Control De Gesti", n, re.IGNORECASE)
+    m = re.match(r"(\d{2})[.\-_ ]?(\d{2})\s*Control De Gesti", n, re.IGNORECASE)
     if m:
-        año, mes = _aamm_to_year_mes(m.group(1))
+        año, mes = _aamm_to_year_mes(m.group(1) + m.group(2))
         return _sp("Control de Gestión", "CDG Mensual", str(año))
 
     # ── Saldo Caja ─────────────────────────────────────────────────────────────

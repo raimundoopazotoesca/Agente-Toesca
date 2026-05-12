@@ -504,6 +504,109 @@ def revisar_rent_rolls(año: int, mes: int) -> str:
     return "\n".join(lines)
 
 
+def _md_cell(value) -> str:
+    return str(value if value is not None else "").replace("|", "\\|").replace("\n", " ")
+
+
+def revisar_rent_roll_jll(año: int, mes: int) -> str:
+    """
+    Revisa solo el Rent Roll JLL del mes indicado.
+    Es una validacion de solo lectura: no copia datos al CDG ni modifica archivos.
+    """
+    global _ultimo_resultado
+
+    cierre = _cierre_mes(año, mes)
+    resultado = {"año": año, "mes": mes, "cierre": str(cierre), "proveedores": {}}
+    aamm = f"{str(año)[2:]}{mes:02d}"
+
+    jll_path = _find_file(año, mes, "jll")
+    lines = [
+        f"### Revision Rent Roll JLL - {MESES_ES[mes]} {año}",
+        f"**Cierre:** `{cierre}`",
+        "",
+    ]
+
+    if not jll_path:
+        _ultimo_resultado = resultado
+        return (
+            "\n".join(lines)
+            + f"**No se encontro el archivo JLL esperado:** `{aamm} Rent Roll y NOI.xlsx`"
+        )
+
+    resultado["proveedores"]["jll"] = _validar_archivo(jll_path, cierre)
+    _ultimo_resultado = resultado
+
+    lines.append(f"**Archivo revisado:** `{os.path.basename(jll_path)}`")
+    lines.append("")
+    lines.append("#### JLL (Nicole)")
+
+    errores = resultado["proveedores"]["jll"].get("errores", {})
+    tiene_inconsistencias = bool(errores)
+
+    if not errores:
+        lines.append("- Sin errores.")
+    else:
+        if "lectura" in errores:
+            lines.append(f"- **ERROR lectura:** {errores['lectura']}")
+
+        if "val1_vacantes" in errores:
+            lines.append(f"- **VAL1 - Coherencia vacantes:** {len(errores['val1_vacantes'])} error(es)")
+            lines.append("")
+            lines.append("| Fila | Tipo Activo 1 | Tipo Activo 3 | Arrendatario | Tipo Arrendatario |")
+            lines.append("|---:|---|---|---|---|")
+            for e in errores["val1_vacantes"]:
+                vals = e["valores"]
+                lines.append(
+                    f"| {e['fila']} | {_md_cell(vals['Tipo Activo 1'])} | "
+                    f"{_md_cell(vals['Tipo Activo 3'])} | {_md_cell(vals['Arrendatario'])} | "
+                    f"{_md_cell(vals['Tipo Arrendatario'])} |"
+                )
+            lines.append("")
+
+        if "val2_absorcion" in errores:
+            lines.append(f"- **VAL2 - Absorcion:** {len(errores['val2_absorcion'])} movimiento(s) sin registro")
+            lines.append("")
+            lines.append("| Local | Activo | Anterior | Actual | Movimiento esperado |")
+            lines.append("|---|---|---|---|---|")
+            for e in errores["val2_absorcion"]:
+                lines.append(
+                    f"| {_md_cell(e['local'])} | {_md_cell(e['activo'])} | "
+                    f"{_md_cell(e['anterior'])} | {_md_cell(e['actual'])} | "
+                    f"{_md_cell(e['movimiento_esperado'])} |"
+                )
+            lines.append("")
+
+        if "val3_escalonada" in errores:
+            lines.append(f"- **VAL3 - Renta escalonada:** {len(errores['val3_escalonada'])} error(es)")
+            lines.append("")
+            lines.append("| Fila | Arrendatario | Renta registrada | Escalon | Valor esperado | Desde |")
+            lines.append("|---:|---|---:|---:|---:|---|")
+            for e in errores["val3_escalonada"]:
+                lines.append(
+                    f"| {e['fila']} | {_md_cell(e['arrendatario'])} | {e['renta_fija']} | "
+                    f"{e['escalon_num']} | {e['escalon_val']} | {_md_cell(e['escalon_desde'])} |"
+                )
+            lines.append("")
+
+        if "val4_terminos" in errores:
+            lines.append(f"- **VAL4 - Contratos vencidos:** {len(errores['val4_terminos'])} error(es)")
+            lines.append("")
+            lines.append("| Fila | Arrendatario | Fecha termino |")
+            lines.append("|---:|---|---|")
+            for e in errores["val4_terminos"]:
+                lines.append(
+                    f"| {e['fila']} | {_md_cell(e['arrendatario'])} | {_md_cell(e['fecha_termino'])} |"
+                )
+            lines.append("")
+
+    lines.append("")
+    lines.append("_No se modifico ningun archivo._")
+    if tiene_inconsistencias:
+        lines.append("")
+        lines.append("¿Quieres que envie un correo a Nicole con estas inconsistencias?")
+    return "\n".join(lines)
+
+
 # ── Consolidación de Absorción en CDG ────────────────────────────────────────
 
 # Columnas a copiar de la Absorción del proveedor al CDG (por nombre)

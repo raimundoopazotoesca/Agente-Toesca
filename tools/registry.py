@@ -1,4 +1,5 @@
 import json
+import os
 from tools.memory_tools import (
     load_memory,
     guardar_tarea,
@@ -101,6 +102,7 @@ from tools.web_bursatil_tools import (
 )
 from tools.rentroll_tools import (
     revisar_rent_rolls,
+    revisar_rent_roll_jll,
     enviar_emails_rent_roll,
     consolidar_rent_rolls,
     consolidar_absorcion,
@@ -485,7 +487,8 @@ TOOL_DEFINITIONS = [
                 "'Archivos encontrados (X/N)' con la ruta exacta de cada uno, "
                 "y 'Archivos faltantes (Y/N)' con los que no se encontraron. "
                 "SIEMPRE copiar el resultado ÍNTEGRO al usuario — nunca resumir ni omitir la sección de encontrados. "
-                "Incluye archivos de fin de trimestre si corresponde (mar/jun/sep/dic)."
+                "Incluye archivos de fin de trimestre si corresponde (mar/jun/sep/dic). "
+                "No existe un requisito RR/NOI Cushman para el CDG; INMOSA corresponde a ER-FC INMOSA."
             ),
             "parameters": {
                 "type": "object",
@@ -519,7 +522,7 @@ TOOL_DEFINITIONS = [
                     "excluir": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
+                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['er_fc_inmosa'].",
                     },
                     "solo": {
                         "type": "array",
@@ -553,7 +556,7 @@ TOOL_DEFINITIONS = [
                     "excluir": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['eeff_inmosa'].",
+                        "description": "Contactos o archivos a omitir. Ej: ['jll'], ['rr_jll'], ['nicole'], ['er_fc_inmosa'].",
                     },
                     "solo": {
                         "type": "array",
@@ -1347,6 +1350,25 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "revisar_rent_roll_jll",
+            "description": (
+                "Revisa solo el Rent Roll JLL del mes indicado con las validaciones de rent roll. "
+                "Es SOLO LECTURA: no copia datos al CDG, no actualiza NOI y no modifica archivos. "
+                "Usar cuando el usuario pida revisar, validar o chequear el RR/Rent Roll de JLL."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "año": {"type": "integer", "description": "Año del mes a revisar (ej: 2026)"},
+                    "mes": {"type": "integer", "description": "Mes a revisar (1-12)"},
+                },
+                "required": ["año", "mes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "consolidar_absorcion",
             "description": (
                 "Sincroniza la hoja 'Absorcion' del CDG con las hojas Absorción de los "
@@ -1493,7 +1515,9 @@ TOOL_DEFINITIONS = [
             "name": "actualizar_noi_pt",
             "description": (
                 "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 335-379 del NOI-RCSD "
-                "(sección Parque Titanium). Las celdas con fórmula no se modifican."
+                "(sección Parque Titanium). MODIFICA el CDG: usar solo si el usuario pidio "
+                "actualizar/copiar/guardar datos, nunca para revisar o validar un RR. "
+                "Las celdas con fórmula no se modifican."
             ),
             "parameters": {
                 "type": "object",
@@ -1513,7 +1537,9 @@ TOOL_DEFINITIONS = [
             "name": "actualizar_noi_apoquindo",
             "description": (
                 "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 426-456 del NOI-RCSD "
-                "(sección Fondo Apoquindo). Las celdas con fórmula no se modifican."
+                "(sección Fondo Apoquindo). MODIFICA el CDG: usar solo si el usuario pidio "
+                "actualizar/copiar/guardar datos, nunca para revisar o validar un RR. "
+                "Las celdas con fórmula no se modifican."
             ),
             "parameters": {
                 "type": "object",
@@ -1533,7 +1559,9 @@ TOOL_DEFINITIONS = [
             "name": "actualizar_noi_apo3001",
             "description": (
                 "Copia datos de la hoja 'NOI PT' del RR JLL a las filas 468-476 del NOI-RCSD "
-                "(sección Apoquindo 3001). Las celdas con fórmula no se modifican."
+                "(sección Apoquindo 3001). MODIFICA el CDG: usar solo si el usuario pidio "
+                "actualizar/copiar/guardar datos, nunca para revisar o validar un RR. "
+                "Las celdas con fórmula no se modifican."
             ),
             "parameters": {
                 "type": "object",
@@ -2303,7 +2331,66 @@ TOOL_DEFINITIONS = [
         },
     },
 ]
+
+_WRITE_TOOL_FILE_ARGS = {
+    "actualizar_celda": ("nombre_archivo",),
+    "guardar_en_sharepoint": ("nombre_archivo",),
+    "guardar_cdg": ("nombre_archivo",),
+    "actualizar_fecha_pendientes": ("nombre_archivo",),
+    "agregar_vr_bursatil_pt": ("nombre_archivo",),
+    "agregar_vr_bursatil_rentas": ("nombre_archivo",),
+    "agregar_vr_contable_pt": ("nombre_archivo",),
+    "agregar_vr_contable_rentas": ("nombre_archivo",),
+    "agregar_vr_contable_apoquindo": ("nombre_archivo",),
+    "agregar_dividendo_pt": ("nombre_archivo",),
+    "agregar_dividendo_rentas": ("nombre_archivo",),
+    "agregar_dividendo_apoquindo": ("nombre_archivo",),
+    "agregar_aporte_pt": ("nombre_archivo",),
+    "agregar_aporte_rentas": ("nombre_archivo",),
+    "agregar_aporte_apoquindo": ("nombre_archivo",),
+    "actualizar_fecha_ar": ("nombre_archivo",),
+    "pegar_rentabilidades_datos_fs": ("nombre_archivo",),
+    "copiar_datos_tir_rentas": ("archivo_cg",),
+    "actualizar_balance_input": ("nombre_archivo",),
+    "actualizar_fecha_bursatil_input": ("nombre_archivo",),
+    "actualizar_fecha_contable_input": ("nombre_archivo",),
+    "agregar_dividendo_input": ("nombre_archivo",),
+    "copiar_datos_saldo_caja": ("archivo_cg",),
+    "agregar_fila_caja_historica": ("archivo_cg",),
+    "actualizar_vacancia": ("nombre_cdg",),
+    "refrescar_tabla_rentas_2": ("nombre_cdg",),
+    "consolidar_rent_rolls": ("nombre_cdg",),
+    "consolidar_absorcion": ("nombre_cdg",),
+    "actualizar_er_vina": ("nombre_cdg",),
+    "actualizar_er_curico": ("nombre_cdg",),
+    "actualizar_noi_pt": ("nombre_cdg",),
+    "actualizar_noi_apoquindo": ("nombre_cdg",),
+    "actualizar_noi_apo3001": ("nombre_cdg",),
+    "actualizar_noi_inmosa": ("nombre_cdg",),
+}
+
+
+def _enforce_vagente_write_permission(name: str, args: dict) -> str | None:
+    """Reject writes to operational Excel files unless they are agent-created vAgente files."""
+    for key in _WRITE_TOOL_FILE_ARGS.get(name, ()):
+        value = args.get(key)
+        if not value:
+            continue
+        filename = os.path.basename(str(value))
+        if filename.lower().endswith((".xlsx", ".xlsm", ".xls")) and "vagente" not in filename.casefold():
+            return (
+                f"Error: sin permiso para modificar '{filename}'. "
+                "El agente solo puede editar archivos creados por el con sufijo vAgente. "
+                "Primero crea o usa una copia vAgente."
+            )
+    return None
+
+
 def _dispatch(name: str, args: dict) -> str:
+    permission_error = _enforce_vagente_write_permission(name, args)
+    if permission_error:
+        return permission_error
+
     dispatch = {
         "preguntar_usuario":            lambda a: preguntar_usuario(a["pregunta"]),
         "buscar_correos_con_planillas": lambda a: list_emails_with_attachments(a.get("limite", 20)),
@@ -2403,6 +2490,7 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_vacancia":            lambda a: consultar_vacancia(a["nombre_cdg"], a["año"], a["mes"], a.get("activo")),
         # Rent Roll
         "revisar_rent_rolls":            lambda a: revisar_rent_rolls(a["año"], a["mes"]),
+        "revisar_rent_roll_jll":         lambda a: revisar_rent_roll_jll(a["año"], a["mes"]),
         "enviar_emails_rent_roll":       lambda a: enviar_emails_rent_roll(),
         "consolidar_rent_rolls":         lambda a: consolidar_rent_rolls(a["año"], a["mes"], a["nombre_cdg"]),
         "consolidar_absorcion":          lambda a: consolidar_absorcion(a["año"], a["mes"], a["nombre_cdg"]),
@@ -2527,7 +2615,7 @@ _TOOLS_CAJA = {
 }
 
 _TOOLS_RENTROLL = {
-    "revisar_rent_rolls", "consolidar_absorcion", "consolidar_rent_rolls",
+    "revisar_rent_rolls", "revisar_rent_roll_jll", "consolidar_absorcion", "consolidar_rent_rolls",
     "enviar_emails_rent_roll", "actualizar_vacancia", "refrescar_tabla_rentas_2", "consultar_vacancia",
 }
 

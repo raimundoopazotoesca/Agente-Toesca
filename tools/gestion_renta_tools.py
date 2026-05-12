@@ -763,7 +763,7 @@ _CONTACTOS_SOLICITUD_CDG = {
     "leonardo": {
         "nombre": "Leonardo",
         "email": "lcantillana@grupoaraucana.cl",
-        "asunto": "EEFF INMOSA {periodo}",
+        "asunto": "ER-FC INMOSA {periodo}",
     },
 }
 
@@ -816,7 +816,7 @@ def _grupos_solicitud_desde_faltantes(faltantes: list[tuple[str, str]]) -> dict:
             add("valentina", "eeff_vina")
         elif "eeff curic" in n:
             add("valentina", "eeff_curico")
-        elif "eeff inmosa" in n:
+        elif "eeff inmosa" in n or "er-fc inmosa" in n or "er fc inmosa" in n:
             add("leonardo", "eeff_inmosa")
 
     return grupos
@@ -902,6 +902,7 @@ def _aplicar_exclusiones_solicitud(grupos: dict, excluir: list[str] | None = Non
         "eeff_curico": "eeff_curico",
         "eeff_curicó": "eeff_curico",
         "eeff_inmosa": "eeff_inmosa",
+        "er_fc_inmosa": "eeff_inmosa",
     }
 
     contactos_excluidos = set()
@@ -983,8 +984,8 @@ def _mail_body_solicitud(contacto_key: str, items: list[str], año: int, mes: in
         objeto = f"el EEFF de {_join_names(activos)}" if len(activos) == 1 else f"los EEFF de {_join_names(activos)}"
         pronombre = "lo" if len(activos) == 1 else "los"
     else:
-        objeto = "el EEFF/ER-FC de INMOSA"
-        pronombre = "lo"
+        objeto = "la planilla ER-FC de INMOSA"
+        pronombre = "la"
 
     plural = "s" if pronombre == "los" else ""
     if seguimiento:
@@ -1184,7 +1185,7 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
       - RR Tres A Curicó (Sebastián)
       - EEFF Viña Centro
       - EEFF Curicó
-      - EEFF INMOSA
+      - ER-FC INMOSA
 
     Adicionales en fin de trimestre (mar/jun/sep/dic):
       - EEFF PT (Toesca Rentas Inmobiliarias PT)
@@ -1265,10 +1266,10 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
         valido = path if (path and mes_str in os.path.basename(path)) else None
         chk(label, valido, os.path.join(_TRES_A_DIRS[mall], str(año)))
 
-    # ── EEFF INMOSA — validar que exista el archivo (el nombre no siempre refleja el mes real) ──
+    # ── ER-FC INMOSA — validar que exista el archivo (el nombre no siempre refleja el mes real) ──
     inmosa = buscar_er_inmosa(año, mes)
     inmosa_valido = inmosa if not inmosa.startswith("Error") else None
-    chk(f"EEFF INMOSA", inmosa_valido,
+    chk(f"ER-FC INMOSA", inmosa_valido,
         os.path.join(_INMOSA_BASE, str(año)))
 
     # ── Fin de trimestre ──────────────────────────────────────────────────────

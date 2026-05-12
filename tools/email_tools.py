@@ -332,6 +332,36 @@ def _mail_summary(msg, date_attr: str) -> dict:
     }
 
 
+def _find_sent_mail(namespace, to: str, subject: str, scan_limit: int = 100) -> dict | None:
+    emails, terms = _contact_matchers(to, to if "@" in str(to or "") else None)
+    sent = namespace.GetDefaultFolder(5)  # Sent Items
+    items = sent.Items
+    items.Sort("[SentOn]", True)
+
+    scanned = 0
+    for msg in items:
+        scanned += 1
+        if scanned > scan_limit:
+            break
+        try:
+            if str(getattr(msg, "Subject", "") or "") != str(subject or ""):
+                continue
+            if _recipients_match(msg, emails, terms):
+                return _mail_summary(msg, "SentOn")
+        except Exception:
+            continue
+    return None
+
+
+def _wait_for_sent_mail(namespace, to: str, subject: str) -> dict | None:
+    for _ in range(6):
+        found = _find_sent_mail(namespace, to, subject)
+        if found:
+            return found
+        time.sleep(2)
+    return None
+
+
 def _subject_key(subject: str) -> str:
     subject = _norm(subject)
     while subject.startswith(("re ", "fw ", "fwd ")):
@@ -458,6 +488,7 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc
             )
     try:
         outlook = _get_outlook()
+        namespace = outlook.GetNamespace("MAPI")
         mail = outlook.CreateItem(0)  # 0 = MailItem
         mail.To = to
         mail.Subject = subject
@@ -474,11 +505,23 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc
                 return f"Error: No se encontró el archivo adjunto '{attachment_path}'."
 
         mail.Send()
+        sent_summary = _wait_for_sent_mail(namespace, to, subject)
+        if not sent_summary:
+            return (
+                "mail.Send() no arrojó error, pero NO pude confirmar el correo en "
+                "Elementos enviados. Revisa Outlook antes de asumir que salió."
+            )
 
         if attachment_path and os.path.exists(attachment_path):
-            return f"Correo enviado a {to} con adjunto '{os.path.basename(attachment_path)}'."
+            return (
+                f"Correo confirmado en Elementos enviados a {to} con adjunto "
+                f"'{os.path.basename(attachment_path)}'. EntryID: {sent_summary['entry_id']}"
+            )
         suffix = f" (CC: {cc})" if cc else ""
-        return f"Correo enviado exitosamente a {to}{suffix}."
+        return (
+            f"Correo confirmado en Elementos enviados a {to}{suffix}. "
+            f"EntryID: {sent_summary['entry_id']}"
+        )
 
     except Exception as e:
         return f"Error al enviar correo: {e}"

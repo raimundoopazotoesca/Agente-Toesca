@@ -204,11 +204,22 @@ Sí puedes reorganizar y formatear la presentación en Markdown para que sea fá
 Si una instrucción específica dice "copiar literalmente" o "mostrar resultado completo", conserva todo el contenido y solo mejora el formato visual si no cambia el texto sustantivo.
 Esto aplica especialmente a rutas de archivos: NUNCA generes una ruta que no vino de una herramienta.
 Si el usuario pregunta dónde está o dónde subir un archivo: llamar leer_wiki("sharepoint/index") primero.
+Nunca muestres pseudo-codigo, bloques <tool_code>, llamadas internas de herramientas ni planes de ejecucion como respuesta final.
+El usuario solo debe ver el resultado, errores encontrados y acciones realizadas.
 
 SEGUIMIENTO DE CORREOS:
 Si el usuario pregunta si una persona respondió un mail enviado (ej. "¿Cantillana respondió?"),
 busca por contacto con revisar_respuestas_contacto. No inventes ni asumas un asunto. No busques por "CDG",
 "Control de Gestión" u otro tema salvo que el usuario lo mencione explícitamente en esa pregunta.
+
+PERMISOS DE EDICION:
+Cuando el usuario pida revisar, validar, verificar, mirar o chequear algo, la tarea es SOLO LECTURA.
+No uses herramientas que actualicen, copien datos, guarden, consoliden o modifiquen planillas salvo que el
+usuario lo pida explicitamente con palabras como actualizar, crear, guardar, consolidar, copiar datos o subir.
+Nunca edites archivos que no hayan sido creados por el agente. En planillas operativas, solo puedes modificar
+archivos con sufijo vAgente; no modifiques vF, vActualizar, archivos fuente, rent rolls, EEFF, saldos de caja
+ni archivos recibidos de terceros. Para revisar un RR JLL usa revisar_rent_roll_jll o revisar_rent_rolls,
+nunca actualizar_noi_pt/apoquindo/apo3001.
 
 ═══════════════════════════════════════════════════════════════
 AUTONOMÍA — REGLA PRINCIPAL
@@ -407,14 +418,23 @@ ARCHIVOS FUENTE PARA NOI:
   EEFF Curicó (Tres Asociados): "MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx" — del MES del CDG
   EEFF Viña (Tres Asociados): "MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx" — del MES del CDG
   ER-FC INMOSA: SharePoint → Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/ — del MES del CDG
+  No existe un requisito "RR y NOI Cushman" para el CDG; INMOSA se pide a Leonardo como planilla ER-FC.
 
 RUTAS SHAREPOINT: Para saber la ruta exacta de cualquier archivo en SharePoint,
   llamar leer_wiki("sharepoint/index") — contiene árbol completo y patrones de nombre.
-  NUNCA inventar rutas — si no está en la wiki, usar buscar_en_sharepoint()."""
+  NUNCA inventar rutas — si no está en la wiki, usar buscar_en_sharepoint().
+
+Si el usuario pide revisar/validar/chequear el RR JLL, usar revisar_rent_roll_jll.
+No usar actualizar_noi_pt/apoquindo/apo3001 salvo que el usuario pida explicitamente actualizar el CDG/NOI."""
 
 PROMPT_RENTROLL = """═══════════════════════════════════════════════════════════════
 VACANCIA Y RENT ROLL
 ═══════════════════════════════════════════════════════════════
+REVISION DE RENT ROLL:
+  - Si el usuario pide revisar/validar/chequear RR JLL, usar revisar_rent_roll_jll(año, mes).
+  - Si pide revisar todos los RR del mes, usar revisar_rent_rolls(año, mes).
+  - Revisar es solo lectura: no consolidar, no actualizar vacancia, no copiar datos al CDG.
+
 VACANCIA:
   El CDG ya tiene consolidado m² vacantes, % vacancia y área total — NO calcular manualmente.
   → Leer m² vacantes: consultar_vacancia(nombre_cdg, año, mes, activo=None)
@@ -540,6 +560,17 @@ _RESPUESTA_MAIL_RE = re.compile(
     re.I,
 )
 
+_REVISAR_RR_JLL_RE = re.compile(
+    r"(?=.*\bjll\b)(?=.*(?:\brr\b|rent\s*roll))(?=.*(?:revis|valid|chequ|esta\s+bien|est[eé]\s+bien))",
+    re.I,
+)
+
+_ENVIAR_MAIL_RR_RE = re.compile(
+    r"(?=.*(?:avis|envi|manda|mandale|m[aá]ndale|correo|mail))"
+    r"(?=.*(?:nicole|nicle|jll|inconsist))",
+    re.I,
+)
+
 
 def _try_revisar_respuesta_contacto_directo(user_input: str):
     """Resuelve seguimientos personales de correo por contacto, sin mezclar asuntos de otros flujos."""
@@ -572,19 +603,64 @@ def _try_verificar_cdg_directo(user_input: str):
     m_año = re.search(r"\b(202\d)\b", user_input)
     if m_año:
         año = int(m_año.group(1))
+    normalized_input = _norm_text(user_input)
     for nombre, num in _MES_NOMBRES.items():
-        if nombre in user_input.lower():
+        if nombre in normalized_input:
             mes = num
             break
     m_aamm = re.search(r"\b(\d{2})(\d{2})\b", user_input)
     if m_aamm and not (año and mes):
         año = 2000 + int(m_aamm.group(1))
         mes = int(m_aamm.group(2))
-    if not (año and mes):
-        hoy = datetime.date.today()
-        año, mes = hoy.year, hoy.month
+    hoy = datetime.date.today()
+    if año is None:
+        año = hoy.year
+    if mes is None:
+        mes = hoy.month
     from tools.gestion_renta_tools import verificar_archivos_cdg
     return verificar_archivos_cdg(año, mes)
+
+
+def _extract_periodo(user_input: str):
+    import datetime
+
+    año = mes = None
+    m_año = re.search(r"\b(202\d)\b", user_input)
+    if m_año:
+        año = int(m_año.group(1))
+
+    normalized_input = _norm_text(user_input)
+    for nombre, num in _MES_NOMBRES.items():
+        if nombre in normalized_input:
+            mes = num
+            break
+
+    m_aamm = re.search(r"\b(\d{2})(\d{2})\b", user_input)
+    if m_aamm and not (año and mes):
+        año = 2000 + int(m_aamm.group(1))
+        mes = int(m_aamm.group(2))
+
+    hoy = datetime.date.today()
+    return año or hoy.year, mes or hoy.month
+
+
+def _try_revisar_rr_jll_directo(user_input: str):
+    """Intercepcion segura: revisar RR JLL es solo lectura, nunca actualiza NOI/CDG."""
+    if not _REVISAR_RR_JLL_RE.search(_norm_text(user_input)):
+        return None
+
+    año, mes = _extract_periodo(user_input)
+    from tools.rentroll_tools import revisar_rent_roll_jll
+    return revisar_rent_roll_jll(año, mes)
+
+
+def _try_enviar_mail_rr_directo(user_input: str):
+    """Envia el correo de inconsistencias de RR cuando el usuario ya lo instruye."""
+    if not _ENVIAR_MAIL_RR_RE.search(_norm_text(user_input)):
+        return None
+
+    from tools.rentroll_tools import enviar_emails_rent_roll
+    return enviar_emails_rent_roll()
 
 
 def run_agent(user_input: str) -> str:
@@ -598,6 +674,20 @@ def run_agent(user_input: str) -> str:
         from tools.memory_tools import guardar_tarea
         guardar_tarea(user_input, ["revisar_respuestas_contacto"], resultado_respuesta_contacto[:200])
         return resultado_respuesta_contacto
+
+    resultado_rr_jll = _try_revisar_rr_jll_directo(user_input)
+    if resultado_rr_jll is not None:
+        print(f"\nAgente: {resultado_rr_jll}")
+        from tools.memory_tools import guardar_tarea
+        guardar_tarea(user_input, ["revisar_rent_roll_jll"], resultado_rr_jll[:200])
+        return resultado_rr_jll
+
+    resultado_mail_rr = _try_enviar_mail_rr_directo(user_input)
+    if resultado_mail_rr is not None:
+        print(f"\nAgente: {resultado_mail_rr}")
+        from tools.memory_tools import guardar_tarea
+        guardar_tarea(user_input, ["enviar_emails_rent_roll"], resultado_mail_rr[:200])
+        return resultado_mail_rr
 
     # Intercepción directa para queries de verificación CDG — evita que Gemini alucine
     resultado_verificacion = _try_verificar_cdg_directo(user_input)
@@ -689,6 +779,8 @@ def run_agent(user_input: str) -> str:
                 if name in {
                     "revisar_respuestas_contacto",
                     "verificar_archivos_cdg",
+                    "revisar_rent_rolls",
+                    "revisar_rent_roll_jll",
                     "ordenar_archivos_raw",
                     "previsualizar_correos_solicitud_cdg",
                     "enviar_correos_solicitud_cdg",

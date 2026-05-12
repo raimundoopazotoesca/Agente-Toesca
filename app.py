@@ -19,7 +19,11 @@ from agent import (
     _select_tools, _dispatch, _llm_call, get_intent_groups, _trim_tool_messages,
     _MAX_TOOL_ITERS, _thinking_phrase, _sanitize_messages_for_api,
     _try_revisar_respuesta_contacto_directo,
+    _try_revisar_rr_jll_directo,
+    _try_enviar_mail_rr_directo,
+    _try_verificar_cdg_directo,
 )
+
 from tools.ask_tools import set_streamlit_mode, _SENTINEL_PREFIX
 set_streamlit_mode(True)
 
@@ -155,6 +159,18 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
+def _restore_authentication_from_cookie():
+    """Rehidrata la sesion desde la cookie antes de mostrar el login custom."""
+    if st.session_state.get("authentication_status") is True:
+        return
+    try:
+        authenticator.login("unrendered")
+    except Exception:
+        pass
+
+
+_restore_authentication_from_cookie()
+
 # Si el usuario no está logueado (status is None o False), mostramos la pantalla custom y paramos
 if st.session_state.get("authentication_status") is not True:
 
@@ -186,20 +202,31 @@ if st.session_state.get("authentication_status") is not True:
     except Exception:
         pass
 
+    if st.session_state.get("authentication_status") is True:
+        st.session_state["logout"] = False
+        st.iframe("""
+        <script>
+        setTimeout(function() {
+            window.parent.location.reload();
+        }, 500);
+        </script>
+        """, width=1, height=1)
+        st.stop()
+
     # UI personalizada: iframe completo, sin interferencia del parser de Markdown
     _html = open('login_template.html', encoding='utf-8').read().replace('__ERR__', _err_msg)
     st.iframe(_html, height=720)
 
-    if st.session_state.get("authentication_status") is True:
-        st.rerun()
-    else:
-        st.stop()
+    st.stop()
 
 
 else:
-    # IMPORTANTE: Llamar a login silenciosamente cuando ya está autenticado
-    # para que Streamlit-Authenticator escriba y mantenga las cookies de sesión.
-    authenticator.login('main')
+    # Mantiene viva la cookie de re-autenticacion para que un refresh no pida login.
+    st.session_state["logout"] = False
+    try:
+        authenticator.cookie_controller.set_cookie()
+    except Exception:
+        pass
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
 css = Path("style.css").read_text(encoding="utf-8")
@@ -479,12 +506,26 @@ if should_generate_response:
     user_msg_text = user_input
 
     if "pending_resume" not in st.session_state:
-        direct_response = _try_revisar_respuesta_contacto_directo(user_msg_text)
+        direct_response = (
+            _try_revisar_respuesta_contacto_directo(user_msg_text)
+            or _try_revisar_rr_jll_directo(user_msg_text)
+            or _try_enviar_mail_rr_directo(user_msg_text)
+            or _try_verificar_cdg_directo(user_msg_text)
+        )
         if direct_response is not None:
             with st.chat_message("assistant", avatar=_AGENT_AVATAR):
                 st.markdown(direct_response)
             st.session_state.messages.append({"role": "assistant", "content": direct_response})
-            guardar_tarea(user_msg_text, ["revisar_respuestas_contacto"], direct_response[:200])
+            direct_tool = "respuesta_directa"
+            if "Rent Roll JLL" in direct_response:
+                direct_tool = "revisar_rent_roll_jll"
+            elif "Correos enviados" in direct_response or "No hay resultados de revisión" in direct_response:
+                direct_tool = "enviar_emails_rent_roll"
+            elif "Verificación CDG" in direct_response or "Verificacion CDG" in direct_response:
+                direct_tool = "verificar_archivos_cdg"
+            elif "correo" in user_msg_text.lower() or "mail" in user_msg_text.lower():
+                direct_tool = "revisar_respuestas_contacto"
+            guardar_tarea(user_msg_text, [direct_tool], direct_response[:200])
             st.rerun()
 
     def _serialize_messages(messages):
@@ -607,6 +648,8 @@ if should_generate_response:
                     if name in {
                         "revisar_respuestas_contacto",
                         "verificar_archivos_cdg",
+                        "revisar_rent_rolls",
+                        "revisar_rent_roll_jll",
                         "ordenar_archivos_raw",
                         "previsualizar_correos_solicitud_cdg",
                         "enviar_correos_solicitud_cdg",

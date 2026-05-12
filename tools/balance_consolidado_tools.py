@@ -2208,6 +2208,70 @@ CHANAR_EERR_MAP = {
     116: ["5-1-01-16"],   # IMPUESTO RENTA
 }
 
+# EERR map Curicó — codes from col B labels (rows 76-168), verified Dec 2025 vs Acum 12-2025.
+# Resultado del período = -405,776,897 calza con D174.
+# Row 162 (4-2-01-004) duplica fila 94 en el planilla y queda en blanco → no se mapea.
+CURICO_EERR_MAP = {
+    76:  ["4-1-01-100"],  # ARRIENDO TIENDAS ANCLAS
+    77:  ["4-1-01-101"],  # ARRIENDO TIENDAS MENORES
+    78:  ["4-1-01-102"],  # ARRIENDO DE MODULOS Y ESPACIOS
+    79:  ["4-1-01-103"],  # ARRIENDO POR PROMOCION Y PUBLICIDAD
+    80:  ["4-1-01-104"],  # ARRIENDO DE PARKING
+    81:  ["4-1-01-105"],  # ARRIENDO VARIABLE
+    82:  ["4-1-01-106"],  # INGRESO POR FONDO DE PROMOCION
+    83:  ["4-1-01-107"],  # INGRESO POR SERVICIOS BASICOS
+    84:  ["4-1-01-108"],  # INGRESO POR GASTOS COMUNES
+    85:  ["4-1-01-109"],  # INGRESOS DIRECTOS LOCATARIOS
+    86:  ["4-1-01-110"],  # INGRESO POR SERVICIOS BASICOS AGUA
+    92:  ["4-2-01-040"],  # MULTAS E INTERESES PERCIBIDOS
+    93:  ["4-2-01-030"],  # INTERESES GANADOS FONDO MUTUO
+    94:  ["4-2-01-004"],  # INGRESO POR INTERESES PRESTAMO LOCATARIOS
+    95:  ["4-1-01-006"],  # OTROS INGRESOS PERCIBIDOS
+    104: ["3-1-10-102"],  # FEE ADMINISTRATIVO (REMUNERACIONES)
+    105: ["3-1-10-105"],  # FEE ADMINISTRATIVO (SERVICIO ADM)
+    107: ["3-1-10-106"],  # SEGURIDAD
+    109: ["3-1-10-101"],  # GASTOS DE ASEO
+    110: ["3-2-01-024"],  # INSUMOS DE ASEO
+    112: ["3-1-10-107"],  # GASTO PROPIO LUZ
+    113: ["3-1-10-108"],  # GASTO PROPIO AGUA
+    115: ["3-1-10-112"],  # MANTENCION PREVENTIVA
+    116: ["3-1-10-114"],  # MANTENCION CORRECTIVA
+    117: ["3-1-10-115"],  # MANTENCION COBRO DIRECTO
+    119: ["3-1-10-113"],  # SERVICIOS ADMINISTRATIVOS
+    120: ["3-1-10-117"],  # SERVICIOS ADMINISTRATIVOS ACTIVO
+    122: ["3-1-40-102"],  # IMPUESTOS PREDIALES (CONTRIBUCIONES)
+    123: ["3-1-40-119"],  # SOBRETASA DE CONTRIBUCION
+    125: ["3-1-40-106"],  # PATENTE MUNICIPAL
+    127: ["3-1-40-100"],  # G.C. SEGURO
+    129: ["3-1-10-008"],  # GASTO CAJA CHICA
+    130: ["3-1-10-109"],  # GASTOS OFICINA
+    131: ["3-1-10-099"],  # OTROS GASTOS
+    133: ["3-1-10-111"],  # GESTION ARQUITECTURA (COX)
+    134: ["3-1-40-101"],  # HONORARIOS
+    135: ["3-1-40-103"],  # HONORARIOS DE AUDITORIA
+    136: ["3-1-40-099"],  # GASTOS ASESORIAS
+    138: ["3-1-10-110"],  # GESTION COMERCIAL
+    140: ["3-1-40-104"],  # DEUDORES INCOBRABLES
+    141: ["3-1-40-182"],  # CASTIGO CLIENTES
+    143: ["3-1-20-100"],  # GASTO FONDO PROMOCION
+    145: ["3-1-40-108"],  # DEPRECIACION DEL EJERCICIO
+    153: ["3-3-01-004"],  # REAJUSTE OPERACIONAL LEASING
+    154: ["3-3-01-007"],  # INTERESES LEASING
+    155: ["3-3-01-009"],  # GASTOS BANCARIOS
+    156: ["3-3-01-010"],  # VARIACION UF
+    157: ["3-3-01-012"],  # VARIACION UF PAGARES INM.CARMEN SPA
+    158: ["3-3-01-014"],  # VARIACION UF PAGARES TOESCA
+    159: ["3-3-01-015"],  # INTERES PAGARES TOESCA
+    160: ["3-3-01-013"],  # INTERES PAGARES INM. CARMEN SPA
+    161: ["3-3-01-018"],  # DIFERENCIA UF ACTIVO PPE
+    163: ["3-3-01-003"],  # REAJUSTE ART.72
+    164: ["3-3-01-016"],  # VARIACION UTM
+    165: ["3-1-40-112"],  # TASACION
+    166: ["3-1-40-172"],  # MULTAS E INTERESES SII
+    167: ["3-1-40-170"],  # GASTO PROPORCIONALIDAD IVA
+    168: ["3-4-01-004"],  # IMPUESTO DIFERIDO
+}
+
 # EERR map Inmob VC — codes extracted from col B labels in planilla, verified Dec 2025.
 INMOB_VC_EERR_MAP = {
     76:  ["4-1-01-01"],   # INGRESOS POR ARRIENDO
@@ -2236,6 +2300,40 @@ INMOB_VC_EERR_MAP = {
     108: ["5-3-01-01"],   # CUADRE PESOS
     109: ["5-2-01-05"],   # REAJUSTE IMPUESTOS
     112: ["5-1-01-16"],   # IMPUESTO RENTA
+}
+
+# EERR map Viña Centro — fuente `BALANCE ACUMULADO` del INFORME EEFF Viña.
+# Verificado Dec 2025: total G-Pd = 3,093,097,786 = D189 (2,848,461,407) + D194 control (244,636,379).
+# El histórico tenía un descuadre de 244M por label codes desalineados; el map nuevo lo corrige
+# mapeando por descripción/valor en vez de strictly por label code. Filas con cambio vs label:
+#   94: 4-2-01-040 → 4-2-01-041  (MULTAS E INTERESES PERCIBIDOS)
+#   97: 4-1-01-006 → 4-2-01-091  (OTROS INGRESOS PERCIBIDOS)
+#   113: 3-2-01-024 → 3-1-10-113 (INSUMOS DE ASEO)
+#   119: 3-1-10-112 → 3-1-10-114 (MANTENCION PREVENTIVA; label duplicaba 118)
+#   120: 3-1-10-114 → 3-1-10-115 (MANTENCION CORRECTIVA)
+#   123: 3-1-10-113 → 3-1-10-116 (SERVICIOS ADMINISTRATIVOS)
+#   137: 3-1-10-099 → 3-1-10-199 (OTROS GASTOS)
+# Filas 82,83,85,86 mantienen label code aunque el valor difiere del histórico (ajustes manuales).
+VINA_EERR_MAP = {
+    76:  ["4-1-01-100"], 77:  ["4-1-01-101"], 78:  ["4-1-01-102"], 79:  ["4-1-01-104"],
+    80:  ["4-1-01-105"], 81:  ["4-1-01-103"], 82:  ["4-1-01-106"], 83:  ["4-1-01-107"],
+    84:  ["4-1-01-110"], 85:  ["4-1-01-108"], 86:  ["4-1-01-109"], 87:  ["4-1-01-111"],
+    88:  ["4-1-01-003"], 94:  ["4-2-01-041"], 95:  ["4-2-01-030"], 96:  ["4-2-01-002"],
+    97:  ["4-2-01-091"], 106: ["3-1-10-102"], 107: ["3-1-10-105"], 109: ["3-1-10-106"],
+    110: ["3-1-10-120"], 112: ["3-1-10-101"], 113: ["3-1-10-113"], 115: ["3-1-10-107"],
+    116: ["3-1-10-108"], 118: ["3-1-10-112"], 119: ["3-1-10-114"], 120: ["3-1-10-115"],
+    121: ["3-1-10-118"], 123: ["3-1-10-116"], 124: ["3-1-10-117"], 125: ["3-1-10-119"],
+    127: ["3-1-40-102"], 128: ["3-1-40-119"], 130: ["3-1-40-106"], 132: ["3-1-40-100"],
+    134: ["3-1-10-008"], 135: ["3-1-10-109"], 136: ["3-1-10-198"], 137: ["3-1-10-199"],
+    139: ["3-1-10-111"], 140: ["3-1-40-101"], 141: ["3-1-40-103"], 142: ["3-1-40-099"],
+    144: ["3-1-10-110"], 146: ["3-1-40-104"], 147: ["3-1-40-182"], 148: ["3-1-40-184"],
+    150: ["3-1-20-100"], 152: ["3-1-40-108"], 160: ["3-1-40-109"], 161: ["3-1-40-110"],
+    162: ["3-4-01-002"], 163: ["3-1-40-114"], 164: ["3-1-40-117"], 165: ["3-1-40-118"],
+    166: ["3-1-40-170"], 167: ["3-1-40-171"], 168: ["3-1-40-172"], 169: ["3-1-40-174"],
+    170: ["3-1-40-175"], 171: ["3-1-40-176"], 172: ["3-1-40-177"], 173: ["3-1-40-178"],
+    174: ["3-1-40-179"], 175: ["3-1-40-180"], 176: ["3-1-40-181"], 177: ["3-2-01-035"],
+    178: ["3-2-01-095"], 179: ["3-1-40-112"], 180: ["3-3-02-007"], 186: ["3-1-40-116"],
+    187: ["3-1-40-115"],
 }
 
 VINA_BALANCE_MAP = {
@@ -2642,7 +2740,9 @@ def actualizar_balance_consolidado_rentas_nuevo(mes: int, año: int) -> str:
                 _apply_balance_map_rn(ws_curico, tb, CURICO_BALANCE_MAP, col)
                 _apply_curico_impdif(ws_curico, tb, col)
                 lines.append(f"  Balance: {len(tb)} cuentas OK (ImpDif neto aplicado)")
-            lines.append("  EERR: TODO (mapa filas pendiente)")
+            if qplan.get(("Curicó", "eerr")) == "analisis":
+                _apply_eerr_sa_map_rn(ws_curico, tb, col, CURICO_EERR_MAP)
+                lines.append(f"  EERR: {len(CURICO_EERR_MAP)} filas escritas")
         except Exception as e:
             lines.append(f"  Error: {e}")
     elif not curico_path:
@@ -2682,7 +2782,9 @@ def actualizar_balance_consolidado_rentas_nuevo(mes: int, año: int) -> str:
                     - _tb_sum(tb, ["1-1-01-020", "1-1-01-022", "1-1-01-023", "1-1-03-030"], "P")
                 )
                 lines.append(f"  Balance: {len(tb)} cuentas OK (efectivo={efectivo:,.0f})")
-            lines.append("  EERR: TODO (mapa filas pendiente)")
+            if qplan.get(("Viña Centro", "eerr")) == "analisis":
+                _apply_eerr_sa_map_rn(ws_vina, tb, col, VINA_EERR_MAP)
+                lines.append(f"  EERR: {len(VINA_EERR_MAP)} filas escritas")
         except Exception as e:
             lines.append(f"  Error: {e}")
     elif not vina_path:

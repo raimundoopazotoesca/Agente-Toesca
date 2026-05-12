@@ -35,7 +35,7 @@ Luego ejecutar:
 - `agregar_vr_contable_rentas(...)`
 - `agregar_vr_contable_apoquindo(...)`
 
-> **EEFF Viña, Curicó, INMOSA**: siempre usan el mes del CDG (no trimestre anterior)
+> **EEFF Viña, EEFF Curicó y ER-FC INMOSA**: siempre usan el mes del CDG (no trimestre anterior)
 
 8. `guardar_en_servidor(...)`
 
@@ -44,6 +44,7 @@ Luego ejecutar:
 - CDG en `Control de Gestión/CDG Mensual/{YYYY}/`
 - EEFF de fondos en `Fondos/Rentas TRI|Rentas PT|Rentas Apoquindo/EEFF/`
 - Fuentes operativas en `Fondos/Rentas TRI/Activos/...`
+- INMOSA usa la planilla ER-FC en `Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/`; no hay requisito RR/NOI Cushman para el CDG.
 - Trabajo en `WORK_DIR`
 
 ## Vínculos
