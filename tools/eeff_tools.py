@@ -10,6 +10,15 @@ Estructura en SharePoint:
 import os
 import re
 from tools.sharepoint_paths import APO_EEFF_DIR, PT_EEFF_DIR, TRI_EEFF_FONDO_DIR
+from tools.db.connection import get_conn
+from tools.db import repo_kpi
+
+# Mapeo (fondo, serie) → nemotécnico para las series de A&R Rentas.
+_SERIE_NEMO = {
+    ("A&R Rentas", "A"): "CFITOERI1A",
+    ("A&R Rentas", "C"): "CFITOERI1C",
+    ("A&R Rentas", "I"): "CFITOERI1I",
+}
 
 # Rutas base por fondo en SharePoint
 FONDO_RUTAS = {
@@ -233,6 +242,37 @@ def extraer_datos_eeff(pdf_path: str, fondo_key: str) -> dict:
     return result
 
 
+def _persist_valor_cuota_libro(fondo_key: str, periodo: str, valor_cuota: dict) -> None:
+    """Dual-write best-effort del valor cuota libro a derived_kpi.
+
+    serie None → entidad 'fondo'; serie A/C/I → entidad 'serie' (por nemotécnico).
+    Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
+    """
+    if not valor_cuota:
+        return
+    try:
+        conn = get_conn()
+        try:
+            for serie, valor in valor_cuota.items():
+                if valor is None:
+                    continue
+                if serie is None:
+                    entidad_tipo, entidad_key = "fondo", fondo_key
+                else:
+                    nemo = _SERIE_NEMO.get((fondo_key, serie))
+                    if nemo is None:
+                        continue
+                    entidad_tipo, entidad_key = "serie", nemo
+                repo_kpi.upsert(
+                    conn, entidad_tipo, entidad_key, periodo,
+                    "valor_cuota_libro", float(valor), "CLP", "eeff_pdf_v1",
+                )
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[eeff] no se pudo persistir valor cuota libro en DB: {e}")
+
+
 def leer_eeff(fondo_key: str, año: int, mes: int) -> str:
     """
     Función principal: busca el PDF, extrae valor cuota libro y dividendos/aportes.
@@ -249,6 +289,7 @@ def leer_eeff(fondo_key: str, año: int, mes: int) -> str:
         return pdf_path  # mensaje de error
 
     datos = extraer_datos_eeff(pdf_path, fondo_key)
+    _persist_valor_cuota_libro(fondo_key, f"{año}-{mes:02d}", datos.get("valor_cuota") or {})
 
     lines = [
         f"EEFF {fondo_key} — trimestre {mes}/{año}",
