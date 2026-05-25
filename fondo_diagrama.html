@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estructura Toesca Rentas Inmobiliarias</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 24px 60px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 8px;
+  }
+  h2 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 48px;
+  }
+  .subtitle span { color: #22c55e; font-weight: 600; }
+
+  /* ── TREE LAYOUT ─────────────────────────────────────────── */
+  .tree { display: flex; flex-direction: column; align-items: center; }
+
+  /* ROOT */
+  .root-node {
+    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+    border-radius: 12px;
+    padding: 18px 32px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(22,163,74,0.35);
+    min-width: 340px;
+    position: relative;
+  }
+  .root-node .fondo-key {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 4px;
+  }
+  .root-node .fondo-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.3;
+  }
+  .root-node .series-row {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .serie-badge {
+    background: rgba(0,0,0,0.25);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    font-family: 'Courier New', monospace;
+  }
+
+  /* CONNECTOR LINES */
+  .connector-root {
+    width: 2px;
+    height: 36px;
+    background: #334155;
+    margin: 0 auto;
+  }
+  .connector-h {
+    height: 2px;
+    background: #334155;
+  }
+  .connector-v {
+    width: 2px;
+    height: 32px;
+    background: #334155;
+    margin: 0 auto;
+  }
+
+  /* MID LEVEL (sub-fondos) */
+  .mid-row {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+  }
+  .mid-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .pct-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  /* SUB-FONDO NODE */
+  .subfondo-node {
+    border-radius: 10px;
+    padding: 14px 22px;
+    text-align: center;
+    min-width: 200px;
+    position: relative;
+  }
+  .subfondo-node.pt {
+    background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+    box-shadow: 0 0 24px rgba(29,78,216,0.3);
+  }
+  .subfondo-node.apo {
+    background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
+    box-shadow: 0 0 24px rgba(124,58,237,0.3);
+  }
+  .subfondo-node .fondo-key {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 3px;
+  }
+  .subfondo-node .fondo-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.3;
+  }
+  .subfondo-node .series-row {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ASSET NODE */
+  .asset-node {
+    border-radius: 8px;
+    padding: 12px 16px;
+    text-align: center;
+    min-width: 150px;
+    max-width: 180px;
+    border: 1px solid;
+    transition: transform 0.15s, box-shadow 0.15s;
+    cursor: default;
+  }
+  .asset-node:hover {
+    transform: translateY(-2px);
+  }
+  .asset-node .cat-label {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .asset-node .asset-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+  .asset-node .asset-key {
+    font-size: 10px;
+    color: #94a3b8;
+    font-family: 'Courier New', monospace;
+  }
+  .asset-node .part-pct {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+
+  /* Category colors */
+  .cat-oficinas    { background: #0f2d4f; border-color: #1e40af; }
+  .cat-oficinas .cat-label  { color: #60a5fa; }
+  .cat-oficinas .part-pct   { color: #93c5fd; }
+  .cat-retail     { background: #14291a; border-color: #16a34a; }
+  .cat-retail .cat-label    { color: #4ade80; }
+  .cat-retail .part-pct     { color: #86efac; }
+  .cat-residencias { background: #2d1515; border-color: #b91c1c; }
+  .cat-residencias .cat-label { color: #f87171; }
+  .cat-residencias .part-pct  { color: #fca5a5; }
+  .cat-industrial  { background: #1e1a09; border-color: #b45309; }
+  .cat-industrial .cat-label  { color: #fbbf24; }
+  .cat-industrial .part-pct   { color: #fcd34d; }
+
+  /* DIRECT ASSETS (TRI direct) */
+  .direct-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0;
+  }
+  .direct-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* BRANCH horizontal container */
+  .h-branch {
+    display: flex;
+    align-items: flex-start;
+    position: relative;
+    gap: 0;
+  }
+  .h-branch::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    right: 0;
+    height: 2px;
+    background: #334155;
+    transform: translateX(-50%);
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 48px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #64748b;
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  /* NOTE */
+  .note {
+    text-align: center;
+    font-size: 10px;
+    color: #334155;
+    margin-top: 12px;
+  }
+  .note span { color: #22c55e; font-weight: 600; }
+
+  /* SVG connector overlay */
+  svg.connectors {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* SPLIT TAG */
+  .split-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 9px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  /* Separator */
+  .sep { width: 60px; height: 2px; background: #1e293b; margin: 0 auto; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .mid-row { flex-direction: column; align-items: center; gap: 16px; }
+    .direct-row { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Generado desde la DB del agente · dim_fondo / dim_activo / dim_serie</h1>
+<h2>Toesca Rentas Inmobiliarias</h2>
+<p class="subtitle">Estructura de propiedad al <span>2026-05</span> · Machalí excluido</p>
+
+<div class="tree">
+
+  <!-- ROOT: TRI -->
+  <div class="root-node">
+    <div class="fondo-key">TRI · fondo_key interno</div>
+    <div class="fondo-name">Toesca Rentas Inmobiliarias<br>Fondo de Inversión</div>
+    <div class="series-row">
+      <span class="serie-badge">CFITOERI1A · Serie A</span>
+      <span class="serie-badge">CFITOERI1C · Serie C</span>
+      <span class="serie-badge">CFITOERI1I · Serie I</span>
+    </div>
+  </div>
+
+  <div class="connector-root"></div>
+
+  <!-- HORIZONTAL BRANCH LINE -->
+  <div style="position:relative; width:100%; max-width:1200px;">
+    <!-- Línea horizontal que une los 3 grandes grupos -->
+    <div style="height:2px; background:#334155; margin:0 auto; width:80%; max-width:900px;"></div>
+  </div>
+
+  <!-- LEVEL 2: 3 columnas — Subfondo Apo | Activos directos TRI | Subfondo PT -->
+  <div class="mid-row" style="width:100%; max-width:1200px; gap:24px; margin-top:0;">
+
+    <!-- COL 1: Fondo Apo -->
+    <div class="mid-col">
+      <div class="connector-v" style="height:28px;"></div>
+      <div class="pct-label">30%</div>
+      <div class="subfondo-node apo">
+        <div class="fondo-key">Apo · fondo_key interno</div>
+        <div class="fondo-name">Fondo Toesca Rentas<br>Inmob Apoquindo</div>
+      </div>
+      <div class="connector-v"></div>
+      <div class="pct-label">100%</div>
+      <div class="asset-node cat-oficinas">
+        <div class="cat-label">Oficinas</div>
+        <div class="asset-name">Apoquindo<br>4501 y 4700</div>
+        <div class="asset-key">activo: Apoquindo</div>
+        <div class="part-pct">30%<span style="font-size:11px;font-weight:400;color:#64748b;"> del TRI</span></div>
+      </div>
+    </div>
+
+    <!-- COL 2: Activos directos TRI -->
+    <div class="mid-col" style="flex:1; min-width:480px;">
+      <div class="connector-v" style="height:28px;"></div>
+      <div style="text-align:center; font-size:10px; color:#64748b; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">Activos directos del fondo</div>
+      <div class="direct-row">
+
+        <!-- INMOSA -->
+        <div class="direct-col">
+          <div class="pct-label">43%</div>
+          <div class="asset-node cat-residencias">
+            <div class="cat-label">Residencias</div>
+            <div class="asset-name">INMOSA</div>
+            <div class="asset-key">6 Residencias Adulto Mayor</div>
+            <div class="part-pct">43%</div>
+          </div>
+        </div>
+
+        <!-- Sucden -->
+        <div class="direct-col">
+          <div class="pct-label">100%</div>
+          <div class="asset-node cat-industrial">
+            <div class="cat-label">Industrial</div>
+            <div class="asset-name">Bodegas Sucden</div>
+            <div class="asset-key">activo: Sucden</div>
+            <div class="part-pct">100%</div>
+          </div>
+        </div>
+
+        <!-- Apo3001 -->
+        <div class="direct-col">
+          <div class="pct-label">68.5%</div>
+          <div class="asset-node cat-oficinas">
+            <div class="cat-label">Oficinas</div>
+            <div class="asset-name">Apoquindo 3001</div>
+            <div class="asset-key">activo: Apo3001</div>
+            <div class="part-pct">68.5%</div>
+          </div>
+        </div>
+
+        <!-- Viña Centro -->
+        <div class="direct-col">
+          <div class="pct-label">100%</div>
+          <div class="asset-node cat-retail">
+            <div class="cat-label">Centros Comerciales</div>
+            <div class="asset-name">Viña Centro</div>
+            <div class="asset-key">activo: Viña Centro</div>
+            <div class="part-pct">100%</div>
+          </div>
+        </div>
+
+        <!-- Mall Curicó -->
+        <div class="direct-col">
+          <div class="pct-label">80%</div>
+          <div class="asset-node cat-retail">
+            <div class="cat-label">Centros Comerciales</div>
+            <div class="asset-name">Mall Curicó</div>
+            <div class="asset-key">activo: Mall Curicó</div>
+            <div class="part-pct">80%</div>
+          </div>
+        </div>
+
+      </div><!-- /direct-row -->
+    </div><!-- /col 2 -->
+
+    <!-- COL 3: Fondo PT -->
+    <div class="mid-col">
+      <div class="connector-v" style="height:28px;"></div>
+      <div class="pct-label">33.3%</div>
+      <div class="subfondo-node pt">
+        <div class="fondo-key">PT · fondo_key interno</div>
+        <div class="fondo-name">Fondo Toesca Rentas<br>Inmobiliarias PT</div>
+        <div class="series-row">
+          <span class="serie-badge">CFITRIPT-E · Única</span>
+        </div>
+      </div>
+      <div class="connector-v"></div>
+      <div class="pct-label">100%</div>
+      <div class="asset-node cat-oficinas">
+        <div class="cat-label">Oficinas</div>
+        <div class="asset-name">Parque Titanium</div>
+        <div class="asset-key">activo: PT</div>
+        <div class="part-pct">33.3%<span style="font-size:11px;font-weight:400;color:#64748b;"> del TRI</span></div>
+        <div class="split-tag">Torre A + Boulevard (splits)</div>
+      </div>
+    </div>
+
+  </div><!-- /mid-row -->
+
+</div><!-- /tree -->
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#1e40af;"></div>Oficinas</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a;"></div>Centros Comerciales</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b91c1c;"></div>Residencias</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b45309;"></div>Industrial</div>
+</div>
+
+<p class="note" style="margin-top:20px;">
+  Datos leídos desde <span>memory/agente_toesca.db</span> →
+  dim_fondo · dim_activo · dim_serie &nbsp;|&nbsp;
+  Participaciones = % efectivo del fondo madre en cada activo
+</p>
+<p class="note" style="margin-top:6px; color:#1e293b;">
+  Machalí (Strip Center Paseo Machalí) excluido · ya no es parte del portfolio
+</p>
+
+</body>
+</html>
