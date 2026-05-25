@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(sqlite3 memory/agente_toesca.db \".schema\")",
+      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\('memory/agente_toesca.db'\\); cur=c.cursor\\(\\); cur.execute\\(\\\\\"SELECT sql FROM sqlite_master WHERE type='table'\\\\\"\\); [print\\(r[0]\\) for r in cur.fetchall\\(\\)]\")",
+      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\('memory/agente_toesca.db'\\); cur=c.cursor\\(\\); cur.execute\\('SELECT name FROM sqlite_master WHERE type=\\\\\"table\\\\\"'\\); tables=[r[0] for r in cur.fetchall\\(\\)]; print\\(tables\\); [print\\(t, cur.execute\\(f'SELECT COUNT\\(*\\) FROM {t}'\\).fetchone\\(\\)[0]\\) for t in tables]\")",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -c \"import pytest; print\\(pytest.__version__\\)\")",
+      "PowerShell(cd C:\\\\Users\\\\raimundo.opazo\\\\automation_agent; $env:PYTHONIOENCODING=\"utf-8\"; python debug_inmosa.py 2>&1)",
+      "PowerShell(cd C:\\\\Users\\\\raimundo.opazo\\\\automation_agent; $env:PYTHONIOENCODING=\"utf-8\"; python debug_noi.py 2>&1)",
+      "Bash(python -m pytest --collect-only)",
+      "Bash(python -m pytest tests/db/test_migrations.py -v)",
+      "Bash(python -m pytest \"C:/Users/raimundo.opazo/automation_agent/tests/db/test_migrations.py\" -v)"
+    ]
+  },
   "enabledPlugins": {
     "code-simplifier@claude-plugins-official": true,
     "github@claude-plugins-official": true,

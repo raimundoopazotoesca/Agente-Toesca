@@ -13,5 +13,15 @@
     "ruta": "Sharepoint -> Documentos\\Controles de Gestión\\Cálculo TIR Fondo Rentas (act. sept-25).xlsx",
     "notas": "Planilla para calcular el TIR del Fondo Rentas",
     "actualizado": "2026-04-23T14:41:50"
+  },
+  "cdg febrero 2026": {
+    "ruta": "2602 Control De Gestión Renta Comercial vF.xlsx",
+    "notas": "CDG de Renta Comercial, versión final de febrero",
+    "actualizado": "2026-05-25T10:59:24"
+  },
+  "rent roll jll marzo 2026": {
+    "ruta": "2603 Rent Roll y NOI JLL.xlsx",
+    "notas": "Rent Roll de JLL para marzo de 2026, contiene NOI de PT y Apoquindo",
+    "actualizado": "2026-05-25T11:01:45"
   }
 }

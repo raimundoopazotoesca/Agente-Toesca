@@ -76,34 +76,26 @@ tools/
 GEMINI_API_KEY=...
 LOCAL_FILES_DIR=R:\
 WORK_DIR=C:\Users\raimundo.opazo\automation_agent\work
+  datos_fs_tools.py   # rentabilidad del fondo, TIR, hoja DATOS FS
+  caja_tools.py       # hoja Caja del CDG: copiar desde Saldo Caja, archivar
+  input_tools.py      # hojas Input AP/PT/Ren: balance trimestral, fechas, dividendos
+  web_bursatil_tools.py  # precios cuota desde web
+  noi_tools.py        # hoja NOI-RCSD: ER Viña, ER Curico, JLL PT/Apoquindo/Apo3001, INMOSA
+  rentroll_tools.py   # validación RR JLL y Tres Asociados (en desarrollo)
+  vacancia_tools.py   # vacancia mensual (en desarrollo)
+  factsheet_tools.py  # actualización PPTX fact sheets (PT, APO, TRI)
+```
+
+## Variables de entorno (.env)
+
+```
+GEMINI_API_KEY=...
+LOCAL_FILES_DIR=R:\
+WORK_DIR=C:\Users\raimundo.opazo\automation_agent\work
 SHAREPOINT_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos
 RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
 FONDOS_DIR=
 SALDO_CAJA_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\Saldo Caja
-```
-
-## Fondos gestionados
-
-| Fondo (Nombre Real) | Clave `fondo_key` (Uso Interno/Excel) | Carpeta SharePoint |
-|---|---|---|
-| Toesca Rentas Inmobiliarias Apoquindo | `A&R Apoquindo` | `Fondos\Rentas Apoquindo` |
-| Toesca Rentas Inmobiliarias PT | `A&R PT` | `Fondos\Rentas PT` |
-| Toesca Rentas Inmobiliarias | `A&R Rentas` | `Fondos\Rentas TRI` |
-
-## Nemotécnicos
-
-| Nemotécnico | Fondo |
-|---|---|
-| `CFITRIPT-E` | A&R PT |
-| `CFITOERI1A` | A&R Rentas Serie A |
-| `CFITOERI1C` | A&R Rentas Serie C |
-| `CFITOERI1I` | A&R Rentas Serie I |
-
-## Celdas fecha en hojas Input (¡inconsistente entre fondos!)
-
-| Fondo | Fecha contable | Fecha bursátil |
-|---|---|---|
-| A&R Apoquindo | C9 | D9 |
 | A&R PT | D11 | C11 |
 | A&R Rentas | D10 | C10 |
 
