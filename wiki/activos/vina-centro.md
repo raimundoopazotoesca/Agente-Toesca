@@ -1,7 +1,7 @@
 ---
 tipo: activo
 nombre: "Viña Centro"
-fondo: "A&R Rentas"
+fondo: "TRI"
 administrador: "Tres Asociados"
 filas_noi: "196–214"
 fuentes: 0

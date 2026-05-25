@@ -1,7 +1,7 @@
 ---
 tipo: activo
 nombre: "Apoquindo 3001"
-fondo: "A&R Apoquindo"
+fondo: "Apo"
 administrador: "JLL"
 filas_noi: "468–476"
 fuentes: 0

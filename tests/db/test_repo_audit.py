@@ -36,7 +36,7 @@ def test_publish_run_lifecycle(tmp_db):
         tmp_db,
         tool="publish_cdg_renta_pt",
         target_excel="/x/cdg.xlsx",
-        target_sheet="A&R PT",
+        target_sheet="PT",
         periodo="2026-04",
     )
     repo_audit.finish_publish_run(tmp_db, run_id, rows_written=42, status="ok")

@@ -54,13 +54,17 @@ def test_serie_mensual_ponderado(tmp_db_path):
 def test_serie_mensual_fondo_suma_activos(tmp_db_path):
     apply_migrations(tmp_db_path)
     conn = get_conn_for(tmp_db_path)
-    # A&R Apoquindo tiene Apoquindo (0.3) y Apo3001 (1.0)
+    # Fondo Apo solo tiene Apoquindo (part=0.3). Apo3001 pertenece a TRI.
     repo_kpi.upsert(conn, "activo", "Apoquindo", "2025-01", "noi_mensual", 1000.0, "UF", "cdg_noi_real_v1")
-    repo_kpi.upsert(conn, "activo", "Apo3001", "2025-01", "noi_mensual", 500.0, "UF", "cdg_noi_real_v1")
-    s100 = nq.serie_mensual(conn, "fondo", "A&R Apoquindo", ponderado=False)
-    assert s100["2025-01"] == 1500.0
-    sp = nq.serie_mensual(conn, "fondo", "A&R Apoquindo", ponderado=True)
-    assert abs(sp["2025-01"] - (1000*0.3 + 500*1.0)) < 1e-9
+    repo_kpi.upsert(conn, "activo", "Apo3001",   "2025-01", "noi_mensual",  500.0, "UF", "cdg_noi_real_v1")
+    # Fondo Apo: solo Apoquindo → 1000 al 100%, 1000*0.3 ponderado
+    s100 = nq.serie_mensual(conn, "fondo", "Apo", ponderado=False)
+    assert s100["2025-01"] == 1000.0
+    sp = nq.serie_mensual(conn, "fondo", "Apo", ponderado=True)
+    assert abs(sp["2025-01"] - 1000 * 0.3) < 1e-9
+    # Fondo TRI: incluye Apo3001 (part=0.685)
+    s_tri = nq.serie_mensual(conn, "fondo", "TRI", ponderado=False)
+    assert s_tri["2025-01"] == 500.0
     conn.close()
 
 

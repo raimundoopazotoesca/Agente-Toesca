@@ -2,20 +2,20 @@
 -- INSERT OR IGNORE para que la migración sea segura ante reaplicaciones manuales.
 
 INSERT OR IGNORE INTO dim_fondo (fondo_key, nombre, sharepoint_folder) VALUES
-  ('A&R Apoquindo', 'Fondo Toesca Rentas Inmob Apoquindo',              'Fondos\Rentas Apoquindo'),
-  ('A&R PT',        'Fondo Toesca Rentas Inmobiliarias PT',              'Fondos\Rentas PT'),
-  ('A&R Rentas',    'Toesca Rentas Inmobiliarias Fondo de Inversión',    'Fondos\Rentas TRI');
+  ('Apo', 'Fondo Toesca Rentas Inmob Apoquindo',              'Fondos\Rentas Apoquindo'),
+  ('PT',        'Fondo Toesca Rentas Inmobiliarias PT',              'Fondos\Rentas PT'),
+  ('TRI',    'Toesca Rentas Inmobiliarias Fondo de Inversión',    'Fondos\Rentas TRI');
 
 INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre, tipo) VALUES
-  ('INMOSA',      'A&R Rentas',    'INMOSA',         'inmobiliario'),
-  ('PT',          'A&R PT',        'Parque Titanium','oficina'),
-  ('Viña Centro', 'A&R Rentas',    'Viña Centro',    'retail'),
-  ('Mall Curicó', 'A&R Rentas',    'Mall Curicó',    'retail'),
-  ('Apoquindo',   'A&R Apoquindo', 'Fondo Apoquindo','oficina'),
-  ('Apo3001',     'A&R Rentas',    'Apoquindo 3001', 'oficina');
+  ('INMOSA',      'TRI',    'INMOSA',         'inmobiliario'),
+  ('PT',          'PT',        'Parque Titanium','oficina'),
+  ('Viña Centro', 'TRI',    'Viña Centro',    'retail'),
+  ('Mall Curicó', 'TRI',    'Mall Curicó',    'retail'),
+  ('Apoquindo',   'Apo', 'Fondo Apoquindo','oficina'),
+  ('Apo3001',     'TRI',    'Apoquindo 3001', 'oficina');
 
 INSERT OR IGNORE INTO dim_serie (nemotecnico, fondo_key, serie) VALUES
-  ('CFITRIPT-E', 'A&R PT',     'Única'),
-  ('CFITOERI1A', 'A&R Rentas', 'A'),
-  ('CFITOERI1C', 'A&R Rentas', 'C'),
-  ('CFITOERI1I', 'A&R Rentas', 'I');
+  ('CFITRIPT-E', 'PT',     'Única'),
+  ('CFITOERI1A', 'TRI', 'A'),
+  ('CFITOERI1C', 'TRI', 'C'),
+  ('CFITOERI1I', 'TRI', 'I');

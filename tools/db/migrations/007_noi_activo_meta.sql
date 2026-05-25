@@ -6,7 +6,7 @@ ALTER TABLE dim_activo ADD COLUMN categoria TEXT;
 
 -- Activo nuevo presente en el NOI- RCSD pero no sembrado antes.
 INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre, tipo) VALUES
-  ('Sucden', 'A&R Rentas', 'Bodegas Sucden', 'industrial');
+  ('Sucden', 'TRI', 'Bodegas Sucden', 'industrial');
 
 -- Participación (de la hoja 'Porcentaje fondos' del CDG) + categoría.
 UPDATE dim_activo SET participacion = 0.43, categoria = 'Residencias'        WHERE activo_key = 'INMOSA';

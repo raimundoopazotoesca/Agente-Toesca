@@ -9,12 +9,12 @@ Flujo típico por fondo:
     4. pegar_rentabilidades_datos_fs(archivo, fondo, rent) → escribe en DATOS FS
 
   Rentas (3 series, inicio viene del archivo TIR Fondo):
-    1. actualizar_fecha_ar(archivo, "A&R Rentas", fecha_serial)
+    1. actualizar_fecha_ar(archivo, "TRI", fecha_serial)
     2. [Abrir Excel para recalcular]
-    3. leer_rentabilidades_ar(archivo, "A&R Rentas")       → YTD/12M por serie
-    4. copiar_datos_tir_rentas(archivo_cg, archivo_tir)    → A&R Rentas C:M → TIR Fondo B:L
+    3. leer_rentabilidades_ar(archivo, "TRI")       → YTD/12M por serie
+    4. copiar_datos_tir_rentas(archivo_cg, archivo_tir)    → TRI C:M → TIR Fondo B:L
     5. leer_tir_rentas_resumen(archivo_tir)                → desde-inicio por serie
-    6. pegar_rentabilidades_datos_fs(archivo, "A&R Rentas", rent_por_serie)
+    6. pegar_rentabilidades_datos_fs(archivo, "TRI", rent_por_serie)
 """
 import os
 import re
@@ -24,22 +24,22 @@ from config import WORK_DIR
 
 # ─── Mapping de sheet files A&R (sincronizado con gestion_renta_tools.SHEET_CFG) ─
 AR_SHEET_FILES = {
-    "A&R PT":        "xl/worksheets/sheet16.xml",
-    "A&R Apoquindo": "xl/worksheets/sheet15.xml",
-    "A&R Rentas":    "xl/worksheets/sheet17.xml",
+    "PT":        "xl/worksheets/sheet16.xml",
+    "Apo": "xl/worksheets/sheet15.xml",
+    "TRI":    "xl/worksheets/sheet17.xml",
 }
 
 # ─── Celdas XIRR en hojas A&R ──────────────────────────────────────────────────
 # PT y Apoquindo: N10=inicio, O10=YTD, P10=12M (fórmulas XIRR, requieren Excel abierto)
 # Rentas: row 12 por serie (también XIRR)
 AR_RENT_CELLS = {
-    "A&R PT": {
+    "PT": {
         None: {"inicio": "N10", "ytd": "O10", "12m": "P10"},
     },
-    "A&R Apoquindo": {
+    "Apo": {
         None: {"inicio": "N10", "ytd": "O10", "12m": "P10"},
     },
-    "A&R Rentas": {
+    "TRI": {
         # Rentas no tiene 'inicio' aquí; ese dato viene del archivo TIR Fondo Resumen
         "A": {"ytd": "P12", "12m": "Q12"},
         "C": {"ytd": "Y12", "12m": "Z12"},
@@ -50,15 +50,15 @@ AR_RENT_CELLS = {
 # ─── Celdas hardcoded (sin fórmula) en DATOS FS ────────────────────────────────
 # Columnas Libro: solo estas se escriben; las columnas Bursátil son fórmulas.
 DATOS_FS_CELLS = {
-    "A&R Rentas": {
+    "TRI": {
         "A": {"inicio": "H10", "ytd": "H11", "12m": "H12"},
         "C": {"inicio": "J10", "ytd": "J11", "12m": "J12"},
         "I": {"inicio": "L10", "ytd": "L11", "12m": "L12"},
     },
-    "A&R PT": {
+    "PT": {
         None: {"inicio": "H98", "ytd": "H99", "12m": "H100"},
     },
-    "A&R Apoquindo": {
+    "Apo": {
         None: {"inicio": "H136", "ytd": "H137", "12m": "H138"},
     },
 }
@@ -266,7 +266,7 @@ def actualizar_fecha_ar(nombre_archivo: str, fondo_key: str, fecha_serial: int) 
 
     Args:
         nombre_archivo: Archivo en WORK_DIR (o ruta absoluta).
-        fondo_key: 'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'.
+        fondo_key: 'PT', 'Apo' o 'TRI'.
         fecha_serial: Serial Excel de la fecha (ej: 46112 = 31/03/2026).
     """
     if fondo_key not in AR_SHEET_FILES:
@@ -347,7 +347,7 @@ def leer_rentabilidades_ar(nombre_archivo: str, fondo_key: str) -> str:
 # Estructura: {serie_o_None: {métrica: {bursatil: ref, libro: ref}}}
 # Apoquindo no tiene bursátil (sin ticker) → solo 'libro'
 DATOS_FS_RENT_CELLS = {
-    "A&R PT": {
+    "PT": {
         None: {
             "inicio":   {"bursatil": "G98",  "libro": "H98"},
             "ytd":      {"bursatil": "G99",  "libro": "H99"},
@@ -356,7 +356,7 @@ DATOS_FS_RENT_CELLS = {
             "dy_amort": {"bursatil": "G102", "libro": "H102"},
         }
     },
-    "A&R Apoquindo": {
+    "Apo": {
         None: {
             "inicio":   {"libro": "H136"},
             "ytd":      {"libro": "H137"},
@@ -365,7 +365,7 @@ DATOS_FS_RENT_CELLS = {
             "dy_amort": {"libro": "H140"},
         }
     },
-    "A&R Rentas": {
+    "TRI": {
         "A": {
             "inicio":   {"bursatil": "G10", "libro": "H10"},
             "ytd":      {"bursatil": "G11", "libro": "H11"},
@@ -404,8 +404,8 @@ def leer_rentabilidades_completas_fs(nombre_archivo: str, fondo_key: str) -> str
     Lee todas las métricas de rentabilidad del FS desde la hoja DATOS FS del CDG:
     inicio, YTD, 12M, Dividend Yield, DY+Amortización — para bursátil y libro.
 
-    Para A&R Apoquindo solo retorna valores libro (sin ticker bursátil).
-    Para A&R Rentas retorna las 3 series (A, C, I).
+    Para Apo solo retorna valores libro (sin ticker bursátil).
+    Para TRI retorna las 3 series (A, C, I).
 
     Retorna texto con los valores y JSON listo para datos_json['rentabilidad']
     en actualizar_fs_pt / actualizar_fs_apoquindo / actualizar_fs_tri.
@@ -481,7 +481,7 @@ def pegar_rentabilidades_datos_fs(
 
     Args:
         nombre_archivo: Archivo en WORK_DIR.
-        fondo_key: 'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'.
+        fondo_key: 'PT', 'Apo' o 'TRI'.
         rentabilidades: dict con los valores a escribir.
           - Para PT/Apoquindo:
               {None: {"inicio": 0.0523, "ytd": 0.0312, "12m": 0.0489}}
@@ -542,7 +542,7 @@ def pegar_rentabilidades_datos_fs(
 
 def copiar_datos_tir_rentas(archivo_cg: str, archivo_tir: str) -> str:
     """
-    Copia los datos de la hoja 'A&R Rentas' (columnas C:M) del archivo CG al
+    Copia los datos de la hoja 'TRI' (columnas C:M) del archivo CG al
     archivo TIR Fondo (columnas B:L de hoja 'TIR Fondo').
 
     Solo copia los valores numéricos de las filas de datos (omite la fila de headers).
@@ -566,13 +566,13 @@ def copiar_datos_tir_rentas(archivo_cg: str, archivo_tir: str) -> str:
         return f"Error: no se encontró '{tir_path}'."
 
     try:
-        # Leer datos de A&R Rentas columnas C:M (índices 3..13 en 1-based)
+        # Leer datos de TRI columnas C:M (índices 3..13 en 1-based)
         wb_cg = openpyxl.load_workbook(cg_path, read_only=True, data_only=True)
-        if "A&R Rentas" not in wb_cg.sheetnames:
+        if "TRI" not in wb_cg.sheetnames:
             wb_cg.close()
-            return "Error: hoja 'A&R Rentas' no encontrada en archivo CG."
+            return "Error: hoja 'TRI' no encontrada en archivo CG."
 
-        ws_rentas = wb_cg["A&R Rentas"]
+        ws_rentas = wb_cg["TRI"]
         # Leer a partir de fila 2 (fila 1 = headers)
         data_rows = []
         for row in ws_rentas.iter_rows(min_row=2, min_col=3, max_col=13):
@@ -584,7 +584,7 @@ def copiar_datos_tir_rentas(archivo_cg: str, archivo_tir: str) -> str:
         wb_cg.close()
 
         if not data_rows:
-            return "No hay filas de datos en A&R Rentas (columnas C:M)."
+            return "No hay filas de datos en TRI (columnas C:M)."
 
         # Escribir en TIR Fondo, columnas B:L, a partir de fila 2
         wb_tir = openpyxl.load_workbook(tir_path)
@@ -607,7 +607,7 @@ def copiar_datos_tir_rentas(archivo_cg: str, archivo_tir: str) -> str:
         wb_tir.close()
 
         return (
-            f"OK: {len(data_rows)} filas copiadas de 'A&R Rentas' (C:M) "
+            f"OK: {len(data_rows)} filas copiadas de 'TRI' (C:M) "
             f"→ '{TIR_FONDO_SHEET}' (B:L) en '{archivo_tir}'."
         )
     except Exception as e:

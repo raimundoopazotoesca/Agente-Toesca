@@ -18,11 +18,11 @@ def test_kpi_vacio(tmp_db_path, monkeypatch):
 def test_kpi_con_datos(tmp_db_path, monkeypatch):
     _patch_conn(monkeypatch, tmp_db_path)
     conn = get_conn_for(tmp_db_path)
-    repo_kpi.upsert(conn, "fondo", "A&R PT", "2026-02", "valor_cuota_libro", 100.0, "CLP", "eeff_pdf_v1")
-    repo_kpi.upsert(conn, "fondo", "A&R PT", "2026-03", "valor_cuota_libro", 110.0, "CLP", "eeff_pdf_v1")
+    repo_kpi.upsert(conn, "fondo", "PT", "2026-02", "valor_cuota_libro", 100.0, "CLP", "eeff_pdf_v1")
+    repo_kpi.upsert(conn, "fondo", "PT", "2026-03", "valor_cuota_libro", 110.0, "CLP", "eeff_pdf_v1")
     conn.close()
 
-    out = q.consultar_db_kpi("fondo", "A&R PT", "valor_cuota_libro")
+    out = q.consultar_db_kpi("fondo", "PT", "valor_cuota_libro")
     assert "2026-02" in out and "2026-03" in out
     assert "10.00%" in out  # variación +10%
 

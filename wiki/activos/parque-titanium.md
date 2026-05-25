@@ -1,7 +1,7 @@
 ---
 tipo: activo
 nombre: "Parque Titanium"
-fondo: "A&R PT"
+fondo: "PT"
 administrador: "JLL"
 filas_noi: "335–379"
 fuentes: 0

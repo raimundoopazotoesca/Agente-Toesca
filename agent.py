@@ -291,7 +291,7 @@ Regla: si el usuario pregunta por pesos, explicar si se está usando el peso his
 pro forma sin Machalí, o una fuente actualizada leída desde CDG/fact sheet/EEFF. No presentar los pesos del
 diagrama como actuales.
 
-Nota interna: En el Control de Gestión (CDG) y herramientas técnicas, estos fondos se identifican con el prefijo "A&R" (Aportes y Repartos), por ejemplo "A&R PT" o "A&R Rentas". NUNCA menciones "A&R" al usuario, usa siempre los nombres reales.
+Nota interna: En el Control de Gestión (CDG) y herramientas técnicas, estos fondos se identifican con el prefijo "A&R" (Aportes y Repartos), por ejemplo "PT" o "TRI". NUNCA menciones "A&R" al usuario, usa siempre los nombres reales.
 
 Nemotécnicos CMF:
   CFITRIPT-E  → Toesca Rentas Inmobiliarias PT
@@ -392,9 +392,9 @@ Correos por archivos faltantes:
 PRECIOS BURSÁTILES Y VR CONTABLE:
 ═══════════════════════════════════════════════════════════════
   → obtener_precios_mes(año, mes) — último día hábil del mes anterior
-  → agregar_vr_bursatil_pt(...)       — A&R PT mensual
-  → agregar_vr_bursatil_rentas(...)   — A&R Rentas series A/C/I mensual
-  (A&R Apoquindo NO tiene VR Bursátil)
+  → agregar_vr_bursatil_pt(...)       — PT mensual
+  → agregar_vr_bursatil_rentas(...)   — TRI series A/C/I mensual
+  (Apo NO tiene VR Bursátil)
 
 VR CONTABLE (solo fin de trimestre: mar/jun/sep/dic):
   Los EEFF de los fondos A&R corresponden al TRIMESTRE ANTERIOR al CDG:

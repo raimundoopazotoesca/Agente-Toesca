@@ -190,11 +190,11 @@ def obtener_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int) -> str:
     Retorna el valor cuota libro formateado para la tabla 'EL FONDO' del Fact Sheet.
     Usa la fecha contable del FS (última del trimestre cerrado anterior al mes del FS).
 
-    fondo_key: 'A&R PT', 'A&R Apoquindo', 'A&R Rentas'
+    fondo_key: 'PT', 'Apo', 'TRI'
     mes_fs: 1, 4, 7 ó 10
 
     Retorna texto con fecha, valor y JSON listo para datos_json['info_fondo'].
-    Para A&R Rentas retorna las 3 series (A, C, I).
+    Para TRI retorna las 3 series (A, C, I).
     """
     from tools.eeff_tools import extraer_datos_eeff, buscar_pdf_eeff
 
@@ -217,7 +217,7 @@ def obtener_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int) -> str:
     lineas = [f"Valor cuota libro {fondo_key} al {fecha_str}:"]
     info_fondo_json = {"valor_libro_fecha": fecha_str}
 
-    if fondo_key == "A&R Rentas":
+    if fondo_key == "TRI":
         # Multi-serie A, C, I
         for serie, val in sorted(datos["valor_cuota"].items(), key=lambda x: str(x[0])):
             label = f"Serie {serie}" if serie else "Único"
@@ -242,7 +242,7 @@ def obtener_historico_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int, 
     El trimestre más reciente es el cierre contable del FS (fecha_contable_fs).
     Los anteriores se calculan retrocediendo de a un trimestre.
 
-    fondo_key: 'A&R PT', 'A&R Apoquindo', 'A&R Rentas'
+    fondo_key: 'PT', 'Apo', 'TRI'
     mes_fs: 1, 4, 7 ó 10
     n: número de trimestres (default 3)
 
@@ -274,7 +274,7 @@ def obtener_historico_valor_libro_fs(fondo_key: str, año_fs: int, mes_fs: int, 
             errores.append(f"{fecha_str}: valor cuota no extraído del PDF")
             continue
 
-        if fondo_key == "A&R Rentas":
+        if fondo_key == "TRI":
             # Multi-serie: devolver dict por serie
             series = {s: _fmt_clp(v) for s, v in datos["valor_cuota"].items()}
             resultados.append({"fecha": fecha_str, **{f"serie_{s.lower()}": v for s, v in series.items()}})
@@ -340,7 +340,7 @@ def leer_repartos_fs(nombre_archivo: str, fondo_key: str, año_fs: int, mes_fs: 
     import zipfile as _zip
     from tools.input_tools import INPUT_CFG, _read_cell_numeric, _find_sheet_xml_path
 
-    _fondo_map = {"PT": "A&R PT", "Apoquindo": "A&R Apoquindo", "TRI": "A&R Rentas"}
+    _fondo_map = {"PT": "PT", "Apoquindo": "Apo", "TRI": "TRI"}
     input_key = _fondo_map.get(fondo_key)
     if not input_key:
         return json.dumps({"error": f"fondo_key inválido: {fondo_key}"})

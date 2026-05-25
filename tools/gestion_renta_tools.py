@@ -23,7 +23,7 @@ RUTA_COMERCIAL = CDG_MENSUAL_DIR
 # ─── Config fija por hoja (derivada del análisis del xlsx 2603) ───────────────
 # Verificar en CONTEXT.txt si se agregan/renombran sheets en versiones futuras.
 SHEET_CFG = {
-    "A&R Apoquindo": {
+    "Apo": {
         "sheet_file": "xl/worksheets/sheet15.xml",
         "table_file": "xl/tables/table2.xml",
         "tabla":      "Tabla133",
@@ -32,7 +32,7 @@ SHEET_CFG = {
         "cuotas":     {None: 1585000},
         "has_bursatil": False,
     },
-    "A&R PT": {
+    "PT": {
         "sheet_file": "xl/worksheets/sheet16.xml",
         "table_file": "xl/tables/table3.xml",
         "tabla":      "Tabla13",
@@ -42,7 +42,7 @@ SHEET_CFG = {
         "has_bursatil": True,
         "nemotecnico": "CFITRIPT-E",
     },
-    "A&R Rentas": {
+    "TRI": {
         "sheet_file": "xl/worksheets/sheet17.xml",
         "table_file": "xl/tables/table4.xml",
         "tabla":      "Tabla1",
@@ -591,74 +591,74 @@ def _agregar_vr(nombre_archivo: str, sheet_key: str, año: int, mes: int,
 
 def agregar_vr_bursatil_pt(nombre_archivo: str, año: int, mes: int,
                             precio_cuota: float) -> str:
-    """Agrega fila VR Bursátil mensual en hoja A&R PT."""
-    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "VR Bursátil", {None: precio_cuota})
+    """Agrega fila VR Bursátil mensual en hoja PT."""
+    return _agregar_vr(nombre_archivo, "PT", año, mes, "VR Bursátil", {None: precio_cuota})
 
 
 def agregar_vr_bursatil_rentas(nombre_archivo: str, año: int, mes: int,
                                 precio_a: float, precio_c: float, precio_i: float) -> str:
-    """Agrega 3 filas VR Bursátil mensuales en hoja A&R Rentas (series A, C, I)."""
-    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "VR Bursátil",
+    """Agrega 3 filas VR Bursátil mensuales en hoja TRI (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "TRI", año, mes, "VR Bursátil",
                        {"A": precio_a, "C": precio_c, "I": precio_i})
 
 
 def agregar_vr_contable_pt(nombre_archivo: str, año: int, mes: int,
                             precio_cuota: float) -> str:
-    """Agrega fila VR Contable trimestral en hoja A&R PT."""
-    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "VR Contable", {None: precio_cuota})
+    """Agrega fila VR Contable trimestral en hoja PT."""
+    return _agregar_vr(nombre_archivo, "PT", año, mes, "VR Contable", {None: precio_cuota})
 
 
 def agregar_vr_contable_rentas(nombre_archivo: str, año: int, mes: int,
                                 precio_a: float, precio_c: float, precio_i: float) -> str:
-    """Agrega 3 filas VR Contable trimestrales en hoja A&R Rentas (series A, C, I)."""
-    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "VR Contable",
+    """Agrega 3 filas VR Contable trimestrales en hoja TRI (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "TRI", año, mes, "VR Contable",
                        {"A": precio_a, "C": precio_c, "I": precio_i})
 
 
 def agregar_vr_contable_apoquindo(nombre_archivo: str, año: int, mes: int,
                                    precio_cuota: float) -> str:
-    """Agrega fila VR Contable trimestral en hoja A&R Apoquindo."""
-    return _agregar_vr(nombre_archivo, "A&R Apoquindo", año, mes, "VR Contable",
+    """Agrega fila VR Contable trimestral en hoja Apo."""
+    return _agregar_vr(nombre_archivo, "Apo", año, mes, "VR Contable",
                        {None: precio_cuota})
 
 
 def agregar_dividendo_pt(nombre_archivo: str, año: int, mes: int,
                          monto_por_cuota: float) -> str:
-    """Agrega fila Dividendo en hoja A&R PT."""
-    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "Dividendo", {None: monto_por_cuota})
+    """Agrega fila Dividendo en hoja PT."""
+    return _agregar_vr(nombre_archivo, "PT", año, mes, "Dividendo", {None: monto_por_cuota})
 
 
 def agregar_dividendo_rentas(nombre_archivo: str, año: int, mes: int,
                               monto_a: float, monto_c: float, monto_i: float) -> str:
-    """Agrega 3 filas Dividendo en A&R Rentas (series A, C, I)."""
-    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "Dividendo",
+    """Agrega 3 filas Dividendo en TRI (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "TRI", año, mes, "Dividendo",
                        {"A": monto_a, "C": monto_c, "I": monto_i})
 
 
 def agregar_dividendo_apoquindo(nombre_archivo: str, año: int, mes: int,
                                  monto_por_cuota: float) -> str:
-    """Agrega fila Dividendo en hoja A&R Apoquindo."""
-    return _agregar_vr(nombre_archivo, "A&R Apoquindo", año, mes, "Dividendo",
+    """Agrega fila Dividendo en hoja Apo."""
+    return _agregar_vr(nombre_archivo, "Apo", año, mes, "Dividendo",
                        {None: monto_por_cuota})
 
 
 def agregar_aporte_pt(nombre_archivo: str, año: int, mes: int,
                       monto_por_cuota: float) -> str:
-    """Agrega fila Aporte en hoja A&R PT."""
-    return _agregar_vr(nombre_archivo, "A&R PT", año, mes, "Aporte", {None: monto_por_cuota})
+    """Agrega fila Aporte en hoja PT."""
+    return _agregar_vr(nombre_archivo, "PT", año, mes, "Aporte", {None: monto_por_cuota})
 
 
 def agregar_aporte_rentas(nombre_archivo: str, año: int, mes: int,
                            monto_a: float, monto_c: float, monto_i: float) -> str:
-    """Agrega 3 filas Aporte en A&R Rentas (series A, C, I)."""
-    return _agregar_vr(nombre_archivo, "A&R Rentas", año, mes, "Aporte",
+    """Agrega 3 filas Aporte en TRI (series A, C, I)."""
+    return _agregar_vr(nombre_archivo, "TRI", año, mes, "Aporte",
                        {"A": monto_a, "C": monto_c, "I": monto_i})
 
 
 def agregar_aporte_apoquindo(nombre_archivo: str, año: int, mes: int,
                               monto_por_cuota: float) -> str:
-    """Agrega fila Aporte en hoja A&R Apoquindo."""
-    return _agregar_vr(nombre_archivo, "A&R Apoquindo", año, mes, "Aporte",
+    """Agrega fila Aporte en hoja Apo."""
+    return _agregar_vr(nombre_archivo, "Apo", año, mes, "Aporte",
                        {None: monto_por_cuota})
 
 
@@ -1275,9 +1275,9 @@ def verificar_archivos_cdg(año: int, mes: int) -> str:
     # ── Fin de trimestre ──────────────────────────────────────────────────────
     # Los EEFF son del trimestre ANTERIOR (ej: CDG marzo → EEFF diciembre año-1)
     _FONDO_DISPLAY = {
-        "A&R PT":        "EEFF PT (Toesca Rentas Inmobiliarias PT)",
-        "A&R Rentas":    "EEFF Rentas/TRI (Toesca Rentas Inmobiliarias)",
-        "A&R Apoquindo": "EEFF Apoquindo (Fondo Toesca Rentas Apoquindo)",
+        "PT":        "EEFF PT (Toesca Rentas Inmobiliarias PT)",
+        "TRI":    "EEFF Rentas/TRI (Toesca Rentas Inmobiliarias)",
+        "Apo": "EEFF Apoquindo (Fondo Toesca Rentas Apoquindo)",
     }
     if es_trimestre:
         trim_map = {3: (12, año - 1), 6: (3, año), 9: (6, año), 12: (9, año)}

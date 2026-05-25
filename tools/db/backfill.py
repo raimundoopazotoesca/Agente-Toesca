@@ -592,8 +592,8 @@ def backfill_dividendos(verbose: bool = True) -> dict:
     bn = os.path.basename(cdg)
     n_fact = n_kpi = 0
     with get_conn() as conn:
-        for hoja, fondo_key in [("A&R PT", "A&R PT"), ("A&R Rentas", "A&R Rentas"),
-                                ("A&R Apoquindo", "A&R Apoquindo")]:
+        for hoja, fondo_key in [("PT", "PT"), ("TRI", "TRI"),
+                                ("Apo", "Apo")]:
             if hoja not in wb.sheetnames:
                 continue
             rows = list(wb[hoja].iter_rows(values_only=True))
@@ -617,10 +617,10 @@ def backfill_dividendos(verbose: bool = True) -> dict:
                     monto = float(monto)
                 except (TypeError, ValueError):
                     continue
-                if hoja == "A&R PT":
+                if hoja == "PT":
                     repo_fact.upsert_dividendo(conn, "CFITRIPT-E", fecha.isoformat(), monto)
                     n_fact += 1
-                elif hoja == "A&R Rentas":
+                elif hoja == "TRI":
                     serie = str(r[5]).strip() if len(r) > 5 and r[5] is not None else None
                     nemo = _RENTAS_SERIE_NEMO.get(serie)
                     if nemo is None:

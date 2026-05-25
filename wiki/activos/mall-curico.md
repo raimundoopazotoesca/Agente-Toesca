@@ -1,7 +1,7 @@
 ---
 tipo: activo
 nombre: "Mall Curicó"
-fondo: "A&R Rentas"
+fondo: "TRI"
 administrador: "Tres Asociados"
 filas_noi: "258–278"
 fuentes: 0

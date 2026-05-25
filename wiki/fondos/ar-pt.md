@@ -1,7 +1,7 @@
 ---
 tipo: fondo
 nombre: "Toesca Rentas Inmobiliarias PT"
-clave: "A&R PT"
+clave: "PT"
 nemotecnico: "CFITRIPT-E"
 carpeta_fondos: "FI Toesca Rentas PT"
 estado: activo
@@ -9,7 +9,7 @@ fuentes: 0
 actualizado: 2026-05-01
 ---
 
-# A&R PT
+# PT
 
 ## Descripción
 

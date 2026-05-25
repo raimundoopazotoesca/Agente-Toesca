@@ -96,8 +96,8 @@ SHAREPOINT_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - D
 RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
 FONDOS_DIR=
 SALDO_CAJA_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\Saldo Caja
-| A&R PT | D11 | C11 |
-| A&R Rentas | D10 | C10 |
+| PT | D11 | C11 |
+| TRI | D10 | C10 |
 
 ## Flujo mensual Control de Gestión Renta Comercial
 
@@ -105,9 +105,9 @@ SALDO_CAJA_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - D
 2. Copiar al WORK_DIR (`copiar_del_servidor`)
 3. `actualizar_fecha_pendientes(...)` → B2 de hoja Pendientes = 1º día del mes
 4. `obtener_precios_mes(año, mes)` → precios último día del mes del CDG (ej. CDG 2604 → 30/04/2026)
-5. `agregar_vr_bursatil_pt(...)` → A&R PT (mensual)
-6. `agregar_vr_bursatil_rentas(...)` → A&R Rentas series A/C/I (mensual)
-   - A&R Apoquindo no tiene VR Bursátil
+5. `agregar_vr_bursatil_pt(...)` → PT (mensual)
+6. `agregar_vr_bursatil_rentas(...)` → TRI series A/C/I (mensual)
+   - Apo no tiene VR Bursátil
 7. Si fin de trimestre (mar/jun/sep/dic):
    - Los EEFF de fondos A&R son del **trimestre anterior** al CDG:
      - CDG marzo → `leer_eeff(mes=12, año=año-1)`
@@ -166,9 +166,9 @@ Hardcoded en `_NOI_CURICO_MAP` / `_NOI_VINA_MAP`. NOI fila 7 = row de fechas (co
 El xlsx es un ZIP. Solo se modifican los archivos internos necesarios:
 
 ```
-xl/worksheets/sheet15.xml  → A&R Apoquindo
-xl/worksheets/sheet16.xml  → A&R PT
-xl/worksheets/sheet17.xml  → A&R Rentas
+xl/worksheets/sheet15.xml  → Apo
+xl/worksheets/sheet16.xml  → PT
+xl/worksheets/sheet17.xml  → TRI
 xl/tables/table2.xml       → Tabla133 (Apoquindo)
 xl/tables/table3.xml       → Tabla13  (PT)
 xl/tables/table4.xml       → Tabla1   (Rentas)
@@ -198,7 +198,7 @@ Usar las helpers que escanean char-by-char:
 
 **Columnas por hoja:** A=YEAR, B=MONTH, C=ID, D=Fecha/SF, E=Detalle, F=Serie, G=Tipo, H=Monto$, I=Precio/cuota, J=Cuotas, K=UF, L=MontoUF, M=MontoUF/cuota, N-Y=Libro/Bolsa.
 
-**Fórmulas compartidas (A&R Rentas):** Columna C usa `<f t="shared" ref="C590:C621" si="127">`. No sobreescribir si ya existe.
+**Fórmulas compartidas (TRI):** Columna C usa `<f t="shared" ref="C590:C621" si="127">`. No sobreescribir si ya existe.
 
 ## Agregar herramienta nueva
 

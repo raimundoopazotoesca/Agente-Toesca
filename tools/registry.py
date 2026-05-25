@@ -655,7 +655,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_vr_bursatil_pt",
-            "description": "Agrega la fila mensual de VR Bursátil en la hoja A&R PT de la planilla.",
+            "description": "Agrega la fila mensual de VR Bursátil en la hoja PT de la planilla.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -672,7 +672,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_vr_bursatil_rentas",
-            "description": "Agrega las 3 filas mensuales de VR Bursátil en la hoja A&R Rentas (series A, C, I).",
+            "description": "Agrega las 3 filas mensuales de VR Bursátil en la hoja TRI (series A, C, I).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -691,7 +691,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_vr_contable_pt",
-            "description": "Agrega la fila trimestral de VR Contable en la hoja A&R PT.",
+            "description": "Agrega la fila trimestral de VR Contable en la hoja PT.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -708,7 +708,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_vr_contable_rentas",
-            "description": "Agrega las 3 filas trimestrales de VR Contable en la hoja A&R Rentas.",
+            "description": "Agrega las 3 filas trimestrales de VR Contable en la hoja TRI.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -732,7 +732,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "fondo_key": {"type": "string", "description": "Nombre del fondo: 'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key": {"type": "string", "description": "Nombre del fondo: 'Apo', 'PT' o 'TRI'"},
                     "año":       {"type": "integer", "description": "Año (ej: 2025)"},
                 },
                 "required": ["fondo_key", "año"],
@@ -754,7 +754,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "fondo_key": {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key": {"type": "string", "description": "'Apo', 'PT' o 'TRI'"},
                     "año":       {"type": "integer", "description": "Año del trimestre (OJO: puede diferir del año del CDG)"},
                     "mes":       {"type": "integer", "description": "Mes de cierre del trimestre ANTERIOR al CDG (3, 6, 9 o 12)"},
                 },
@@ -767,7 +767,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_dividendo_pt",
-            "description": "Agrega una fila de Dividendo en la hoja A&R PT.",
+            "description": "Agrega una fila de Dividendo en la hoja PT.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -784,7 +784,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_dividendo_rentas",
-            "description": "Agrega filas de Dividendo en A&R Rentas (series A, C, I).",
+            "description": "Agrega filas de Dividendo en TRI (series A, C, I).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -803,7 +803,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_dividendo_apoquindo",
-            "description": "Agrega una fila de Dividendo en la hoja A&R Apoquindo.",
+            "description": "Agrega una fila de Dividendo en la hoja Apo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -820,7 +820,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_aporte_pt",
-            "description": "Agrega una fila de Aporte en la hoja A&R PT.",
+            "description": "Agrega una fila de Aporte en la hoja PT.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -837,7 +837,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_aporte_rentas",
-            "description": "Agrega filas de Aporte en A&R Rentas (series A, C, I).",
+            "description": "Agrega filas de Aporte en TRI (series A, C, I).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -856,7 +856,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_aporte_apoquindo",
-            "description": "Agrega una fila de Aporte en la hoja A&R Apoquindo.",
+            "description": "Agrega una fila de Aporte en la hoja Apo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -873,7 +873,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "agregar_vr_contable_apoquindo",
-            "description": "Agrega la fila trimestral de VR Contable en la hoja A&R Apoquindo.",
+            "description": "Agrega la fila trimestral de VR Contable en la hoja Apo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -901,7 +901,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string", "description": "Archivo en WORK_DIR"},
-                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                     "fecha_serial":   {"type": "integer", "description": "Serial Excel de la fecha"},
                 },
                 "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
@@ -922,7 +922,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
-                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                 },
                 "required": ["nombre_archivo", "fondo_key"],
             },
@@ -944,7 +944,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string", "description": "Nombre del CDG en WORK_DIR"},
-                    "fondo_key":      {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                 },
                 "required": ["nombre_archivo", "fondo_key"],
             },
@@ -964,7 +964,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo":  {"type": "string"},
-                    "fondo_key":       {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key":       {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                     "rentabilidades":  {"type": "string", "description": "JSON string con valores por serie y métrica. Ej: '{\"null\": {\"inicio\": 0.05, \"ytd\": 0.03, \"12m\": 0.048}}'"},
                 },
                 "required": ["nombre_archivo", "fondo_key", "rentabilidades"],
@@ -976,7 +976,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "copiar_datos_tir_rentas",
             "description": (
-                "Copia las columnas C:M de la hoja A&R Rentas (archivo CG) a las columnas B:L "
+                "Copia las columnas C:M de la hoja TRI (archivo CG) a las columnas B:L "
                 "de la hoja 'TIR Fondo' en el archivo TIR. Necesario para que el archivo TIR "
                 "calcule la rentabilidad desde inicio de cada serie."
             ),
@@ -1174,7 +1174,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo":  {"type": "string", "description": "Nombre del CDG en work/"},
-                    "fondo_key":       {"type": "string", "description": "Clave del fondo: 'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key":       {"type": "string", "description": "Clave del fondo: 'Apo', 'PT' o 'TRI'"},
                     "año":             {"type": "integer"},
                     "mes":             {"type": "integer", "description": "Mes de cierre del trimestre (3, 6, 9 o 12)"},
                     "caja":            {"type": "number"},
@@ -1204,7 +1204,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
-                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'Apo', 'PT' o 'TRI'"},
                     "fecha_serial":   {"type": "integer", "description": "Fecha como serial Excel (días desde 1899-12-30)"},
                 },
                 "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
@@ -1224,7 +1224,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
-                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'Apo', 'PT' o 'TRI'"},
                     "fecha_serial":   {"type": "integer", "description": "Fecha como serial Excel (días desde 1899-12-30)"},
                 },
                 "required": ["nombre_archivo", "fondo_key", "fecha_serial"],
@@ -1245,7 +1245,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
-                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'Apo', 'PT' o 'TRI'"},
                     "año":            {"type": "integer"},
                     "mes":            {"type": "integer"},
                     "dia":            {"type": "integer", "description": "Día del mes (opcional, default=último día del mes)"},
@@ -1267,7 +1267,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nombre_archivo": {"type": "string"},
-                    "fondo_key":      {"type": "string", "description": "'A&R Apoquindo', 'A&R PT' o 'A&R Rentas'"},
+                    "fondo_key":      {"type": "string", "description": "'Apo', 'PT' o 'TRI'"},
                 },
                 "required": ["nombre_archivo", "fondo_key"],
             },
@@ -1677,7 +1677,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "fondo":   {"type": "string", "description": "Nombre del fondo o activo (ej: 'A&R PT', 'Viña Centro', 'Mall Curicó', 'Parque Titanium')"},
+                    "fondo":   {"type": "string", "description": "Nombre del fondo o activo (ej: 'PT', 'Viña Centro', 'Mall Curicó', 'Parque Titanium')"},
                     "periodo": {"type": "string", "description": "Período YYYY-MM (ej: '2026-03')"},
                     "kpi":     {"type": "string", "description": "Nombre del KPI: valor_cuota_bursatil, valor_cuota_contable, noi, rcsd, tir, ltv, dividend_yield, dividendo_por_cuota, aporte_por_cuota, vacancia, superficie_vacante, ingresos_arriendo"},
                     "valor":   {"type": "number", "description": "Valor numérico"},
@@ -1752,7 +1752,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "entidad_tipo": {"type": "string", "enum": ["fondo", "activo", "serie"], "description": "Tipo de entidad"},
-                    "entidad_key":  {"type": "string", "description": "Clave: ej 'PT', 'A&R Rentas', nemotécnico 'CFITOERI1A'"},
+                    "entidad_key":  {"type": "string", "description": "Clave: ej 'PT', 'TRI', nemotécnico 'CFITOERI1A'"},
                     "kpi":          {"type": "string", "description": "Nombre del KPI, ej 'valor_cuota_libro'"},
                     "desde":        {"type": "string", "description": "Período inicial YYYY-MM (opcional)"},
                     "hasta":        {"type": "string", "description": "Período final YYYY-MM (opcional)"},
@@ -1844,7 +1844,7 @@ TOOL_DEFINITIONS = [
                 "type": "object",
                 "properties": {
                     "nivel": {"type": "string", "enum": ["activo", "fondo", "categoria", "total"], "description": "Nivel de agregación"},
-                    "clave": {"type": "string", "description": "activo_key (PT, Apoquindo, Apo3001, Viña Centro, Mall Curicó, INMOSA, Sucden), fondo_key (A&R PT, A&R Apoquindo, A&R Rentas) o categoría. Omitir para 'total'."},
+                    "clave": {"type": "string", "description": "activo_key (PT, Apoquindo, Apo3001, Viña Centro, Mall Curicó, INMOSA, Sucden), fondo_key (PT, Apo, TRI) o categoría. Omitir para 'total'."},
                     "año": {"type": "integer", "description": "Año de referencia (default: el del último dato)"},
                     "ponderado": {"type": "boolean", "description": "Si true, pondera por % de participación del fondo en cada activo. Default false (100%)."},
                 },
@@ -2056,7 +2056,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "fondo_key": {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key": {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                     "año_fs":    {"type": "integer"},
                     "mes_fs":    {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
                     "n":         {"type": "integer", "description": "Número de trimestres (default 3)"},
@@ -2073,12 +2073,12 @@ TOOL_DEFINITIONS = [
                 "Extrae el valor cuota libro del EEFF PDF para la tabla 'EL FONDO' del Fact Sheet. "
                 "Usa automáticamente la fecha contable correcta según el mes del FS. "
                 "Retorna JSON listo para datos_json['info_fondo']. "
-                "Para A&R Rentas retorna las 3 series (A, C, I)."
+                "Para TRI retorna las 3 series (A, C, I)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "fondo_key": {"type": "string", "description": "'A&R PT', 'A&R Apoquindo' o 'A&R Rentas'"},
+                    "fondo_key": {"type": "string", "description": "'PT', 'Apo' o 'TRI'"},
                     "año_fs":    {"type": "integer", "description": "Año del FS"},
                     "mes_fs":    {"type": "integer", "description": "Mes del FS: 1, 4, 7 ó 10"},
                 },

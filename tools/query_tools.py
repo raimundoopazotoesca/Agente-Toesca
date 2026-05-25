@@ -15,7 +15,7 @@ def consultar_db_kpi(entidad_tipo: str, entidad_key: str, kpi: str,
     """Serie temporal de un KPI desde derived_kpi.
 
     entidad_tipo: 'fondo' | 'activo' | 'serie'
-    entidad_key:  ej. 'PT', 'A&R Rentas', 'CFITOERI1A'
+    entidad_key:  ej. 'PT', 'TRI', 'CFITOERI1A'
     kpi:          ej. 'valor_cuota_libro', 'NOI', 'vacancia'
     desde/hasta:  'YYYY-MM' opcionales.
     """

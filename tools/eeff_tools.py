@@ -13,25 +13,25 @@ from tools.sharepoint_paths import APO_EEFF_DIR, PT_EEFF_DIR, TRI_EEFF_FONDO_DIR
 from tools.db.connection import get_conn
 from tools.db import repo_kpi
 
-# Mapeo (fondo, serie) → nemotécnico para las series de A&R Rentas.
+# Mapeo (fondo, serie) → nemotécnico para las series de TRI.
 _SERIE_NEMO = {
-    ("A&R Rentas", "A"): "CFITOERI1A",
-    ("A&R Rentas", "C"): "CFITOERI1C",
-    ("A&R Rentas", "I"): "CFITOERI1I",
+    ("TRI", "A"): "CFITOERI1A",
+    ("TRI", "C"): "CFITOERI1C",
+    ("TRI", "I"): "CFITOERI1I",
 }
 
 # Rutas base por fondo en SharePoint
 FONDO_RUTAS = {
-    "A&R Apoquindo": APO_EEFF_DIR,
-    "A&R PT":        PT_EEFF_DIR,
-    "A&R Rentas":    TRI_EEFF_FONDO_DIR,
+    "Apo": APO_EEFF_DIR,
+    "PT":        PT_EEFF_DIR,
+    "TRI":    TRI_EEFF_FONDO_DIR,
 }
 
 # Series por fondo (sincronizado con gestion_renta_tools.SHEET_CFG)
 FONDO_SERIES = {
-    "A&R Apoquindo": [None],
-    "A&R PT":        [None],
-    "A&R Rentas":    ["A", "C", "I"],
+    "Apo": [None],
+    "PT":        [None],
+    "TRI":    ["A", "C", "I"],
 }
 
 

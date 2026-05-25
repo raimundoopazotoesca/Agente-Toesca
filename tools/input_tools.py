@@ -28,7 +28,7 @@ from config import WORK_DIR
 
 # ─── Configuración por fondo ───────────────────────────────────────────────────
 INPUT_CFG = {
-    "A&R Apoquindo": {
+    "Apo": {
         "sheet":           "Input AP",
         "fecha_contable":  "C9",
         "fecha_bursatil":  "D9",
@@ -36,7 +36,7 @@ INPUT_CFG = {
         "div_start_row":   63,   # primera fila de datos en tabla dividendos
         "div_date_col":    "B",
     },
-    "A&R PT": {
+    "PT": {
         "sheet":           "Input PT",
         "fecha_contable":  "D11",
         "fecha_bursatil":  "C11",
@@ -44,7 +44,7 @@ INPUT_CFG = {
         "div_start_row":   82,
         "div_date_col":    "B",
     },
-    "A&R Rentas": {
+    "TRI": {
         "sheet":           "Input Ren",
         "fecha_contable":  "D10",
         "fecha_bursatil":  "C10",

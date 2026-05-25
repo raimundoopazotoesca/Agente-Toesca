@@ -20,9 +20,9 @@ El Agente Toesca es un agente de automatización para la gestión de fondos inmo
 
 | Fondo | Clave | Nemotécnico(s) |
 |-------|-------|----------------|
-| [[fondos/ar-apoquindo\|A&R Apoquindo]] | `A&R Apoquindo` | — |
-| [[fondos/ar-pt\|A&R PT]] | `A&R PT` | `CFITRIPT-E` |
-| [[fondos/ar-rentas\|A&R Rentas]] | `A&R Rentas` | `CFITOERI1A/C/I` |
+| [[fondos/ar-apoquindo\|Apo]] | `Apo` | — |
+| [[fondos/ar-pt\|PT]] | `PT` | `CFITRIPT-E` |
+| [[fondos/ar-rentas\|TRI]] | `TRI` | `CFITOERI1A/C/I` |
 
 ## Activos principales
 

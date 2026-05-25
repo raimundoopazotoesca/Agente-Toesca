@@ -20,17 +20,17 @@ Toesca administra 3 fondos de inversión inmobiliaria:
 ┌─────────────────────┬──────────────────────────────────────────────────┬──────────────┐
 │ Fondo               │ Activos                                          │ Hoja CDG     │
 ├─────────────────────┼──────────────────────────────────────────────────┼──────────────┤
-│ A&R Apoquindo       │ Apoquindo 4700, Apoquindo 4501, Apoquindo 3001   │ Input AP     │
-│ A&R PT              │ PT Oficinas, PT Locales, PT Bodegas              │ Input PT     │
-│ A&R Rentas          │ Viña Centro, Mall Curicó, INMOSA, SUCDEN,        │ Input Ren    │
+│ Apo       │ Apoquindo 4700, Apoquindo 4501, Apoquindo 3001   │ Input AP     │
+│ PT              │ PT Oficinas, PT Locales, PT Bodegas              │ Input PT     │
+│ TRI          │ Viña Centro, Mall Curicó, INMOSA, SUCDEN,        │ Input Ren    │
 │                     │ Machalí                                          │              │
 └─────────────────────┴──────────────────────────────────────────────────┴──────────────┘
 
 Nemotécnicos CMF:
-  CFITRIPT-E  → A&R PT
-  CFITOERI1A  → A&R Rentas Serie A
-  CFITOERI1C  → A&R Rentas Serie C
-  CFITOERI1I  → A&R Rentas Serie I
+  CFITRIPT-E  → PT
+  CFITOERI1A  → TRI Serie A
+  CFITOERI1C  → TRI Serie C
+  CFITOERI1I  → TRI Serie I
 
 ═══════════════════════════════════════════════════════════════
 BÚSQUEDA DE ARCHIVOS — ORDEN ESTRICTO
@@ -80,9 +80,9 @@ Para abrir el CDG de un mes dado:
 PRECIOS BURSÁTILES Y VR CONTABLE:
 ═══════════════════════════════════════════════════════════════
   → obtener_precios_mes(año, mes) — último día hábil del mes anterior
-  → agregar_vr_bursatil_pt(...)       — A&R PT mensual
-  → agregar_vr_bursatil_rentas(...)   — A&R Rentas series A/C/I mensual
-  (A&R Apoquindo NO tiene VR Bursátil)
+  → agregar_vr_bursatil_pt(...)       — PT mensual
+  → agregar_vr_bursatil_rentas(...)   — TRI series A/C/I mensual
+  (Apo NO tiene VR Bursátil)
 
 VR CONTABLE (solo fin de trimestre: mar/jun/sep/dic):
   Los EEFF de los fondos A&R corresponden al TRIMESTRE ANTERIOR al CDG:

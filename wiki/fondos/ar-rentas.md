@@ -1,7 +1,7 @@
 ---
 tipo: fondo
 nombre: "Toesca Rentas Inmobiliarias"
-clave: "A&R Rentas"
+clave: "TRI"
 nemotecnicos: ["CFITOERI1A", "CFITOERI1C", "CFITOERI1I"]
 carpeta_fondos: "FI Toesca Rentas"
 estado: activo
@@ -9,7 +9,7 @@ fuentes: 1
 actualizado: 2026-05-06
 ---
 
-# A&R Rentas
+# TRI
 
 ## Descripción
 

@@ -28,12 +28,12 @@
 
 | Página | Descripción | Fondo | Actualizado |
 |--------|-------------|-------|-------------|
-| [[activos/parque-titanium]] | Parque Titanium — JLL | A&R PT | 2026-05-01 |
-| [[activos/apoquindo]] | Apoquindo — JLL | A&R Apoquindo | 2026-05-01 |
-| [[activos/apoquindo-3001]] | Apoquindo 3001 — JLL | A&R Apoquindo | 2026-05-01 |
-| [[activos/vina-centro]] | Viña Centro — Tres Asociados | A&R Rentas | 2026-05-01 |
-| [[activos/mall-curico]] | Mall Curicó — Tres Asociados | A&R Rentas | 2026-05-01 |
-| [[activos/inmosa]] | INMOSA | A&R Rentas | 2026-05-01 |
+| [[activos/parque-titanium]] | Parque Titanium — JLL | PT | 2026-05-01 |
+| [[activos/apoquindo]] | Apoquindo — JLL | Apo | 2026-05-01 |
+| [[activos/apoquindo-3001]] | Apoquindo 3001 — JLL | Apo | 2026-05-01 |
+| [[activos/vina-centro]] | Viña Centro — Tres Asociados | TRI | 2026-05-01 |
+| [[activos/mall-curico]] | Mall Curicó — Tres Asociados | TRI | 2026-05-01 |
+| [[activos/inmosa]] | INMOSA | TRI | 2026-05-01 |
 
 ## Procesos
 

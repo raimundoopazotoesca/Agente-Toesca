@@ -1,7 +1,7 @@
 ---
 tipo: fondo
 nombre: "Toesca Rentas Inmobiliarias Apoquindo"
-clave: "A&R Apoquindo"
+clave: "Apo"
 nemotecnico: ""
 carpeta_fondos: "FI Toesca Rentas Apoquindo"
 estado: activo
@@ -9,7 +9,7 @@ fuentes: 0
 actualizado: 2026-05-01
 ---
 
-# A&R Apoquindo
+# Apo
 
 ## Descripción
 

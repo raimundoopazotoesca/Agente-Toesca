@@ -1,7 +1,7 @@
 ---
 tipo: activo
 nombre: "INMOSA"
-fondo: "A&R Rentas"
+fondo: "TRI"
 administrador: "INMOSA"
 filas_noi: "287–295"
 fuentes: 0
