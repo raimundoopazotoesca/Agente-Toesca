@@ -29,3 +29,7 @@ desktop.ini
 ~$*.xls
 *.tmp
 wiki/.obsidian/workspace.json
+
+# Backups binarios de la DB del agente
+memory/backups/*.db
+.pytest_cache/

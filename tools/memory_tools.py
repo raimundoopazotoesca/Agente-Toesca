@@ -15,6 +15,10 @@ WIKI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
 DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca.db")
 UBICACIONES_FILE = os.path.join(MEMORY_DIR, "ubicaciones.json")
 
+# Aplicar migraciones pendientes al cargar el módulo.
+from tools.db.connection import apply_migrations as _apply_migrations
+_apply_migrations(DB_PATH)
+
 def _get_user():
     try:
         return st.session_state.get("username", "general")
