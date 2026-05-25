@@ -49,7 +49,7 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 
 - Fase 0 (esqueleto): DONE (2026-05-25)
 - Fase 1 (dual-write por dominio): EN CURSO — 5 dominios listos
-- Fase 2 (backfill histórico): EN CURSO — rent rolls cargados (10k filas, 2025-09..2026-03)
+- Fase 2 (backfill histórico): CASI COMPLETO — todos los dominios salvo dividendos
 - Fase 3 (inversión del flujo): pendiente
 - Fase 4 (query + dashboards): EN CURSO — tools `consultar_db_*` listas y registradas
 
@@ -60,9 +60,19 @@ funciones del flujo en vivo (idempotente). Correr con:
 ```
 python -X utf8 -m tools.db.backfill rent_roll
 ```
-Hecho: rent rolls JLL + Tres A (12 archivos, ~8k filas nuevas; 10.122 totales en DB).
-Gap conocido: `2511 Rent Roll y NOI.xlsx` (noviembre) tiene la hoja 'Rent Roll' vacía/ausente.
-Pendiente backfill: EEFF, ER Viña/Curicó, flujos INMOSA, precios (cada uno reusando su `_persist_*`).
+Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
+- `rent_roll` — JLL + Tres A. 10.122 filas, 2025-09..2026-03.
+- `er` — ER Viña/Curicó desde INFORME EEFF. 400 filas, 2025-12..2026-03.
+- `inmosa` — flujos INMOSA (meses en columnas; usa hash_extra=periodo). 46 filas, 2026-01..2026-02.
+- `uf` — UF diaria desde hoja 'UF' del CDG más reciente. 5.182 días, 2012..2026.
+- `eeff` — valor cuota libro desde PDFs (regex, parcial). 4 trimestres.
+- `precios` — datachart LarraínVial, 1 fetch/nemo, fin de mes. 100 filas (4 nemos × 25 meses).
+
+Gaps conocidos:
+- `2511 Rent Roll y NOI.xlsx` (nov): hoja 'Rent Roll' vacía/ausente.
+- INMOSA marzo `EEFF y FC Senior Assist Mar.26.xlsx`: estructura distinta (hoja 'Activo Pasivo EERR', sin columnas de fecha tipo date). Lo cubre el flujo en vivo.
+- EEFF valor cuota: regex parcial (no siempre captura serie I).
+- **dividendos**: aún sin fuente confiable definida (el parser EEFF no trae fecha/serie).
 
 ### Camino de lectura (Fase 4)
 
