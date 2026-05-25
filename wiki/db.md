@@ -74,6 +74,16 @@ Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
 
 Lectura: `consultar_db_dividendos(nemotecnico)` además de las otras `consultar_db_*`.
 
+### Dashboard
+
+`tools/db/dashboard.py` genera un `dashboard.html` autocontenido (datos embebidos + Chart.js CDN):
+cobertura por activo/período (heatmap), gaps a poblar, series de mercado (precios/UF/dividendos),
+explorador del último período y KPIs. Regenerar:
+```
+python -X utf8 -m tools.db.dashboard      # o tool generar_dashboard
+```
+`dashboard.html` está en `.gitignore` (regenerable).
+
 Gaps conocidos:
 - `2511 Rent Roll y NOI.xlsx` (nov): hoja 'Rent Roll' vacía/ausente.
 - INMOSA marzo `EEFF y FC Senior Assist Mar.26.xlsx`: estructura distinta (hoja 'Activo Pasivo EERR', sin columnas de fecha tipo date). Lo cubre el flujo en vivo.
