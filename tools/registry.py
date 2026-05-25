@@ -151,6 +151,14 @@ from tools.balance_consolidado_tools import (
     actualizar_balances_consolidados_si_completos,
 )
 from tools.raw_tools import ordenar_archivos_raw, reemplazar_en_tool, reemplazar_en_wiki
+from tools.query_tools import (
+    consultar_db_kpi,
+    consultar_db_precio,
+    consultar_db_rent_roll,
+    consultar_db_er,
+    consultar_db_flujo,
+    consultar_db_cobertura,
+)
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -1727,6 +1735,92 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_db_cobertura",
+            "description": "PRIMERO al responder preguntas sobre datos: muestra qué hay en la base de datos del agente (filas y rango de períodos por dominio: rent_roll, er_activo, flujo, kpi, precios, uf, dividendos). Úsala para saber si la DB ya tiene el dato antes de abrir un Excel.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_kpi",
+            "description": "Consulta la serie temporal de un KPI desde la base de datos (no abre Excel). KPIs disponibles dependen de lo registrado, ej. 'valor_cuota_libro'. Para preguntas sobre evolución/tendencias de un fondo, activo o serie.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entidad_tipo": {"type": "string", "enum": ["fondo", "activo", "serie"], "description": "Tipo de entidad"},
+                    "entidad_key":  {"type": "string", "description": "Clave: ej 'PT', 'A&R Rentas', nemotécnico 'CFITOERI1A'"},
+                    "kpi":          {"type": "string", "description": "Nombre del KPI, ej 'valor_cuota_libro'"},
+                    "desde":        {"type": "string", "description": "Período inicial YYYY-MM (opcional)"},
+                    "hasta":        {"type": "string", "description": "Período final YYYY-MM (opcional)"},
+                },
+                "required": ["entidad_tipo", "entidad_key", "kpi"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_precio",
+            "description": "Consulta precios de cuota desde la base de datos (no abre Excel ni web). Sin fecha devuelve los más recientes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {"type": "string", "description": "Ej CFITRIPT-E, CFITOERI1A/C/I"},
+                    "fecha":       {"type": "string", "description": "Fecha YYYY-MM-DD (opcional)"},
+                },
+                "required": ["nemotecnico"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_rent_roll",
+            "description": "Consulta el rent roll (arrendatarios, m², renta, vencimiento) de un activo y período desde la base de datos, sin abrir el Excel.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activo_key": {"type": "string", "description": "PT, Apoquindo, Apo3001, Viña Centro, Mall Curicó"},
+                    "periodo":    {"type": "string", "description": "Período YYYY-MM"},
+                },
+                "required": ["activo_key", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_er",
+            "description": "Consulta las líneas del estado de resultado (cuenta y monto CLP) de un activo y período desde la base de datos. Para Viña Centro y Mall Curicó.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activo_key": {"type": "string", "description": "Viña Centro, Mall Curicó"},
+                    "periodo":    {"type": "string", "description": "Período YYYY-MM"},
+                },
+                "required": ["activo_key", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_flujo",
+            "description": "Consulta las líneas de flujo (cuenta y monto CLP) de un activo y período desde la base de datos. Ej. INMOSA.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activo_key": {"type": "string", "description": "Ej INMOSA"},
+                    "periodo":    {"type": "string", "description": "Período YYYY-MM"},
+                },
+                "required": ["activo_key", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "buscar_ubicacion",
             "description": (
                 "Busca si ya se conoce la ubicación de un archivo o recurso. "
@@ -2516,6 +2610,13 @@ def _dispatch(name: str, args: dict) -> str:
         "buscar_ubicacion":              lambda a: buscar_ubicacion(a["concepto"]),
         "guardar_ubicacion":             lambda a: guardar_ubicacion(a["concepto"], a["ruta"], a.get("notas", "")),
         "leer_wiki":                     lambda a: leer_wiki(a["pagina"]),
+        # Consultas a la DB (Fase 1/4) — lectura, no abren Excel
+        "consultar_db_cobertura":        lambda a: consultar_db_cobertura(),
+        "consultar_db_kpi":              lambda a: consultar_db_kpi(a["entidad_tipo"], a["entidad_key"], a["kpi"], a.get("desde"), a.get("hasta")),
+        "consultar_db_precio":           lambda a: consultar_db_precio(a["nemotecnico"], a.get("fecha")),
+        "consultar_db_rent_roll":        lambda a: consultar_db_rent_roll(a["activo_key"], a["periodo"]),
+        "consultar_db_er":               lambda a: consultar_db_er(a["activo_key"], a["periodo"]),
+        "consultar_db_flujo":            lambda a: consultar_db_flujo(a["activo_key"], a["periodo"]),
         # Consultas históricas
         "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
         "buscar_en_rent_roll":           lambda a: buscar_en_rent_roll(a["mes"], a["año"], a.get("activo"), a.get("local")),
@@ -2570,6 +2671,8 @@ _TOOLS_GENERAL = {
     "listar_planillas_en_trabajo",
     "leer_contexto", "actualizar_contexto", "leer_historial",
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
+    "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
+    "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",
