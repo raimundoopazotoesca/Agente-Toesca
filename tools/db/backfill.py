@@ -336,8 +336,9 @@ def backfill_uf(verbose: bool = True) -> dict:
 _RENTAS_SERIE_NEMO = {"A": "CFITOERI1A", "C": "CFITOERI1C", "I": "CFITOERI1I"}
 
 # Filas de la hoja 'Vacancia' del CDG → nombre de segmento (m² vacantes).
+# Machalí (fila 48) excluido: ya no es parte del portfolio.
 _VACANCIA_ROWS = {
-    47: "INMOSA", 48: "Machalí", 49: "SUCDEN",
+    47: "INMOSA", 49: "SUCDEN",
     50: "PT Oficinas", 51: "PT Locales", 52: "PT Bodegas",
     53: "Viña Centro", 54: "Apoquindo 4700", 55: "Apoquindo 4501",
     56: "Fondo Apoquindo", 57: "Curicó", 58: "Apoquindo 3001",
