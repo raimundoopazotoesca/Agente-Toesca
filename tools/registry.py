@@ -161,6 +161,7 @@ from tools.query_tools import (
     consultar_db_cobertura,
 )
 from tools.db.dashboard import generar_dashboard
+from tools.noi_query import consultar_noi
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -1837,6 +1838,23 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_noi",
+            "description": "Consulta el NOI (Net Operating Income) en UF desde la base de datos: mensual, anual, anualizado (real YTD + promedio histórico de meses faltantes), U12M, y variaciones MoM e YoY. Puede agregar por activo, fondo, categoría (Oficinas, Centros Comerciales, Residencias, Industrial) o total, al 100% del activo o ponderado por % de participación del fondo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nivel": {"type": "string", "enum": ["activo", "fondo", "categoria", "total"], "description": "Nivel de agregación"},
+                    "clave": {"type": "string", "description": "activo_key (PT, Apoquindo, Apo3001, Viña Centro, Mall Curicó, INMOSA, Sucden), fondo_key (A&R PT, A&R Apoquindo, A&R Rentas) o categoría. Omitir para 'total'."},
+                    "año": {"type": "integer", "description": "Año de referencia (default: el del último dato)"},
+                    "ponderado": {"type": "boolean", "description": "Si true, pondera por % de participación del fondo en cada activo. Default false (100%)."},
+                },
+                "required": ["nivel"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generar_dashboard",
             "description": "Regenera el dashboard HTML (dashboard.html) con todo lo que tiene la base de datos: cobertura por activo/período, gaps a poblar, series de mercado y explorador. Devuelve la ruta del archivo para abrir en el navegador.",
             "parameters": {"type": "object", "properties": {}, "required": []},
@@ -2642,6 +2660,7 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_db_er":               lambda a: consultar_db_er(a["activo_key"], a["periodo"]),
         "consultar_db_flujo":            lambda a: consultar_db_flujo(a["activo_key"], a["periodo"]),
         "consultar_db_dividendos":       lambda a: consultar_db_dividendos(a["nemotecnico"]),
+        "consultar_noi":                 lambda a: consultar_noi(a["nivel"], a.get("clave"), a.get("año"), a.get("ponderado", False)),
         "generar_dashboard":             lambda a: f"Dashboard generado: {generar_dashboard()}",
         # Consultas históricas
         "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
@@ -2699,7 +2718,7 @@ _TOOLS_GENERAL = {
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
-    "consultar_db_dividendos", "generar_dashboard",
+    "consultar_db_dividendos", "consultar_noi", "generar_dashboard",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",

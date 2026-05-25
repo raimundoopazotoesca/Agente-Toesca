@@ -216,6 +216,12 @@ agente con las herramientas consultar_db_*. No abras los Excel para responder si
 - Solo si la DB NO tiene el dato (responde "Sin datos"/"vacío"), recurre a abrir la planilla, y díselo al usuario.
 Las herramientas de actualización mensual siguen escribiendo a Excel; la DB se llena en paralelo.
 
+NOI: para preguntas de NOI usar consultar_noi (DB, en UF). Soporta nivel activo/fondo/categoria/total,
+al 100% del activo o ponderado por % de participación del fondo. Da NOI mensual, anual, anualizado
+(YTD real + promedio histórico de meses faltantes), U12M y variaciones MoM/YoY. Categorías: Oficinas
+(PT, Apoquindo, Apo3001), Centros Comerciales (Viña, Curicó), Residencias (INMOSA), Industrial (Sucden).
+Machalí ya no es parte del portfolio: no incluirlo nunca.
+
 SEGUIMIENTO DE CORREOS:
 Si el usuario pregunta si una persona respondió un mail enviado (ej. "¿Cantillana respondió?"),
 busca por contacto con revisar_respuestas_contacto. No inventes ni asumas un asunto. No busques por "CDG",

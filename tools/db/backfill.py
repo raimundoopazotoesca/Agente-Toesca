@@ -345,6 +345,89 @@ _VACANCIA_ROWS = {
 }
 
 
+# NOI- RCSD sección "Real": activo → fila "NOI Mensual" (Machalí excluido).
+_NOI_REAL_ROWS = {
+    "INMOSA": 296,
+    "Sucden": 329,
+    "PT": 382,
+    "Viña Centro": 416,
+    "Apoquindo": 457,
+    "Apo3001": 477,
+    "Mall Curicó": 502,
+}
+
+
+def backfill_noi(verbose: bool = True) -> dict:
+    """NOI mensual real (100% del activo) desde la sección Real del NOI- RCSD.
+
+    Guarda derived_kpi kpi='noi_mensual' (UF), entidad_tipo='activo'. Las
+    agregaciones (fondo ponderado, categoría, anual, anualizado, U12M, MoM, YoY)
+    se calculan al consultar. Omite meses sin dato (None/0).
+    """
+    import openpyxl
+    from datetime import date, datetime
+    from tools.db.connection import get_conn
+    from tools.db import repo_kpi
+
+    rep = {"archivos": 0, "filas": 0, "sin_datos": [], "por_activo": {}}
+    cdg = _find_cdg()
+    if not cdg:
+        rep["sin_datos"].append("No se encontró ningún CDG")
+        return rep
+    try:
+        wb = openpyxl.load_workbook(cdg, read_only=True, data_only=True)
+    except Exception as e:
+        rep["sin_datos"].append(f"{os.path.basename(cdg)}: {e}")
+        return rep
+    if "NOI- RCSD" not in wb.sheetnames:
+        wb.close()
+        rep["sin_datos"].append(f"{os.path.basename(cdg)}: sin hoja 'NOI- RCSD'")
+        return rep
+
+    max_row = max(_NOI_REAL_ROWS.values())
+    filas: dict = {}
+    for i, row in enumerate(wb["NOI- RCSD"].iter_rows(min_row=7, max_row=max_row, values_only=True), start=7):
+        filas[i] = row
+    wb.close()
+
+    hoy = date.today()
+    periodo_actual = f"{hoy.year}-{hoy.month:02d}"
+
+    row7 = filas.get(7, ())
+    col_periodo: dict = {}
+    for ci, v in enumerate(row7):
+        if isinstance(v, datetime):
+            v = v.date()
+        if isinstance(v, date):
+            periodo = f"{v.year}-{v.month:02d}"
+            if periodo <= periodo_actual:  # no almacenar proyecciones futuras como real
+                col_periodo[ci] = periodo
+
+    n = 0
+    with get_conn() as conn:
+        for activo, noi_row in _NOI_REAL_ROWS.items():
+            rowvals = filas.get(noi_row, ())
+            cnt = 0
+            for ci, periodo in col_periodo.items():
+                if ci >= len(rowvals):
+                    continue
+                val = rowvals[ci]
+                if not isinstance(val, (int, float)) or val == 0:
+                    continue
+                repo_kpi.upsert(conn, "activo", activo, periodo,
+                                "noi_mensual", float(val), "UF", "cdg_noi_real_v1")
+                cnt += 1
+                n += 1
+            rep["por_activo"][activo] = cnt
+    rep["archivos"] = 1
+    rep["filas"] = n
+    if verbose:
+        for a, c in rep["por_activo"].items():
+            print(f"  [noi] {a}: {c} meses")
+        print(f"  [noi] total {n} valores <- {os.path.basename(cdg)}")
+    return rep
+
+
 def backfill_vacancia(verbose: bool = True) -> dict:
     """Espeja la vacancia oficial (m² vacantes) de la hoja 'Vacancia' del CDG a derived_kpi.
 
@@ -508,7 +591,7 @@ def _print_reporte(nombre: str, rep: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -521,6 +604,8 @@ def main(argv: list[str]) -> None:
         _print_reporte("dividendos", backfill_dividendos(verbose=True))
     if "vacancia" in dominios:
         _print_reporte("vacancia", backfill_vacancia(verbose=True))
+    if "noi" in dominios:
+        _print_reporte("noi", backfill_noi(verbose=True))
     if "eeff" in dominios:
         rep = backfill_eeff_valor_cuota(verbose=True)
         print(f"\n=== Backfill eeff (valor cuota) ===")

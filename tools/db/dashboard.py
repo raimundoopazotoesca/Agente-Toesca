@@ -132,6 +132,29 @@ def _recolectar(conn) -> dict:
     ):
         data["vacancia"].setdefault(ek, []).append({"x": per, "y": val})
 
+    # ── NOI: serie mensual por activo + por categoría ─────────────────────────
+    data["noi_activo"] = {}
+    for ek, per, val in conn.execute(
+        "SELECT entidad_key, periodo, valor FROM derived_kpi "
+        "WHERE kpi='noi_mensual' ORDER BY periodo"
+    ):
+        data["noi_activo"].setdefault(ek, []).append({"x": per, "y": val})
+    # categoría: sumar activos por dim_activo.categoria
+    cat_de = {r["activo_key"]: r["categoria"]
+              for r in conn.execute("SELECT activo_key, categoria FROM dim_activo")}
+    cat_acc: dict = {}
+    for activo, serie in data["noi_activo"].items():
+        cat = cat_de.get(activo)
+        if not cat:
+            continue
+        for pt in serie:
+            cat_acc.setdefault(cat, {})
+            cat_acc[cat][pt["x"]] = cat_acc[cat].get(pt["x"], 0.0) + pt["y"]
+    data["noi_categoria"] = {
+        cat: [{"x": p, "y": round(v, 1)} for p, v in sorted(d.items())]
+        for cat, d in cat_acc.items()
+    }
+
     # ── Muestra de datos (último período por activo, capado) ───────────────────
     for dom, tabla in _RAW_ACTIVO.items():
         filas = []
@@ -259,6 +282,12 @@ _HTML_TEMPLATE = r"""<!doctype html>
   <h2>Vacancia (m² vacantes por segmento)</h2>
   <div class="chartbox"><canvas id="ch-vac"></canvas></div>
 
+  <h2>NOI mensual (UF, 100% del activo)</h2>
+  <div class="chart-grid">
+    <div class="chartbox"><h3>Por activo</h3><canvas id="ch-noi-act"></canvas></div>
+    <div class="chartbox"><h3>Por categoría</h3><canvas id="ch-noi-cat"></canvas></div>
+  </div>
+
   <h2>Gaps a poblar</h2>
   <div id="gaps"></div>
 
@@ -327,6 +356,8 @@ lineChart('ch-precios', DATA.precios);
 lineChart('ch-uf', {UF: DATA.uf});
 lineChart('ch-div', DATA.dividendos);
 if(DATA.vacancia && Object.keys(DATA.vacancia).length) lineChart('ch-vac', DATA.vacancia);
+if(DATA.noi_activo && Object.keys(DATA.noi_activo).length) lineChart('ch-noi-act', DATA.noi_activo);
+if(DATA.noi_categoria && Object.keys(DATA.noi_categoria).length) lineChart('ch-noi-cat', DATA.noi_categoria);
 
 // ── Gaps ───────────────────────────────────────────────────────────────────
 $('#gaps').innerHTML = DATA.gaps.length ? DATA.gaps.map(g=>{
