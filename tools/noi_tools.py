@@ -429,7 +429,7 @@ def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict
     """
     activo_key = _ER_ACTIVO_KEY.get(mall)
     if not activo_key or not eeff_values:
-        return
+        return 0
     try:
         fh = _file_hash(eeff_path)
         conn = _db_get_conn()
@@ -459,10 +459,12 @@ def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict
             repo_audit.finish_ingest_run(
                 conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
             )
+            return n
         finally:
             conn.close()
     except Exception as e:
         print(f"[noi] no se pudo persistir ER {mall} en DB: {e}")
+        return 0
 
 
 def _persist_flujo_lines(
@@ -472,15 +474,23 @@ def _persist_flujo_lines(
     periodo: str,
     data: dict,
     tool: str,
-) -> None:
+    hash_extra: str = "",
+) -> int:
     """Dual-write best-effort de líneas de flujo (label→monto CLP) a raw_flujo_line.
 
-    Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
+    hash_extra: sufijo para el file_hash. Necesario cuando un mismo archivo
+    contiene varios períodos (ej. backfill INMOSA con meses en columnas), para
+    que (file_hash, source_row) no colisione entre períodos.
+
+    Devuelve filas insertadas. Nunca propaga errores: si la DB falla, el flujo
+    de Excel debe seguir.
     """
     if not data:
-        return
+        return 0
     try:
         fh = _file_hash(src_path)
+        if hash_extra:
+            fh = f"{fh}:{hash_extra}"
         conn = _db_get_conn()
         try:
             run_id = repo_audit.start_ingest_run(
@@ -505,10 +515,12 @@ def _persist_flujo_lines(
             repo_audit.finish_ingest_run(
                 conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
             )
+            return n
         finally:
             conn.close()
     except Exception as e:
         print(f"[noi] no se pudo persistir flujo {activo_key} en DB: {e}")
+        return 0
 
 
 # ── Función principal: actualizar ER Viña / ER Curico ─────────────────────────
