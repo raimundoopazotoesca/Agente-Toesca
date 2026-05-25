@@ -14,6 +14,7 @@ Validaciones:
 """
 
 import glob
+import hashlib
 import json
 import os
 import shutil
@@ -31,6 +32,17 @@ from tools.sharepoint_paths import (
     TRI_CURICO_RENT_ROLL_DIR,
     TRI_VINA_RENT_ROLL_DIR,
 )
+from tools.db.connection import get_conn as _db_get_conn
+from tools.db import repo_audit, repo_rent_roll
+
+# Activo1 del rent roll (proveedor) → activo_key en dim_activo.
+_RR_ACTIVO_KEY = {
+    "Fondo Rentas PT": "PT",
+    "Fondo Rentas Apoquindo": "Apoquindo",
+    "Apoquindo 3001": "Apo3001",
+    "Paseo Viña Centro": "Viña Centro",
+    "Mall Curicó": "Mall Curicó",
+}
 
 # ── Rutas SharePoint Rent Rolls ──────────────────────────────────────────────
 _RR_JLL_DIR = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
@@ -1110,6 +1122,90 @@ def _read_source_data(filepath: str) -> dict:
     return source
 
 
+def _rr_file_hash(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _rr_num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _rr_date_str(v):
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    return str(v).strip() if v is not None else None
+
+
+def _persist_rent_roll(src_path: str, periodo: str, source_data: dict, proveedor: str) -> int:
+    """Dual-write best-effort del rent roll por arrendatario a raw_rent_roll_line.
+
+    source_data: {(activo2, detalle): {col_name: value}}.
+    Mapea record['Activo1'] → activo_key. Salta records sin activo mapeable.
+    Devuelve filas insertadas. Nunca propaga errores.
+    """
+    if not source_data:
+        return 0
+    try:
+        fh = _rr_file_hash(src_path)
+        conn = _db_get_conn()
+        try:
+            run_id = repo_audit.start_ingest_run(
+                conn,
+                tool=f"consolidar_rent_rolls:{proveedor}",
+                source_file=os.path.basename(src_path),
+                file_hash=fh,
+            )
+            lines = []
+            for i, ((activo2, detalle), rec) in enumerate(source_data.items()):
+                activo1 = str(rec.get("Activo1") or "").strip()
+                activo_key = _RR_ACTIVO_KEY.get(activo1)
+                if activo_key is None:
+                    continue
+                extra = {
+                    "activo1": activo1,
+                    "activo2": activo2,
+                    "tipo_activo_1": rec.get("Tipo Activo 1"),
+                    "tipo_activo_3": rec.get("Tipo Activo 3"),
+                    "tipo_arrendatario": rec.get("Tipo Arrendatario"),
+                    "rol": rec.get("Rol"),
+                    "fecha_inicio": _rr_date_str(rec.get("Fecha Inicio")),
+                }
+                lines.append({
+                    "activo_key": activo_key,
+                    "periodo": periodo,
+                    "unidad": detalle,
+                    "arrendatario": (str(rec.get("Arrendatario")).strip()
+                                     if rec.get("Arrendatario") is not None else None),
+                    "m2": _rr_num(rec.get("Area Arrendable (m2)")),
+                    "renta_uf": _rr_num(rec.get("Renta Fija (UF/m2 /mes)")),
+                    "vencimiento": _rr_date_str(rec.get("Término del Contrato")),
+                    "extra_json": json.dumps(extra, ensure_ascii=False, default=str),
+                    "source_file": os.path.basename(src_path),
+                    "source_sheet": "Rent Roll",
+                    "source_row": i,
+                    "file_hash": fh,
+                })
+            n = repo_rent_roll.insert_lines(conn, lines, run_id)
+            repo_audit.finish_ingest_run(
+                conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
+            )
+            return n
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[rentroll] no se pudo persistir rent roll {proveedor} en DB: {e}")
+        return 0
+
+
 def consolidar_rent_rolls(año: int, mes: int, nombre_cdg: str) -> str:
     """
     Consolida los datos de los Rent Rolls de proveedores (JLL y Tres A) en la
@@ -1131,6 +1227,7 @@ def consolidar_rent_rolls(año: int, mes: int, nombre_cdg: str) -> str:
     # ── 1. Leer datos de proveedores ─────────────────────────────────────────
     source_data: dict = {}   # (activo2, detalle) → record
 
+    periodo = f"{año}-{mes:02d}"
     for proveedor in ("jll", "vina", "curico"):
         path = _find_file(año, mes, proveedor)
         if path:
@@ -1142,6 +1239,7 @@ def consolidar_rent_rolls(año: int, mes: int, nombre_cdg: str) -> str:
                     "Revisar archivos."
                 )
             source_data.update(data)
+            _persist_rent_roll(path, periodo, data, proveedor)
 
     if not source_data:
         return "No se encontraron archivos de RR en WORK_DIR para el período indicado."
