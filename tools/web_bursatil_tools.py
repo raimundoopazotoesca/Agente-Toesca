@@ -9,6 +9,9 @@ import urllib.error
 from datetime import date
 from calendar import monthrange
 
+from tools.db.connection import get_conn
+from tools.db import repo_fact
+
 
 NEMOTECNICOS = {
     "CFITRIPT-E":  "Toesca Rentas Inmobiliarias PT",
@@ -69,6 +72,21 @@ def _parse_datachart(raw: str) -> list[dict]:
     return entries
 
 
+def _persist_precio(nemotecnico: str, fecha_iso: str, precio: float) -> None:
+    """Dual-write best-effort: guarda el precio en fact_precio_cuota.
+
+    Nunca propaga errores — si la DB falla, el flujo de Excel debe seguir.
+    """
+    try:
+        conn = get_conn()
+        try:
+            repo_fact.upsert_precio(conn, nemotecnico, fecha_iso, precio, fuente="LarraínVial")
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[web_bursatil] no se pudo persistir precio en DB: {e}")
+
+
 def obtener_precio_cuota(nemotecnico: str, año: int, mes: int) -> str:
     """
     Obtiene el valor cuota del último día bursátil del mes indicado.
@@ -90,6 +108,7 @@ def obtener_precio_cuota(nemotecnico: str, año: int, mes: int) -> str:
                     f"- {history[-1]['year']}/{history[-1]['js_month']+1}.")
         last_day = date(año, mes, monthrange(año, mes)[1])
         actual_day = date(entry["year"], entry["js_month"] + 1, entry["day"])
+        _persist_precio(nemotecnico, actual_day.isoformat(), entry["close"])
         return (f"Precio cuota {nemotecnico} al {actual_day.strftime('%d/%m/%Y')}"
                 f" (último bursátil de {last_day.strftime('%m/%Y')}): "
                 f"{entry['close']:,.4f} (fuente: LarraínVial)")
