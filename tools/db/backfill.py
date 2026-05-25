@@ -284,6 +284,30 @@ def _find_cdg() -> str | None:
     return sorted(cands)[-1] if cands else None
 
 
+_MES_NUM_CDG = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+}
+
+
+def _cdg_periodo(cdg_path: str) -> str | None:
+    """Detecta el período de cierre del CDG desde su nombre de archivo.
+
+    'Control De Gestión Febrero 2026.xlsx' → '2026-02'.
+    Si no se puede parsear, retorna None (el caller cae a date.today()).
+    """
+    low = os.path.basename(cdg_path).lower()
+    año_m = re.search(r"(20\d{2})", low)
+    if not año_m:
+        return None
+    año = año_m.group(1)
+    for nombre, num in _MES_NUM_CDG.items():
+        if nombre in low:
+            return f"{año}-{num:02d}"
+    return None
+
+
 def backfill_uf(verbose: bool = True) -> dict:
     """Backfill de UF diaria desde la hoja 'UF' del CDG más reciente (fact_uf)."""
     import openpyxl
@@ -398,18 +422,42 @@ def backfill_noi(verbose: bool = True) -> dict:
         filas[i] = row
     wb.close()
 
-    hoy = date.today()
-    periodo_actual = f"{hoy.year}-{hoy.month:02d}"
-
+    # Tope: ultimo periodo con dato real positivo en la fila de PT (fila 382),
+    # el activo mas confiable. El CDG puede tener proyecciones para meses futuros
+    # al cierre; estos tendran valores negativos o nulos en PT. El nombre del
+    # archivo no siempre incluye el mes, asi que no confiamos en el.
+    _PT_ROW = 382
+    pt_rowvals = filas.get(_PT_ROW, ())
     row7 = filas.get(7, ())
-    col_periodo: dict = {}
+
+    # Construir mapa completo col->periodo (sin tope aun)
+    col_periodo_all: dict = {}
     for ci, v in enumerate(row7):
         if isinstance(v, datetime):
             v = v.date()
         if isinstance(v, date):
-            periodo = f"{v.year}-{v.month:02d}"
-            if periodo <= periodo_actual:  # no almacenar proyecciones futuras como real
-                col_periodo[ci] = periodo
+            col_periodo_all[ci] = f"{v.year}-{v.month:02d}"
+
+    # Ultimo periodo donde PT tiene valor real (positivo)
+    periodo_cierre = None
+    for ci in sorted(col_periodo_all):
+        if ci >= len(pt_rowvals):
+            break
+        val = pt_rowvals[ci]
+        if isinstance(val, (int, float)) and val > 0:
+            periodo_cierre = col_periodo_all[ci]
+
+    if periodo_cierre:
+        if verbose:
+            print(f"  [noi] Periodo de cierre detectado desde fila PT: {periodo_cierre}")
+    else:
+        hoy = date.today()
+        periodo_cierre = f"{hoy.year}-{hoy.month:02d}"
+        if verbose:
+            print(f"  [noi] No se detecto cierre desde PT, usando hoy: {periodo_cierre}")
+
+    col_periodo = {ci: p for ci, p in col_periodo_all.items() if p <= periodo_cierre}
+
 
     def _store(conn, activo, noi_row, recipe):
         rowvals = filas.get(noi_row, ())
