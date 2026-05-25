@@ -49,9 +49,20 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 
 - Fase 0 (esqueleto): DONE (2026-05-25)
 - Fase 1 (dual-write por dominio): EN CURSO — 5 dominios listos
-- Fase 2 (backfill histórico): pendiente
+- Fase 2 (backfill histórico): EN CURSO — rent rolls cargados (10k filas, 2025-09..2026-03)
 - Fase 3 (inversión del flujo): pendiente
 - Fase 4 (query + dashboards): EN CURSO — tools `consultar_db_*` listas y registradas
+
+### Backfill (Fase 2)
+
+`tools/db/backfill.py` recorre los archivos de proveedor en SharePoint y los reingesta con las mismas
+funciones del flujo en vivo (idempotente). Correr con:
+```
+python -X utf8 -m tools.db.backfill rent_roll
+```
+Hecho: rent rolls JLL + Tres A (12 archivos, ~8k filas nuevas; 10.122 totales en DB).
+Gap conocido: `2511 Rent Roll y NOI.xlsx` (noviembre) tiene la hoja 'Rent Roll' vacía/ausente.
+Pendiente backfill: EEFF, ER Viña/Curicó, flujos INMOSA, precios (cada uno reusando su `_persist_*`).
 
 ### Camino de lectura (Fase 4)
 
