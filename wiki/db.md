@@ -49,7 +49,7 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 
 - Fase 0 (esqueleto): DONE (2026-05-25)
 - Fase 1 (dual-write por dominio): EN CURSO — 5 dominios listos
-- Fase 2 (backfill histórico): CASI COMPLETO — todos los dominios salvo dividendos
+- Fase 2 (backfill histórico): COMPLETO — todos los dominios poblados
 - Fase 3 (inversión del flujo): pendiente
 - Fase 4 (query + dashboards): EN CURSO — tools `consultar_db_*` listas y registradas
 
@@ -67,6 +67,12 @@ Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
 - `uf` — UF diaria desde hoja 'UF' del CDG más reciente. 5.182 días, 2012..2026.
 - `eeff` — valor cuota libro desde PDFs (regex, parcial). 4 trimestres.
 - `precios` — datachart LarraínVial, 1 fetch/nemo, fin de mes. 100 filas (4 nemos × 25 meses).
+- `dividendos` — desde hojas 'A&R *' del CDG (Detalle='Dividendo', col D=fecha, col I=$/cuota).
+  PT+Rentas A/C/I → `fact_dividendo` (108 filas, 2018..2025). Apoquindo (sin nemotécnico) →
+  `derived_kpi` kpi='dividendo_por_cuota' (6 filas).
+- `uf` — UF diaria desde hoja 'UF' del CDG. 5.182 días, 2012..2026.
+
+Lectura: `consultar_db_dividendos(nemotecnico)` además de las otras `consultar_db_*`.
 
 Gaps conocidos:
 - `2511 Rent Roll y NOI.xlsx` (nov): hoja 'Rent Roll' vacía/ausente.

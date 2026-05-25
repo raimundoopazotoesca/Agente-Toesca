@@ -3,6 +3,20 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-05-25] feat | DB Fase 2 — backfill histórico completo
+
+`tools/db/backfill.py` pobló la DB desde archivos ya en SharePoint/CDG (idempotente, reusa los `_persist_*`):
+- rent_roll: 10.122 filas (2025-09..2026-03, 5 activos)
+- er_activo: 400 (Viña/Curicó, 2025-12..2026-03)
+- flujo INMOSA: 46 (2026-01..02; marzo "Senior Assist" queda al flujo en vivo)
+- uf: 5.182 días (2012..2026, hoja UF del CDG)
+- precios: 100 (4 nemos × 25 meses, datachart LarraínVial)
+- valor_cuota_libro (eeff): 4 trimestres (regex parcial)
+- dividendos: 108 en fact_dividendo (PT+Rentas) + 6 Apoquindo en derived_kpi (desde CDG)
+
+Detalle técnico: `_persist_flujo_lines` ganó `hash_extra` para archivos multi-período (INMOSA).
+Query tools ampliadas con `consultar_db_dividendos`. 81 tests verdes. Ver `wiki/db.md`.
+
 ## [2026-05-25] feat | DB Fase 1 — dual-write de 5 dominios
 
 Cada tool de ingesta ahora escribe en paralelo a la DB (best-effort, no rompe Excel si la DB falla):
