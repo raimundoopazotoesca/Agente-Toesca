@@ -67,6 +67,10 @@ Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
 - `uf` — UF diaria desde hoja 'UF' del CDG más reciente. 5.182 días, 2012..2026.
 - `eeff` — valor cuota libro desde PDFs (regex, parcial). 4 trimestres.
 - `precios` — datachart LarraínVial, 1 fetch/nemo, fin de mes. 100 filas (4 nemos × 25 meses).
+- `vacancia` — m² vacantes oficiales de la hoja 'Vacancia' del CDG (fila 46=fechas mensuales día=1,
+  filas 47-58=segmentos) → `derived_kpi` kpi='m2_vacantes'. 1.091 valores, 12 segmentos, 2018+.
+  Mismo valor que el CDG (no recalculado). Dual-write también en `actualizar_vacancia`.
+  NOTA técnica: leer en read_only iterando filas UNA vez (ws.cell() es O(n) en read_only → no usar).
 - `dividendos` — desde hojas 'A&R *' del CDG (Detalle='Dividendo', col D=fecha, col I=$/cuota).
   PT+Rentas A/C/I → `fact_dividendo` (108 filas, 2018..2025). Apoquindo (sin nemotécnico) →
   `derived_kpi` kpi='dividendo_por_cuota' (6 filas).
