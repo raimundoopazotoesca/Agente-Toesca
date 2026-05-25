@@ -43,7 +43,7 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 
 ## Tests
 
-`pytest tests/db/ -v` (48 tests). Usan SQLite temporal vía fixture `tmp_db` en `tests/conftest.py`.
+`pytest tests/db/ -v` (91 tests). Usan SQLite temporal vía fixture `tmp_db` en `tests/conftest.py`.
 
 ## Estado por fase
 
@@ -69,11 +69,15 @@ Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
 - `precios` — datachart LarraínVial, 1 fetch/nemo, fin de mes. 100 filas (4 nemos × 25 meses).
 - `noi` — NOI mensual REAL al 100% del activo, de la sección "NOI Real" del NOI- RCSD
   (filas "NOI Mensual": INMOSA 296, Sucden 329, PT 382, Viña 416, Apoquindo 457, Apo3001 477, Curicó 502).
-  → `derived_kpi` kpi='noi_mensual' (UF). 642 valores, 2018+. Topado al mes actual (no proyecciones).
+  → `derived_kpi` kpi='noi_mensual' (UF). 822 valores, 2018-01..2026-02.
+  **Tope automático:** se detecta el mes de cierre leyendo la última fila con valor positivo de PT
+  (fila 382). Evita guardar proyecciones de meses futuros que el CDG incluye para ciertos activos.
   Metadata en `dim_activo` (migración 007): `participacion` (de hoja 'Porcentaje fondos') y `categoria`.
   Participación: INMOSA 0.43, Sucden 1.0, PT 0.333, Viña 1.0, Apoquindo 0.3, Apo3001 1.0, Curicó 0.8.
-  Categorías: Oficinas (PT, Apoquindo, Apo3001), Centros Comerciales (Viña, Curicó),
-  Residencias (INMOSA), Industrial (Sucden). PENDIENTE: split PT Torre A/Boulevard para 'Comercial'.
+  Categorías: Oficinas (PT Torre A, Apoquindo, Apo3001), Centros Comerciales (Viña, Curicó),
+  Comercial (Viña + Curicó + PT Boulevard), Residencias (INMOSA), Industrial (Sucden).
+  PT se divide en Torre A (fila 387) y Boulevard/CDC (fila 388), recipe `cdg_noi_split_v1`,
+  para separar Oficinas de Comercial sin duplicar PT en agregaciones de fondo/total.
   Cálculos en `tools/noi_query.py` (tool `consultar_noi`): mensual, anual, anualizado
   (YTD real + promedio histórico de meses faltantes), U12M, MoM, YoY; por activo/fondo/categoria/total,
   100% o ponderado por participación. Verificado: NOI- RCSD está al 100% (Viña 100% calza con Resumen;

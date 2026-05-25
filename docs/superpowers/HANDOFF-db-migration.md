@@ -38,29 +38,20 @@ Participación y categoría en `dim_activo` (migración 007). Machalí EXCLUIDO 
 
 ## EN PROGRESO al cerrar la sesión (TERMINAR ESTO)
 
-**Split de PT para la categoría "Comercial".** Confirmado por el usuario: el "NOI CDC"
-(Inmobiliaria Centro de Convenciones, fila 388 del NOI- RCSD) = "Boulevard" = parte comercial de PT.
-PT(382) ≈ Torre A(387) + CDC(388) verificado (dif <0,04%).
+~~**Split de PT para la categoría "Comercial".**~~ ✅ CERRADO 2026-05-25.
 
-Cambios YA escritos en código (commit pendiente de verificación):
-- `tools/db/backfill.py`: `_NOI_SPLIT_ROWS` = {PT Torre A:387, PT Boulevard:388}, recipe `cdg_noi_split_v1`.
-  `backfill_noi` ahora guarda también los splits.
-- `tools/noi_query.py`: `_CATEGORIA_FUENTE` define categorías por fuentes (Oficinas usa PT Torre A;
-  Comercial = Centros Comerciales + PT Boulevard). `_activos_de` filtra recipe real para que
-  fondo/total NO dupliquen PT. serie_mensual(categoria) usa el mapa.
-- `tools/db/dashboard.py`: categorías del dashboard usan el mismo mapa.
+**Fix adicional aplicado:** `backfill_noi` ahora detecta el período de cierre real del CDG
+leyendo la última fila con valor positivo de PT (fila 382 del NOI- RCSD), en vez de usar
+`date.today()`. Esto evita guardar proyecciones de meses futuros que el CDG incluye para
+activos como Apo3001, Sucden o Viña. Commit: `6d53dca`.
 
-**Pasos para cerrar (en orden):**
-1. Correr el backfill del split (escribe PT Torre A / PT Boulevard a la DB):
-   `python -X utf8 -m tools.db.backfill noi`
-   Luego borrar proyecciones futuras: `DELETE FROM derived_kpi WHERE kpi='noi_mensual' AND periodo > '<YYYY-MM actual>'`
-   (el backfill_noi ya topa al mes actual, pero verificar).
-2. Verificar: `consultar_noi('categoria','Comercial')` y `consultar_noi('categoria','Oficinas')` devuelven datos;
-   `consultar_noi('activo','PT')` ≈ Oficinas-PT + Comercial-PT.
-3. Regenerar dashboard: `python -X utf8 -m tools.db.dashboard`.
-4. Correr suite: `python -m pytest tests/db/ -q` (deben pasar 89; agregar tests del split en
-   `tests/db/test_noi_query.py` para 'Comercial' y que fondo/total no dupliquen PT).
-5. Commit + push. Actualizar `wiki/db.md` (quitar el "PENDIENTE split PT" de la sección noi).
+**Pasos ejecutados:**
+1. ✅ Backfill NOI corrido — split PT Torre A / PT Boulevard escritos en DB (98 meses, 2018-01..2026-02)
+2. ✅ 8 proyecciones contaminadas (> 2026-02) eliminadas de derived_kpi
+3. ✅ `consultar_noi('categoria','Comercial')` y `consultar_noi('categoria','Oficinas')` devuelven datos limpios
+4. ✅ Dashboard regenerado
+5. ✅ 91/91 tests pasan
+6. ✅ Commit + push. Actualizar `wiki/db.md` (quitar "PENDIENTE split PT").
 
 ## Pendientes / gaps conocidos (en `wiki/db.md`)
 - NOI vs Resumen NOI no reconcilian por factor simple (se usó NOI- RCSD Real como fuente al 100%, verificado con Viña 100% y Apoquindo ×0.3). Reconciliar con Resumen NOI queda pendiente si se necesita.
