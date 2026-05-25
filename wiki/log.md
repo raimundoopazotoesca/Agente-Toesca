@@ -3,6 +3,17 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-05-25] feat | DB Fase 1 — dual-write de 5 dominios
+
+Cada tool de ingesta ahora escribe en paralelo a la DB (best-effort, no rompe Excel si la DB falla):
+- `web_bursatil_tools.obtener_precio_cuota` → `fact_precio_cuota`
+- `eeff_tools.leer_eeff` → `derived_kpi` (valor_cuota_libro; serie A/C/I por nemotécnico, fondo único para PT/Apoquindo)
+- `noi_tools._actualizar_er_mall` (Viña/Curicó) → `raw_er_activo_line`
+- `noi_tools.actualizar_noi_inmosa` → `raw_flujo_line`
+- `rentroll_tools.consolidar_rent_rolls` → `raw_rent_roll_line` (por arrendatario, mapeo Activo1→activo_key para los 5 activos)
+
+Idempotencia por (file_hash, source_row). 69 tests verdes. Ver `wiki/db.md` para estado y pendientes.
+
 ## [2026-05-25] feat | DB Fase 0 — esqueleto SQLite del agente
 
 Se creó la base de datos real del agente (migración desde Excels como "base de datos"):

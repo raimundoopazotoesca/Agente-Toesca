@@ -48,9 +48,27 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 ## Estado por fase
 
 - Fase 0 (esqueleto): DONE (2026-05-25)
-- Fase 1 (dual-write por dominio): pendiente
+- Fase 1 (dual-write por dominio): EN CURSO — 5 dominios listos
 - Fase 2 (backfill histórico): pendiente
 - Fase 3 (inversión del flujo): pendiente
 - Fase 4 (query + dashboards): pendiente
+
+### Dominios en dual-write (Fase 1)
+
+| Dominio | Tool con dual-write | Destino DB |
+|---|---|---|
+| Precios cuota | `web_bursatil_tools.obtener_precio_cuota` | `fact_precio_cuota` |
+| Valor cuota libro (EEFF) | `eeff_tools.leer_eeff` | `derived_kpi` (kpi=`valor_cuota_libro`) |
+| ER Viña/Curicó | `noi_tools._actualizar_er_mall` | `raw_er_activo_line` |
+| Flujos INMOSA | `noi_tools.actualizar_noi_inmosa` | `raw_flujo_line` |
+| Rent roll (todos los activos) | `rentroll_tools.consolidar_rent_rolls` | `raw_rent_roll_line` |
+
+Todos son **best-effort**: si la DB falla, el flujo de Excel sigue (nunca se rompe el entregable).
+
+### Pendientes Fase 1
+
+- **UF**: vive en la hoja 'UF' del CDG (Excel), no hay fuente web. Persistir cuando se toque ese flujo.
+- **Dividendos EEFF**: el parser regex no trae fecha ni serie de forma confiable → no persistible aún.
+- **NOI PT agregado (RR JLL)**: hoja multi-activo; se optó por persistir el rent roll detallado en su lugar (más valioso para dashboards). El NOI por activo se derivará en Fase computacional.
 
 Spec completo: `docs/superpowers/specs/2026-05-25-db-migration-design.md`.
