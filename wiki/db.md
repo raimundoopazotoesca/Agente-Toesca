@@ -51,7 +51,20 @@ Las tablas raw tienen `UNIQUE(file_hash, source_row)`. `insert_lines` usa `INSER
 - Fase 1 (dual-write por dominio): EN CURSO — 5 dominios listos
 - Fase 2 (backfill histórico): pendiente
 - Fase 3 (inversión del flujo): pendiente
-- Fase 4 (query + dashboards): pendiente
+- Fase 4 (query + dashboards): EN CURSO — tools `consultar_db_*` listas y registradas
+
+### Camino de lectura (Fase 4)
+
+`tools/query_tools.py` expone, registradas en `registry.py` y siempre disponibles:
+- `consultar_db_cobertura()` — qué hay en la DB (filas + rango de períodos por dominio). Empezar acá.
+- `consultar_db_kpi(entidad_tipo, entidad_key, kpi, desde, hasta)`
+- `consultar_db_precio(nemotecnico, fecha)`
+- `consultar_db_rent_roll(activo_key, periodo)`
+- `consultar_db_er(activo_key, periodo)`
+- `consultar_db_flujo(activo_key, periodo)`
+
+El system prompt (`agent.py`) instruye usar estas antes de abrir Excel para responder preguntas.
+La DB se llena a medida que corren los flujos mensuales (o con el backfill de Fase 2).
 
 ### Dominios en dual-write (Fase 1)
 
