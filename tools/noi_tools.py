@@ -23,6 +23,7 @@ Implementación: zipfile + XML directo para máxima velocidad con archivo 14MB/8
 """
 
 import glob
+import hashlib
 import os
 import re
 import shutil
@@ -34,6 +35,8 @@ from typing import Optional
 import openpyxl
 
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.db.connection import get_conn as _db_get_conn
+from tools.db import repo_audit, repo_er_activo
 from tools.sharepoint_paths import (
     RR_JLL_DIR,
     TRI_ACTIVOS_DIR,
@@ -406,6 +409,62 @@ def _find_eeff_file(mall: str, año: int, mes: int) -> Optional[str]:
     return None
 
 
+# ── Dual-write a DB (Fase 1) ──────────────────────────────────────────────────
+
+_ER_ACTIVO_KEY = {"vina": "Viña Centro", "curico": "Mall Curicó"}
+
+
+def _file_hash(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict) -> None:
+    """Dual-write best-effort de las líneas del ER a raw_er_activo_line.
+
+    Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
+    """
+    activo_key = _ER_ACTIVO_KEY.get(mall)
+    if not activo_key or not eeff_values:
+        return
+    try:
+        fh = _file_hash(eeff_path)
+        conn = _db_get_conn()
+        try:
+            run_id = repo_audit.start_ingest_run(
+                conn,
+                tool=f"actualizar_er_{mall}",
+                source_file=os.path.basename(eeff_path),
+                file_hash=fh,
+            )
+            lines = [
+                {
+                    "activo_key": activo_key,
+                    "periodo": periodo,
+                    "cuenta_codigo": None,
+                    "cuenta_nombre": codigo,
+                    "monto_clp": clp_val,
+                    "monto_uf": None,
+                    "source_file": os.path.basename(eeff_path),
+                    "source_sheet": "ESTADO DE RESULTADO",
+                    "source_row": i,
+                    "file_hash": fh,
+                }
+                for i, (codigo, clp_val) in enumerate(eeff_values.items())
+            ]
+            n = repo_er_activo.insert_lines(conn, lines, run_id)
+            repo_audit.finish_ingest_run(
+                conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
+            )
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[noi] no se pudo persistir ER {mall} en DB: {e}")
+
+
 # ── Función principal: actualizar ER Viña / ER Curico ─────────────────────────
 
 def _actualizar_er_mall(
@@ -433,6 +492,8 @@ def _actualizar_er_mall(
     año, mes = fecha_cierre.year, fecha_cierre.month
     fecha_fin = _ultimo_dia_mes(año, mes)
     target_serial = _excel_serial(fecha_fin)
+
+    _persist_er_lines(mall, eeff_path, f"{año}-{mes:02d}", eeff_values)
 
     cfg = {
         "vina":   {"xml": _ER_VINA_XML,   "date_row": 6, "uf_row": 5, "in_uf": True},
@@ -958,6 +1019,22 @@ def actualizar_noi_inmosa(nombre_cdg: str, nombre_er_inmosa: str,
                     break
         if target_col_er is not None:
             break
+
+    if target_col_er is None:
+        # Fallback: buscar encabezado de texto tipo "ACUM MAR" / "MAR" + año en filas cercanas
+        _MESES_ABREV = {
+            1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+            7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic",
+        }
+        mes_abrev = _MESES_ABREV[mes]
+        for row in er_rows:
+            for ci, v in enumerate(row):
+                if isinstance(v, str) and mes_abrev in v.lower():
+                    # Verificar que el año aparece cerca (misma columna, filas adyacentes)
+                    target_col_er = ci
+                    break
+            if target_col_er is not None:
+                break
 
     if target_col_er is None:
         return (f"Error: no se encontró columna para {mes:02d}-{año} en '{target_sheet}'. "
