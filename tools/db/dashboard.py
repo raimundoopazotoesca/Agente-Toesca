@@ -139,21 +139,13 @@ def _recolectar(conn) -> dict:
         "WHERE kpi='noi_mensual' ORDER BY periodo"
     ):
         data["noi_activo"].setdefault(ek, []).append({"x": per, "y": val})
-    # categoría: sumar activos por dim_activo.categoria
-    cat_de = {r["activo_key"]: r["categoria"]
-              for r in conn.execute("SELECT activo_key, categoria FROM dim_activo")}
-    cat_acc: dict = {}
-    for activo, serie in data["noi_activo"].items():
-        cat = cat_de.get(activo)
-        if not cat:
-            continue
-        for pt in serie:
-            cat_acc.setdefault(cat, {})
-            cat_acc[cat][pt["x"]] = cat_acc[cat].get(pt["x"], 0.0) + pt["y"]
-    data["noi_categoria"] = {
-        cat: [{"x": p, "y": round(v, 1)} for p, v in sorted(d.items())]
-        for cat, d in cat_acc.items()
-    }
+    # categoría: usar el mismo mapa de fuentes que noi_query (incluye split PT).
+    from tools.noi_query import serie_mensual as _noi_serie, _CATEGORIA_FUENTE
+    data["noi_categoria"] = {}
+    for cat in _CATEGORIA_FUENTE:
+        serie = _noi_serie(conn, "categoria", cat, ponderado=False)
+        if serie:
+            data["noi_categoria"][cat] = [{"x": p, "y": round(v, 1)} for p, v in serie.items()]
 
     # ── Muestra de datos (último período por activo, capado) ───────────────────
     for dom, tabla in _RAW_ACTIVO.items():

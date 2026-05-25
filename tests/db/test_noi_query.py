@@ -73,3 +73,30 @@ def test_serie_mensual_categoria(tmp_db_path):
     s = nq.serie_mensual(conn, "categoria", "Centros Comerciales", ponderado=False)
     assert s["2025-01"] == 300.0
     conn.close()
+
+
+def test_comercial_incluye_boulevard(tmp_db_path):
+    apply_migrations(tmp_db_path)
+    conn = get_conn_for(tmp_db_path)
+    repo_kpi.upsert(conn, "activo", "Viña Centro", "2025-01", "noi_mensual", 200.0, "UF", "cdg_noi_real_v1")
+    repo_kpi.upsert(conn, "activo", "Mall Curicó", "2025-01", "noi_mensual", 100.0, "UF", "cdg_noi_real_v1")
+    # split de PT (recipe distinta)
+    repo_kpi.upsert(conn, "activo", "PT Torre A", "2025-01", "noi_mensual", 700.0, "UF", "cdg_noi_split_v1")
+    repo_kpi.upsert(conn, "activo", "PT Boulevard", "2025-01", "noi_mensual", 50.0, "UF", "cdg_noi_split_v1")
+    com = nq.serie_mensual(conn, "categoria", "Comercial", ponderado=False)
+    assert com["2025-01"] == 200.0 + 100.0 + 50.0  # CC + Boulevard
+    ofi = nq.serie_mensual(conn, "categoria", "Oficinas", ponderado=False)
+    assert ofi["2025-01"] == 700.0  # PT Torre A (Apoquindo/Apo3001 sin dato)
+    conn.close()
+
+
+def test_split_no_duplica_en_total(tmp_db_path):
+    apply_migrations(tmp_db_path)
+    conn = get_conn_for(tmp_db_path)
+    repo_kpi.upsert(conn, "activo", "PT", "2025-01", "noi_mensual", 750.0, "UF", "cdg_noi_real_v1")
+    repo_kpi.upsert(conn, "activo", "PT Torre A", "2025-01", "noi_mensual", 700.0, "UF", "cdg_noi_split_v1")
+    repo_kpi.upsert(conn, "activo", "PT Boulevard", "2025-01", "noi_mensual", 50.0, "UF", "cdg_noi_split_v1")
+    total = nq.serie_mensual(conn, "total", None, ponderado=False)
+    # total usa solo recipe real → PT cuenta una vez (750), no 750+700+50
+    assert total["2025-01"] == 750.0
+    conn.close()

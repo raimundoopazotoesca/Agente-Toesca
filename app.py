@@ -365,6 +365,20 @@ def _queue_quick_action(instruction: str):
     st.session_state.pending_input = instruction
     st.rerun()
 
+
+def _clear_conversation_state():
+    st.session_state.messages = []
+    st.session_state.pending_input = None
+    st.session_state.pop("pending_resume", None)
+
+
+def _finish_conversation():
+    st.session_state.pending_input = None
+    st.session_state.pop("pending_resume", None)
+    if st.session_state.messages and st.session_state.messages[-1].get("content") != "Conversacion terminada.":
+        st.session_state.messages.append({"role": "assistant", "content": "Conversacion terminada."})
+    st.rerun()
+
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<p class="toesca-logo">toesca.</p>', unsafe_allow_html=True)
@@ -435,10 +449,14 @@ with st.sidebar:
     for f in ["Toesca Rentas Inmobiliarias", "Toesca Rentas Inmobiliarias PT", "Toesca Rentas Inmobiliarias Apoquindo"]:
         st.markdown(f'<div style="font-family:Inter,sans-serif;font-size:0.78rem;color:#555;padding:0.3rem 0">{f}</div>', unsafe_allow_html=True)
 
+    st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-section">Sesion</p>', unsafe_allow_html=True)
+    if st.button("Terminar", key="finish_conversation"):
+        _finish_conversation()
+
     if st.session_state.messages:
-        st.markdown('<hr class="sidebar-divider">', unsafe_allow_html=True)
         if st.button("🗑  Nueva conversación", key="clear"):
-            st.session_state.messages = []
+            _clear_conversation_state()
             st.rerun()
 
 # ─── Procesar input inicial ──────────────────────────────────────────────────

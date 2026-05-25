@@ -356,6 +356,14 @@ _NOI_REAL_ROWS = {
     "Mall Curicó": 502,
 }
 
+# Split de PT para la dimensión categoría (recipe distinta para no contaminar
+# las agregaciones por activo/fondo). Torre A = Oficinas, Boulevard/CDC = Comercial.
+_NOI_SPLIT_ROWS = {
+    "PT Torre A": 387,
+    "PT Boulevard": 388,
+}
+_NOI_SPLIT_RECIPE = "cdg_noi_split_v1"
+
 
 def backfill_noi(verbose: bool = True) -> dict:
     """NOI mensual real (100% del activo) desde la sección Real del NOI- RCSD.
@@ -384,7 +392,7 @@ def backfill_noi(verbose: bool = True) -> dict:
         rep["sin_datos"].append(f"{os.path.basename(cdg)}: sin hoja 'NOI- RCSD'")
         return rep
 
-    max_row = max(_NOI_REAL_ROWS.values())
+    max_row = max(list(_NOI_REAL_ROWS.values()) + list(_NOI_SPLIT_ROWS.values()))
     filas: dict = {}
     for i, row in enumerate(wb["NOI- RCSD"].iter_rows(min_row=7, max_row=max_row, values_only=True), start=7):
         filas[i] = row
@@ -403,22 +411,30 @@ def backfill_noi(verbose: bool = True) -> dict:
             if periodo <= periodo_actual:  # no almacenar proyecciones futuras como real
                 col_periodo[ci] = periodo
 
+    def _store(conn, activo, noi_row, recipe):
+        rowvals = filas.get(noi_row, ())
+        cnt = 0
+        for ci, periodo in col_periodo.items():
+            if ci >= len(rowvals):
+                continue
+            val = rowvals[ci]
+            if not isinstance(val, (int, float)) or val == 0:
+                continue
+            repo_kpi.upsert(conn, "activo", activo, periodo,
+                            "noi_mensual", float(val), "UF", recipe)
+            cnt += 1
+        return cnt
+
     n = 0
     with get_conn() as conn:
         for activo, noi_row in _NOI_REAL_ROWS.items():
-            rowvals = filas.get(noi_row, ())
-            cnt = 0
-            for ci, periodo in col_periodo.items():
-                if ci >= len(rowvals):
-                    continue
-                val = rowvals[ci]
-                if not isinstance(val, (int, float)) or val == 0:
-                    continue
-                repo_kpi.upsert(conn, "activo", activo, periodo,
-                                "noi_mensual", float(val), "UF", "cdg_noi_real_v1")
-                cnt += 1
-                n += 1
+            cnt = _store(conn, activo, noi_row, "cdg_noi_real_v1")
             rep["por_activo"][activo] = cnt
+            n += cnt
+        for activo, noi_row in _NOI_SPLIT_ROWS.items():
+            cnt = _store(conn, activo, noi_row, _NOI_SPLIT_RECIPE)
+            rep["por_activo"][activo] = cnt
+            n += cnt
     rep["archivos"] = 1
     rep["filas"] = n
     if verbose:
