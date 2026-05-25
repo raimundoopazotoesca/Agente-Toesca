@@ -67,6 +67,17 @@ Dominios (`python -X utf8 -m tools.db.backfill [dominio...]`):
 - `uf` — UF diaria desde hoja 'UF' del CDG más reciente. 5.182 días, 2012..2026.
 - `eeff` — valor cuota libro desde PDFs (regex, parcial). 4 trimestres.
 - `precios` — datachart LarraínVial, 1 fetch/nemo, fin de mes. 100 filas (4 nemos × 25 meses).
+- `noi` — NOI mensual REAL al 100% del activo, de la sección "NOI Real" del NOI- RCSD
+  (filas "NOI Mensual": INMOSA 296, Sucden 329, PT 382, Viña 416, Apoquindo 457, Apo3001 477, Curicó 502).
+  → `derived_kpi` kpi='noi_mensual' (UF). 642 valores, 2018+. Topado al mes actual (no proyecciones).
+  Metadata en `dim_activo` (migración 007): `participacion` (de hoja 'Porcentaje fondos') y `categoria`.
+  Participación: INMOSA 0.43, Sucden 1.0, PT 0.333, Viña 1.0, Apoquindo 0.3, Apo3001 1.0, Curicó 0.8.
+  Categorías: Oficinas (PT, Apoquindo, Apo3001), Centros Comerciales (Viña, Curicó),
+  Residencias (INMOSA), Industrial (Sucden). PENDIENTE: split PT Torre A/Boulevard para 'Comercial'.
+  Cálculos en `tools/noi_query.py` (tool `consultar_noi`): mensual, anual, anualizado
+  (YTD real + promedio histórico de meses faltantes), U12M, MoM, YoY; por activo/fondo/categoria/total,
+  100% o ponderado por participación. Verificado: NOI- RCSD está al 100% (Viña 100% calza con Resumen;
+  Apoquindo ×0.3 ≈ NOI económico del fondo).
 - `vacancia` — m² vacantes oficiales de la hoja 'Vacancia' del CDG (fila 46=fechas mensuales día=1,
   filas 47-58=segmentos) → `derived_kpi` kpi='m2_vacantes'. 1.091 valores, 12 segmentos, 2018+.
   Mismo valor que el CDG (no recalculado). Dual-write también en `actualizar_vacancia`.
