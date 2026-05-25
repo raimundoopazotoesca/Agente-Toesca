@@ -115,6 +115,19 @@ def consultar_db_flujo(activo_key: str, periodo: str) -> str:
     return "\n".join(lines)
 
 
+def consultar_db_dividendos(nemotecnico: str) -> str:
+    """Historial de dividendos por cuota de una serie desde fact_dividendo."""
+    nemotecnico = nemotecnico.strip().upper()
+    with get_conn() as conn:
+        rows = repo_fact.list_dividendos(conn, nemotecnico)
+    if not rows:
+        return f"Sin dividendos en DB para {nemotecnico}."
+    lines = [f"Dividendos {nemotecnico} (DB, {len(rows)} pagos):"]
+    for r in rows[-24:]:
+        lines.append(f"  {r['fecha_pago']}: {r['monto']:,.4f}/cuota")
+    return "\n".join(lines)
+
+
 def consultar_db_cobertura() -> str:
     """Resumen de qué datos hay en la DB: filas y rango de períodos por dominio."""
     tablas = {

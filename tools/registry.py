@@ -157,6 +157,7 @@ from tools.query_tools import (
     consultar_db_rent_roll,
     consultar_db_er,
     consultar_db_flujo,
+    consultar_db_dividendos,
     consultar_db_cobertura,
 )
 
@@ -1821,6 +1822,20 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_db_dividendos",
+            "description": "Consulta el historial de dividendos por cuota de una serie desde la base de datos. Nemotécnicos: CFITRIPT-E, CFITOERI1A/C/I.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {"type": "string", "description": "Ej CFITRIPT-E"},
+                },
+                "required": ["nemotecnico"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "buscar_ubicacion",
             "description": (
                 "Busca si ya se conoce la ubicación de un archivo o recurso. "
@@ -2617,6 +2632,7 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_db_rent_roll":        lambda a: consultar_db_rent_roll(a["activo_key"], a["periodo"]),
         "consultar_db_er":               lambda a: consultar_db_er(a["activo_key"], a["periodo"]),
         "consultar_db_flujo":            lambda a: consultar_db_flujo(a["activo_key"], a["periodo"]),
+        "consultar_db_dividendos":       lambda a: consultar_db_dividendos(a["nemotecnico"]),
         # Consultas históricas
         "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
         "buscar_en_rent_roll":           lambda a: buscar_en_rent_roll(a["mes"], a["año"], a.get("activo"), a.get("local")),
@@ -2673,6 +2689,7 @@ _TOOLS_GENERAL = {
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
+    "consultar_db_dividendos",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",

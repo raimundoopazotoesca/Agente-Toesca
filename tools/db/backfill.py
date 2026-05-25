@@ -333,6 +333,97 @@ def backfill_uf(verbose: bool = True) -> dict:
     return rep
 
 
+_RENTAS_SERIE_NEMO = {"A": "CFITOERI1A", "C": "CFITOERI1C", "I": "CFITOERI1I"}
+
+
+def _find_header_dividendos(rows: list) -> int | None:
+    """Fila (0-based) cuyo header tiene 'Detalle' (col E) y 'Tipo' (col G)."""
+    for i, r in enumerate(rows):
+        e = r[4] if len(r) > 4 else None
+        g = r[6] if len(r) > 6 else None
+        if isinstance(e, str) and e.strip().lower() == "detalle" and \
+           isinstance(g, str) and g.strip().lower() == "tipo":
+            return i
+    return None
+
+
+def backfill_dividendos(verbose: bool = True) -> dict:
+    """Backfill de dividendos desde el CDG (hojas A&R *).
+
+    PT y Rentas (con nemotécnico) → fact_dividendo.
+    Apoquindo (sin nemotécnico) → derived_kpi (kpi='dividendo_por_cuota', entidad fondo).
+    Monto = 'Monto $ / cuota' (col I). Fecha = col D.
+    """
+    from datetime import date, datetime
+    import openpyxl
+    from tools.db.connection import get_conn
+    from tools.db import repo_fact, repo_kpi
+
+    rep = {"archivos": 0, "filas": 0, "sin_datos": [], "detalle": []}
+    cdg = _find_cdg()
+    if not cdg:
+        rep["sin_datos"].append("No se encontró ningún CDG")
+        return rep
+    try:
+        wb = openpyxl.load_workbook(cdg, read_only=True, data_only=True)
+    except Exception as e:
+        rep["sin_datos"].append(f"{os.path.basename(cdg)}: {e}")
+        return rep
+
+    bn = os.path.basename(cdg)
+    n_fact = n_kpi = 0
+    with get_conn() as conn:
+        for hoja, fondo_key in [("A&R PT", "A&R PT"), ("A&R Rentas", "A&R Rentas"),
+                                ("A&R Apoquindo", "A&R Apoquindo")]:
+            if hoja not in wb.sheetnames:
+                continue
+            rows = list(wb[hoja].iter_rows(values_only=True))
+            h = _find_header_dividendos(rows)
+            if h is None:
+                rep["sin_datos"].append(f"{hoja}: sin header Detalle/Tipo")
+                continue
+            for r in rows[h + 1:]:
+                detalle = r[4] if len(r) > 4 else None
+                if not (isinstance(detalle, str) and detalle.strip().lower() == "dividendo"):
+                    continue
+                fecha = r[3] if len(r) > 3 else None
+                monto = r[8] if len(r) > 8 else None  # Monto $ / cuota
+                if fecha is None or monto is None:
+                    continue
+                if isinstance(fecha, datetime):
+                    fecha = fecha.date()
+                if not isinstance(fecha, date):
+                    continue
+                try:
+                    monto = float(monto)
+                except (TypeError, ValueError):
+                    continue
+                if hoja == "A&R PT":
+                    repo_fact.upsert_dividendo(conn, "CFITRIPT-E", fecha.isoformat(), monto)
+                    n_fact += 1
+                elif hoja == "A&R Rentas":
+                    serie = str(r[5]).strip() if len(r) > 5 and r[5] is not None else None
+                    nemo = _RENTAS_SERIE_NEMO.get(serie)
+                    if nemo is None:
+                        continue
+                    repo_fact.upsert_dividendo(conn, nemo, fecha.isoformat(), monto)
+                    n_fact += 1
+                else:  # Apoquindo: fondo-level, sin nemotécnico
+                    repo_kpi.upsert(
+                        conn, "fondo", fondo_key, fecha.isoformat(),
+                        "dividendo_por_cuota", monto, "CLP", "cdg_dividendo_v1",
+                    )
+                    n_kpi += 1
+
+    wb.close()
+    rep["archivos"] = 1
+    rep["filas"] = n_fact + n_kpi
+    rep["detalle"].append(f"fact_dividendo: {n_fact} | derived_kpi (Apoquindo): {n_kpi}")
+    if verbose:
+        print(f"  [dividendos] fact_dividendo: {n_fact} | Apoquindo→kpi: {n_kpi} <- {bn}")
+    return rep
+
+
 def _print_reporte(nombre: str, rep: dict) -> None:
     print(f"\n=== Backfill {nombre} ===")
     print(f"Archivos ingestados: {rep['archivos']}  |  Filas insertadas: {rep['filas']}")
@@ -345,7 +436,7 @@ def _print_reporte(nombre: str, rep: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -354,6 +445,8 @@ def main(argv: list[str]) -> None:
         _print_reporte("inmosa", backfill_inmosa(verbose=True))
     if "uf" in dominios:
         _print_reporte("uf", backfill_uf(verbose=True))
+    if "dividendos" in dominios:
+        _print_reporte("dividendos", backfill_dividendos(verbose=True))
     if "eeff" in dominios:
         rep = backfill_eeff_valor_cuota(verbose=True)
         print(f"\n=== Backfill eeff (valor cuota) ===")
