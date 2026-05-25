@@ -36,7 +36,7 @@ import openpyxl
 
 from config import SHAREPOINT_DIR, WORK_DIR
 from tools.db.connection import get_conn as _db_get_conn
-from tools.db import repo_audit, repo_er_activo
+from tools.db import repo_audit, repo_er_activo, repo_flujo
 from tools.sharepoint_paths import (
     RR_JLL_DIR,
     TRI_ACTIVOS_DIR,
@@ -463,6 +463,52 @@ def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict
             conn.close()
     except Exception as e:
         print(f"[noi] no se pudo persistir ER {mall} en DB: {e}")
+
+
+def _persist_flujo_lines(
+    activo_key: str,
+    src_path: str,
+    src_sheet: str,
+    periodo: str,
+    data: dict,
+    tool: str,
+) -> None:
+    """Dual-write best-effort de líneas de flujo (label→monto CLP) a raw_flujo_line.
+
+    Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
+    """
+    if not data:
+        return
+    try:
+        fh = _file_hash(src_path)
+        conn = _db_get_conn()
+        try:
+            run_id = repo_audit.start_ingest_run(
+                conn, tool=tool, source_file=os.path.basename(src_path), file_hash=fh
+            )
+            lines = [
+                {
+                    "activo_key": activo_key,
+                    "periodo": periodo,
+                    "cuenta_codigo": None,
+                    "cuenta_nombre": label,
+                    "monto_clp": monto,
+                    "monto_uf": None,
+                    "source_file": os.path.basename(src_path),
+                    "source_sheet": src_sheet,
+                    "source_row": i,
+                    "file_hash": fh,
+                }
+                for i, (label, monto) in enumerate(data.items())
+            ]
+            n = repo_flujo.insert_lines(conn, lines, run_id)
+            repo_audit.finish_ingest_run(
+                conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
+            )
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[noi] no se pudo persistir flujo {activo_key} en DB: {e}")
 
 
 # ── Función principal: actualizar ER Viña / ER Curico ─────────────────────────
@@ -1051,6 +1097,11 @@ def actualizar_noi_inmosa(nombre_cdg: str, nombre_er_inmosa: str,
                 er_data[label] = float(row[target_col_er])
             except (TypeError, ValueError):
                 pass
+
+    _persist_flujo_lines(
+        "INMOSA", er_path, target_sheet, f"{año}-{mes:02d}", er_data,
+        tool="actualizar_noi_inmosa",
+    )
 
     # ── 2. Leer XML del NOI-RCSD ──────────────────────────────────────────────
     with zipfile.ZipFile(cdg_path, "r") as z:
