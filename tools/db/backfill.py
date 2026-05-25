@@ -335,6 +335,77 @@ def backfill_uf(verbose: bool = True) -> dict:
 
 _RENTAS_SERIE_NEMO = {"A": "CFITOERI1A", "C": "CFITOERI1C", "I": "CFITOERI1I"}
 
+# Filas de la hoja 'Vacancia' del CDG → nombre de segmento (m² vacantes).
+_VACANCIA_ROWS = {
+    47: "INMOSA", 48: "Machalí", 49: "SUCDEN",
+    50: "PT Oficinas", 51: "PT Locales", 52: "PT Bodegas",
+    53: "Viña Centro", 54: "Apoquindo 4700", 55: "Apoquindo 4501",
+    56: "Fondo Apoquindo", 57: "Curicó", 58: "Apoquindo 3001",
+}
+
+
+def backfill_vacancia(verbose: bool = True) -> dict:
+    """Espeja la vacancia oficial (m² vacantes) de la hoja 'Vacancia' del CDG a derived_kpi.
+
+    Fila 46 = fechas; filas 47-58 = segmentos. kpi='m2_vacantes', entidad_tipo='activo'.
+    """
+    import openpyxl
+    from datetime import date, datetime
+    from tools.db.connection import get_conn
+    from tools.db import repo_kpi
+
+    rep = {"archivos": 0, "filas": 0, "sin_datos": []}
+    cdg = _find_cdg()
+    if not cdg:
+        rep["sin_datos"].append("No se encontró ningún CDG")
+        return rep
+    try:
+        wb = openpyxl.load_workbook(cdg, read_only=True, data_only=True)
+    except Exception as e:
+        rep["sin_datos"].append(f"{os.path.basename(cdg)}: {e}")
+        return rep
+    if "Vacancia" not in wb.sheetnames:
+        wb.close()
+        rep["sin_datos"].append(f"{os.path.basename(cdg)}: sin hoja 'Vacancia'")
+        return rep
+    # En read_only, ws.cell(r,c) es O(n) por llamada → iterar filas UNA vez.
+    filas: dict = {}
+    for i, row in enumerate(wb["Vacancia"].iter_rows(min_row=46, max_row=58, values_only=True)):
+        filas[46 + i] = row
+    wb.close()
+
+    row46 = filas.get(46, ())
+    # índice de columna → periodo (solo fechas día=1: los headers de vacancia son mensuales)
+    col_periodo: dict = {}
+    for ci, v in enumerate(row46):
+        if isinstance(v, datetime):
+            v = v.date()
+        if isinstance(v, date) and v.day == 1:
+            col_periodo[ci] = f"{v.year}-{v.month:02d}"
+
+    n = 0
+    with get_conn() as conn:
+        for row, seg in _VACANCIA_ROWS.items():
+            rowvals = filas.get(row, ())
+            for ci, periodo in col_periodo.items():
+                if ci >= len(rowvals):
+                    continue
+                val = rowvals[ci]
+                if val in (None, "-", ""):
+                    continue
+                try:
+                    m2 = float(val)
+                except (TypeError, ValueError):
+                    continue
+                repo_kpi.upsert(conn, "activo", seg, periodo,
+                                "m2_vacantes", m2, "m2", "cdg_vacancia_v1")
+                n += 1
+    rep["archivos"] = 1
+    rep["filas"] = n
+    if verbose:
+        print(f"  [vacancia] {n} valores ({len(col_periodo)} meses × segmentos) <- {os.path.basename(cdg)}")
+    return rep
+
 
 def _find_header_dividendos(rows: list) -> int | None:
     """Fila (0-based) cuyo header tiene 'Detalle' (col E) y 'Tipo' (col G)."""
@@ -436,7 +507,7 @@ def _print_reporte(nombre: str, rep: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -447,6 +518,8 @@ def main(argv: list[str]) -> None:
         _print_reporte("uf", backfill_uf(verbose=True))
     if "dividendos" in dominios:
         _print_reporte("dividendos", backfill_dividendos(verbose=True))
+    if "vacancia" in dominios:
+        _print_reporte("vacancia", backfill_vacancia(verbose=True))
     if "eeff" in dominios:
         rep = backfill_eeff_valor_cuota(verbose=True)
         print(f"\n=== Backfill eeff (valor cuota) ===")

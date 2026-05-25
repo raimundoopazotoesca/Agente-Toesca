@@ -25,6 +25,24 @@ import openpyxl
 from config import WORK_DIR
 
 
+def _persist_vacancia(periodo: str, asset_values: dict) -> None:
+    """Dual-write best-effort de m² vacantes a derived_kpi (kpi='m2_vacantes').
+
+    asset_values: {row: (segmento, valor)}. Nunca propaga errores.
+    """
+    try:
+        from tools.db.connection import get_conn
+        from tools.db import repo_kpi
+        with get_conn() as conn:
+            for _row, (seg, val) in asset_values.items():
+                if val is None:
+                    continue
+                repo_kpi.upsert(conn, "activo", seg, periodo,
+                                "m2_vacantes", float(val), "m2", "cdg_vacancia_v1")
+    except Exception as e:
+        print(f"[vacancia] no se pudo persistir en DB: {e}")
+
+
 def _leer_valor(ws, row: int, col: int) -> float:
     """Lee celda; retorna 0 si es None o '-'."""
     v = ws.cell(row=row, column=col).value
@@ -122,6 +140,8 @@ def actualizar_vacancia(nombre_cdg: str, año: int, mes: int) -> str:
     # ── 4. Guardar ────────────────────────────────────────────────────────────
     wb.save(cdg_path)
     wb.close()
+
+    _persist_vacancia(f"{año}-{mes:02d}", asset_values)
 
     lines = [
         f"Vacancia actualizada — {año}-{mes:02d}",

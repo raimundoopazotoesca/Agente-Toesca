@@ -124,6 +124,14 @@ def _recolectar(conn) -> dict:
         data["kpi"].append({"entidad_tipo": et, "entidad_key": ek, "periodo": per,
                             "kpi": kpi, "valor": val, "unidad": uni, "recipe": recipe})
 
+    # ── Vacancia: serie m² vacantes por segmento ───────────────────────────────
+    data["vacancia"] = {}
+    for ek, per, val in conn.execute(
+        "SELECT entidad_key, periodo, valor FROM derived_kpi "
+        "WHERE kpi='m2_vacantes' ORDER BY periodo"
+    ):
+        data["vacancia"].setdefault(ek, []).append({"x": per, "y": val})
+
     # ── Muestra de datos (último período por activo, capado) ───────────────────
     for dom, tabla in _RAW_ACTIVO.items():
         filas = []
@@ -248,6 +256,9 @@ _HTML_TEMPLATE = r"""<!doctype html>
     <div class="chartbox"><h3>Dividendos por cuota</h3><canvas id="ch-div"></canvas></div>
   </div>
 
+  <h2>Vacancia (m² vacantes por segmento)</h2>
+  <div class="chartbox"><canvas id="ch-vac"></canvas></div>
+
   <h2>Gaps a poblar</h2>
   <div id="gaps"></div>
 
@@ -315,6 +326,7 @@ function lineChart(canvasId, seriesObj){
 lineChart('ch-precios', DATA.precios);
 lineChart('ch-uf', {UF: DATA.uf});
 lineChart('ch-div', DATA.dividendos);
+if(DATA.vacancia && Object.keys(DATA.vacancia).length) lineChart('ch-vac', DATA.vacancia);
 
 // ── Gaps ───────────────────────────────────────────────────────────────────
 $('#gaps').innerHTML = DATA.gaps.length ? DATA.gaps.map(g=>{
