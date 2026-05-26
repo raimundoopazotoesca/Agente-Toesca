@@ -53,7 +53,18 @@ activos como Apo3001, Sucden o Viña. Commit: `6d53dca`.
 5. ✅ 91/91 tests pasan
 6. ✅ Commit + push. Actualizar `wiki/db.md` (quitar "PENDIENTE split PT").
 
-## Siguiente prioridad: vacancia desde rent roll
+## Siguiente prioridad: derivar TODO desde raw (no del CDG consolidado)
+
+Tanto vacancia como NOI deben computarse desde los datos raw que ya están en la DB, no leerse del
+CDG. Esto cierra el camino hacia "reemplazar el CDG" ([[vision-reemplazar-cdg]]).
+
+**Caching inteligente** ([[noi-desde-eerr-y-caching-inteligente]]):
+- Resultados baratos (sumas, agregaciones, anual/anualizado/U12M/MoM/YoY) → recalcular al pedirlo.
+- Resultados costosos sobre meses cerrados → persistir en `derived_kpi` con recipe propia.
+- Resultados sobre el mes en curso → recalcular (input puede cambiar).
+- Invalidación: comparar `computed_at` del derived contra `loaded_at` del raw fuente.
+
+### Vacancia desde rent roll
 
 Decidido 2026-05-25: la vacancia se debe **calcular desde `raw_rent_roll_line`**, no leer de la hoja
 "Vacancia" del CDG. Ver memoria `feedback_vacancia_desde_rr.md`. Implementar:
@@ -64,6 +75,19 @@ Decidido 2026-05-25: la vacancia se debe **calcular desde `raw_rent_roll_line`**
 - Almacenar como `derived_kpi` kpi='m2_vacantes' recipe='rr_calculado_v1'.
 - Exponer tool `consultar_vacancia_calculada` y agregarla al dashboard como vista alternativa.
 - Mantener `backfill_vacancia` actual como legacy/cross-check, no fuente primaria.
+
+### NOI desde EERR (no del NOI-RCSD)
+
+`compute_noi_activo(activo, periodo)` debe sumar líneas de `raw_er_activo_line` y `raw_flujo_line`:
+- NOI = Σ (monto × signo) de cuentas con `tipo_eeff IN ('ingreso_operacional', 'gasto_operacional')`.
+- Requiere poblar `dim_cuenta.tipo_eeff` y `dim_cuenta.signo` (hoy vacíos para la mayoría).
+- Recipe nueva: `eerr_calculado_v1`. Mantener `cdg_noi_real_v1` como cross-check legacy.
+- Política de caching: persistir si el mes está cerrado (input estable); recalcular si mes en curso
+  o si el derived es barato (anual = suma de mensuales).
+
+Paso preparatorio: poblar `dim_cuenta` con la clasificación contable. Cada `cuenta_codigo` ↔ `tipo_eeff`
+y `signo`. Esto necesita el plan de cuentas del cliente — pedírselo o derivar de los EEFF (cuentas que
+empiezan con "(+) Ingresos..." y "(-) Gastos...").
 
 ## Pendientes / gaps conocidos (en `wiki/db.md`)
 - NOI vs Resumen NOI no reconcilian por factor simple (se usó NOI- RCSD Real como fuente al 100%, verificado con Viña 100% y Apoquindo ×0.3). Reconciliar con Resumen NOI queda pendiente si se necesita.
