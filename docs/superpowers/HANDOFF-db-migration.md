@@ -53,6 +53,18 @@ activos como Apo3001, Sucden o Viña. Commit: `6d53dca`.
 5. ✅ 91/91 tests pasan
 6. ✅ Commit + push. Actualizar `wiki/db.md` (quitar "PENDIENTE split PT").
 
+## Siguiente prioridad: vacancia desde rent roll
+
+Decidido 2026-05-25: la vacancia se debe **calcular desde `raw_rent_roll_line`**, no leer de la hoja
+"Vacancia" del CDG. Ver memoria `feedback_vacancia_desde_rr.md`. Implementar:
+- `tools/vacancia_query.py` con `compute_vacancia(periodo)` que cuenta m² vacantes/totales por segmento.
+- Marcador: `arrendatario` contiene "vacante" (insensible a mayúsculas).
+- Sub-segmentación: PT (Torre A/Locales/Bodegas), Apoquindo (4501/4700) — usar las columnas Activo1/
+  Activo2/Detalle del rent roll JLL (ver `rentroll_tools._read_source_data`).
+- Almacenar como `derived_kpi` kpi='m2_vacantes' recipe='rr_calculado_v1'.
+- Exponer tool `consultar_vacancia_calculada` y agregarla al dashboard como vista alternativa.
+- Mantener `backfill_vacancia` actual como legacy/cross-check, no fuente primaria.
+
 ## Pendientes / gaps conocidos (en `wiki/db.md`)
 - NOI vs Resumen NOI no reconcilian por factor simple (se usó NOI- RCSD Real como fuente al 100%, verificado con Viña 100% y Apoquindo ×0.3). Reconciliar con Resumen NOI queda pendiente si se necesita.
 - EEFF valor cuota: extracción regex parcial (a veces no captura serie I).
