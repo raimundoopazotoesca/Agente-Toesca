@@ -11,7 +11,16 @@
       "PowerShell(cd C:\\\\Users\\\\raimundo.opazo\\\\automation_agent; $env:PYTHONIOENCODING=\"utf-8\"; python debug_noi.py 2>&1)",
       "Bash(python -m pytest --collect-only)",
       "Bash(python -m pytest tests/db/test_migrations.py -v)",
-      "Bash(python -m pytest \"C:/Users/raimundo.opazo/automation_agent/tests/db/test_migrations.py\" -v)"
+      "Bash(python -m pytest \"C:/Users/raimundo.opazo/automation_agent/tests/db/test_migrations.py\" -v)",
+      "Bash(python -c \"import sqlite3; con=sqlite3.connect\\(r'memory/agente_toesca.db'\\); cur=con.cursor\\(\\); [print\\(r[0]\\) for r in cur.execute\\(\\\\\"SELECT sql FROM sqlite_master WHERE type='table' ORDER BY name\\\\\"\\).fetchall\\(\\)]\")",
+      "Bash(mkdir \"C:\\\\Users\\\\raimundo.opazo\\\\.claude\\\\skills\\\\db-dashboard-expert\")",
+      "Edit(~/.claude/skills/db-dashboard-expert/**)",
+      "Edit(~/.claude/skills/db-ingestion-expert/**)",
+      "Bash(python -X utf8 -c ' *)",
+      "Bash(python scripts/extract_cdg_vc.py)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\raimundo.opazo\\.claude\\skills"
     ]
   },
   "enabledPlugins": {

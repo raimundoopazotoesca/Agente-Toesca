@@ -1,22 +1,25 @@
-"""Aplica los nombres oficiales de fondos y verifica la estructura completa."""
 from tools.db.connection import get_conn
-
 conn = get_conn()
-conn.execute("UPDATE dim_fondo SET nombre='Fondo Toesca Rentas Inmobiliarias PT' WHERE fondo_key='A&R PT'")
-conn.execute("UPDATE dim_fondo SET nombre='Fondo Toesca Rentas Inmob Apoquindo' WHERE fondo_key='A&R Apoquindo'")
-conn.commit()
 
-print("=== Estructura de fondos (oficial) ===")
-for r in conn.execute("SELECT fondo_key, nombre FROM dim_fondo ORDER BY fondo_key"):
-    print(f"  [{r[0]}] {r[1]}")
+print("=== Vacancia Curicó - Marzo 2026 ===")
+rows = conn.execute(
+    "SELECT entidad_key, periodo, kpi, valor, unidad FROM derived_kpi "
+    "WHERE kpi='m2_vacantes' AND entidad_key LIKE '%uric%' AND periodo='2026-03' "
+    "ORDER BY entidad_key"
+).fetchall()
 
-print()
-print("=== Activos por fondo ===")
-for r in conn.execute(
-    "SELECT f.nombre as fondo, a.activo_key, a.participacion, a.categoria "
-    "FROM dim_activo a JOIN dim_fondo f ON a.fondo_key = f.fondo_key "
-    "ORDER BY f.fondo_key, a.activo_key"
-):
-    print(f"  {r['fondo']:<45} | {r['activo_key']:<14} | {r['participacion']} | {r['categoria']}")
+if rows:
+    for r in rows:
+        print(f"  {r[0]} | {r[1]} | {r[3]:,.1f} {r[4]}")
+else:
+    print("  (sin dato para 2026-03 en la DB)")
+    rows2 = conn.execute(
+        "SELECT entidad_key, periodo, kpi, valor, unidad FROM derived_kpi "
+        "WHERE kpi='m2_vacantes' AND entidad_key LIKE '%uric%' "
+        "ORDER BY periodo DESC LIMIT 3"
+    ).fetchall()
+    print("  Últimos datos disponibles:")
+    for r in rows2:
+        print(f"  {r[0]} | {r[1]} | {r[3]:,.1f} {r[4]}")
 
 conn.close()
