@@ -110,7 +110,7 @@ def backfill_er(verbose: bool = True) -> dict:
         for path in _listar_xlsx(base):
             bn = os.path.basename(path)
             try:
-                fecha_cierre, eeff_values = noi._leer_eeff_estado_resultado(path)
+                fecha_cierre, eeff_values, meta_map = noi._leer_eeff_estado_resultado(path)
             except Exception as e:
                 rep["sin_datos"].append(f"{bn}: {e}")
                 continue
@@ -118,7 +118,7 @@ def backfill_er(verbose: bool = True) -> dict:
                 rep["sin_datos"].append(f"{bn}: sin ESTADO DE RESULTADO o fecha")
                 continue
             periodo = f"{fecha_cierre.year}-{fecha_cierre.month:02d}"
-            n = noi._persist_er_lines(mall, path, periodo, eeff_values)
+            n = noi._persist_er_lines(mall, path, periodo, eeff_values, meta_map)
             rep["archivos"] += 1
             rep["filas"] += n
             rep["detalle"].append(f"{mall} {periodo}: {n} filas <- {bn}")

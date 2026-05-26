@@ -357,22 +357,38 @@ def _leer_eeff_estado_resultado(eeff_path: str) -> tuple:
         if fecha_cierre:
             break
 
-    # ── Leer valores (col B = código, col E = mes actual) ─────────────────────
+    # ── Leer valores + secciones (col B = código/encabezado, col E = mes actual) ─
     account_values: dict = {}
+    meta_map: dict = {}   # {codigo: {"seccion": str, "es_operacional": int}}
+    seccion_actual: str | None = None
+    es_operacional: int = 1  # todo lo que precede a TOTAL OPERACIONAL es operacional
+
     for row in rows[10:]:
         code_raw = row[1] if len(row) > 1 else None
         val_raw  = row[4] if len(row) > 4 else None
-        if code_raw is None or val_raw is None:
+        if code_raw is None:
             continue
         code = str(code_raw).strip()
-        if not re.match(r"^\d[-\d]", code):
+        if not code:
             continue
-        try:
-            account_values[code] = float(val_raw)
-        except (TypeError, ValueError):
-            pass
 
-    return fecha_cierre, account_values
+        if re.match(r"^\d[-\d]", code):
+            # Línea de cuenta: guardar valor y metadata de sección
+            if val_raw is None:
+                continue
+            try:
+                account_values[code] = float(val_raw)
+                meta_map[code] = {"seccion": seccion_actual, "es_operacional": es_operacional}
+            except (TypeError, ValueError):
+                pass
+        else:
+            # Encabezado de sección: actualizar contexto
+            seccion_actual = code
+            # El marcador de fin del bloque operacional
+            if "TOTAL OPERACIONAL" in code.upper():
+                es_operacional = 0
+
+    return fecha_cierre, account_values, meta_map
 
 
 # ── Descubrir archivo EEFF ────────────────────────────────────────────────────
@@ -422,14 +438,19 @@ def _file_hash(path: str) -> str:
     return h.hexdigest()
 
 
-def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict) -> None:
+def _persist_er_lines(
+    mall: str, eeff_path: str, periodo: str, eeff_values: dict,
+    meta_map: dict | None = None,
+) -> int:
     """Dual-write best-effort de las líneas del ER a raw_er_activo_line.
 
+    meta_map: {codigo: {"seccion": str, "es_operacional": int}} (de _leer_eeff_estado_resultado).
     Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
     """
     activo_key = _ER_ACTIVO_KEY.get(mall)
     if not activo_key or not eeff_values:
         return 0
+    meta_map = meta_map or {}
     try:
         fh = _file_hash(eeff_path)
         conn = _db_get_conn()
@@ -440,21 +461,23 @@ def _persist_er_lines(mall: str, eeff_path: str, periodo: str, eeff_values: dict
                 source_file=os.path.basename(eeff_path),
                 file_hash=fh,
             )
-            lines = [
-                {
+            lines = []
+            for i, (codigo, clp_val) in enumerate(eeff_values.items()):
+                meta = meta_map.get(codigo, {})
+                lines.append({
                     "activo_key": activo_key,
                     "periodo": periodo,
                     "cuenta_codigo": None,
                     "cuenta_nombre": codigo,
                     "monto_clp": clp_val,
                     "monto_uf": None,
+                    "seccion": meta.get("seccion"),
+                    "es_operacional": meta.get("es_operacional"),
                     "source_file": os.path.basename(eeff_path),
                     "source_sheet": "ESTADO DE RESULTADO",
                     "source_row": i,
                     "file_hash": fh,
-                }
-                for i, (codigo, clp_val) in enumerate(eeff_values.items())
-            ]
+                })
             n = repo_er_activo.insert_lines(conn, lines, run_id)
             repo_audit.finish_ingest_run(
                 conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok"
@@ -541,7 +564,7 @@ def _actualizar_er_mall(
         return f"Error: EEFF no encontrado: {eeff_path}"
 
     # ── 1. Leer EEFF ──────────────────────────────────────────────────────────
-    fecha_cierre, eeff_values = _leer_eeff_estado_resultado(eeff_path)
+    fecha_cierre, eeff_values, meta_map = _leer_eeff_estado_resultado(eeff_path)
     if not eeff_values:
         return f"Error: no se pudo leer 'ESTADO DE RESULTADO' en {os.path.basename(eeff_path)}"
     if fecha_cierre is None:
@@ -551,7 +574,7 @@ def _actualizar_er_mall(
     fecha_fin = _ultimo_dia_mes(año, mes)
     target_serial = _excel_serial(fecha_fin)
 
-    _persist_er_lines(mall, eeff_path, f"{año}-{mes:02d}", eeff_values)
+    _persist_er_lines(mall, eeff_path, f"{año}-{mes:02d}", eeff_values, meta_map)
 
     cfg = {
         "vina":   {"xml": _ER_VINA_XML,   "date_row": 6, "uf_row": 5, "in_uf": True},

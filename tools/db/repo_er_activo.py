@@ -4,6 +4,7 @@ import sqlite3
 _INSERT_COLS = [
     "activo_key", "periodo", "cuenta_codigo", "cuenta_nombre",
     "monto_clp", "monto_uf",
+    "seccion", "es_operacional",
     "source_file", "source_sheet", "source_row", "file_hash", "ingest_run_id",
 ]
 
