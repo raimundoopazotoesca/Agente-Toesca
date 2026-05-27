@@ -109,6 +109,7 @@ from tools.query_tools import (
     consultar_db_cobertura,
 )
 from tools.db.dashboard import generar_dashboard
+from tools.db.ingest_router import ingestar_archivo
 from tools.noi_query import consultar_noi
 from tools.finance_tools import (
     calcular_indicador_financiero,
@@ -1181,6 +1182,27 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "ingestar_archivo",
+            "description": (
+                "Ingesta un archivo de proveedor a la DB del agente. Detecta el tipo "
+                "automáticamente por nombre del archivo (INFORME EEFF Viña/Curicó → "
+                "raw_er_activo_line; ER-FC INMOSA → raw_flujo_line). Es idempotente: "
+                "re-ingestar no duplica. Usar cuando el usuario provee un archivo "
+                "nuevo que debe entrar a la DB."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Ruta absoluta al archivo a ingestar."},
+                    "periodo": {"type": "string", "description": "YYYY-MM. Opcional; se infiere del archivo si no se entrega."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "buscar_ubicacion",
             "description": (
                 "Busca si ya se conoce la ubicación de un archivo o recurso. "
@@ -1839,6 +1861,7 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_db_dividendos":       lambda a: consultar_db_dividendos(a["nemotecnico"]),
         "consultar_noi":                 lambda a: consultar_noi(a["nivel"], a.get("clave"), a.get("año"), a.get("ponderado", False)),
         "generar_dashboard":             lambda a: f"Dashboard generado: {generar_dashboard()}",
+        "ingestar_archivo":              lambda a: ingestar_archivo(a["path"], a.get("periodo")),
         # Consultas históricas
         "leer_cdg_historico":            lambda a: leer_cdg_historico(a["mes"], a["año"], a["hoja"], a.get("filtro")),
         "buscar_en_rent_roll":           lambda a: buscar_en_rent_roll(a["mes"], a["año"], a.get("activo"), a.get("local")),
