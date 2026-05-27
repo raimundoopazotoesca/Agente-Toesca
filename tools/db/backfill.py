@@ -101,7 +101,7 @@ def backfill_rent_roll(verbose: bool = True) -> dict:
 
 def backfill_er(verbose: bool = True) -> dict:
     """Backfill de ER Viña/Curicó desde los INFORME EEFF (raw_er_activo_line)."""
-    import tools.noi_tools as noi
+    from tools.db.ingest_er import read_er_eeff, persist_er_lines
     from tools.sharepoint_paths import TRI_VINA_EEFF_DIR, TRI_CURICO_EEFF_DIR
 
     fuentes = [("vina", TRI_VINA_EEFF_DIR), ("curico", TRI_CURICO_EEFF_DIR)]
@@ -110,7 +110,7 @@ def backfill_er(verbose: bool = True) -> dict:
         for path in _listar_xlsx(base):
             bn = os.path.basename(path)
             try:
-                fecha_cierre, eeff_values, meta_map = noi._leer_eeff_estado_resultado(path)
+                fecha_cierre, eeff_values, meta_map = read_er_eeff(path)
             except Exception as e:
                 rep["sin_datos"].append(f"{bn}: {e}")
                 continue
@@ -118,7 +118,7 @@ def backfill_er(verbose: bool = True) -> dict:
                 rep["sin_datos"].append(f"{bn}: sin ESTADO DE RESULTADO o fecha")
                 continue
             periodo = f"{fecha_cierre.year}-{fecha_cierre.month:02d}"
-            n = noi._persist_er_lines(mall, path, periodo, eeff_values, meta_map)
+            n = persist_er_lines(mall, path, periodo, eeff_values, meta_map)
             rep["archivos"] += 1
             rep["filas"] += n
             rep["detalle"].append(f"{mall} {periodo}: {n} filas <- {bn}")
@@ -131,7 +131,7 @@ def backfill_inmosa(verbose: bool = True) -> dict:
     """Backfill de flujos INMOSA (raw_flujo_line). El archivo tiene meses en columnas."""
     import openpyxl
     from datetime import date, datetime
-    import tools.noi_tools as noi
+    from tools.db.ingest_flujo import persist_flujo_lines
     from tools.sharepoint_paths import TRI_INMOSA_FLUJOS_DIR
 
     rep = {"archivos": 0, "filas": 0, "sin_datos": [], "detalle": []}
@@ -188,7 +188,7 @@ def backfill_inmosa(verbose: bool = True) -> dict:
                         pass
             if not er_data:
                 continue
-            n = noi._persist_flujo_lines(
+            n = persist_flujo_lines(
                 "INMOSA", path, target, periodo, er_data,
                 tool="backfill_inmosa", hash_extra=periodo,
             )

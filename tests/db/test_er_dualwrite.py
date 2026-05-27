@@ -1,5 +1,5 @@
 """Tests del dual-write de ER Viña/Curicó a raw_er_activo_line (Fase 1)."""
-import tools.noi_tools as noi
+from tools.db.ingest_er import persist_er_lines
 from tools.db import repo_er_activo
 from tools.db.connection import apply_migrations, get_conn_for
 
@@ -11,11 +11,12 @@ def _fake_eeff(tmp_path, contenido=b"contenido"):
 
 
 def test_persist_er_lines_vina(tmp_db_path, tmp_path, monkeypatch):
+    from tools.db import ingest_er
     apply_migrations(tmp_db_path)
-    monkeypatch.setattr(noi, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
+    monkeypatch.setattr(ingest_er, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_eeff(tmp_path)
 
-    noi._persist_er_lines("vina", path, "2026-03", {"4-01 Arriendos": 1000.0, "5-01 Gastos": -500.0})
+    persist_er_lines("vina", path, "2026-03", {"4-01 Arriendos": 1000.0, "5-01 Gastos": -500.0})
 
     conn = get_conn_for(tmp_db_path)
     rows = repo_er_activo.list_by_periodo(conn, "Viña Centro", "2026-03")
@@ -25,11 +26,12 @@ def test_persist_er_lines_vina(tmp_db_path, tmp_path, monkeypatch):
 
 
 def test_persist_er_lines_curico(tmp_db_path, tmp_path, monkeypatch):
+    from tools.db import ingest_er
     apply_migrations(tmp_db_path)
-    monkeypatch.setattr(noi, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
+    monkeypatch.setattr(ingest_er, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_eeff(tmp_path)
 
-    noi._persist_er_lines("curico", path, "2026-03", {"4-01": 777.0})
+    persist_er_lines("curico", path, "2026-03", {"4-01": 777.0})
 
     conn = get_conn_for(tmp_db_path)
     rows = repo_er_activo.list_by_periodo(conn, "Mall Curicó", "2026-03")
@@ -39,13 +41,14 @@ def test_persist_er_lines_curico(tmp_db_path, tmp_path, monkeypatch):
 
 
 def test_persist_er_idempotente(tmp_db_path, tmp_path, monkeypatch):
+    from tools.db import ingest_er
     apply_migrations(tmp_db_path)
-    monkeypatch.setattr(noi, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
+    monkeypatch.setattr(ingest_er, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_eeff(tmp_path)
     valores = {"4-01": 1.0, "5-01": 2.0}
 
-    noi._persist_er_lines("vina", path, "2026-03", valores)
-    noi._persist_er_lines("vina", path, "2026-03", valores)  # mismo archivo → no duplica
+    persist_er_lines("vina", path, "2026-03", valores)
+    persist_er_lines("vina", path, "2026-03", valores)  # mismo archivo → no duplica
 
     conn = get_conn_for(tmp_db_path)
     rows = repo_er_activo.list_by_periodo(conn, "Viña Centro", "2026-03")
@@ -54,11 +57,12 @@ def test_persist_er_idempotente(tmp_db_path, tmp_path, monkeypatch):
 
 
 def test_persist_er_registra_ingest_run(tmp_db_path, tmp_path, monkeypatch):
+    from tools.db import ingest_er
     apply_migrations(tmp_db_path)
-    monkeypatch.setattr(noi, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
+    monkeypatch.setattr(ingest_er, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_eeff(tmp_path)
 
-    noi._persist_er_lines("vina", path, "2026-03", {"4-01": 1.0})
+    persist_er_lines("vina", path, "2026-03", {"4-01": 1.0})
 
     conn = get_conn_for(tmp_db_path)
     run = conn.execute(
@@ -71,10 +75,11 @@ def test_persist_er_registra_ingest_run(tmp_db_path, tmp_path, monkeypatch):
 
 
 def test_persist_er_no_rompe_si_db_falla(tmp_path, monkeypatch):
+    from tools.db import ingest_er
     def _boom():
         raise RuntimeError("db caída")
 
-    monkeypatch.setattr(noi, "_db_get_conn", _boom)
+    monkeypatch.setattr(ingest_er, "_db_get_conn", _boom)
     path = _fake_eeff(tmp_path)
     # No debe levantar excepción.
-    noi._persist_er_lines("vina", path, "2026-03", {"4-01": 1.0})
+    persist_er_lines("vina", path, "2026-03", {"4-01": 1.0})
