@@ -179,6 +179,16 @@ def ingest_parsed_data(
                      periodo, source_file, file_hash),
                 )
                 vc_count += conn.execute("SELECT changes()").fetchone()[0]
+                # Superseder valores CDG para la misma fecha/nemotécnico/tipo
+                # (EEFF auditado tiene precedencia sobre CDG)
+                conn.execute(
+                    """UPDATE raw_valor_cuota_line
+                       SET superseded_at = CURRENT_TIMESTAMP
+                       WHERE nemotecnico = ? AND fecha = ? AND tipo = 'contable'
+                         AND source_file = 'cdg_extract.xlsx'
+                         AND superseded_at IS NULL""",
+                    (nemo, fecha),
+                )
 
             # Cuotas en circulación
             for serie, cuotas in data.get("cuotas", {}).items():
