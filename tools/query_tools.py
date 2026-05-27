@@ -129,40 +129,7 @@ def consultar_db_dividendos(nemotecnico: str) -> str:
 
 
 def consultar_db_cobertura() -> str:
-    """Resumen de qué datos hay en la DB: filas y rango de períodos por dominio."""
-    tablas = {
-        "rent_roll":   ("raw_rent_roll_line", "activo_key"),
-        "er_activo":   ("raw_er_activo_line", "activo_key"),
-        "flujo":       ("raw_flujo_line", "activo_key"),
-        "kpi":         ("derived_kpi", "entidad_key"),
-    }
-    lines = ["Cobertura de la DB del agente:"]
-    with get_conn() as conn:
-        for dom, (tabla, keycol) in tablas.items():
-            total = conn.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0]
-            if total == 0:
-                lines.append(f"  {dom}: vacío")
-                continue
-            rango = conn.execute(
-                f"SELECT MIN(periodo), MAX(periodo) FROM {tabla}"
-            ).fetchone()
-            entidades = [r[0] for r in conn.execute(
-                f"SELECT DISTINCT {keycol} FROM {tabla} ORDER BY {keycol}"
-            )]
-            lines.append(
-                f"  {dom}: {total} filas | {rango[0]}..{rango[1]} | "
-                f"{', '.join(entidades)}"
-            )
-        # Precios y UF (sin columna periodo)
-        for dom, tabla, fcol in [
-            ("precios", "fact_precio_cuota", "fecha"),
-            ("uf", "fact_uf", "fecha"),
-            ("dividendos", "fact_dividendo", "fecha_pago"),
-        ]:
-            total = conn.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0]
-            if total == 0:
-                lines.append(f"  {dom}: vacío")
-                continue
-            rango = conn.execute(f"SELECT MIN({fcol}), MAX({fcol}) FROM {tabla}").fetchone()
-            lines.append(f"  {dom}: {total} filas | {rango[0]}..{rango[1]}")
-    return "\n".join(lines)
+    """Reporta qué hay disponible en la DB y dónde hay gaps mensuales por activo/fondo."""
+    import json
+    from tools.db.coverage import audit_coverage
+    return json.dumps(audit_coverage(), ensure_ascii=False, indent=2)
