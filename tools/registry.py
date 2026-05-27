@@ -75,6 +75,7 @@ from tools.web_bursatil_tools import (
     obtener_precio_cuota,
     obtener_precios_mes,
 )
+from tools.uf_web_tools import actualizar_uf_desde_web
 from tools.rentroll_tools import (
     revisar_rent_rolls,
     revisar_rent_roll_jll,
@@ -604,6 +605,18 @@ TOOL_DEFINITIONS = [
                 },
                 "required": ["año", "mes"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "actualizar_uf_desde_web",
+            "description": (
+                "Descarga los valores de UF diaria desde mindicador.cl y actualiza fact_uf en la DB "
+                "con todos los días que falten desde la última fecha registrada hasta hoy. "
+                "Úsala antes de calcular cualquier indicador en UF si puede haber datos desactualizados."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
     {
@@ -1818,6 +1831,7 @@ def _dispatch(name: str, args: dict) -> str:
         "info_siguiente_accion":        lambda a: info_siguiente_accion(a["nombre_archivo"]),
         "obtener_precio_cuota":         lambda a: obtener_precio_cuota(a["nemotecnico"], a["año"], a["mes"]),
         "obtener_precios_mes":          lambda a: obtener_precios_mes(a["año"], a["mes"]),
+        "actualizar_uf_desde_web":      lambda _: str(actualizar_uf_desde_web()),
         "agregar_vr_bursatil_pt":       lambda a: agregar_vr_bursatil_pt(a["nombre_archivo"], a["año"], a["mes"], a["precio_cuota"]),
         "agregar_vr_bursatil_rentas":   lambda a: agregar_vr_bursatil_rentas(a["nombre_archivo"], a["año"], a["mes"], a["precio_a"], a["precio_c"], a["precio_i"]),
         "agregar_vr_contable_pt":       lambda a: agregar_vr_contable_pt(a["nombre_archivo"], a["año"], a["mes"], a["precio_cuota"]),

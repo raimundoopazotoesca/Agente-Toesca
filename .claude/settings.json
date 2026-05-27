@@ -17,7 +17,8 @@
       "Edit(~/.claude/skills/db-dashboard-expert/**)",
       "Edit(~/.claude/skills/db-ingestion-expert/**)",
       "Bash(python -X utf8 -c ' *)",
-      "Bash(python scripts/extract_cdg_vc.py)"
+      "Bash(python scripts/extract_cdg_vc.py)",
+      "Bash(Get-ChildItem -Recurse -File -Filter \"*.py\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\raimundo.opazo\\.claude\\skills"
