@@ -63,10 +63,12 @@ EXTRACT_PROMPT = """Del siguiente texto de EEFF TRI (Toesca Rentas Inmobiliarias
    c) cuotas_total: número TOTAL de cuotas en circulación para Series A, C e I
       (usar el valor TOTAL al final de la tabla de la nota Cuotas Emitidas, NO filas parciales)
 
-2. Del Estado de Cambios en el Patrimonio (tabla con columna "Aportes M$"):
-   - capital_total_mclp: saldo total de aportes al cierre del período (en M$)
-   - aportes_mclp: nuevos aportes recibidos en el período (fila "Aportes (+)", valor positivo)
-   - disminuciones_mclp: repartos de patrimonio en el período (fila "Repartos de patrimonio (-)", valor positivo)
+2. Del Estado de Cambios en el Patrimonio (puede haber una tabla por serie o una tabla consolidada):
+   - capital_suscrito_mclp: saldo de "Capital aportado" al CIERRE del período, POR SERIE A, C e I (M$).
+     Es el saldo final de la columna "Aportes M$" o "Capital aportado" para cada serie.
+     Si hay una sola tabla consolidada (sin desglose por serie), usar null para cada serie.
+   - aportes_mclp: nuevos aportes recibidos en el período (fila "Aportes (+)"), total fondo (M$)
+   - disminuciones_mclp: repartos de patrimonio en el período (fila "Repartos de patrimonio (-)"), total fondo (M$)
    Extraer para el período actual y comparativo.
 
 3. De la nota "Reparto de beneficios a los aportantes" (dividendos):
@@ -85,7 +87,7 @@ Retorna SOLO este JSON (sin texto extra):
       "fecha": "YYYY-MM-DD",
       "valor_cuota": {"A": null, "C": null, "I": null},
       "cuotas_total": {"A": null, "C": null, "I": null},
-      "capital_total_mclp": null,
+      "capital_suscrito_mclp": {"A": null, "C": null, "I": null},
       "aportes_mclp": null,
       "disminuciones_mclp": null
     }
@@ -210,7 +212,7 @@ def ingest_groq_result(
 
             valor_cuota = periodo_data.get("valor_cuota", {})
             cuotas_total = periodo_data.get("cuotas_total", {})
-            capital_uf = periodo_data.get("capital_suscrito_uf", {})
+            capital_suscrito_mclp = periodo_data.get("capital_suscrito_mclp", {}) or {}
 
             for serie in ["A", "C", "I"]:
                 nemo = SERIE_NEMO[serie]
@@ -258,8 +260,21 @@ def ingest_groq_result(
                     )
                     cuotas_count += conn.execute("SELECT changes()").fetchone()[0]
 
-            # ── Capital del fondo (nivel fondo, no por serie) ─────────────
-            # Guardar en raw_eeff_line usando códigos de cuenta especiales
+                # ── Capital suscrito por serie ─────────────────────────────
+                cap_mclp = capital_suscrito_mclp.get(serie)
+                if cap_mclp and uf_dia:
+                    cap_uf = (cap_mclp * 1_000_000) / uf_dia  # M$ → CLP → UF
+                    conn.execute(
+                        """INSERT OR REPLACE INTO raw_capital_suscrito_line
+                           (fondo_key, nemotecnico, fecha_fin_periodo, capital_suscrito_uf,
+                            periodo, source_file, file_hash)
+                           VALUES ('TRI', ?, ?, ?, ?, ?, ?)""",
+                        (nemo, fecha, cap_uf, periodo, source_file, file_hash),
+                    )
+                    cap_count += conn.execute("SELECT changes()").fetchone()[0]
+
+            # ── Capital del fondo (aportes/disminuciones del período) ──────
+            # Guardar en raw_eeff_line para trazabilidad de movimientos
             cap_total = periodo_data.get("capital_total_mclp")
             aportes = periodo_data.get("aportes_mclp")
             dism = periodo_data.get("disminuciones_mclp")
