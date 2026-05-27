@@ -64,21 +64,39 @@ EXTRACT_PROMPT = """Del siguiente texto de EEFF TRI (Toesca Rentas Inmobiliarias
       (usar el valor TOTAL al final de la tabla de la nota Cuotas Emitidas, NO filas parciales)
 
 2. Del Estado de Cambios en el Patrimonio (tabla con columna "Aportes M$"):
-   - capital_total_mclp: saldo total de aportes al cierre del período (en miles de CLP = M$)
-   - aportes_mclp: nuevos aportes recibidos en el período (fila "Aportes (+)")
-   - disminuciones_mclp: repartos/disminuciones de patrimonio en el período (fila "Repartos de patrimonio (-)")
+   - capital_total_mclp: saldo total de aportes al cierre del período (en M$)
+   - aportes_mclp: nuevos aportes recibidos en el período (fila "Aportes (+)", valor positivo)
+   - disminuciones_mclp: repartos de patrimonio en el período (fila "Repartos de patrimonio (-)", valor positivo)
    Extraer para el período actual y comparativo.
+
+3. De la nota "Reparto de beneficios a los aportantes" (dividendos):
+   Extraer TODOS los repartos listados por serie. Para cada reparto:
+   - fecha_pago: "YYYY-MM-DD" (fecha de distribución)
+   - serie: "A", "C" o "I"
+   - monto_por_cuota_clp: Monto por Cuota $ (en CLP, aplicar regla número chileno)
+   - monto_total_mclp: Monto total distribuido (M$)
+   - tipo: "definitivo" o "provisorio"
+   Nota: el mismo reparto aparece repetido para los 2 períodos — incluirlo UNA SOLA VEZ.
 
 Retorna SOLO este JSON (sin texto extra):
 {
   "periodos": [
     {
       "fecha": "YYYY-MM-DD",
-      "valor_cuota": {"A": float_o_null, "C": float_o_null, "I": float_o_null},
-      "cuotas_total": {"A": float_o_null, "C": float_o_null, "I": float_o_null},
-      "capital_total_mclp": float_o_null,
-      "aportes_mclp": float_o_null,
-      "disminuciones_mclp": float_o_null
+      "valor_cuota": {"A": null, "C": null, "I": null},
+      "cuotas_total": {"A": null, "C": null, "I": null},
+      "capital_total_mclp": null,
+      "aportes_mclp": null,
+      "disminuciones_mclp": null
+    }
+  ],
+  "dividendos": [
+    {
+      "fecha_pago": "YYYY-MM-DD",
+      "serie": "A",
+      "monto_por_cuota_clp": null,
+      "monto_total_mclp": null,
+      "tipo": "definitivo"
     }
   ]
 }
@@ -118,6 +136,14 @@ def _extract_cuotas_section(text: str) -> str:
     if m2:
         start2 = max(0, m2.start() - 100)
         parts.append("\n\n--- ESTADO DE CAMBIOS EN PATRIMONIO ---\n" + text[start2:start2 + 3000])
+
+    # ── Sección 3: Reparto de beneficios / Dividendos ───────────────────────
+    # Buscar la ocurrencia que es la nota contable real (seguida de texto, no de puntos "...")
+    for m3 in re.finditer(r"[Rr]eparto\s+de\s+beneficios\s+a\s+los\s+aportantes", text, re.IGNORECASE):
+        snippet = text[m3.start():m3.start() + 100]
+        if "..." not in snippet and "." * 5 not in snippet:  # no es entrada de índice
+            parts.append("\n\n--- REPARTO DE BENEFICIOS (DIVIDENDOS) ---\n" + text[m3.start():m3.start() + 3000])
+            break
 
     return "\n\n".join(parts) if parts else text[:5000]
 
@@ -254,6 +280,23 @@ def ingest_groq_result(
                     )
                     cap_count += conn.execute("SELECT changes()").fetchone()[0]
 
+        # ── Dividendos ────────────────────────────────────────────────────────
+        div_count = 0
+        for div in parsed.get("dividendos", []):
+            fecha_pago = _parse_fecha(div.get("fecha_pago", ""))
+            serie = div.get("serie", "").upper()
+            monto = div.get("monto_por_cuota_clp")
+            nemo = SERIE_NEMO.get(serie)
+            if not (fecha_pago and nemo and monto):
+                continue
+            conn.execute(
+                """INSERT OR IGNORE INTO fact_dividendo
+                   (nemotecnico, fecha_pago, monto)
+                   VALUES (?, ?, ?)""",
+                (nemo, fecha_pago, monto),
+            )
+            div_count += conn.execute("SELECT changes()").fetchone()[0]
+
         conn.commit()
     finally:
         conn.close()
@@ -262,6 +305,7 @@ def ingest_groq_result(
         "valor_cuota_insertadas": vc_count,
         "cuotas_insertadas": cuotas_count,
         "capital_insertadas": cap_count,
+        "dividendos_insertados": div_count,
     }
 
 
