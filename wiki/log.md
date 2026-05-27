@@ -3,6 +3,17 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-05-27] feat | Extractor Groq EEFF TRI — independencia del CDG
+
+Nuevo módulo `tools/db/ingest_eeff_tri_groq.py` (llama-3.3-70b-versatile via Groq):
+extrae valor cuota libro, cuotas en circulación, capital/aportes/disminuciones y dividendos
+desde PDFs de EEFF TRI. Fix bug regex (capturaba primer valor de tabla en vez del TOTAL).
+Dedup: `tools/db/dedup_eeff_tri.py` supersede redundantes, DB sin duplicados.
+Estado: 17/32 PDFs procesados (límite diario 100k tokens free tier). 15 PDFs pendientes
+para próxima sesión. Validación 52/56 comparaciones EEFF vs CDG = 0.00% diff exacta;
+2025-12-31 EEFF correcto (31.869), CDG tenía error (35.791) ya supersedido.
+Pendiente: test capital+dividendos, backfill 15 PDFs restantes.
+
 ## [2026-05-27] refactor | Limpieza CDG legacy + pipeline ingesta DB-centric
 
 Eliminados módulos CDG-write (`noi_tools`, `vacancia_tools`, `datos_fs_tools`, `caja_tools`, `input_tools`, `balance_consolidado_tools`) — 7.319 líneas, 32 tools desregistradas. Funciones de ingesta a DB recuperadas a `tools/db/ingest_er.py` y `tools/db/ingest_flujo.py`. Nuevo: `tools/db/coverage.py` (audit de gaps), `tools/db/ingest_router.py` (tool `ingestar_archivo` con detección por nombre), `scripts/ingest_eeff.py` generaliza a TRI/PT/APO, migración 010 con índices. System prompt explícito: DB es fuente primaria. Doc: `docs/ingest_pipeline.md`.
