@@ -50,10 +50,11 @@ def ingest_cdg_extract_tri(excel_path: str) -> Dict:
 
         fecha = ws[f'D{row_num}'].value
         serie = ws[f'F{row_num}'].value
+        monto_clp_cuota = ws[f'I{row_num}'].value   # $/cuota (columna I)
         cuota_count = ws[f'J{row_num}'].value
-        monto_uf_cuota = ws[f'K{row_num}'].value
+        monto_uf_cuota = ws[f'M{row_num}'].value     # UF/cuota (columna M)
 
-        if not (fecha and serie and monto_uf_cuota):
+        if not (fecha and serie and monto_clp_cuota):
             continue
 
         nemo = NEMO_MAP.get(str(serie).strip())
@@ -63,12 +64,12 @@ def ingest_cdg_extract_tri(excel_path: str) -> Dict:
         fecha_str = fecha.strftime('%Y-%m-%d')
         periodo = f"{fecha.year}-{fecha.month:02d}"
 
-        # Consolidar por fecha y serie
         if fecha_str not in dividendos:
             dividendos[fecha_str] = {}
             cuotas[fecha_str] = {}
 
         dividendos[fecha_str][nemo] = {
+            'monto_clp_cuota': monto_clp_cuota,
             'monto_uf_cuota': monto_uf_cuota,
             'periodo': periodo,
             'fecha': fecha_str
@@ -85,6 +86,7 @@ def ingest_cdg_extract_tri(excel_path: str) -> Dict:
             fondo_key TEXT NOT NULL,
             nemotecnico TEXT NOT NULL,
             fecha_pago TEXT NOT NULL,
+            monto_clp_cuota REAL,
             monto_uf_cuota REAL,
             periodo TEXT,
             source_file TEXT,
@@ -122,10 +124,11 @@ def ingest_cdg_extract_tri(excel_path: str) -> Dict:
             try:
                 conn.execute("""
                     INSERT OR REPLACE INTO raw_dividendo_line
-                    (fondo_key, nemotecnico, fecha_pago, monto_uf_cuota, periodo, source_file, file_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (fondo_key, nemotecnico, fecha_pago, monto_clp_cuota, monto_uf_cuota, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    'TRI', nemo, fecha_str, data['monto_uf_cuota'],
+                    'TRI', nemo, fecha_str,
+                    data['monto_clp_cuota'], data['monto_uf_cuota'],
                     data['periodo'], source_file, file_hash
                 ))
                 dividendos_insertados += 1
