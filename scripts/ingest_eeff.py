@@ -1,11 +1,14 @@
 """
-Ingesta de EEFF históricos del fondo TRI desde archivos MD (convertidos con MarkItDown).
+Ingesta de EEFF históricos desde archivos MD (convertidos con MarkItDown).
 Usa Gemini 2.5 Flash para extraer JSON estructurado y persiste en raw_eeff_line.
 
+Soporta múltiples fondos: TRI, PT, APO.
+
 Uso:
-  python scripts/ingest_eeff_tri.py --file <md_path>     # un archivo (test)
-  python scripts/ingest_eeff_tri.py --all                # todos los MD de work/eeff_ingesta/TRI/md
-  python scripts/ingest_eeff_tri.py --dry-run            # no persiste, solo dumpea JSON a disco
+  python scripts/ingest_eeff.py --fondo TRI --file <md_path>     # un archivo (test)
+  python scripts/ingest_eeff.py --fondo TRI --all                # todos los MD de work/eeff_ingesta/TRI/md
+  python scripts/ingest_eeff.py --fondo PT --dry-run             # no persiste, solo dumpea JSON a disco
+  python scripts/ingest_eeff.py --help                           # muestra opciones
 """
 import argparse
 import hashlib
@@ -22,14 +25,18 @@ from config import GEMINI_API_KEY
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "memory" / "agente_toesca.db"
-MD_DIR = ROOT / "work" / "eeff_ingesta" / "TRI" / "md"
-PDF_DIR = ROOT / "work" / "eeff_ingesta" / "TRI" / "pdf"
-JSON_DIR = ROOT / "work" / "eeff_ingesta" / "TRI" / "json"
-JSON_DIR.mkdir(parents=True, exist_ok=True)
 
 import os
 MODEL = os.getenv("EEFF_INGEST_MODEL", "gemini-2.5-flash-lite")
-FONDO_KEY = "TRI"
+
+def paths_for_fondo(fondo_key: str) -> tuple[Path, Path, Path]:
+    """Devuelve (md_dir, pdf_dir, json_dir) para un fondo dado."""
+    base = ROOT / "work" / "eeff_ingesta" / fondo_key
+    md_dir = base / "md"
+    pdf_dir = base / "pdf"
+    json_dir = base / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
+    return md_dir, pdf_dir, json_dir
 
 client = OpenAI(
     api_key=GEMINI_API_KEY,
@@ -145,10 +152,10 @@ def call_gemini(md_text: str, filename: str, raw_dump: Path | None = None) -> di
         return json.loads(_try_repair_json(content))
 
 
-def get_pdf_for_md(md_path: Path) -> Path | None:
+def get_pdf_for_md(md_path: Path, pdf_dir: Path) -> Path | None:
     """Encuentra el PDF/DOCX original cuyo stem coincide."""
     for ext in (".pdf", ".docx"):
-        cand = PDF_DIR / (md_path.stem + ext)
+        cand = pdf_dir / (md_path.stem + ext)
         if cand.exists():
             return cand
     return None
@@ -162,11 +169,11 @@ def ensure_ingest_run(con: sqlite3.Connection, source_file: str, fhash: str) -> 
     return cur.lastrowid
 
 
-def insert_lines(con: sqlite3.Connection, lineas: list[dict], source_file: str, fhash: str, run_id: int):
+def insert_lines(con: sqlite3.Connection, lineas: list[dict], fondo_key: str, source_file: str, fhash: str, run_id: int):
     rows = []
     for L in lineas:
         rows.append((
-            FONDO_KEY,
+            fondo_key,
             L.get("periodo"),
             L.get("cuenta_codigo"),
             L.get("cuenta_nombre"),
@@ -196,19 +203,19 @@ def already_ingested(con: sqlite3.Connection, fhash: str) -> bool:
     return n > 0
 
 
-def process_file(md_path: Path, dry_run: bool = False) -> dict:
-    pdf = get_pdf_for_md(md_path)
+def process_file(md_path: Path, fondo_key: str, pdf_dir: Path, json_dir: Path, dry_run: bool = False) -> dict:
+    pdf = get_pdf_for_md(md_path, pdf_dir)
     if pdf is None:
         return {"file": md_path.name, "error": "PDF/DOCX original no encontrado"}
     fhash = file_hash(pdf)
     md_text = md_path.read_text(encoding="utf-8")
 
     print(f"[{md_path.name}] enviando a Gemini ({len(md_text)} chars)...", flush=True)
-    raw_dump = JSON_DIR / (md_path.stem + ".raw.txt")
+    raw_dump = json_dir / (md_path.stem + ".raw.txt")
     data = call_gemini(md_text, md_path.name, raw_dump=raw_dump)
 
     # dump JSON to disk for inspection
-    json_out = JSON_DIR / (md_path.stem + ".json")
+    json_out = json_dir / (md_path.stem + ".json")
     json_out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     lineas = data.get("lineas", [])
@@ -224,7 +231,7 @@ def process_file(md_path: Path, dry_run: bool = False) -> dict:
             print(f"  -> ya ingestado (file_hash existe), skip", flush=True)
             return {"file": md_path.name, "skipped": True, "file_hash": fhash}
         run_id = ensure_ingest_run(con, source_file=pdf.name, fhash=fhash)
-        n = insert_lines(con, lineas, source_file=pdf.name, fhash=fhash, run_id=run_id)
+        n = insert_lines(con, lineas, fondo_key=fondo_key, source_file=pdf.name, fhash=fhash, run_id=run_id)
         con.execute(
             "UPDATE ingest_run SET status=?, ended_at=?, rows_in=?, rows_loaded=? WHERE id=?",
             ("ok", datetime.now().isoformat(timespec="seconds"), len(lineas), n, run_id),
@@ -237,22 +244,25 @@ def process_file(md_path: Path, dry_run: bool = False) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--fondo", required=True, choices=["TRI", "PT", "APO"], help="fondo a ingestar (TRI, PT, APO)")
     ap.add_argument("--file", help="ruta a un MD específico")
-    ap.add_argument("--all", action="store_true", help="procesa todos los MD en work/eeff_ingesta/TRI/md")
+    ap.add_argument("--all", action="store_true", help="procesa todos los MD en work/eeff_ingesta/<FONDO>/md")
     ap.add_argument("--dry-run", action="store_true", help="no persiste; solo dumpea JSON")
     args = ap.parse_args()
+
+    md_dir, pdf_dir, json_dir = paths_for_fondo(args.fondo)
 
     if args.file:
         files = [Path(args.file)]
     elif args.all:
-        files = sorted(MD_DIR.glob("*.md"))
+        files = sorted(md_dir.glob("*.md"))
     else:
         ap.error("usar --file o --all")
 
     results = []
     for f in files:
         try:
-            r = process_file(f, dry_run=args.dry_run)
+            r = process_file(f, fondo_key=args.fondo, pdf_dir=pdf_dir, json_dir=json_dir, dry_run=args.dry_run)
         except Exception as e:
             r = {"file": f.name, "error": str(e)}
         results.append(r)
