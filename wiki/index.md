@@ -16,6 +16,12 @@
 | [[agente/arquitectura]] | Stack técnico, archivos principales, variables de entorno | 2026-05-01 |
 | [[agente/herramientas]] | Catálogo de todos los tools con descripción y archivo fuente | 2026-05-01 |
 
+## Skills
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[skills/real-estate-finance-expert]] | Computar KPIs financieros (rentabilidades, cap rate, dividend yield, TIR) con caching inteligente; fórmulas editables | 2026-05-27 |
+
 ## Fondos
 
 | Página | Descripción | Fuentes | Actualizado |
