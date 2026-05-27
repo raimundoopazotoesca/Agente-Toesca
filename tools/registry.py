@@ -162,6 +162,12 @@ from tools.query_tools import (
 )
 from tools.db.dashboard import generar_dashboard
 from tools.noi_query import consultar_noi
+from tools.finance_tools import (
+    calcular_indicador_financiero,
+    listar_indicadores_disponibles,
+    invalidar_cache_indicador,
+    verificar_skill,
+)
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -2466,6 +2472,94 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    # Real Estate Finance Indicators (skill: real-estate-finance-expert)
+    {
+        "type": "function",
+        "function": {
+            "name": "calcular_indicador",
+            "description": (
+                "Calcula un indicador financiero derivado (rentabilidades, cap rate, dividend yield, TIR, tasas de arriendo) "
+                "a partir de agente_toesca.db. Invoca la skill real-estate-finance-expert automáticamente. "
+                "Usa cache si el indicador ya fue computado para ese período; persiste resultados si compensa el costo. "
+                "Ejemplos de KPI: 'rent_anualizada', 'cap_rate_implicito', 'dividend_yield', 'tasa_arriendo_uf_m2'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kpi": {
+                        "type": "string",
+                        "description": "Nombre del indicador (ej: 'rent_anualizada', 'cap_rate_implicito', 'dividend_yield', 'tasa_arriendo_uf_m2')"
+                    },
+                    "entidad_tipo": {
+                        "type": "string",
+                        "description": "Tipo de entidad ('serie', 'activo', 'fondo', etc)"
+                    },
+                    "entidad_key": {
+                        "type": "string",
+                        "description": "Identificador único (ej: 'CFITOERI1A' para TRI Serie A, 'Parque Titanium' para PT)"
+                    },
+                    "periodo": {
+                        "type": "string",
+                        "description": "Período en formato YYYY-MM (ej: '2026-03', '2026-04')"
+                    },
+                    "force_recompute": {
+                        "type": "boolean",
+                        "description": "Si true, recalcula aunque esté en cache (default: false)"
+                    },
+                },
+                "required": ["kpi", "entidad_tipo", "entidad_key", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "listar_indicadores",
+            "description": (
+                "Lista todos los indicadores financieros disponibles en la skill real-estate-finance-expert. "
+                "Muestra cuáles están operativos y cuáles tienen dependencias pendientes (placeholders)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "invalidar_cache_indicador",
+            "description": (
+                "Invalida el cache de un indicador específico. "
+                "La próxima consulta recalculará desde datos crudos. "
+                "Útil después de actualizar la DB o cambiar fórmulas en config/formulas.yaml."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kpi": {
+                        "type": "string",
+                        "description": "Nombre del indicador a invalidar (ej: 'rent_anualizada')"
+                    },
+                },
+                "required": ["kpi"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "verificar_skill_finanzas",
+            "description": (
+                "Verifica que la skill real-estate-finance-expert esté instalada y accesible. "
+                "Útil para diagnosticar si hay problemas de importación."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
 ]
 
 _WRITE_TOOL_FILE_ARGS = {
@@ -2694,6 +2788,13 @@ def _dispatch(name: str, args: dict) -> str:
         "eliminar_carpeta_sharepoint": lambda a: eliminar_carpeta_sharepoint(a["ruta"]),
         "reemplazar_en_tool":          lambda a: reemplazar_en_tool(a["nombre_archivo"], a["texto_viejo"], a["texto_nuevo"]),
         "reemplazar_en_wiki":          lambda a: reemplazar_en_wiki(a["nombre_archivo"], a["texto_viejo"], a["texto_nuevo"]),
+        # Real Estate Finance Indicators (skill: real-estate-finance-expert)
+        "calcular_indicador":          lambda a: calcular_indicador_financiero(
+            a["kpi"], a["entidad_tipo"], a["entidad_key"], a["periodo"], a.get("force_recompute", False)
+        ),
+        "listar_indicadores":          lambda a: listar_indicadores_disponibles(),
+        "invalidar_cache_indicador":   lambda a: invalidar_cache_indicador(a["kpi"]),
+        "verificar_skill_finanzas":    lambda a: verificar_skill(),
     }
     fn = dispatch.get(name)
     if fn is None:
@@ -2719,6 +2820,7 @@ _TOOLS_GENERAL = {
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
     "consultar_db_dividendos", "consultar_noi", "generar_dashboard",
+    "calcular_indicador", "listar_indicadores", "invalidar_cache_indicador", "verificar_skill_finanzas",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",
