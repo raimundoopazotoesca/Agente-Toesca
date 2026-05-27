@@ -26,6 +26,12 @@ def detect_tipo(path: str) -> Optional[str]:
         return "rent_roll_tresa_vina"
     if "tres a" in bn and ("curico" in bn or "curicó" in bn):
         return "rent_roll_tresa_curico"
+    if bn.endswith(".pdf") and (
+        "toesca rentas" in bn
+        or "rentas inmobiliarias" in bn
+        or "fondo toesca rentas" in bn
+    ):
+        return "eeff_tri_fondo"
     if bn.endswith(".pdf") and "eeff" in bn:
         return "eeff_pdf"
     return None
@@ -114,5 +120,9 @@ def ingestar_archivo(path: str, periodo: Optional[str] = None) -> dict:
             total_filas += n
             periodos_ingestados.append(p)
         return {"tipo": tipo, "filas": total_filas, "periodos": periodos_ingestados, "activo": "INMOSA"}
+
+    if tipo == "eeff_tri_fondo":
+        from tools.db.ingest_eeff_tri_series import ingest_eeff_tri_pdf
+        return ingest_eeff_tri_pdf(path)
 
     return {"error": f"Tipo {tipo} reconocido pero ingesta no implementada todavía. Usa el script o backfill correspondiente."}
