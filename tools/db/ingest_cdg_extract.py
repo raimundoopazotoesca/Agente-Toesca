@@ -192,13 +192,13 @@ def ingest_capital_suscrito(excel_path: str) -> Dict:
     for row_num in range(16, 900):
         fecha = ws[f'D{row_num}'].value
         serie = ws[f'F{row_num}'].value
-        tipo = ws[f'G{row_num}'].value
+        detalle = ws[f'E{row_num}'].value   # col E = Detalle (no col G = Tipo)
         monto_uf = ws[f'L{row_num}'].value
 
-        if not (fecha and serie and tipo and monto_uf is not None):
+        if not (fecha and serie and detalle and monto_uf is not None):
             continue
 
-        tipo_str = str(tipo).strip()
+        tipo_str = str(detalle).strip()
         if tipo_str not in TIPOS_CAPITAL:
             continue
 
@@ -257,6 +257,175 @@ def ingest_capital_suscrito(excel_path: str) -> Dict:
         'capital_suscrito_insertados': insertados,
         'series': list(NEMO_MAP.values())
     }
+
+
+def ingest_vr_contable(excel_path: str) -> Dict:
+    """
+    Lee hoja 'A&R Rentas' y persiste VR Contable (valor libro) por serie/fecha.
+    VR Contable = Monto UF/cuota (col M) donde Detalle = 'VR Contable', Serie = X, Fecha = exacta.
+    Guarda en raw_valor_cuota_line con tipo='contable' y source_file='cdg_extract.xlsx'.
+    Solo inserta si no existe ya una fila para (nemotecnico, fecha, tipo='contable') de EEFF PDF.
+    """
+    path = Path(excel_path)
+    if not path.exists():
+        return {'error': f'Archivo no encontrado: {excel_path}'}
+
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        ws = wb['A&R Rentas']
+    except Exception as e:
+        return {'error': f'Error abriendo Excel: {e}'}
+
+    NEMO_MAP = {'A': 'CFITOERI1A', 'C': 'CFITOERI1C', 'I': 'CFITOERI1I'}
+
+    # Recoger valores: (fecha_str, nemo) → (precio_uf_cuota, cuotas, monto_uf)
+    data: dict = {}
+    for row_num in range(16, 1200):
+        fecha = ws[f'D{row_num}'].value
+        detalle = ws[f'E{row_num}'].value
+        serie = ws[f'F{row_num}'].value
+        cuotas = ws[f'J{row_num}'].value
+        monto_uf = ws[f'L{row_num}'].value
+        muf_cuota = ws[f'M{row_num}'].value   # Monto UF / cuota = VR Contable
+
+        if fecha is None:
+            break
+        if not (detalle and serie and muf_cuota is not None):
+            continue
+        if 'VR Contable' not in str(detalle):
+            continue
+
+        nemo = NEMO_MAP.get(str(serie).strip())
+        if not nemo:
+            continue
+
+        fecha_str = fecha.strftime('%Y-%m-%d')
+        data[(fecha_str, nemo)] = (muf_cuota, cuotas, monto_uf)
+
+    conn = get_conn()
+    file_hash = _hash_file(excel_path)
+    source_file = Path(excel_path).name
+
+    insertados = 0
+    omitidos = 0
+    discrepancias = []
+
+    for (fecha_str, nemo), (precio_uf, cuotas, monto_uf) in data.items():
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+        periodo = f"{fecha_obj.year}-{fecha_obj.month:02d}"
+
+        # Verificar si ya existe una fila de EEFF PDF para esta fecha/nemo
+        existing = conn.execute("""
+            SELECT precio_uf, source_file FROM raw_valor_cuota_line
+            WHERE fondo_key = 'TRI' AND nemotecnico = ? AND fecha = ? AND tipo = 'contable'
+              AND source_file NOT LIKE '%cdg_extract%'
+        """, (nemo, fecha_str)).fetchone()
+
+        if existing:
+            diff = abs(existing[0] - precio_uf) / precio_uf if precio_uf else 0
+            if diff > 0.001:  # más del 0.1% de diferencia
+                discrepancias.append((fecha_str, nemo, precio_uf, existing[0], existing[1]))
+            omitidos += 1
+            continue  # EEFF PDF tiene precedencia
+
+        try:
+            conn.execute("""
+                INSERT INTO raw_valor_cuota_line
+                (fondo_key, nemotecnico, fecha, tipo, precio_uf, cuotas, periodo, source_file, file_hash)
+                VALUES (?, ?, ?, 'contable', ?, ?, ?, ?, ?)
+            """, ('TRI', nemo, fecha_str, precio_uf, cuotas, periodo, source_file, file_hash))
+            insertados += 1
+        except Exception:
+            omitidos += 1
+
+    conn.commit()
+    result: Dict = {'insertados': insertados, 'omitidos_eeff_prioritario': omitidos}
+    if discrepancias:
+        result['discrepancias'] = [
+            {'fecha': d[0], 'nemo': d[1], 'ar_rentas': round(d[2], 9),
+             'eeff_pdf': round(d[3], 9), 'pdf_source': d[4]}
+            for d in discrepancias
+        ]
+    return result
+
+
+def ingest_patrimonio_bursatil(excel_path: str) -> Dict:
+    """
+    Lee hoja 'A&R Rentas' y persiste el Patrimonio Bursátil por serie/fecha.
+    Patrimonio Bursátil = SUM(Monto UF) donde Detalle = 'VR Bursátil', Serie = X, Fecha = exacta.
+    Cada fecha de corte genera una fila por serie en raw_patrimonio_bursatil_line.
+    """
+    path = Path(excel_path)
+    if not path.exists():
+        return {'error': f'Archivo no encontrado: {excel_path}'}
+
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        ws = wb['A&R Rentas']
+    except Exception as e:
+        return {'error': f'Error abriendo Excel: {e}'}
+
+    NEMO_MAP = {'A': 'CFITOERI1A', 'C': 'CFITOERI1C', 'I': 'CFITOERI1I'}
+
+    # Acumular por (fecha, serie) — puede haber más de una fila por fecha/serie
+    from collections import defaultdict
+    acum: dict = defaultdict(float)
+
+    for row_num in range(16, 1200):
+        fecha = ws[f'D{row_num}'].value
+        detalle = ws[f'E{row_num}'].value
+        serie = ws[f'F{row_num}'].value
+        monto_uf = ws[f'L{row_num}'].value
+
+        if fecha is None:
+            break
+        if not (detalle and serie and monto_uf is not None):
+            continue
+        if 'VR Burs' not in str(detalle):
+            continue
+
+        nemo = NEMO_MAP.get(str(serie).strip())
+        if not nemo:
+            continue
+
+        fecha_str = fecha.strftime('%Y-%m-%d')
+        acum[(fecha_str, nemo)] += monto_uf
+
+    conn = get_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS raw_patrimonio_bursatil_line (
+            id          INTEGER PRIMARY KEY,
+            fondo_key   TEXT NOT NULL,
+            nemotecnico TEXT NOT NULL,
+            fecha       TEXT NOT NULL,
+            patrimonio_uf REAL NOT NULL,
+            periodo     TEXT,
+            source_file TEXT,
+            file_hash   TEXT,
+            loaded_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nemotecnico, fecha, file_hash)
+        )
+    """)
+
+    file_hash = _hash_file(excel_path)
+    source_file = Path(excel_path).name
+
+    insertados = 0
+    for (fecha_str, nemo), pat_uf in acum.items():
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+        periodo = f"{fecha_obj.year}-{fecha_obj.month:02d}"
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO raw_patrimonio_bursatil_line
+                (fondo_key, nemotecnico, fecha, patrimonio_uf, periodo, source_file, file_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, ('TRI', nemo, fecha_str, pat_uf, periodo, source_file, file_hash))
+            insertados += 1
+        except Exception:
+            pass
+
+    conn.commit()
+    return {'insertados': insertados, 'fechas_unicas': len(set(k[0] for k in acum))}
 
 
 def _hash_file(path: str) -> str:

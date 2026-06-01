@@ -29,7 +29,7 @@ def calcular_indicador_financiero(
     force_recompute: bool = False,
 ) -> str:
     """
-    Calcula un indicador financiero derivado desde agente_toesca.db.
+    Calcula un indicador financiero derivado desde agente_toesca_v2.db.
 
     Args:
         kpi: Nombre del indicador (ej: "rent_anualizada", "cap_rate_implicito", "dividend_yield")
@@ -86,7 +86,7 @@ def listar_indicadores_disponibles() -> str:
             {"kpi": "tasa_arriendo_uf_m2", "descripcion": "Tasa de arriendo promedio ponderado UF/m²"},
         ],
         "placeholders": [
-            {"kpi": "tir_actual", "descripcion": "TIR actual (XIRR) — TODO: numpy_financial", "blocker": "numpy_financial"},
+            {"kpi": "tir_actual", "descripcion": "TIR actual (XIRR) — pendiente implementación"},
             {"kpi": "ltv", "descripcion": "Loan-to-value — TODO: dim_deuda", "blocker": "dim_deuda"},
             {"kpi": "dscr", "descripcion": "Debt Service Coverage Ratio — TODO: fact_servicio_deuda", "blocker": "fact_servicio_deuda"},
         ]
@@ -136,5 +136,5 @@ def verificar_skill() -> str:
     return json.dumps({
         "disponible": True,
         "skill_path": str(SKILL_SCRIPTS.parent),
-        "db_path": "agente_toesca.db (en proyecto automation_agent)"
+        "db_path": "agente_toesca_v2.db (en proyecto automation_agent)"
     })

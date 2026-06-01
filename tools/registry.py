@@ -108,6 +108,11 @@ from tools.query_tools import (
     consultar_db_flujo,
     consultar_db_dividendos,
     consultar_db_cobertura,
+    consultar_db_capital_suscrito,
+    consultar_db_patrimonio_bursatil,
+    consultar_db_valor_libro,
+    consultar_db_valor_bursatil,
+    consultar_dividend_yield,
 )
 from tools.db.dashboard import generar_dashboard
 from tools.db.ingest_router import ingestar_archivo
@@ -118,6 +123,7 @@ from tools.finance_tools import (
     invalidar_cache_indicador,
     verificar_skill,
 )
+from tools.financiamiento_tools import consultar_financiamiento
 
 _MAX_TOOL_RESULT    = 6_000   # chars máximos por resultado de tool antes de truncar
 TOOL_DEFINITIONS = [
@@ -1156,12 +1162,206 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_db_valor_bursatil",
+            "description": (
+                "Consulta el VR Bursátil por cuota por serie TRI en UF. "
+                "= SUM(Monto UF/cuota col M) donde Detalle='VR Bursátil' y Fecha=exacta. "
+                "Dato mensual desde 2017-12 hasta 2026-03. "
+                "Distinto de Patrimonio Bursátil total (que usa col L). Aquí se usa col M."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {
+                        "type": "string",
+                        "description": "Ej: 'CFITOERI1A' (Serie A), 'CFITOERI1C' (Serie C), 'CFITOERI1I' (Serie I). Omitir para todas."
+                    },
+                    "fecha": {
+                        "type": "string",
+                        "description": "Fecha exacta: 'YYYY-MM-DD' o 'YYYY-MM'. Omitir para la última disponible."
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_valor_libro",
+            "description": (
+                "Consulta el VR Contable (valor libro) por cuota por serie TRI en UF. "
+                "Fuente: raw_valor_cuota_line tipo='contable' (EEFF PDFs prioritario, fallback A&R Rentas). "
+                "Dato trimestral. Devuelve precio_uf = UF por cuota a la fecha exacta solicitada."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {
+                        "type": "string",
+                        "description": "Ej: 'CFITOERI1A' (Serie A), 'CFITOERI1C' (Serie C), 'CFITOERI1I' (Serie I). Omitir para todas."
+                    },
+                    "fecha": {
+                        "type": "string",
+                        "description": "Fecha de corte trimestral: 'YYYY-MM-DD' o 'YYYY-MM'. Omitir para la última disponible."
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_patrimonio_bursatil",
+            "description": (
+                "Consulta el Patrimonio Bursátil por serie del fondo TRI desde la base de datos. "
+                "Patrimonio Bursátil = SUM(Monto UF) de filas con Detalle='VR Bursátil' para la fecha exacta. "
+                "Cubre 114 fechas mensuales desde 2017 hasta 2026-03. "
+                "A diferencia del capital suscrito, NO es acumulado — es un snapshot mensual."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {
+                        "type": "string",
+                        "description": "Ej: 'CFITOERI1A' (Serie A), 'CFITOERI1C' (Serie C), 'CFITOERI1I' (Serie I). Omitir para todas."
+                    },
+                    "fecha": {
+                        "type": "string",
+                        "description": "Fecha exacta de corte: 'YYYY-MM-DD' o 'YYYY-MM' (se expande al último día del mes). Omitir para la última disponible."
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_capital_suscrito",
+            "description": (
+                "Consulta el capital suscrito acumulado por serie del fondo TRI desde la base de datos. "
+                "Calcula desde movimientos históricos A&R (Aportes + Canjes - Disminuciones en UF). "
+                "Para un período dado devuelve el último valor acumulado en o antes de esa fecha. "
+                "Si no se especifica fecha_corte, devuelve el último disponible (sep-2021)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {
+                        "type": "string",
+                        "description": "Ej: 'CFITOERI1A' (Serie A), 'CFITOERI1C' (Serie C), 'CFITOERI1I' (Serie I). Omitir para todas."
+                    },
+                    "fecha_corte": {
+                        "type": "string",
+                        "description": "Fecha de corte: 'YYYY-MM-DD' o 'YYYY-MM'. Devuelve el acumulado en o antes de esta fecha."
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_financiamiento",
+            "description": (
+                "Consulta información de deuda y financiamiento del portfolio Toesca desde la DB. "
+                "Tipos disponibles:\n"
+                "  creditos_vigentes: lista créditos bancarios con saldo, tasa, vencimiento.\n"
+                "  amortizacion: capital amortizado en un período (desde/hasta YYYY-MM).\n"
+                "  saldo_deuda: saldo de deuda actual por fondo o crédito.\n"
+                "  perfil_vencimientos: amortizaciones anuales proyectadas (histograma).\n"
+                "  pagares: pagarés intercompañía fondo↔sociedad.\n"
+                "  dy_amort: DY + amortización por serie TRI (A/C/I) y año."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["creditos_vigentes", "amortizacion", "saldo_deuda",
+                                 "perfil_vencimientos", "pagares", "dy_amort"],
+                        "description": "Tipo de consulta.",
+                    },
+                    "fondo": {
+                        "type": "string",
+                        "description": "Filtrar por fondo: 'TRI', 'PT' o 'Apo'. Opcional.",
+                    },
+                    "desde": {
+                        "type": "string",
+                        "description": "Período inicio YYYY-MM (para tipo=amortizacion).",
+                    },
+                    "hasta": {
+                        "type": "string",
+                        "description": "Período fin YYYY-MM (para tipo=amortizacion).",
+                    },
+                    "credito_key": {
+                        "type": "string",
+                        "description": "Clave de crédito específico, ej: TRI_SUCDEN_BICE. Opcional.",
+                    },
+                    "fecha_corte": {
+                        "type": "string",
+                        "description": "Fecha de corte YYYY-MM para dy_amort (rolling 12 meses hasta esa fecha). Por defecto: mes anterior al día de hoy.",
+                    },
+                    "tipo_valor": {
+                        "type": "string",
+                        "enum": ["bursatil", "contable"],
+                        "description": "Tipo de valor cuota para dy_amort: 'bursatil' o 'contable'. Por defecto: bursatil.",
+                    },
+                },
+                "required": ["tipo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "consultar_db_dividendos",
             "description": "Consulta el historial de dividendos por cuota de una serie desde la base de datos. Nemotécnicos: CFITRIPT-E, CFITOERI1A/C/I.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "nemotecnico": {"type": "string", "description": "Ej CFITRIPT-E"},
+                },
+                "required": ["nemotecnico"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_dividend_yield",
+            "description": (
+                "Calcula el dividend yield o total de dividendos repartidos de una serie TRI. "
+                "tipo='contable' (default): DY = dividendos U12M UF/cuota / valor libro UF/cuota. "
+                "tipo='bursatil': DY = dividendos U12M UF/cuota / precio bursátil UF/cuota. "
+                "tipo='total': suma total de dividendos UF/cuota repartidos en el año. "
+                "Usar cuando el usuario pregunta por: dividend yield, DY, rentabilidad por dividendos, "
+                "cuánto rinde el fondo en dividendos, total dividendos repartidos, distribuciones. "
+                "Nemotécnicos TRI: CFITOERI1A (Serie A), CFITOERI1C (Serie C), CFITOERI1I (Serie I)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nemotecnico": {
+                        "type": "string",
+                        "description": "Ej. CFITOERI1A, CFITOERI1C, CFITOERI1I",
+                    },
+                    "periodo": {
+                        "type": "string",
+                        "description": "Período de referencia YYYY-MM. Si se omite, usa el año más reciente con datos.",
+                    },
+                    "anio": {
+                        "type": "integer",
+                        "description": "Año calendario (ej. 2025). Alternativo a periodo; usa diciembre de ese año.",
+                    },
+                    "tipo": {
+                        "type": "string",
+                        "enum": ["contable", "bursatil", "total"],
+                        "description": "Tipo de cálculo: 'contable' (DY sobre libro), 'bursatil' (DY sobre precio bolsa), 'total' (suma dividendos del año).",
+                    },
                 },
                 "required": ["nemotecnico"],
             },
@@ -1872,7 +2072,16 @@ def _dispatch(name: str, args: dict) -> str:
         "consultar_db_rent_roll":        lambda a: consultar_db_rent_roll(a["activo_key"], a["periodo"]),
         "consultar_db_er":               lambda a: consultar_db_er(a["activo_key"], a["periodo"]),
         "consultar_db_flujo":            lambda a: consultar_db_flujo(a["activo_key"], a["periodo"]),
+        "consultar_db_valor_bursatil":        lambda a: consultar_db_valor_bursatil(a.get("nemotecnico"), a.get("fecha")),
+        "consultar_db_valor_libro":          lambda a: consultar_db_valor_libro(a.get("nemotecnico"), a.get("fecha")),
+        "consultar_db_patrimonio_bursatil": lambda a: consultar_db_patrimonio_bursatil(a.get("nemotecnico"), a.get("fecha")),
+        "consultar_db_capital_suscrito":  lambda a: consultar_db_capital_suscrito(a.get("nemotecnico"), a.get("fecha_corte")),
+        "consultar_financiamiento":      lambda a: consultar_financiamiento(
+            a["tipo"], a.get("fondo"), a.get("desde"), a.get("hasta"), a.get("credito_key"),
+            a.get("fecha_corte"), a.get("tipo_valor", "bursatil")
+        ),
         "consultar_db_dividendos":       lambda a: consultar_db_dividendos(a["nemotecnico"]),
+        "consultar_dividend_yield":      lambda a: consultar_dividend_yield(a["nemotecnico"], a.get("periodo"), a.get("anio"), a.get("tipo", "contable")),
         "consultar_noi":                 lambda a: consultar_noi(a["nivel"], a.get("clave"), a.get("año"), a.get("ponderado", False)),
         "generar_dashboard":             lambda a: f"Dashboard generado: {generar_dashboard()}",
         "ingestar_archivo":              lambda a: ingestar_archivo(a["path"], a.get("periodo")),
@@ -1929,8 +2138,9 @@ _TOOLS_GENERAL = {
     "registrar_kpi", "consultar_kpi", "resumen_kpis", "comparar_periodos",
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
-    "consultar_db_dividendos", "consultar_noi", "generar_dashboard",
-    "calcular_indicador", "listar_indicadores", "invalidar_cache_indicador", "verificar_skill_finanzas",
+    "consultar_db_valor_bursatil", "consultar_db_valor_libro", "consultar_db_patrimonio_bursatil", "consultar_db_capital_suscrito", "consultar_db_dividendos", "consultar_dividend_yield", "consultar_noi", "consultar_financiamiento", "generar_dashboard",
+    "calcular_indicador",
+    "listar_indicadores", "invalidar_cache_indicador", "verificar_skill_finanzas",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",
     "leer_cdg_historico", "buscar_en_rent_roll",
