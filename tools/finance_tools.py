@@ -220,10 +220,9 @@ def listar_indicadores_disponibles() -> str:
             {"kpi": "tir_bursatil_u12m",         "descripcion": "TIR XIRR bursátil últimos 12 meses"},
             {"kpi": "tir_contable_u12m",         "descripcion": "TIR XIRR contable últimos 12 meses"},
             {"kpi": "tir_bursatil_desde_inicio", "descripcion": "TIR bursátil desde primer aporte — XIRR por cuota usando raw_ar_event_line (Aporte/Dividendo/Disminucion + VR Bursátil terminal)"},
+            {"kpi": "tir_contable_desde_inicio", "descripcion": "TIR contable desde primer aporte — XIRR por cuota. Aportes: -(monto_uf/cuotas_totales_aporte). Dividendos/Disminuciones: +(monto_uf/cuotas_row). Canjes y VR intermedios: 0. Terminal: precio_uf de raw_valor_cuota_line tipo=contable en fecha_corte."},
         ],
-        "pendiente_revision": [
-            {"kpi": "tir_contable_desde_inicio", "descripcion": "TIR contable desde inicio — metodología pendiente de definición"},
-        ],
+        "pendiente_revision": [],
         "placeholders": [
             {"kpi": "ltv",  "descripcion": "Loan-to-value", "blocker": "dim_deuda"},
             {"kpi": "dscr", "descripcion": "Debt Service Coverage Ratio", "blocker": "fact_servicio_deuda"},
