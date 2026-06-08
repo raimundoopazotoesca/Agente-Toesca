@@ -45,6 +45,18 @@ Notas:
 - [[activos/parque-titanium]]
 - [[activos/apoquindo]]
 
+## Historial de dividendos — hechos confirmados
+
+| Período | Dividendos | Nota |
+|---------|------------|------|
+| 2018–Q3 2023 | Sí, trimestrales | 23 pagos por serie (datos en DB) |
+| Q4 2023 (oct–dic) | **No** | Confirmado: no hubo distribución |
+| 2024 completo | **No** | Confirmado: no hubo distribución |
+| 2025 | Sí, trimestrales | 4 pagos por serie (datos en DB) |
+
+> Cuando la DB no tiene dividendos en 2024 y Q4 2023, **eso es correcto** — no son datos faltantes.
+> Relevante para TIR desde inicio: los 27 dividendos en DB son el historial completo.
+
 ## Nemotécnicos
 
 | Nemotécnico | Serie |

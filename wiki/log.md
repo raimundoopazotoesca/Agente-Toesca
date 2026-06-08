@@ -3,6 +3,8 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-06-08] dominio | TRI: sin dividendos en Q4-2023 ni en 2024 — confirmado por usuario
+
 ## [2026-05-27] feat | Extractor Groq EEFF TRI — independencia del CDG
 
 Nuevo módulo `tools/db/ingest_eeff_tri_groq.py` (llama-3.3-70b-versatile via Groq):
