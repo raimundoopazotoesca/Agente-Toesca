@@ -119,6 +119,8 @@ from tools.db.ingest_router import ingestar_archivo
 from tools.noi_query import consultar_noi
 from tools.finance_tools import (
     calcular_indicador_financiero,
+    calcular_dy_fondo,
+    calcular_tir_fondo,
     listar_indicadores_disponibles,
     invalidar_cache_indicador,
     verificar_skill,
@@ -1267,14 +1269,17 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "consultar_financiamiento",
             "description": (
-                "Consulta información de deuda y financiamiento del portfolio Toesca desde la DB. "
+                "Consulta información de deuda, amortización y financiamiento del portfolio Toesca desde la DB. "
+                "Usar para cualquier pregunta sobre: créditos bancarios, saldo de deuda, amortización de capital, "
+                "perfil de vencimientos, pagarés intercompañía, o DY+amortización (dividend yield + amort) por serie TRI.\n"
                 "Tipos disponibles:\n"
                 "  creditos_vigentes: lista créditos bancarios con saldo, tasa, vencimiento.\n"
                 "  amortizacion: capital amortizado en un período (desde/hasta YYYY-MM).\n"
                 "  saldo_deuda: saldo de deuda actual por fondo o crédito.\n"
                 "  perfil_vencimientos: amortizaciones anuales proyectadas (histograma).\n"
                 "  pagares: pagarés intercompañía fondo↔sociedad.\n"
-                "  dy_amort: DY + amortización por serie TRI (A/C/I) y año."
+                "  dy_amort: dividend yield + amortización por cuota para series TRI (A/C/I), "
+                "rolling 12 meses. Fórmula: (dividendos_U12M + amort_UF×UF/cuotas) / valor_cuota."
             ),
             "parameters": {
                 "type": "object",
@@ -1869,17 +1874,31 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "calcular_indicador",
             "description": (
-                "Calcula un indicador financiero derivado (rentabilidades, cap rate, dividend yield, TIR, tasas de arriendo) "
-                "a partir de agente_toesca.db. Invoca la skill real-estate-finance-expert automáticamente. "
-                "Usa cache si el indicador ya fue computado para ese período; persiste resultados si compensa el costo. "
-                "Ejemplos de KPI: 'rent_anualizada', 'cap_rate_implicito', 'dividend_yield', 'tasa_arriendo_uf_m2'."
+                "Calcula un indicador financiero derivado a partir de agente_toesca.db. "
+                "Invoca la skill real-estate-finance-expert. Usa cache si ya fue computado; persiste si compensa. "
+                "KPIs OPERATIVOS: "
+                "'rent_anualizada' (CAGR), 'rent_u12m', "
+                "'dividend_yield', 'dividend_yield_contable', 'dividend_yield_capital', 'dividend_yield_con_amort', "
+                "'cap_rate_real', 'cap_rate_implicito', 'tasa_arriendo_uf_m2', "
+                "'tir_bursatil_ytd' (XIRR bursátil YTD, T0=31-dic año anterior), "
+                "'tir_contable_ytd' (XIRR contable YTD), "
+                "'tir_bursatil_u12m' (XIRR bursátil U12M), "
+                "'tir_contable_u12m' (XIRR contable U12M), "
+                "'tir_bursatil_desde_inicio' (XIRR bursátil desde primer aporte, método por cuota vía raw_ar_event_line). "
+                "Para TIR de todas las series de un fondo usar calcular_tir_fondo. "
+                "PENDIENTE: 'tir_contable_desde_inicio' (metodología por definir)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "kpi": {
                         "type": "string",
-                        "description": "Nombre del indicador (ej: 'rent_anualizada', 'cap_rate_implicito', 'dividend_yield', 'tasa_arriendo_uf_m2')"
+                        "description": (
+                            "KPI a calcular. Operativos: rent_anualizada, rent_u12m, dividend_yield, "
+                            "dividend_yield_contable, dividend_yield_capital, dividend_yield_con_amort, "
+                            "cap_rate_real, cap_rate_implicito, tasa_arriendo_uf_m2, "
+                            "tir_bursatil_ytd, tir_contable_ytd, tir_bursatil_u12m, tir_contable_u12m."
+                        )
                     },
                     "entidad_tipo": {
                         "type": "string",
@@ -1948,6 +1967,67 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calcular_dy_fondo",
+            "description": (
+                "Calcula DY bursátil, DY contable y DY+Amortización para TODAS las series de un fondo en una sola llamada. "
+                "Usar en lugar de múltiples llamadas a calcular_indicador cuando se necesita la tabla completa de dividend yield. "
+                "Devuelve una fila por serie con: dy_bursatil, dy_contable, dy_amort_bursatil, amort_uf_cuota, dividendos_uf_cuota."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {
+                        "type": "string",
+                        "description": "Clave del fondo: 'TRI', 'PT', 'APO'"
+                    },
+                    "periodo": {
+                        "type": "string",
+                        "description": "Período YYYY-MM (ej: '2026-02'). Calcula U12M hasta el último día de ese mes."
+                    },
+                    "force_recompute": {
+                        "type": "boolean",
+                        "description": "Si true, ignora cache y recalcula. Default false."
+                    },
+                },
+                "required": ["fondo_key", "periodo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calcular_tir_fondo",
+            "description": (
+                "Calcula TIR (XIRR) YTD y U12M para TODAS las series de un fondo en una sola llamada. "
+                "Devuelve una fila por serie con: tir_bursatil_desde_inicio, tir_contable_desde_inicio, "
+                "tir_bursatil_ytd, tir_contable_ytd, tir_bursatil_u12m, tir_contable_u12m. "
+                "T0 para YTD = 31-dic año anterior; T0 para U12M = mismo mes año anterior. "
+                "tir_*_desde_inicio: XIRR por cuota desde primer aporte vía raw_ar_event_line, "
+                "terminal = VR Bursátil o VR Contable en FECHA_CORTE."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fondo_key": {
+                        "type": "string",
+                        "description": "Clave del fondo: 'TRI', 'PT', 'APO'"
+                    },
+                    "periodo": {
+                        "type": "string",
+                        "description": "Período YYYY-MM (ej: '2025-12'). Calcula hasta el último día de ese mes."
+                    },
+                    "force_recompute": {
+                        "type": "boolean",
+                        "description": "Si true, ignora cache y recalcula. Default false."
+                    },
+                },
+                "required": ["fondo_key", "periodo"],
             },
         },
     },
@@ -2111,6 +2191,12 @@ def _dispatch(name: str, args: dict) -> str:
         "calcular_indicador":          lambda a: calcular_indicador_financiero(
             a["kpi"], a["entidad_tipo"], a["entidad_key"], a["periodo"], a.get("force_recompute", False)
         ),
+        "calcular_dy_fondo":           lambda a: calcular_dy_fondo(
+            a["fondo_key"], a["periodo"], a.get("force_recompute", False)
+        ),
+        "calcular_tir_fondo":          lambda a: calcular_tir_fondo(
+            a["fondo_key"], a["periodo"], a.get("force_recompute", False)
+        ),
         "listar_indicadores":          lambda a: listar_indicadores_disponibles(),
         "invalidar_cache_indicador":   lambda a: invalidar_cache_indicador(a["kpi"]),
         "verificar_skill_finanzas":    lambda a: verificar_skill(),
@@ -2139,7 +2225,7 @@ _TOOLS_GENERAL = {
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
     "consultar_db_valor_bursatil", "consultar_db_valor_libro", "consultar_db_patrimonio_bursatil", "consultar_db_capital_suscrito", "consultar_db_dividendos", "consultar_dividend_yield", "consultar_noi", "consultar_financiamiento", "generar_dashboard",
-    "calcular_indicador",
+    "calcular_indicador", "calcular_dy_fondo", "calcular_tir_fondo",
     "listar_indicadores", "invalidar_cache_indicador", "verificar_skill_finanzas",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
     "ordenar_archivos_raw",

@@ -67,6 +67,135 @@ def calcular_indicador_financiero(
         })
 
 
+def calcular_dy_fondo(
+    fondo_key: str,
+    periodo: str,
+    force_recompute: bool = False,
+) -> str:
+    """
+    Calcula DY, DY+Amort y DY contable para todas las series de un fondo en una sola llamada.
+
+    Args:
+        fondo_key: "TRI", "PT", "APO"
+        periodo: YYYY-MM (ej: "2026-02")
+        force_recompute: fuerza recálculo ignorando cache
+
+    Returns:
+        JSON con tabla completa: {periodo, filas: [{serie, nemo, dy_bursatil, dy_contable, dy_amort_bursatil, advertencias}]}
+    """
+    if obtener is None:
+        return json.dumps({"error": True, "mensaje": f"Skill no disponible: {_IMPORT_ERROR}"})
+
+    try:
+        from tools.db.connection import get_conn
+        conn = get_conn()
+        series = conn.execute(
+            "SELECT nemotecnico FROM dim_serie WHERE fondo_key=? ORDER BY nemotecnico",
+            (fondo_key,)
+        ).fetchall()
+        conn.close()
+
+        if not series:
+            return json.dumps({"error": True, "mensaje": f"No se encontraron series para fondo {fondo_key}"})
+
+        filas = []
+        for row in series:
+            nemo = row[0]
+            serie_label = nemo[-1]  # último char: A, C, I
+
+            dy_b = obtener("dividend_yield", "serie", nemo, periodo, force_recompute)
+            dy_c = obtener("dividend_yield_contable", "serie", nemo, periodo, force_recompute)
+            dy_a = obtener("dividend_yield_con_amort", "serie", nemo, periodo, force_recompute)
+
+            advertencias = []
+            for r in [dy_b, dy_c, dy_a]:
+                advertencias.extend(r.get("advertencias", []))
+
+            filas.append({
+                "serie": serie_label,
+                "nemotecnico": nemo,
+                "dy_bursatil": dy_b.get("valor"),
+                "dy_contable": dy_c.get("valor"),
+                "dy_amort_bursatil": dy_a.get("valor"),
+                "amort_uf_cuota": dy_a.get("metadata", {}).get("amort_u12m_uf_cuota"),
+                "dividendos_uf_cuota": dy_a.get("metadata", {}).get("dividendos_u12m_uf_cuota"),
+                "fuente": dy_a.get("fuente"),
+                "advertencias": list(set(advertencias)),
+            })
+
+        return json.dumps({"fondo": fondo_key, "periodo": periodo, "u12m": True, "filas": filas}, default=str)
+
+    except Exception as e:
+        return json.dumps({"error": True, "mensaje": str(e)})
+
+
+def calcular_tir_fondo(
+    fondo_key: str,
+    periodo: str,
+    force_recompute: bool = False,
+) -> str:
+    """
+    Calcula TIR (XIRR) YTD y U12M para todas las series de un fondo en una sola llamada.
+
+    Variantes calculadas por serie:
+      tir_bursatil_ytd   → precio bursátil, T0 = 31-dic año anterior
+      tir_contable_ytd   → precio contable, T0 = 31-dic año anterior
+      tir_bursatil_u12m  → precio bursátil, T0 = mismo mes año anterior
+      tir_contable_u12m  → precio contable, T0 = mismo mes año anterior
+
+    Args:
+        fondo_key: 'TRI', 'PT', 'APO'
+        periodo:   YYYY-MM (ej: '2025-12')
+        force_recompute: fuerza recálculo ignorando cache
+
+    Returns:
+        JSON con tabla: {fondo, periodo, filas: [{serie, nemo, tir_bursatil_ytd, tir_contable_ytd,
+                          tir_bursatil_u12m, tir_contable_u12m, advertencias}]}
+    """
+    if obtener is None:
+        return json.dumps({"error": True, "mensaje": f"Skill no disponible: {_IMPORT_ERROR}"})
+
+    try:
+        from tools.db.connection import get_conn
+        conn = get_conn()
+        series = conn.execute(
+            "SELECT nemotecnico FROM dim_serie WHERE fondo_key=? ORDER BY nemotecnico",
+            (fondo_key,)
+        ).fetchall()
+        conn.close()
+
+        if not series:
+            return json.dumps({"error": True, "mensaje": f"No se encontraron series para fondo {fondo_key}"})
+
+        filas = []
+        for row in series:
+            nemo = row[0]
+            serie_label = nemo[-1]
+
+            resultados = {}
+            advertencias = []
+            for kpi in ("tir_bursatil_desde_inicio", "tir_contable_desde_inicio", "tir_bursatil_ytd", "tir_contable_ytd", "tir_bursatil_u12m", "tir_contable_u12m"):
+                r = obtener(kpi, "serie", nemo, periodo, force_recompute)
+                resultados[kpi] = r.get("valor")
+                advertencias.extend(r.get("advertencias", []))
+
+            filas.append({
+                "serie": serie_label,
+                "nemotecnico": nemo,
+                **resultados,
+                "advertencias": list(set(a for a in advertencias if a)),
+            })
+
+        return json.dumps({
+            "fondo": fondo_key,
+            "periodo": periodo,
+            "filas": filas,
+        }, default=str)
+
+    except Exception as e:
+        return json.dumps({"error": True, "mensaje": str(e)})
+
+
 def listar_indicadores_disponibles() -> str:
     """
     Lista todos los indicadores soportados por la skill.
@@ -79,16 +208,25 @@ def listar_indicadores_disponibles() -> str:
             {"kpi": "rent_desde_inicio", "descripcion": "Rentabilidad desde primer precio disponible (CAGR)"},
             {"kpi": "rent_anualizada", "descripcion": "Rentabilidad anualizada (CAGR)"},
             {"kpi": "rent_u12m", "descripcion": "Retorno últimos 12 meses (CAGR)"},
-            {"kpi": "dividend_yield", "descripcion": "Dividend yield simple (dividendos / precio)"},
-            {"kpi": "dividend_yield_con_amort", "descripcion": "Dividend yield + amortizaciones"},
+            {"kpi": "dividend_yield", "descripcion": "Dividend yield simple (dividendos / precio bursátil)"},
+            {"kpi": "dividend_yield_contable", "descripcion": "Dividend yield sobre precio contable"},
+            {"kpi": "dividend_yield_capital", "descripcion": "Dividend yield sobre capital suscrito por cuota"},
+            {"kpi": "dividend_yield_con_amort", "descripcion": "Dividend yield + amortización de deuda / precio bursátil"},
             {"kpi": "cap_rate_real", "descripcion": "Cap rate real (NOI anual / valor_activo)"},
             {"kpi": "cap_rate_implicito", "descripcion": "Cap rate implícito (NOI anual fondo / market_cap)"},
             {"kpi": "tasa_arriendo_uf_m2", "descripcion": "Tasa de arriendo promedio ponderado UF/m²"},
+            {"kpi": "tir_bursatil_ytd",          "descripcion": "TIR XIRR bursátil YTD (T0=31-dic año anterior)"},
+            {"kpi": "tir_contable_ytd",          "descripcion": "TIR XIRR contable YTD (T0=31-dic año anterior)"},
+            {"kpi": "tir_bursatil_u12m",         "descripcion": "TIR XIRR bursátil últimos 12 meses"},
+            {"kpi": "tir_contable_u12m",         "descripcion": "TIR XIRR contable últimos 12 meses"},
+            {"kpi": "tir_bursatil_desde_inicio", "descripcion": "TIR bursátil desde primer aporte — XIRR por cuota usando raw_ar_event_line (Aporte/Dividendo/Disminucion + VR Bursátil terminal)"},
+        ],
+        "pendiente_revision": [
+            {"kpi": "tir_contable_desde_inicio", "descripcion": "TIR contable desde inicio — metodología pendiente de definición"},
         ],
         "placeholders": [
-            {"kpi": "tir_actual", "descripcion": "TIR actual (XIRR) — pendiente implementación"},
-            {"kpi": "ltv", "descripcion": "Loan-to-value — TODO: dim_deuda", "blocker": "dim_deuda"},
-            {"kpi": "dscr", "descripcion": "Debt Service Coverage Ratio — TODO: fact_servicio_deuda", "blocker": "fact_servicio_deuda"},
+            {"kpi": "ltv",  "descripcion": "Loan-to-value", "blocker": "dim_deuda"},
+            {"kpi": "dscr", "descripcion": "Debt Service Coverage Ratio", "blocker": "fact_servicio_deuda"},
         ]
     }
     return json.dumps(indicadores)
