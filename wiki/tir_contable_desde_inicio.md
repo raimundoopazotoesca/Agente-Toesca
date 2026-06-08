@@ -68,14 +68,20 @@ tir = xirr(cashflows, dates)  # tasa anual como ratio
 
 | Serie | TIR contable desde inicio | Fuente |
 |---|---|---|
-| CFITOERI1A | ~0.18% | CDG Excel "Cálculo TIRcontable..." |
-| CFITOERI1C | ~0.73% | CDG Excel |
-| CFITOERI1I | ~0.82% | CDG Excel |
+| CFITOERI1A | 0.30% | DB (data completa) |
+| CFITOERI1C | 0.86% | DB (data completa) |
+| CFITOERI1I | 0.96% | DB (data completa) |
 
-> La DB produce ~0.30% / 0.86% / 0.96% — diferencia <0.15% por cuotas outstanding
-> ligeramente distintas entre CDG (457,667 para A) y DB (475,667 para A).
+> **Nota sobre discrepancia con CDG:** El archivo `work/Cálculo TIRcontable desde el inicio - Fondo Rentas.xlsx`
+> da 0.18%/0.73%/0.82% porque es una versión que no tiene los dividendos de Oct y Dic 2025.
+> Con solo los dividendos Apr+Jul 2025 (como tiene el CDG), nuestra DB también reproduce exactamente 0.18%/0.73%/0.82%.
+> Los valores correctos con la totalidad de dividendos pagados son los de la tabla arriba.
+>
+> Adicionalmente, el CDG tiene un bug en la celda terminal de dic-2025: usa UF=28,302 en vez de 39,728,
+> inflando el VR a 1.024639 UF/cuota (en vez de 0.802191) y entregando 3.28% en AB3. Los valores del CDG
+> que son correctos son los que el usuario calculó manualmente con el VR correcto.
 
 ## Referencia
 
 Archivo CDG: `work/Cálculo TIRcontable desde el inicio - Fondo Rentas.xlsx`
-Celda resultado: AB3 de cada hoja (A, C, I).
+Celda resultado: AB3 de cada hoja (A, C, I) — tiene bug de UF en terminal dic-2025.
