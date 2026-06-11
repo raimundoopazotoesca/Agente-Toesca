@@ -6,7 +6,7 @@ Si un dato no está en la DB, lo reportan como gap para que el agente decida
 abrir la planilla correspondiente.
 """
 from tools.db.connection import get_conn
-from tools.db import repo_kpi, repo_rent_roll, repo_er_activo, repo_flujo, repo_fact
+from tools.db import repo_kpi, repo_rent_roll, repo_er_activo, repo_flujo, repo_fact, repo_tasacion
 from tools.db.errors import NotFoundError
 
 
@@ -128,8 +128,431 @@ def consultar_db_dividendos(nemotecnico: str) -> str:
     return "\n".join(lines)
 
 
+def consultar_db_valor_bursatil(
+    nemotecnico: str | None = None,
+    fecha: str | None = None,
+) -> str:
+    """VR Bursátil por cuota por serie TRI en UF desde raw_valor_cuota_line.
+
+    = SUM(col M 'Monto UF/cuota') donde Detalle='VR Bursátil', Serie=X, Fecha=exacta.
+    Dato mensual. Cobertura: 2017-12 a 2026-03.
+
+    nemotecnico: 'CFITOERI1A' | 'CFITOERI1C' | 'CFITOERI1I' | None (todas)
+    fecha:       'YYYY-MM-DD' o 'YYYY-MM' (último día del mes)
+    """
+    import calendar
+
+    fecha_exacta: str | None = None
+    if fecha:
+        fc = fecha.strip()
+        if len(fc) == 7:
+            year, month = int(fc[:4]), int(fc[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_exacta = f"{year}-{month:02d}-{last_day:02d}"
+        else:
+            fecha_exacta = fc
+
+    with get_conn() as conn:
+        if not fecha_exacta:
+            cur = conn.execute(
+                "SELECT MAX(fecha) FROM raw_valor_cuota_line "
+                "WHERE fondo_key = 'TRI' AND tipo = 'bursatil'"
+            )
+            fecha_exacta = cur.fetchone()[0]
+            if not fecha_exacta:
+                return "Sin datos de VR Bursátil en la DB."
+
+        where = "fondo_key = 'TRI' AND tipo = 'bursatil' AND fecha = ?"
+        params: list = [fecha_exacta]
+        if nemotecnico:
+            where += " AND nemotecnico = ?"
+            params.append(nemotecnico.strip().upper())
+
+        rows = conn.execute(
+            f"SELECT nemotecnico, fecha, precio_uf, cuotas "
+            f"FROM raw_valor_cuota_line WHERE {where} ORDER BY nemotecnico",
+            params,
+        ).fetchall()
+
+    if not rows:
+        filtro = f" para {nemotecnico or 'todas las series'} al {fecha or fecha_exacta}"
+        return f"Sin datos de VR Bursátil{filtro}."
+
+    lines = [f"VR Bursátil TRI al {fecha_exacta} (UF/cuota):"]
+    for r in rows:
+        cuotas_str = f"  {r['cuotas']:>10,.0f} cuotas" if r["cuotas"] else ""
+        lines.append(f"  {r['nemotecnico']:15s}  {r['precio_uf']:.9f} UF/cuota{cuotas_str}")
+    return "\n".join(lines)
+
+
+def consultar_db_valor_libro(
+    nemotecnico: str | None = None,
+    fecha: str | None = None,
+) -> str:
+    """VR Contable (valor libro) por cuota por serie TRI desde raw_valor_cuota_line.
+
+    Devuelve precio_uf (UF/cuota) para la fecha exacta solicitada.
+    Fuente preferida: EEFF PDF. Fallback: A&R Rentas cdg_extract.xlsx.
+    Si no se especifica fecha, devuelve la última disponible.
+
+    nemotecnico: 'CFITOERI1A' | 'CFITOERI1C' | 'CFITOERI1I' | None (todas)
+    fecha:       'YYYY-MM-DD' o 'YYYY-MM' (se resuelve al último día del mes)
+    """
+    import calendar
+
+    fecha_exacta: str | None = None
+    if fecha:
+        fc = fecha.strip()
+        if len(fc) == 7:
+            year, month = int(fc[:4]), int(fc[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_exacta = f"{year}-{month:02d}-{last_day:02d}"
+        else:
+            fecha_exacta = fc
+
+    with get_conn() as conn:
+        if not fecha_exacta:
+            cur = conn.execute(
+                "SELECT MAX(fecha) FROM raw_valor_cuota_line "
+                "WHERE fondo_key = 'TRI' AND tipo = 'contable'"
+            )
+            fecha_exacta = cur.fetchone()[0]
+            if not fecha_exacta:
+                return "Sin datos de valor libro en la DB."
+
+        where = "fondo_key = 'TRI' AND tipo = 'contable' AND fecha = ?"
+        params: list = [fecha_exacta]
+        if nemotecnico:
+            where += " AND nemotecnico = ?"
+            params.append(nemotecnico.strip().upper())
+
+        # Priorizar EEFF PDF sobre A&R Rentas; si hay duplicados tomar el más reciente cargado
+        rows = conn.execute(
+            f"SELECT nemotecnico, fecha, precio_uf, cuotas, source_file "
+            f"FROM raw_valor_cuota_line WHERE {where} "
+            f"ORDER BY nemotecnico, "
+            f"  CASE WHEN source_file LIKE '%cdg_extract%' THEN 1 ELSE 0 END, "
+            f"  loaded_at DESC",
+            params,
+        ).fetchall()
+
+    # Deduplicar: tomar primera fila por nemotecnico (ya ordenada por prioridad)
+    seen: set = set()
+    deduped = []
+    for r in rows:
+        if r["nemotecnico"] not in seen:
+            seen.add(r["nemotecnico"])
+            deduped.append(r)
+
+    if not deduped:
+        filtro = f" para {nemotecnico or 'todas las series'} al {fecha or fecha_exacta}"
+        return f"Sin datos de valor libro{filtro}."
+
+    label = f"al {fecha_exacta}"
+    lines = [f"VR Contable TRI {label} (UF/cuota):"]
+    for r in deduped:
+        src = "EEFF" if "cdg_extract" not in (r["source_file"] or "") else "A&R"
+        cuotas_str = f"  {r['cuotas']:>10,.0f} cuotas" if r["cuotas"] else ""
+        lines.append(f"  {r['nemotecnico']:15s}  {r['precio_uf']:.9f} UF/cuota{cuotas_str}  [{src}]")
+    return "\n".join(lines)
+
+
+def consultar_db_patrimonio_bursatil(
+    nemotecnico: str | None = None,
+    fecha: str | None = None,
+) -> str:
+    """Patrimonio Bursátil por serie TRI desde raw_patrimonio_bursatil_line.
+
+    Devuelve el VR Bursátil en UF para la fecha exacta solicitada.
+    Si no se especifica fecha, devuelve la última disponible.
+
+    nemotecnico: 'CFITOERI1A' | 'CFITOERI1C' | 'CFITOERI1I' | None (todas)
+    fecha:       'YYYY-MM-DD' o 'YYYY-MM' (se resuelve al último día del mes)
+    """
+    import calendar
+
+    fecha_exacta: str | None = None
+    if fecha:
+        fc = fecha.strip()
+        if len(fc) == 7:
+            year, month = int(fc[:4]), int(fc[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fecha_exacta = f"{year}-{month:02d}-{last_day:02d}"
+        else:
+            fecha_exacta = fc
+
+    with get_conn() as conn:
+        if fecha_exacta:
+            where = "fondo_key = 'TRI' AND fecha = ?"
+            params: list = [fecha_exacta]
+        else:
+            # Última fecha disponible
+            cur = conn.execute(
+                "SELECT MAX(fecha) FROM raw_patrimonio_bursatil_line WHERE fondo_key = 'TRI'"
+            )
+            fecha_exacta = cur.fetchone()[0]
+            if not fecha_exacta:
+                return "Sin datos de patrimonio bursátil en la DB."
+            where = "fondo_key = 'TRI' AND fecha = ?"
+            params = [fecha_exacta]
+
+        if nemotecnico:
+            where += " AND nemotecnico = ?"
+            params.append(nemotecnico.strip().upper())
+
+        rows = conn.execute(
+            f"SELECT nemotecnico, fecha, patrimonio_uf FROM raw_patrimonio_bursatil_line "
+            f"WHERE {where} ORDER BY nemotecnico",
+            params,
+        ).fetchall()
+
+    if not rows:
+        filtro = f" para {nemotecnico or 'todas las series'} al {fecha or fecha_exacta}"
+        return f"Sin datos de patrimonio bursátil{filtro}."
+
+    lines = [f"Patrimonio Bursátil TRI al {fecha_exacta} (fuente: VR Bursátil A&R Rentas):"]
+    total = 0.0
+    for r in rows:
+        lines.append(f"  {r['nemotecnico']:15s}  {r['patrimonio_uf']:>14,.2f} UF")
+        total += r["patrimonio_uf"]
+    if not nemotecnico:
+        lines.append(f"  {'TOTAL':15s}  {total:>14,.2f} UF")
+    return "\n".join(lines)
+
+
+def consultar_db_capital_suscrito(
+    nemotecnico: str | None = None,
+    fecha_corte: str | None = None,
+) -> str:
+    """Capital suscrito acumulado por serie TRI desde raw_capital_suscrito_line.
+
+    Para cada serie devuelve el último valor acumulado en o antes de fecha_corte.
+    Fuente: movimientos A&R (Aportes + Canjes - Disminuciones) acumulados.
+
+    nemotecnico: 'CFITOERI1A' | 'CFITOERI1C' | 'CFITOERI1I' | None (todas)
+    fecha_corte: 'YYYY-MM-DD' o 'YYYY-MM' (se expande al último día del mes) | None = último disponible
+    """
+    # Normalizar fecha_corte a YYYY-MM-DD
+    if fecha_corte:
+        fc = fecha_corte.strip()
+        if len(fc) == 7:  # YYYY-MM → último día del mes
+            import calendar
+            year, month = int(fc[:4]), int(fc[5:7])
+            last_day = calendar.monthrange(year, month)[1]
+            fc = f"{year}-{month:02d}-{last_day:02d}"
+    else:
+        fc = "9999-12-31"
+
+    with get_conn() as conn:
+        nemo_filter = "AND nemotecnico = ?" if nemotecnico else ""
+        params = [fc]
+        if nemotecnico:
+            params.append(nemotecnico.strip().upper())
+
+        sql = f"""
+            SELECT nemotecnico, fecha_fin_periodo, capital_suscrito_uf
+            FROM raw_capital_suscrito_line
+            WHERE fondo_key = 'TRI'
+              AND fecha_fin_periodo <= ?
+              {nemo_filter}
+            GROUP BY nemotecnico
+            HAVING fecha_fin_periodo = MAX(fecha_fin_periodo)
+            ORDER BY nemotecnico
+        """
+        rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        filtro = f" para {nemotecnico or 'todas las series'}{f' al {fecha_corte}' if fecha_corte else ''}"
+        return f"Sin datos de capital suscrito{filtro}."
+
+    label = f"al {fecha_corte}" if fecha_corte else "(último disponible)"
+    lines = [f"Capital suscrito TRI {label} (fuente: A&R Rentas acumulado):"]
+    total = 0.0
+    for r in rows:
+        lines.append(f"  {r['nemotecnico']:15s}  {r['fecha_fin_periodo']}  {r['capital_suscrito_uf']:>14,.2f} UF")
+        total += r["capital_suscrito_uf"]
+    if not nemotecnico:
+        lines.append(f"  {'TOTAL':15s}  {'':10s}  {total:>14,.2f} UF")
+    return "\n".join(lines)
+
+
 def consultar_db_cobertura() -> str:
     """Reporta qué hay disponible en la DB y dónde hay gaps mensuales por activo/fondo."""
     import json
     from tools.db.coverage import audit_coverage
     return json.dumps(audit_coverage(), ensure_ascii=False, indent=2)
+
+
+def consultar_dividend_yield(
+    nemotecnico: str,
+    periodo: str | None = None,
+    anio: int | None = None,
+    tipo: str = "contable",
+) -> str:
+    """Dividend yield de una serie TRI en UF/cuota.
+
+    Fórmula: SUM(dividendos UF/cuota del año calendario) / precio_UF_cuota al cierre del año.
+    Usa dividendos del año calendario (no ventana U12M).
+
+    tipo:
+      'contable'  → DY = div_año / valor_libro_UF_cuota al cierre  (default)
+      'bursatil'  → DY = div_año / precio_bursatil_UF_cuota al cierre
+      'total'     → total UF/cuota repartidos en el año (sin dividir)
+
+    nemotecnico: 'CFITOERI1A' | 'CFITOERI1C' | 'CFITOERI1I'
+    periodo:     'YYYY-MM' — cierre del período. Si se omite y hay anio, usa ANIO-12.
+    anio:        año calendario (ej. 2025). Alternativo a periodo.
+    """
+    import calendar as cal
+
+    nemo = nemotecnico.strip().upper()
+
+    if not periodo and anio:
+        periodo = f"{anio}-12"
+    elif not periodo:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(substr(fecha_pago,1,4)) FROM raw_dividendo_line "
+                "WHERE nemotecnico=? AND superseded_at IS NULL",
+                (nemo,)
+            ).fetchone()
+        anio_max = int(row[0]) if row and row[0] else 2025
+        periodo = f"{anio_max}-12"
+
+    anio_ref = int(periodo[:4])
+    mes_ref = int(periodo[5:7])
+    ultimo_dia = cal.monthrange(anio_ref, mes_ref)[1]
+    fecha_fin = f"{anio_ref}-{mes_ref:02d}-{ultimo_dia:02d}"
+    fecha_inicio = f"{anio_ref}-01-01"
+
+    with get_conn() as conn:
+        # Dividendos del año calendario
+        div_row = conn.execute(
+            "SELECT SUM(monto_uf_cuota), COUNT(monto_uf_cuota), MIN(fecha_pago), MAX(fecha_pago) "
+            "FROM raw_dividendo_line "
+            "WHERE nemotecnico=? AND fecha_pago>=? AND fecha_pago<=? "
+            "AND superseded_at IS NULL AND monto_uf_cuota IS NOT NULL",
+            (nemo, fecha_inicio, fecha_fin)
+        ).fetchone()
+
+        div_total = div_row[0] if div_row and div_row[0] else None
+        n_pagos = div_row[1] if div_row else 0
+        f_min = div_row[2] if div_row else None
+        f_max = div_row[3] if div_row else None
+
+        # Precio de cierre (último disponible hasta fecha_fin)
+        precio_row = conn.execute(
+            "SELECT precio_uf FROM raw_valor_cuota_line "
+            "WHERE nemotecnico=? AND tipo=? AND fecha<=? AND superseded_at IS NULL "
+            "ORDER BY fecha DESC LIMIT 1",
+            (nemo, "contable" if tipo == "contable" else "bursatil", fecha_fin)
+        ).fetchone()
+        precio = precio_row[0] if precio_row and precio_row[0] else None
+
+    if tipo == "total":
+        if not div_total:
+            return f"Sin dividendos en DB para {nemo} en {anio_ref}."
+        lines = [
+            f"Dividendos repartidos {nemo} — {anio_ref}:",
+            f"  Total UF/cuota: {div_total:.6f}",
+            f"  Número de pagos: {n_pagos}",
+            f"  Rango: {f_min} -> {f_max}",
+        ]
+        if precio:
+            label = "valor libro" if tipo == "contable" else "precio bursátil"
+            lines.append(f"  {label.capitalize()} al cierre: {precio:.6f} UF/cuota")
+        return "\n".join(lines)
+
+    if not div_total:
+        return f"Sin dividendos en DB para {nemo} en {anio_ref}."
+    if not precio:
+        tipo_label = "contable" if tipo == "contable" else "bursátil"
+        return f"Sin precio {tipo_label} en DB para {nemo} al {fecha_fin}."
+
+    dy = div_total / precio
+    label = "valor libro" if tipo == "contable" else "precio bursátil"
+
+    lines = [
+        f"Dividend Yield {nemo} — {anio_ref}:",
+        f"  DY sobre {label}: {dy * 100:.4f}%",
+        f"  Dividendos año UF/cuota: {div_total:.6f} ({n_pagos} pagos, {f_min} -> {f_max})",
+        f"  {label.capitalize()} al cierre ({fecha_fin}): {precio:.6f} UF/cuota",
+    ]
+    return "\n".join(lines)
+
+
+def consultar_db_tasaciones(
+    activo_key: str | None = None,
+    periodo: str | None = None,
+) -> str:
+    """Tasaciones de activos inmobiliarios (fact_tasacion).
+
+    Muestra las dos tasadoras por año y el promedio.
+    activo_key: ej. 'PT', 'Viña Centro', 'INMOSA' | None = todos
+    periodo:    YYYY | None = todos los años
+    """
+    with get_conn() as conn:
+        rows = repo_tasacion.list_tasaciones(conn, activo_key, periodo)
+
+    if not rows:
+        filtro = f"'{activo_key}'" if activo_key else "todos los activos"
+        extra = f" período {periodo}" if periodo else ""
+        return f"Sin tasaciones en DB para {filtro}{extra}."
+
+    # Agrupar por (activo, periodo)
+    from collections import defaultdict
+    grupos: dict = defaultdict(list)
+    for r in rows:
+        grupos[(r["activo_key"], r["periodo"])].append(r)
+
+    lines = ["Tasaciones (DB):"]
+    for (ak, per), tas_list in sorted(grupos.items()):
+        valores_uf = [t["valor_uf"] for t in tas_list if t["valor_uf"] is not None]
+        promedio = sum(valores_uf) / len(valores_uf) if valores_uf else None
+        prom_str = f"  → Promedio: {promedio:,.0f} UF" if promedio else ""
+        lines.append(f"\n  {ak} — {per}{prom_str}")
+        for t in tas_list:
+            campos = [f"    {t['tasador']:20s}"]
+            if t["valor_uf"] is not None:
+                campos.append(f"{t['valor_uf']:>12,.0f} UF")
+            if t["uf_m2"] is not None:
+                campos.append(f"{t['uf_m2']:.1f} UF/m²")
+            if t["cap_rate"] is not None:
+                campos.append(f"cap rate {t['cap_rate']*100:.2f}%")
+            if t["tasa_dcto"] is not None:
+                campos.append(f"tasa dcto {t['tasa_dcto']*100:.2f}%")
+            if t["ltv"] is not None:
+                campos.append(f"LTV {t['ltv']*100:.1f}%")
+            lines.append("  ".join(campos))
+    return "\n".join(lines)
+
+
+def consultar_db_adquisiciones(activo_key: str | None = None) -> str:
+    """Valores de compra de activos inmobiliarios (fact_adquisicion).
+
+    activo_key: ej. 'PT' | None = todos los activos
+    """
+    with get_conn() as conn:
+        if activo_key:
+            row = repo_tasacion.get_adquisicion(conn, activo_key)
+            rows = [row] if row else []
+        else:
+            rows = repo_tasacion.list_adquisiciones(conn)
+
+    if not rows:
+        filtro = f"'{activo_key}'" if activo_key else "ningún activo"
+        return f"Sin valor de adquisición en DB para {filtro}."
+
+    lines = ["Valores de adquisición (DB):"]
+    for r in rows:
+        partes = [f"  {r['activo_key']:15s}  {r['fecha_adquisicion']}"]
+        if r["precio_uf"] is not None:
+            partes.append(f"precio fondo: {r['precio_uf']:>12,.0f} UF")
+        if r["valor_activo_uf"] is not None:
+            partes.append(f"valor 100%: {r['valor_activo_uf']:>12,.0f} UF")
+        if r["uf_m2"] is not None:
+            partes.append(f"{r['uf_m2']:.2f} UF/m²")
+        if r["porcentaje_adquirido"] is not None:
+            partes.append(f"{r['porcentaje_adquirido']*100:.1f}% adquirido")
+        lines.append("  ".join(partes))
+    return "\n".join(lines)

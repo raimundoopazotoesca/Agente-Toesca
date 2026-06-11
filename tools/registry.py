@@ -113,6 +113,8 @@ from tools.query_tools import (
     consultar_db_valor_libro,
     consultar_db_valor_bursatil,
     consultar_dividend_yield,
+    consultar_db_tasaciones,
+    consultar_db_adquisiciones,
 )
 from tools.db.dashboard import generar_dashboard
 from tools.db.ingest_router import ingestar_archivo
@@ -1375,6 +1377,55 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "consultar_db_tasaciones",
+            "description": (
+                "Consulta las tasaciones de activos inmobiliarios (fact_tasacion). "
+                "Muestra los valores de cada tasadora por año y el promedio. "
+                "Usar cuando el usuario pregunta por: tasación, valor tasado, cap rate, "
+                "tasa de descuento, LTV, LTC, leverage financiero, UF/m² tasado, "
+                "o comparación entre tasadoras."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activo_key": {
+                        "type": "string",
+                        "description": "Ej. 'PT', 'Viña Centro', 'INMOSA'. Omitir para todos.",
+                    },
+                    "periodo": {
+                        "type": "string",
+                        "description": "Año (YYYY). Omitir para todos los años.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_db_adquisiciones",
+            "description": (
+                "Consulta los valores de compra/adquisición de activos inmobiliarios (fact_adquisicion). "
+                "Muestra el precio pagado, valor del activo al 100%, UF/m², fecha y porcentaje adquirido. "
+                "Usar cuando el usuario pregunta por: precio de compra, valor de adquisición, "
+                "cuánto se pagó por el activo, fecha de entrada al portfolio."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activo_key": {
+                        "type": "string",
+                        "description": "Ej. 'PT', 'Viña Centro'. Omitir para todos.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "consultar_noi",
             "description": "Consulta el NOI (Net Operating Income) en UF desde la base de datos: mensual, anual, anualizado (real YTD + promedio histórico de meses faltantes), U12M, y variaciones MoM e YoY. Puede agregar por activo, fondo, categoría (Oficinas, Centros Comerciales, Residencias, Industrial) o total, al 100% del activo o ponderado por % de participación del fondo.",
             "parameters": {
@@ -2162,6 +2213,8 @@ def _dispatch(name: str, args: dict) -> str:
         ),
         "consultar_db_dividendos":       lambda a: consultar_db_dividendos(a["nemotecnico"]),
         "consultar_dividend_yield":      lambda a: consultar_dividend_yield(a["nemotecnico"], a.get("periodo"), a.get("anio"), a.get("tipo", "contable")),
+        "consultar_db_tasaciones":       lambda a: consultar_db_tasaciones(a.get("activo_key"), a.get("periodo")),
+        "consultar_db_adquisiciones":    lambda a: consultar_db_adquisiciones(a.get("activo_key")),
         "consultar_noi":                 lambda a: consultar_noi(a["nivel"], a.get("clave"), a.get("año"), a.get("ponderado", False)),
         "generar_dashboard":             lambda a: f"Dashboard generado: {generar_dashboard()}",
         "ingestar_archivo":              lambda a: ingestar_archivo(a["path"], a.get("periodo")),
@@ -2225,6 +2278,7 @@ _TOOLS_GENERAL = {
     "consultar_db_cobertura", "consultar_db_kpi", "consultar_db_precio",
     "consultar_db_rent_roll", "consultar_db_er", "consultar_db_flujo",
     "consultar_db_valor_bursatil", "consultar_db_valor_libro", "consultar_db_patrimonio_bursatil", "consultar_db_capital_suscrito", "consultar_db_dividendos", "consultar_dividend_yield", "consultar_noi", "consultar_financiamiento", "generar_dashboard",
+    "consultar_db_tasaciones", "consultar_db_adquisiciones",
     "calcular_indicador", "calcular_dy_fondo", "calcular_tir_fondo",
     "listar_indicadores", "invalidar_cache_indicador", "verificar_skill_finanzas",
     "buscar_ubicacion", "guardar_ubicacion", "leer_wiki",
