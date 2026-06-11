@@ -3,6 +3,13 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-06-11] feat | ingesta EEFF PT en raw_eeff_line completa 2020–2025
+
+Ingesta manual de EEFF trimestrales PT (fondo paraguas, no el activo) desde PDFs vía ChatGPT → JSON → DB.
+Períodos completados: 2020-03-31 a 2025-12-31 (24 períodos, 100 filas c/u).
+Script: `tools/db/ingest_eeff_pt_json.py` (función `ingest_from_file`).
+JSONs staging en `work/eeff_pt_json/`.
+
 ## [2026-06-11] feat | ingesta PT — raw_valor_cuota_line, dividendos, cuotas, precios
 
 Inicio de poblamiento de DB para fondo PT (Toesca Rentas Inmobiliarias PT, CFITRIPT-E, Serie Única).
