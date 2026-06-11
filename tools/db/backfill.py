@@ -660,16 +660,17 @@ def backfill_eeff_pt(verbose: bool = True) -> dict:
 
 
 def backfill_ar_pt(verbose: bool = True) -> dict:
-    """Backfill de PT desde hoja 'A&R PT' del CDG más reciente.
+    """Backfill de PT desde hoja 'A&R PT' del CDG extract (liviano, ~1MB).
 
     Ingesta en un solo pase: dividendos, valor cuota contable, cuotas en
     circulación, precios bursátiles históricos y patrimonio bursátil.
     """
     from tools.db.ingest_cdg_extract import ingest_ar_pt
 
-    cdg = _find_cdg()
+    extract = os.path.join(ROOT, "work", "eeff_ingesta", "TRI", "cdg_extract.xlsx")
+    cdg = extract if os.path.exists(extract) else _find_cdg()
     if not cdg:
-        return {"archivos": 0, "filas": 0, "sin_datos": ["No se encontró CDG"]}
+        return {"archivos": 0, "filas": 0, "sin_datos": ["No se encontró CDG extract"]}
 
     result = ingest_ar_pt(cdg)
     if "error" in result:
