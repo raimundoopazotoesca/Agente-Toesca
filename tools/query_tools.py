@@ -556,3 +556,113 @@ def consultar_db_adquisiciones(activo_key: str | None = None) -> str:
             partes.append(f"{r['porcentaje_adquirido']*100:.1f}% adquirido")
         lines.append("  ".join(partes))
     return "\n".join(lines)
+
+
+_INMOSA_RESIDENCIAS = (
+    "('Residencia Arturo Medina','Residencia Candil','Residencia Colombia',"
+    "'Residencia Coventry','Residencia Domingo Calderón','Residencia Padre Errázuriz')"
+)
+
+
+def consultar_ltv(
+    activo_key: str | None = None,
+    periodo: str | None = None,
+    fondo_key: str | None = None,
+) -> str:
+    """LTV dinámico por activo (y agregado por fondo).
+
+    LTV = deuda 100% del activo / tasación promedio vigente.
+    El saldo de deuda se actualiza mensualmente; la tasación usa el promedio del
+    año más reciente disponible (≤ año del periodo).
+
+    activo_key: ej. 'Torre A', 'INMOSA' | None = todos
+    periodo:    'YYYY-MM' | None = último mes con datos de saldo
+    fondo_key:  'PT' | 'TRI' | 'Apo' | None = todos
+    """
+    with get_conn() as conn:
+        # Resolver periodo por defecto
+        if not periodo:
+            cur = conn.execute(
+                "SELECT MAX(s.periodo) FROM raw_deuda_saldo_line s WHERE s.is_proyeccion=0"
+            )
+            periodo = cur.fetchone()[0]
+            if not periodo:
+                return "Sin datos de saldo de deuda en la DB."
+
+        filtros, params = ["s.is_proyeccion=0", "s.periodo=?"], [periodo]
+        if activo_key:
+            filtros.append("dc.activo_key=?")
+            params.append(activo_key)
+        if fondo_key:
+            filtros.append("dc.fondo_key=?")
+            params.append(fondo_key)
+        where = " AND ".join(filtros)
+
+        sql = f"""
+        WITH deuda AS (
+            SELECT dc.activo_key, dc.fondo_key, MAX(dc.part_fondo) as part_fondo,
+                   SUM(s.saldo_uf) as deuda_uf_fondo
+            FROM raw_deuda_saldo_line s
+            JOIN dim_credito dc ON dc.credito_key = s.credito_key
+            WHERE {where}
+            GROUP BY dc.activo_key, dc.fondo_key
+        ),
+        tas_mapped AS (
+            SELECT
+                CASE WHEN activo_key IN {_INMOSA_RESIDENCIAS} THEN 'INMOSA' ELSE activo_key END as activo_key,
+                periodo as anio,
+                SUM(valor_uf) as tasacion_uf
+            FROM fact_tasacion WHERE tasador='Promedio'
+            GROUP BY 1, 2
+        )
+        SELECT
+            d.activo_key, d.fondo_key, d.deuda_uf_fondo, d.part_fondo,
+            (SELECT t.tasacion_uf FROM tas_mapped t
+             WHERE t.activo_key = d.activo_key AND t.anio <= substr(?,1,4)
+             ORDER BY t.anio DESC LIMIT 1) as tasacion_uf,
+            (SELECT t.anio FROM tas_mapped t
+             WHERE t.activo_key = d.activo_key AND t.anio <= substr(?,1,4)
+             ORDER BY t.anio DESC LIMIT 1) as tasacion_anio
+        FROM deuda d
+        ORDER BY d.fondo_key, d.activo_key
+        """
+        rows = conn.execute(sql, params + [periodo, periodo]).fetchall()
+
+    if not rows:
+        return f"Sin datos de LTV para {activo_key or 'todos'} en {periodo}."
+
+    lines = [f"LTV por activo — {periodo} (deuda real / tasación promedio):"]
+    lines.append(f"  {'Activo':30s}  {'Fondo':5s}  {'Deuda 100%':>12s}  {'Tasación':>12s}  {'Año tas':7s}  {'LTV':>8s}")
+    lines.append("  " + "-" * 80)
+
+    fondo_totals: dict = {}
+    for r in rows:
+        ak = r["activo_key"]
+        fk = r["fondo_key"]
+        deuda_fondo = r["deuda_uf_fondo"] or 0
+        part = r["part_fondo"] or 1
+        deuda_total = deuda_fondo / part if part else None
+        tasacion = r["tasacion_uf"]
+        anio_tas = r["tasacion_anio"] or "—"
+        ltv = deuda_total / tasacion if (deuda_total and tasacion) else None
+        ltv_str = f"{ltv:.1%}" if ltv is not None else "—"
+        deuda_str = f"{deuda_total:>12,.0f}" if deuda_total else "—"
+        tas_str = f"{tasacion:>12,.0f}" if tasacion else "s/d"
+        lines.append(f"  {ak:30s}  {fk:5s}  {deuda_str}  {tas_str}  {anio_tas:7s}  {ltv_str:>8s}")
+
+        # Acumular por fondo (usando deuda al 100% × part y tasacion × part)
+        if tasacion and deuda_total:
+            if fk not in fondo_totals:
+                fondo_totals[fk] = {"deuda_eco": 0.0, "valor_eco": 0.0}
+            fondo_totals[fk]["deuda_eco"] += deuda_fondo        # deuda económica del fondo
+            fondo_totals[fk]["valor_eco"] += tasacion * part    # valor económico del fondo
+
+    if len(fondo_totals) >= 1:
+        lines.append("")
+        lines.append("  LTV por fondo (deuda econ. / valor econ.):")
+        for fk, v in sorted(fondo_totals.items()):
+            ltv_f = v["deuda_eco"] / v["valor_eco"] if v["valor_eco"] else None
+            ltv_f_str = f"{ltv_f:.1%}" if ltv_f else "—"
+            lines.append(f"    {fk}: {v['deuda_eco']:>10,.0f} UF deuda econ.  /  {v['valor_eco']:>12,.0f} UF valor econ.  →  LTV {ltv_f_str}")
+
+    return "\n".join(lines)
