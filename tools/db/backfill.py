@@ -643,6 +643,49 @@ def backfill_dividendos(verbose: bool = True) -> dict:
     return rep
 
 
+def backfill_eeff_pt(verbose: bool = True) -> dict:
+    """Backfill de EEFF PDFs de PT → raw_valor_cuota_line + raw_cuota_en_circulacion_line."""
+    from tools.db.ingest_eeff_pt import backfill_eeff_pt_pdfs
+    res = backfill_eeff_pt_pdfs(verbose=verbose)
+    if verbose:
+        print(f"  [eeff_pt] PDFs={res['pdfs_encontrados']} | "
+              f"VC={res['valor_cuota_insertadas']} | CQ={res['cuotas_insertadas']}")
+        for e in res["errores"]:
+            print(f"  [ERROR] {e}")
+    return {
+        "archivos": res["pdfs_encontrados"],
+        "filas": res["valor_cuota_insertadas"] + res["cuotas_insertadas"],
+        "sin_datos": res["errores"],
+    }
+
+
+def backfill_ar_pt(verbose: bool = True) -> dict:
+    """Backfill de PT desde hoja 'A&R PT' del CDG más reciente.
+
+    Ingesta en un solo pase: dividendos, valor cuota contable, cuotas en
+    circulación, precios bursátiles históricos y patrimonio bursátil.
+    """
+    from tools.db.ingest_cdg_extract import ingest_ar_pt
+
+    cdg = _find_cdg()
+    if not cdg:
+        return {"archivos": 0, "filas": 0, "sin_datos": ["No se encontró CDG"]}
+
+    result = ingest_ar_pt(cdg)
+    if "error" in result:
+        return {"archivos": 0, "filas": 0, "sin_datos": [result["error"]]}
+
+    total = sum(v for v in result.values() if isinstance(v, int))
+    if verbose:
+        bn = os.path.basename(cdg)
+        print(f"  [ar_pt] dividendos={result.get('dividendos_insertados', 0)} | "
+              f"VR Contable={result.get('valor_cuota_contable_insertados', 0)} | "
+              f"cuotas={result.get('cuotas_circulacion_insertadas', 0)} | "
+              f"precios={result.get('precios_bursatiles_insertados', 0)} | "
+              f"patrimonio={result.get('patrimonio_bursatil_insertados', 0)} <- {bn}")
+    return {"archivos": 1, "filas": total, "sin_datos": [], "detalle": [str(result)]}
+
+
 def _print_reporte(nombre: str, rep: dict) -> None:
     print(f"\n=== Backfill {nombre} ===")
     print(f"Archivos ingestados: {rep['archivos']}  |  Filas insertadas: {rep['filas']}")
@@ -655,7 +698,7 @@ def _print_reporte(nombre: str, rep: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi", "ar_pt", "eeff_pt"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -685,6 +728,10 @@ def main(argv: list[str]) -> None:
         if rep["errores"]:
             for e in rep["errores"]:
                 print(f"  - {e}")
+    if "ar_pt" in dominios:
+        _print_reporte("ar_pt", backfill_ar_pt(verbose=True))
+    if "eeff_pt" in dominios:
+        _print_reporte("eeff_pt", backfill_eeff_pt(verbose=True))
 
 
 if __name__ == "__main__":

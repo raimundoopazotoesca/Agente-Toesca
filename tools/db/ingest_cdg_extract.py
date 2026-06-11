@@ -428,6 +428,162 @@ def ingest_patrimonio_bursatil(excel_path: str) -> Dict:
     return {'insertados': insertados, 'fechas_unicas': len(set(k[0] for k in acum))}
 
 
+def ingest_ar_pt(excel_path: str) -> Dict:
+    """
+    Lee hoja 'A&R PT' del CDG extract y persiste en un solo pase:
+      - raw_dividendo_line            (Detalle='Dividendo')
+      - raw_valor_cuota_line          (Detalle='VR Contable', tipo='contable')
+      - raw_precio_cuota_line         (Detalle='VR Bursátil', para gap-fill histórico)
+      - raw_cuota_en_circulacion_line (cuotas del período de VR Contable)
+      - raw_patrimonio_bursatil_line  (Detalle='VR Bursátil', patrimonio total)
+
+    PT tiene SERIE ÚNICA → nemotecnico = 'CFITRIPT-E' en todas las filas.
+    Columnas hoja (0-based): A=año, B=mes, C=id, D=fecha_sf, E=detalle, F=serie,
+      G=tipo, H=monto_clp, I=monto_clp_cuota, J=cuotas, K=uf_dia, L=monto_uf, M=monto_uf_cuota.
+    Datos desde fila 13 (índice 0 = fila 1). Terminan cuando col A es None.
+    """
+    path = Path(excel_path)
+    if not path.exists():
+        return {'error': f'Archivo no encontrado: {excel_path}'}
+
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        ws = wb['A&R PT']
+    except Exception as e:
+        return {'error': f'Error abriendo Excel: {e}'}
+
+    NEMO = 'CFITRIPT-E'
+    FONDO = 'PT'
+    START_ROW = 13  # primera fila de datos (1-based)
+
+    rows = list(ws.iter_rows(min_row=START_ROW, values_only=True))
+    wb.close()
+
+    file_hash = _hash_file(excel_path)
+    source_file = Path(excel_path).name
+
+    # Colectar por tipo
+    dividendos: list = []
+    vr_contable: list = []
+    vr_bursatil: list = []
+
+    for i, row in enumerate(rows):
+        if row[0] is None and row[3] is None:
+            break
+        fecha_val = row[3]
+        detalle = str(row[4]).strip() if row[4] else ''
+        monto_clp = row[7]
+        monto_clp_cuota = row[8]
+        cuotas = row[9]
+        uf_dia = row[10]
+        monto_uf = row[11]
+        monto_uf_cuota = row[12]
+
+        if not fecha_val or not detalle:
+            continue
+
+        fecha_str = fecha_val.strftime('%Y-%m-%d') if hasattr(fecha_val, 'strftime') else str(fecha_val)
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+        periodo = f"{fecha_obj.year}-{fecha_obj.month:02d}"
+        src_row = START_ROW + i
+
+        if 'Dividendo' in detalle:
+            dividendos.append((FONDO, NEMO, fecha_str, monto_clp_cuota, monto_uf_cuota, periodo, source_file, file_hash, src_row))
+        elif 'VR Contable' in detalle:
+            vr_contable.append((FONDO, NEMO, fecha_str, 'contable', monto_uf_cuota, monto_clp_cuota, cuotas, uf_dia, periodo, source_file, file_hash, src_row))
+        elif 'VR Burs' in detalle:
+            vr_bursatil.append((FONDO, NEMO, fecha_str, monto_clp_cuota, monto_uf, uf_dia, periodo, source_file, file_hash, src_row))
+
+    conn = get_conn()
+
+    # ── dividendos ────────────────────────────────────────────────────────────
+    div_ins = 0
+    for row in dividendos:
+        fk, nm, fecha, clp_c, uf_c, per, sf, fh, sr = row
+        try:
+            conn.execute("""
+                INSERT OR IGNORE INTO raw_dividendo_line
+                (fondo_key, nemotecnico, fecha_pago, monto_clp_cuota, monto_uf_cuota,
+                 periodo, source_file, file_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (fk, nm, fecha, clp_c, uf_c, per, sf, fh))
+            div_ins += conn.execute("SELECT changes()").fetchone()[0]
+        except Exception:
+            pass
+
+    # ── valor cuota libro (VR Contable) ───────────────────────────────────────
+    vc_ins = 0
+    cuotas_ins = 0
+    for row in vr_contable:
+        fk, nm, fecha, tipo, precio_uf, precio_clp, cuotas, uf_dia, per, sf, fh, sr = row
+
+        # EEFF PDF tiene precedencia si ya existe
+        exists = conn.execute("""
+            SELECT 1 FROM raw_valor_cuota_line
+            WHERE fondo_key=? AND nemotecnico=? AND fecha=? AND tipo='contable'
+              AND source_file NOT LIKE '%cdg%'
+        """, (fk, nm, fecha)).fetchone()
+        if not exists and precio_uf:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_valor_cuota_line
+                    (fondo_key, nemotecnico, fecha, tipo, precio_uf, precio_clp, uf_dia,
+                     cuotas, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (fk, nm, fecha, tipo, precio_uf, precio_clp, uf_dia, cuotas, per, sf, fh))
+                vc_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+
+        # Cuotas en circulación (siempre del VR Contable, más confiable)
+        if cuotas:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_cuota_en_circulacion_line
+                    (fondo_key, nemotecnico, fecha, cuotas, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (fk, nm, fecha, cuotas, per, sf, fh))
+                cuotas_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+
+    # ── precio cuota bursátil (gap-fill histórico) ────────────────────────────
+    # raw_precio_cuota_line tiene desde 2024-05; el CDG tiene desde 2017
+    precio_ins = 0
+    pat_ins = 0
+    for row in vr_bursatil:
+        fk, nm, fecha, clp_cuota, pat_uf, uf_dia, per, sf, fh, sr = row
+        if clp_cuota:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_precio_cuota_line
+                    (nemotecnico, fecha, precio_clp, fuente, loaded_at)
+                    VALUES (?, ?, ?, 'cdg_ar_pt', datetime('now'))
+                """, (nm, fecha, clp_cuota))
+                precio_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+        if pat_uf:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_patrimonio_bursatil_line
+                    (fondo_key, nemotecnico, fecha, patrimonio_uf, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (fk, nm, fecha, pat_uf, per, sf, fh))
+                pat_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+
+    conn.commit()
+    return {
+        'dividendos_insertados': div_ins,
+        'valor_cuota_contable_insertados': vc_ins,
+        'cuotas_circulacion_insertadas': cuotas_ins,
+        'precios_bursatiles_insertados': precio_ins,
+        'patrimonio_bursatil_insertados': pat_ins,
+    }
+
+
 def _hash_file(path: str) -> str:
     """SHA256 del archivo."""
     sha = hashlib.sha256()

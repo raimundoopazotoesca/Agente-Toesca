@@ -3,6 +3,38 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-06-11] feat | ingesta PT — raw_valor_cuota_line, dividendos, cuotas, precios
+
+Inicio de poblamiento de DB para fondo PT (Toesca Rentas Inmobiliarias PT, CFITRIPT-E, Serie Única).
+
+**Fuentes:**
+- `A&R PT` del CDG → dividendos, VR Contable (valor cuota libro trimestral desde 2017-11), cuotas en circulación (siempre 1.640.000), precios bursátiles históricos, patrimonio bursátil.
+- PDFs EEFF en `work/eeff_pt/` → valor cuota libro exacto por trimestre (tienen precedencia sobre CDG).
+
+**Nuevo código:**
+- `tools/db/ingest_cdg_extract.py::ingest_ar_pt` — lee hoja 'A&R PT' del CDG en un pase.
+- `tools/db/ingest_eeff_pt.py` — parser regex EEFF PT para SERIE ÚNICA. Maneja formato 2017 ("tiene un valor cuota de\n$X") y formato 2025 ("tienen un valor cuota de $ X").
+- `tools/db/backfill.py` → dominios `eeff_pt` y `ar_pt` registrados.
+
+**Carpeta staging:** `work/eeff_pt/` — subir PDFs aquí sin subcarpetas.
+
+**Validación:** 5 PDFs (2017-12 → 2018-12) parseados. VC cross-check vs CDG: ✓ (25.815,4355 dic-2017).
+
+**Pendiente:**
+- Subir PDFs 2019→2025 a `work/eeff_pt/` y re-correr `python -X utf8 -m tools.db.backfill eeff_pt`.
+- Cuotas de PDFs no parseadas (formato tabular antiguo, Suscritas sin número en línea siguiente) — el CDG las cubre vía `ar_pt`.
+- Validar resultado final del backfill `ar_pt` (CDG tiene 33 fechas VR Contable desde 2017-12).
+
+## [2026-06-11] fix | dim_credito — fechas DD-MM-YYYY corregidas (bug ingesta)
+
+Todas las `fecha_inicio` y `fecha_vencimiento` de `dim_credito` estaban almacenadas como
+`YYYY-DD-MM` en vez de `YYYY-MM-DD` (formato chileno no convertido al ingestar).
+Detectado al comparar duration PT: yo calculaba 2.43 años (con venc. ene-2029),
+usuario tenía 3.17 años (con venc. nov-2029 = fecha correcta).
+Fix: `scripts/fix_fechas_credito_apply.py` corrigió 23 valores en 15 créditos (PT, TRI, Apo).
+PT vencimiento corregido: `2029-01-11` → `2029-11-01`. Duration PT: 3.12 años (Macaulay).
+Prevención futura: parsear fechas chilenas con `dayfirst=True` al re-ingestar.
+
 ## [2026-06-08] dominio | TRI: sin dividendos en Q4-2023 ni en 2024 — confirmado por usuario
 
 ## [2026-05-27] feat | Extractor Groq EEFF TRI — independencia del CDG

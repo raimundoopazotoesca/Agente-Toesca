@@ -21,13 +21,40 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv(encoding="utf-8")
 from config import GEMINI_API_KEY
 
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "memory" / "agente_toesca.db"
+DB_PATH = ROOT / "memory" / "agente_toesca_v2.db"
 
 import os
 MODEL = os.getenv("EEFF_INGEST_MODEL", "gemini-2.5-flash-lite")
+
+_anthropic_client = None
+_groq_client = None
+
+_GROQ_PREFIX = "groq:"
+_ANTHROPIC_PREFIX = "anthropic:"
+
+if MODEL.startswith(_GROQ_PREFIX):
+    MODEL = MODEL[len(_GROQ_PREFIX):]
+    client = OpenAI(
+        api_key=os.environ["GROQ_API_KEY"],
+        base_url="https://api.groq.com/openai/v1",
+    )
+    _groq_client = client
+elif MODEL.startswith(_ANTHROPIC_PREFIX):
+    MODEL = MODEL[len(_ANTHROPIC_PREFIX):]
+    import anthropic as _anthropic_sdk
+    _anthropic_client = _anthropic_sdk.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = None
+else:
+    client = OpenAI(
+        api_key=GEMINI_API_KEY,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+    )
+
 
 def paths_for_fondo(fondo_key: str) -> tuple[Path, Path, Path]:
     """Devuelve (md_dir, pdf_dir, json_dir) para un fondo dado."""
@@ -38,17 +65,12 @@ def paths_for_fondo(fondo_key: str) -> tuple[Path, Path, Path]:
     json_dir.mkdir(parents=True, exist_ok=True)
     return md_dir, pdf_dir, json_dir
 
-client = OpenAI(
-    api_key=GEMINI_API_KEY,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-)
-
 SYSTEM_PROMPT = """Eres un experto en EEFF de fondos de inversión chilenos (CMF).
 Recibirás el texto de un PDF de EEFF (convertido a Markdown). Extrae TODAS las cuentas con sus montos.
 
 Devuelve SOLO JSON válido con esta estructura:
 {
-  "periodos_reportados": ["YYYY-MM-DD", ...],  // todas las fechas de corte que aparecen como columna en los estados
+  "periodos_reportados": ["YYYY-MM-DD"],  // lista ÚNICA y CORTA de fechas de cierre (máximo 4-5 fechas distintas)
   "lineas": [
     {
       "section": "ESF|ER|ECP|EFE|NOTA_<n>|ANEXO_<letra>",
@@ -131,7 +153,19 @@ def _try_repair_json(s: str) -> str:
     return s
 
 
+_GROQ_MAX_INPUT_CHARS = 12_000  # ~3000 tokens input; deja margen para output dentro del TPM (12K)
+
+
 def call_gemini(md_text: str, filename: str, raw_dump: Path | None = None) -> dict:
+    if _anthropic_client is not None:
+        return _call_anthropic(md_text, filename, raw_dump)
+
+    is_groq = _groq_client is not None
+    if is_groq and len(md_text) > _GROQ_MAX_INPUT_CHARS:
+        md_text = md_text[:_GROQ_MAX_INPUT_CHARS]
+        print(f"  [Groq] input truncado a {_GROQ_MAX_INPUT_CHARS} chars para TPM limit", flush=True)
+
+    max_out = 4096 if is_groq else 32768
     resp = client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -140,7 +174,7 @@ def call_gemini(md_text: str, filename: str, raw_dump: Path | None = None) -> di
         ],
         response_format={"type": "json_object"},
         temperature=0,
-        max_tokens=65536,
+        max_tokens=max_out,
     )
     content = resp.choices[0].message.content
     if raw_dump is not None:
@@ -148,7 +182,25 @@ def call_gemini(md_text: str, filename: str, raw_dump: Path | None = None) -> di
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        # intento de reparación
+        return json.loads(_try_repair_json(content))
+
+
+def _call_anthropic(md_text: str, filename: str, raw_dump: Path | None = None) -> dict:
+    resp = _anthropic_client.messages.create(
+        model=MODEL,
+        max_tokens=16000,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": USER_PROMPT_TPL.format(filename=filename, md_content=md_text)}],
+    )
+    content = resp.content[0].text
+    if raw_dump is not None:
+        raw_dump.write_text(content, encoding="utf-8")
+    # Strip markdown code fences if present
+    content = re.sub(r"^```(?:json)?\s*", "", content.strip())
+    content = re.sub(r"\s*```$", "", content)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
         return json.loads(_try_repair_json(content))
 
 
@@ -208,8 +260,22 @@ def process_file(md_path: Path, fondo_key: str, pdf_dir: Path, json_dir: Path, d
     if pdf is None:
         return {"file": md_path.name, "error": "PDF/DOCX original no encontrado"}
     fhash = file_hash(pdf)
-    md_text = md_path.read_text(encoding="utf-8")
 
+    if not dry_run:
+        con = sqlite3.connect(DB_PATH)
+        try:
+            if already_ingested(con, fhash):
+                print(f"[{md_path.name}] ya ingestado (file_hash existe), skip", flush=True)
+                return {"file": md_path.name, "skipped": True, "file_hash": fhash}
+        finally:
+            con.close()
+
+    # Truncar: los 4 estados financieros están siempre en los primeros ~25K chars.
+    # El resto son notas narrativas que duplican espacio sin agregar cuentas clave.
+    _MAX_CHARS = int(os.getenv("EEFF_MAX_CHARS", "35000"))
+    md_text = md_path.read_text(encoding="utf-8")
+    if len(md_text) > _MAX_CHARS:
+        md_text = md_text[:_MAX_CHARS]
     print(f"[{md_path.name}] enviando a Gemini ({len(md_text)} chars)...", flush=True)
     raw_dump = json_dir / (md_path.stem + ".raw.txt")
     data = call_gemini(md_text, md_path.name, raw_dump=raw_dump)
@@ -227,9 +293,6 @@ def process_file(md_path: Path, fondo_key: str, pdf_dir: Path, json_dir: Path, d
 
     con = sqlite3.connect(DB_PATH)
     try:
-        if already_ingested(con, fhash):
-            print(f"  -> ya ingestado (file_hash existe), skip", flush=True)
-            return {"file": md_path.name, "skipped": True, "file_hash": fhash}
         run_id = ensure_ingest_run(con, source_file=pdf.name, fhash=fhash)
         n = insert_lines(con, lineas, fondo_key=fondo_key, source_file=pdf.name, fhash=fhash, run_id=run_id)
         con.execute(
