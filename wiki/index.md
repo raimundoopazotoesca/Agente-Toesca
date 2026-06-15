@@ -69,6 +69,12 @@
 
 | Página | Descripción | Actualizado |
 |--------|-------------|-------------|
+| [[tir_contable_desde_inicio]] | **METODOLOGÍA CANÓNICA TIR desde inicio** — fuentes, flujos, XIRR, valores referencia dic-2025 | 2026-06-15 |
+
+## Conceptos (separado)
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
 | [[conceptos/ooxml]] | Arquitectura XML directo en XLSX, helpers críticos | 2026-05-01 |
 | [[conceptos/fechas-excel]] | Seriales de fecha Excel y conversión | 2026-05-01 |
 | [[conceptos/numeros-chilenos]] | Formato de números CLP en Excel | 2026-05-01 |

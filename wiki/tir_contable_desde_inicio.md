@@ -1,87 +1,118 @@
-# TIR Contable desde Inicio — Metodología
+# TIR desde Inicio — Metodología canónica (todos los fondos)
 
-## Fuentes de datos
+> Documento de referencia. Cualquier agente que calcule TIR desde inicio DEBE seguir esta metodología
+> y usar estas fuentes de datos. No inventar variantes.
 
-- `raw_ar_event_line` — eventos A&R del CDG por fondo/serie (aportes, dividendos, disminuciones)
-- `raw_valor_cuota_line` — precios UF/cuota contable (fuente del terminal VR)
+---
 
-## Paso 1 — Cuotas totales de aportes (divisor fijo por serie)
+## TRI series (A / C / I) — método `tir_por_cuota`
+
+Se usa cuando hay aportes posteriores al primer VNA contable (fondos con múltiples rondas).
+
+### Fuentes de datos
+
+| Dato | Tabla | Campo |
+|---|---|---|
+| Aportes y Disminuciones | `raw_ar_event_line` | `monto_uf`, `cuotas`, `fecha` |
+| Dividendos | `raw_dividendo_line` | `monto_uf_cuota`, `fecha_pago` |
+| Terminal VNA contable | `raw_valor_cuota_line` | `precio_uf` donde `tipo='contable'` |
+| Terminal VNA bursatil | `raw_valor_cuota_line` | `precio_uf` donde `tipo='bursatil'` |
+
+### Paso 1 — Cuotas totales de aportes (divisor fijo por serie)
 
 ```sql
-cuotas_totales_serie = SUM(cuotas)
-WHERE detalle = 'Aporte'
-  AND nemotecnico = <serie>
+cuotas_totales = SUM(cuotas)
+FROM raw_ar_event_line
+WHERE nemotecnico = <serie> AND detalle = 'Aporte'
 ```
 
-Valores conocidos:
 | Serie | cuotas_totales_aporte |
 |---|---|
 | CFITOERI1A | 526,079 |
 | CFITOERI1C | 1,385,310 |
 | CFITOERI1I | 908,887 |
 
-## Paso 2 — Terminal VR Contable
+### Paso 2 — Terminal VNA
 
 ```sql
 terminal = precio_uf
 FROM raw_valor_cuota_line
-WHERE nemotecnico = <serie> AND tipo = 'contable' AND fecha <= FECHA_CORTE
+WHERE nemotecnico = <serie>
+  AND tipo = 'contable'   -- o 'bursatil' para tir_bursatil
+  AND fecha <= FECHA_CORTE
 ORDER BY fecha DESC LIMIT 1
 ```
 
-El terminal NO proviene de los VR rows de `raw_ar_event_line`.
+**IMPORTANTE**: el terminal siempre viene de `raw_valor_cuota_line`. NUNCA de `raw_ar_event_line`
+(los VR de raw_ar_event_line pueden estar desactualizados respecto a los EEFF publicados).
 
-## Paso 3 — Construir flujos XIRR
+### Paso 3 — Construir flujos (en UF/cuota)
 
-Para cada fila de `raw_ar_event_line` ordenada por `fecha ASC`:
+| Fuente | detalle | flujo UF/cuota | fecha |
+|---|---|---|---|
+| `raw_ar_event_line` | `Aporte` | `-(monto_uf / cuotas_totales)` | fecha real del aporte |
+| `raw_ar_event_line` | `Disminucion` | `+(monto_uf / cuotas_row)` | fecha real |
+| `raw_dividendo_line` | — | `+monto_uf_cuota` | `fecha_pago` real |
+| terminal (VNA) | — | `+precio_uf` | FECHA_CORTE |
+| `raw_ar_event_line` | `Canje Cuotas` | **EXCLUIR** | — |
+| `raw_ar_event_line` | `VR Contable/Bursatil` | **EXCLUIR** | — |
 
-| detalle | flujo | condición |
-|---|---|---|
-| `Aporte` | `-(monto_uf / cuotas_totales_serie)` | siempre |
-| `Dividendo` | `+(monto_uf / cuotas_row)` | solo si `fecha <= FECHA_CORTE` |
-| `Disminucion` | `+(monto_uf / cuotas_row)` | solo si `fecha <= FECHA_CORTE` |
-| `VR Contable` | excluir | — |
-| `VR Bursatil` | excluir | — |
-| `Canje Cuotas` | excluir | flujo = 0 |
+Filtros raw_dividendo_line:
+- `superseded_at IS NULL`
+- `tipo = 'dividendo'`
+- `monto_uf_cuota IS NOT NULL AND monto_uf_cuota > 0`
+- `fecha_pago <= FECHA_CORTE`
 
-Agregar como último flujo: `(terminal_per_cuota, FECHA_CORTE)`.
+### Paso 4 — XIRR
 
-> **Nota clave**: aportes usan `cuotas_totales_serie` (total histórico de aportes) como denominador.
-> Dividendos/disminuciones usan `cuotas_row` (cuotas outstanding en esa fila específica).
+Ordenar todos los flujos por fecha. Usar bisección:
 
-## Paso 4 — XIRR
-
-```python
-tir = xirr(cashflows, dates)  # tasa anual como ratio
+```
+0 = Σ CF_i / (1 + r)^((d_i - d_0) / 365)
 ```
 
-## Diferencias respecto a otras TIR
+- `d_0` = fecha del primer flujo (primer aporte)
+- `d_i` = fecha real de cada flujo
+- **No agrupar por año, no mover fechas al cierre del período**
 
-| KPI | Fuente terminal | Denominador aportes | Ventana |
-|---|---|---|---|
-| `tir_contable_desde_inicio` | `raw_valor_cuota_line` tipo=contable | cuotas totales de aportes | desde primer aporte |
-| `tir_bursatil_desde_inicio` | `raw_valor_cuota_line` tipo=bursatil | cuotas totales de aportes | desde primer aporte |
-| `tir_contable_ytd` | `raw_valor_cuota_line` precio inicial/final | N/A (método precio) | 31-dic año anterior → hoy |
-| `tir_contable_u12m` | `raw_valor_cuota_line` precio inicial/final | N/A (método precio) | hace 12 meses → hoy |
+---
 
-## Valores de referencia (dic-2025)
+## PT (serie única CFITRIPT-E) — método `tir_simple_uf`
 
-| Serie | TIR contable desde inicio | Fuente |
+Se usa cuando no hay aportes posteriores al primer VNA (fondo con aporte único de lanzamiento).
+
+1. `T0` = fecha del primer registro en `raw_valor_cuota_line` tipo=`contable`
+2. Flow en T0 = `−precio_uf` del primer VNA (precio implícito de la inversión)
+3. Dividendos = `+monto_uf_cuota` de `raw_dividendo_line`, fechas reales
+4. Terminal = `precio_uf` de `raw_valor_cuota_line` al FECHA_CORTE
+5. XIRR idéntico
+
+Para bursatil PT: terminal desde `fact_precio_cuota` / `fact_uf` (no hay bursatil en raw_valor_cuota_line para PT).
+
+---
+
+## Valores de referencia validados (dic-2025)
+
+| Serie | TIR contable desde inicio | TIR bursatil desde inicio |
 |---|---|---|
-| CFITOERI1A | 0.30% | DB (data completa) |
-| CFITOERI1C | 0.86% | DB (data completa) |
-| CFITOERI1I | 0.96% | DB (data completa) |
+| CFITOERI1A | **0.301%** | -8.19% |
+| CFITOERI1C | **0.855%** | -6.47% |
+| CFITOERI1I | **0.957%** | -0.13% |
+| CFITRIPT-E | **-5.28%** | -6.42% |
 
-> **Nota sobre discrepancia con CDG:** El archivo `work/Cálculo TIRcontable desde el inicio - Fondo Rentas.xlsx`
-> da 0.18%/0.73%/0.82% porque es una versión que no tiene los dividendos de Oct y Dic 2025.
-> Con solo los dividendos Apr+Jul 2025 (como tiene el CDG), nuestra DB también reproduce exactamente 0.18%/0.73%/0.82%.
-> Los valores correctos con la totalidad de dividendos pagados son los de la tabla arriba.
->
-> Adicionalmente, el CDG tiene un bug en la celda terminal de dic-2025: usa UF=28,302 en vez de 39,728,
-> inflando el VR a 1.024639 UF/cuota (en vez de 0.802191) y entregando 3.28% en AB3. Los valores del CDG
-> que son correctos son los que el usuario calculó manualmente con el VR correcto.
+Confirmados contra CDG manual del usuario (jun-2025).
 
-## Referencia
+---
 
-Archivo CDG: `work/Cálculo TIRcontable desde el inicio - Fondo Rentas.xlsx`
-Celda resultado: AB3 de cada hoja (A, C, I) — tiene bug de UF en terminal dic-2025.
+## Implementación en el skill
+
+Archivo: `skills/real-estate-finance-expert/scripts/tir.py`
+- Función: `_calcular_tir_por_cuota` → TRI y fondos con múltiples aportes
+- Función: `_calcular_tir_simple_uf` → PT y fondos sin aportes post-VNA
+- Dispatch: si `COUNT(Aportes WHERE fecha >= primer_VNA) == 0` → usar `tir_simple_uf`
+
+KPI names para llamar el skill:
+- `tir_contable_desde_inicio`
+- `tir_bursatil_desde_inicio`
+
+Nemotécnicos en la DB: `CFITOERI1A`, `CFITOERI1C`, `CFITOERI1I`, `CFITRIPT-E` (no alias cortos).
