@@ -584,6 +584,129 @@ def ingest_ar_pt(excel_path: str) -> Dict:
     }
 
 
+def ingest_ar_apo(excel_path: str) -> Dict:
+    """
+    Lee hoja 'A&R Apoquindo' del CDG extract y persiste:
+      - raw_valor_cuota_line          (Detalle='VR Contable', tipo='contable')
+      - raw_cuota_en_circulacion_line (cuotas de cada VR Contable)
+      - raw_dividendo_line            (Detalle='Dividendo' o 'Disminución')
+
+    Apo no cotiza en bolsa → sin VR Bursátil ni raw_precio_cuota_line.
+    Serie única → nemotecnico = 'Apo'.
+    Columnas: A=año, B=mes, C=id, D=fecha, E=detalle, F=serie(None),
+      G=tipo, H=monto_clp, I=monto_clp_cuota, J=cuotas, K=uf_dia,
+      L=monto_uf, M=monto_uf_cuota. Datos desde fila 13.
+    """
+    path = Path(excel_path)
+    if not path.exists():
+        return {'error': f'Archivo no encontrado: {excel_path}'}
+
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+        ws = wb['A&R Apoquindo']
+    except Exception as e:
+        return {'error': f'Error abriendo Excel: {e}'}
+
+    NEMO = 'Apo'
+    FONDO = 'Apo'
+    START_ROW = 13
+
+    rows = list(ws.iter_rows(min_row=START_ROW, values_only=True))
+    wb.close()
+
+    file_hash = _hash_file(excel_path)
+    source_file = Path(excel_path).name
+
+    vr_contable: list = []
+    distribuciones: list = []
+
+    for i, row in enumerate(rows):
+        año = row[0]
+        if año is None or (isinstance(año, int) and año < 2000):
+            break
+        fecha_val = row[3]
+        detalle = str(row[4]).strip() if row[4] else ''
+        monto_clp_cuota = row[8]
+        cuotas = row[9]
+        uf_dia = row[10]
+        monto_uf = row[11]
+        monto_uf_cuota = row[12]
+
+        if not fecha_val or not detalle:
+            continue
+
+        fecha_str = fecha_val.strftime('%Y-%m-%d') if hasattr(fecha_val, 'strftime') else str(fecha_val)
+        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+        periodo = f"{fecha_obj.year}-{fecha_obj.month:02d}"
+
+        if 'VR Contable' in detalle:
+            vr_contable.append((FONDO, NEMO, fecha_str, 'contable', monto_uf_cuota,
+                                monto_clp_cuota, cuotas, uf_dia, periodo, source_file, file_hash))
+        elif 'Dividendo' in detalle:
+            distribuciones.append((FONDO, NEMO, fecha_str, 'dividendo',
+                                   monto_clp_cuota, monto_uf_cuota, periodo, source_file, file_hash))
+        elif 'Disminuci' in detalle:  # Disminución (con tilde o sin tilde)
+            distribuciones.append((FONDO, NEMO, fecha_str, 'disminucion',
+                                   monto_clp_cuota, monto_uf_cuota, periodo, source_file, file_hash))
+
+    conn = get_conn()
+
+    vc_ins = cuotas_ins = 0
+    for fk, nm, fecha, tipo, precio_uf, precio_clp, cuotas, uf_dia, per, sf, fh in vr_contable:
+        if precio_uf:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_valor_cuota_line
+                    (fondo_key, nemotecnico, fecha, tipo, precio_uf, precio_clp,
+                     uf_dia, cuotas, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (fk, nm, fecha, tipo, precio_uf, precio_clp, uf_dia, cuotas, per, sf, fh))
+                vc_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+        if cuotas:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO raw_cuota_en_circulacion_line
+                    (fondo_key, nemotecnico, fecha, cuotas, periodo, source_file, file_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (fk, nm, fecha, cuotas, per, sf, fh))
+                cuotas_ins += conn.execute("SELECT changes()").fetchone()[0]
+            except Exception:
+                pass
+
+    # Idempotencia sin UNIQUE en raw_dividendo_line: verificar por file_hash
+    existing_keys = {
+        r[0] for r in conn.execute(
+            "SELECT fecha_pago || '|' || tipo FROM raw_dividendo_line WHERE fondo_key=? AND file_hash=?",
+            (FONDO, file_hash)
+        ).fetchall()
+    }
+    div_ins = 0
+    for fk, nm, fecha, tipo, clp_c, uf_c, per, sf, fh in distribuciones:
+        key = f"{fecha}|{tipo}"
+        if key in existing_keys:
+            continue
+        try:
+            conn.execute("""
+                INSERT INTO raw_dividendo_line
+                (fondo_key, nemotecnico, fecha_pago, tipo, monto_clp_cuota, monto_uf_cuota,
+                 periodo, source_file, file_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (fk, nm, fecha, tipo, clp_c, uf_c, per, sf, fh))
+            div_ins += 1
+            existing_keys.add(key)
+        except Exception:
+            pass
+
+    conn.commit()
+    return {
+        'valor_cuota_contable_insertados': vc_ins,
+        'cuotas_circulacion_insertadas': cuotas_ins,
+        'dividendos_insertados': div_ins,
+    }
+
+
 def _hash_file(path: str) -> str:
     """SHA256 del archivo."""
     sha = hashlib.sha256()

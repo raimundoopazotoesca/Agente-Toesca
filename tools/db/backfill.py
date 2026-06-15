@@ -14,6 +14,8 @@ import os
 import re
 import sys
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from tools.sharepoint_paths import (
     RR_JLL_DIR,
     TRI_VINA_RENT_ROLL_DIR,
@@ -659,6 +661,32 @@ def backfill_eeff_pt(verbose: bool = True) -> dict:
     }
 
 
+def backfill_ar_apo(verbose: bool = True) -> dict:
+    """Backfill de Apoquindo desde hoja 'A&R Apoquindo' del CDG extract (liviano, ~1MB).
+
+    Ingesta: VR Contable (valor cuota libro), cuotas en circulación,
+    dividendos y disminuciones.
+    """
+    from tools.db.ingest_cdg_extract import ingest_ar_apo
+
+    extract = os.path.join(ROOT, "work", "eeff_ingesta", "TRI", "cdg_extract.xlsx")
+    cdg = extract if os.path.exists(extract) else _find_cdg()
+    if not cdg:
+        return {"archivos": 0, "filas": 0, "sin_datos": ["No se encontró CDG extract"]}
+
+    result = ingest_ar_apo(cdg)
+    if "error" in result:
+        return {"archivos": 0, "filas": 0, "sin_datos": [result["error"]]}
+
+    total = sum(v for v in result.values() if isinstance(v, int))
+    if verbose:
+        bn = os.path.basename(cdg)
+        print(f"  [ar_apo] VR Contable={result.get('valor_cuota_contable_insertados', 0)} | "
+              f"cuotas={result.get('cuotas_circulacion_insertadas', 0)} | "
+              f"dividendos+dismin={result.get('dividendos_insertados', 0)} <- {bn}")
+    return {"archivos": 1, "filas": total, "sin_datos": [], "detalle": [str(result)]}
+
+
 def backfill_ar_pt(verbose: bool = True) -> dict:
     """Backfill de PT desde hoja 'A&R PT' del CDG extract (liviano, ~1MB).
 
@@ -699,7 +727,7 @@ def _print_reporte(nombre: str, rep: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi", "ar_pt", "eeff_pt"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi", "ar_pt", "ar_apo", "eeff_pt"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -729,6 +757,8 @@ def main(argv: list[str]) -> None:
         if rep["errores"]:
             for e in rep["errores"]:
                 print(f"  - {e}")
+    if "ar_apo" in dominios:
+        _print_reporte("ar_apo", backfill_ar_apo(verbose=True))
     if "ar_pt" in dominios:
         _print_reporte("ar_pt", backfill_ar_pt(verbose=True))
     if "eeff_pt" in dominios:
