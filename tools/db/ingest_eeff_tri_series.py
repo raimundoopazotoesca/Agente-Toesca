@@ -217,14 +217,14 @@ def ingest_eeff_tri_pdf(pdf_path: str, db_path: Optional[str] = None) -> Dict:
 
     Args:
         pdf_path: Ruta absoluta al PDF.
-        db_path:  Ruta a la DB. Si None, usa memory/agente_toesca.db.
+        db_path:  Ruta a la DB. Si None, usa memory/agente_toesca_v2.db.
 
     Retorna dict con conteos y errores.
     """
     from markitdown import MarkItDown
 
     if db_path is None:
-        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca.db")
+        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db")
 
     if not os.path.isfile(pdf_path):
         return {"error": f"Archivo no encontrado: {pdf_path}"}

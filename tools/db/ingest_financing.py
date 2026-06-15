@@ -78,9 +78,17 @@ CREDITO_ACTIVO_KEY = {
 }
 
 
+_MIGRATION_FILES = {
+    20: "020_dim_credito.sql",
+    21: "021_raw_deuda_saldo_line.sql",
+    22: "022_raw_pagare_intercompania.sql",
+    23: "023_raw_amortizacion_line.sql",
+}
+
+
 def _apply_migrations(conn: sqlite3.Connection) -> None:
-    for n in (20, 21, 22):
-        sql_file = MIGRATIONS_DIR / f"0{n:02d}_{'dim_credito' if n==20 else 'raw_deuda_saldo_line' if n==21 else 'raw_pagare_intercompania'}.sql"
+    for n in sorted(_MIGRATION_FILES):
+        sql_file = MIGRATIONS_DIR / _MIGRATION_FILES[n]
         conn.executescript(sql_file.read_text(encoding="utf-8"))
     conn.commit()
 
@@ -271,6 +279,75 @@ def ingest_pagares(conn: sqlite3.Connection, wb: openpyxl.Workbook) -> int:
     return len(rows_to_insert)
 
 
+# Bloques de Hoja2 (0-indexed): (credito_key, fecha_col, capital_col, intereses_col, saldo_col)
+# CONSOLIDADO_TRI y CONSOLIDADO_PT son claves especiales (no FK en dim_credito)
+HOJA2_BLOCKS = [
+    ("CONSOLIDADO_TRI",         2,   4,   5,   7),   # CONSOLIDADO RENTAS
+    ("TRI_SUCDEN_BICE",        22,  24,  25,  28),   # CHANARCILLO Bodegas
+    ("TRI_APO3001_SCOTIABANK", 40,  43,  44,  45),   # Apoquindo 3001
+    ("TRI_VINA_PRINCIPAL",     58,  60,  61,  62),   # VINA CENTRO
+    ("TRI_CURICO_METLIFE",     84,  87,  88,  89),   # Paseo Curico
+    ("TRI_MEDINA_METLIFE",    102, 105, 106, 107),   # MEDINA
+    ("TRI_CANDIL_METLIFE",    109, 112, 113, 114),   # CANDIL
+    ("TRI_PADREERRA_METLIFE", 116, 119, 120, 121),   # PADRE ERRAZURIZ
+    ("TRI_COVENTRY_CONFUTURO",123, 126, 127, 128),   # CONVENTRY
+    ("TRI_COLOMBIA_PRINCIPAL",130, 133, 134, 135),   # COLOMBIA
+    ("TRI_DOMCALDERON_ZURIC", 137, 140, 141, 142),   # DOMINGO CALDERON
+    ("CONSOLIDADO_PT",        145, 147, 148, 149),   # CONSOLIDADO PT
+    ("PT_BOULEVARD_SECURITY", 154, 157, 158, 159),   # Inmob. CdC (Boulevard)
+    ("PT_TORREA_SECURITY",    163, 166, 167, 168),   # Torre A
+    ("APO_APO_EUROAMERICA",   172, 175, 176, 177),   # Apoquindo Euroamerica
+    ("APO_APO_BTG",           185, 188, 189, 190),   # Apoquindo BTG
+]
+
+
+def ingest_amortizacion(conn: sqlite3.Connection, wb: openpyxl.Workbook) -> int:
+    if "Hoja2" not in wb.sheetnames:
+        print("  [WARN] Hoja2 no encontrada — omitiendo amortizacion")
+        return 0
+
+    ws = wb["Hoja2"]
+    # Cargar todas las filas de datos (desde fila 44 en adelante)
+    all_rows = list(ws.iter_rows(min_row=44, values_only=True))
+
+    rows_to_insert = []
+    from datetime import datetime as _dt
+
+    for credito_key, fc, cc, ic, sc in HOJA2_BLOCKS:
+        for row in all_rows:
+            if len(row) <= max(fc, cc):
+                continue
+            fecha_val = row[fc] if fc < len(row) else None
+            cap_val   = row[cc] if cc < len(row) else None
+            int_val   = row[ic] if ic < len(row) else None
+            sal_val   = row[sc] if sc < len(row) else None
+
+            if not isinstance(fecha_val, _dt):
+                continue
+            if cap_val is None and int_val is None:
+                continue
+
+            periodo = fecha_val.strftime("%Y-%m")
+            try:
+                capital   = float(cap_val)   if cap_val is not None else None
+                intereses = float(int_val)   if int_val is not None else None
+                saldo     = float(sal_val)   if sal_val is not None else None
+            except (TypeError, ValueError):
+                continue
+
+            rows_to_insert.append((credito_key, periodo, capital, intereses, saldo))
+
+    conn.execute("DELETE FROM raw_amortizacion_line")
+    conn.executemany(
+        """INSERT OR REPLACE INTO raw_amortizacion_line
+           (credito_key, periodo, capital_uf, intereses_uf, saldo_uf)
+           VALUES (?,?,?,?,?)""",
+        rows_to_insert,
+    )
+    conn.commit()
+    return len(rows_to_insert)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--xlsx", required=True)
@@ -278,7 +355,7 @@ def main():
     args = parser.parse_args()
 
     conn = sqlite3.connect(args.db)
-    print("Aplicando migraciones 020-022...")
+    print("Aplicando migraciones 020-023...")
     _apply_migrations(conn)
 
     print("Cargando workbook...")
@@ -296,6 +373,10 @@ def main():
     n_pagares = ingest_pagares(conn, wb)
     print(f"  -> {n_pagares} pagares")
 
+    print("Insertando raw_amortizacion_line (Hoja2)...")
+    n_amort = ingest_amortizacion(conn, wb)
+    print(f"  -> {n_amort} filas de amortizacion")
+
     wb.close()
     conn.close()
     print("\nListo.")
@@ -303,3 +384,85 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ─── Re-ingesta desde tablas de amortización (Financiamiento agente.xlsx) ─────
+
+# (sheet_name, credito_key, col_fecha_0based, col_saldo_final_0based)
+_AMORT_TABLE_CONFIGS = [
+    ("Sucden",           "TRI_SUCDEN_BICE",       7, 13),  # Sucden III desde 2026-01
+    ("Apoquindo 3001",   "TRI_APO3001_SCOTIABANK", 4,  9),
+    ("Vi\xf1a Centro",   "TRI_VINA_PRINCIPAL",     4,  9),
+    ("Vi\xf1a Centro",   "TRI_INMOBVC_ARIZONA",   11, 17),
+    ("Curic\xf3",        "TRI_CURICO_METLIFE",     4,  9),
+    ("Inmosa",           "TRI_MEDINA_METLIFE",     11, 16),
+    ("Inmosa",           "TRI_CANDIL_METLIFE",     18, 23),
+    ("Inmosa",           "TRI_PADREERRA_METLIFE",  25, 30),
+    ("Inmosa",           "TRI_COVENTRY_CONFUTURO", 32, 37),
+    ("Inmosa",           "TRI_COLOMBIA_PRINCIPAL", 39, 44),
+    ("Inmosa",           "TRI_DOMCALDERON_ZURIC",  46, 51),
+    ("Fondo PT",         "PT_BOULEVARD_SECURITY",  11, 16),
+    ("Fondo PT",         "PT_TORREA_SECURITY",     18, 23),
+    ("Fondo Apoquindo",  "APO_APO_BTG",            11, 16),
+    ("Fondo Apoquindo",  "APO_APO_EUROAMERICA",    18, 23),
+]
+
+# Créditos a marcar como VIGENTE (estaban incorrectamente marcados como PAGADO)
+_CREDITOS_VIGENTES_FIX = ["APO_APO_EUROAMERICA", "APO_APO_BTG"]
+
+
+def _parse_amort_table(ws, col_fecha: int, col_saldo: int):
+    """Extrae (periodo 'YYYY-MM', saldo_uf) de una tabla de amortización."""
+    from datetime import datetime as _dt
+    results = []
+    for row in ws.iter_rows(values_only=True):
+        if col_fecha >= len(row) or col_saldo >= len(row):
+            continue
+        fecha = row[col_fecha]
+        saldo = row[col_saldo]
+        if not isinstance(fecha, _dt):
+            continue
+        if not isinstance(saldo, (int, float)):
+            continue
+        results.append((fecha.strftime("%Y-%m"), float(saldo)))
+    return results
+
+
+def reload_deuda_from_amort_tables(xlsx_path: str, db_path: str) -> None:
+    """
+    Trunca raw_deuda_saldo_line y la repuebla desde las tablas de amortización
+    del Excel 'Financiamiento agente.xlsx'. Corrige también los estados de
+    dim_credito para APO Euroamérica y BTG (PAGADO → VIGENTE).
+    """
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    conn = sqlite3.connect(db_path)
+
+    rows = []
+    for sheet_name, credito_key, col_fecha, col_saldo in _AMORT_TABLE_CONFIGS:
+        data = _parse_amort_table(wb[sheet_name], col_fecha, col_saldo)
+        # Deduplica por periodo — en caso de solapamiento entre tablas de
+        # refinanciamiento en la misma columna se conserva el primer valor
+        seen: dict[str, float] = {}
+        for periodo, saldo_uf in data:
+            if periodo not in seen:
+                seen[periodo] = saldo_uf
+        for periodo, saldo_uf in seen.items():
+            rows.append((credito_key, periodo, saldo_uf, 0))
+        print(f"  {credito_key}: {len(seen)} periodos ({len(data)} filas raw)")
+
+    with conn:
+        conn.execute("DELETE FROM raw_deuda_saldo_line")
+        conn.executemany(
+            "INSERT INTO raw_deuda_saldo_line (credito_key, periodo, saldo_uf, is_proyeccion) "
+            "VALUES (?, ?, ?, ?)",
+            rows,
+        )
+        for ck in _CREDITOS_VIGENTES_FIX:
+            conn.execute(
+                "UPDATE dim_credito SET estado = 'VIGENTE' WHERE credito_key = ?", (ck,)
+            )
+            print(f"  dim_credito: {ck} = VIGENTE")
+
+    print(f"\n  {len(rows)} filas insertadas en raw_deuda_saldo_line")
+    conn.close()
+    wb.close()

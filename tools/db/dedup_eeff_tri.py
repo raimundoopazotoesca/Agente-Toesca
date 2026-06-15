@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-DB_PATH = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca.db")
+DB_PATH = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db")
 
 
 def dedup_valor_cuota(db_path: str = DB_PATH) -> dict:

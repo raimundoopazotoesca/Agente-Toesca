@@ -1,0 +1,16 @@
+-- Correcciones a dim_activo según organigrama:
+--   1. Sucden: TRI → Chañarcillo (100%) → Sucden (100%) → participacion = 1.0
+--      El 68,5% del organigrama aplica solo a Apoquindo 3001, no a Sucden.
+--   2. 'Apoquindo' no es un activo sino el fondo Toesca Rentas Inmob Apoquindo.
+--      Eliminarlo. Los activos reales son Apo4501 y Apo4700 (desde migración 015).
+--   3. 'PT' no es un activo sino el fondo Toesca Rentas Inmobiliarias PT.
+--      Eliminarlo. Los activos reales son Torre A y Boulevard (desde migración 015).
+--
+-- NOTA: raw_rent_roll_line tiene ~4405 filas con activo_key='Apoquindo' y ~5255 con 'PT'.
+-- Son datos históricos agregados. Re-ingestar separados por edificio cuando estén disponibles.
+-- Esta migración se aplica con PRAGMA foreign_keys = OFF (ver fix_activos.py aplicado manualmente).
+
+-- (aplicado directamente con PRAGMA foreign_keys = OFF)
+-- UPDATE dim_activo SET participacion = 1.0 WHERE activo_key = 'Sucden';
+-- DELETE FROM dim_activo WHERE activo_key = 'Apoquindo';
+-- DELETE FROM dim_activo WHERE activo_key = 'PT';

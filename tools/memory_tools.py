@@ -12,7 +12,7 @@ import streamlit as st
 
 MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory")
 WIKI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
-DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca.db")
+DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca_v2.db")
 UBICACIONES_FILE = os.path.join(MEMORY_DIR, "ubicaciones.json")
 
 # Aplicar migraciones pendientes al cargar el módulo.

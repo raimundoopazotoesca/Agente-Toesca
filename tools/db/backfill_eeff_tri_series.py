@@ -15,7 +15,7 @@ from pathlib import Path
 from tools.sharepoint_paths import TRI_EEFF_FONDO_DIR
 from tools.db.ingest_eeff_tri_series import ingest_eeff_tri_pdf, SERIE_NEMO
 
-DB_PATH = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca.db")
+DB_PATH = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db")
 
 
 def backfill_from_pdfs() -> list[dict]:

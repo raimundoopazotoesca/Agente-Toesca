@@ -18,7 +18,12 @@
       "Edit(~/.claude/skills/db-ingestion-expert/**)",
       "Bash(python -X utf8 -c ' *)",
       "Bash(python scripts/extract_cdg_vc.py)",
-      "Bash(Get-ChildItem -Recurse -File -Filter \"*.py\")"
+      "Bash(Get-ChildItem -Recurse -File -Filter \"*.py\")",
+      "Bash(python tools/db/ingest_financing.py --xlsx work/resumen_deudas.xlsx --db memory/agente_toesca.db)",
+      "Bash(python -m markitdown \"work/eeff_ingesta/TRI/cdg_extract.xlsx\")",
+      "Bash(python -c \"import numpy_financial; print\\('numpy_financial OK'\\)\")",
+      "Bash(python -c \"from scipy.optimize import brentq; print\\('scipy OK'\\)\")",
+      "Edit(~/.claude/skills/real-estate-finance-expert/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\raimundo.opazo\\.claude\\skills"

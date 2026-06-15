@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-DB = Path(__file__).resolve().parents[1] / "memory" / "agente_toesca.db"
+DB = Path(__file__).resolve().parents[1] / "memory" / "agente_toesca_v2.db"
 FONDO = "TRI"
 
 st.set_page_config(page_title="EEFF Fondo TRI", layout="wide", page_icon="📊")

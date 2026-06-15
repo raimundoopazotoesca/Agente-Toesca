@@ -9,7 +9,7 @@ from pathlib import Path
 import hashlib
 
 CDG_PATH = Path("work/eeff_ingesta/TRI/cdg_extract.xlsx")
-DB_PATH = Path("memory/agente_toesca.db")
+DB_PATH = Path("memory/agente_toesca_v2.db")
 
 AR_SHEETS = {
     "A&R Rentas": "TRI",

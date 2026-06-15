@@ -273,25 +273,21 @@ def ingest_groq_result(
                     )
                     cap_count += conn.execute("SELECT changes()").fetchone()[0]
 
-            # ── Capital del fondo (aportes/disminuciones del período) ──────
-            # Guardar en raw_eeff_line para trazabilidad de movimientos
-            cap_total = periodo_data.get("capital_total_mclp")
+            # ── Aportes / disminuciones del fondo en el período ─────────────
             aportes = periodo_data.get("aportes_mclp")
             dism = periodo_data.get("disminuciones_mclp")
 
-            for codigo, nombre, valor_m in [
-                ("CAPITAL_TOTAL", "Capital total aportado", cap_total),
-                ("CAPITAL_APORTES", "Aportes de capital en el período", aportes),
-                ("CAPITAL_DISMINUCIONES", "Disminuciones de capital en el período", dism),
-            ]:
+            for tipo, valor_m in [("aporte", aportes), ("disminucion", dism)]:
                 if valor_m is not None and valor_m != 0:
-                    valor_clp = valor_m * 1000  # M$ → CLP
+                    monto_clp = valor_m * 1_000_000  # M$ → CLP
+                    monto_uf = (monto_clp / uf_dia) if uf_dia else None
                     conn.execute(
-                        """INSERT OR IGNORE INTO raw_eeff_line
-                           (fondo_key, periodo, cuenta_codigo, cuenta_nombre,
-                            monto_clp, source_file, file_hash)
-                           VALUES ('TRI', ?, ?, ?, ?, ?, ?)""",
-                        (periodo, codigo, nombre, valor_clp, source_file, file_hash),
+                        """INSERT OR IGNORE INTO raw_capital_movimiento_line
+                           (fondo_key, fecha_fin_periodo, periodo, tipo,
+                            monto_mclp, monto_clp, monto_uf, source_file, file_hash)
+                           VALUES ('TRI', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (fecha, periodo, tipo, valor_m, monto_clp, monto_uf,
+                         source_file, file_hash),
                     )
                     cap_count += conn.execute("SELECT changes()").fetchone()[0]
 
@@ -331,7 +327,7 @@ def process_pdf_groq(pdf_path: str, db_path: Optional[str] = None) -> dict:
     from markitdown import MarkItDown
 
     if db_path is None:
-        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca.db")
+        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db")
 
     if not os.path.isfile(pdf_path):
         return {"error": f"No encontrado: {pdf_path}"}
@@ -365,7 +361,7 @@ def backfill_all_pdfs(pdf_dir: Optional[str] = None, db_path: Optional[str] = No
     if pdf_dir is None:
         pdf_dir = str(Path(__file__).resolve().parents[2] / "work" / "eeff_ingesta" / "tri" / "pdf")
     if db_path is None:
-        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca.db")
+        db_path = str(Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db")
 
     results = []
     files = sorted(
