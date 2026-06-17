@@ -52,6 +52,13 @@
 | [[procesos/balance-consolidado-apoquindo]] | Balance Consolidado Rentas Apoquindo: hojas, procedimiento, mapeo EEFF | trimestral | 2026-05-07 |
 | [[procesos/balance-consolidado-rentas-nuevo]] | Balance Consolidado Rentas Nuevo: fuente por quarter | trimestral | 2026-05-07 |
 
+## KPIs y Rentabilidades
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[tir_contable_desde_inicio]] | Metodología canónica TIR desde inicio — fuentes, flujos, valores referencia | 2026-06-11 |
+| [[kpis_rentabilidad_fondos]] | **Metodología validada**: TIR, YTD, U12M, Dividend Yield — fórmulas + valores MAR-26 confirmados vs CDG | 2026-06-17 |
+
 ## Proyecto
 
 | Página | Descripción | Actualizado |
