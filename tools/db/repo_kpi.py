@@ -14,17 +14,19 @@ def upsert(
     unidad: str | None,
     recipe: str,
     ingest_run_id: int | None = None,
+    variante: str | None = None,
 ) -> None:
     conn.execute(
         """INSERT INTO derived_kpi
-             (entidad_tipo, entidad_key, periodo, kpi, valor, unidad, recipe, ingest_run_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(entidad_tipo, entidad_key, periodo, kpi, recipe) DO UPDATE SET
-             valor = excluded.valor,
-             unidad = excluded.unidad,
+             (entidad_tipo, entidad_key, periodo, kpi, variante, valor, unidad, recipe, ingest_run_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(entidad_tipo, entidad_key, periodo, kpi, variante) DO UPDATE SET
+             valor         = excluded.valor,
+             unidad        = excluded.unidad,
+             recipe        = excluded.recipe,
              ingest_run_id = excluded.ingest_run_id,
-             computed_at = datetime('now')""",
-        (entidad_tipo, entidad_key, periodo, kpi, valor, unidad, recipe, ingest_run_id),
+             computed_at   = datetime('now')""",
+        (entidad_tipo, entidad_key, periodo, kpi, variante, valor, unidad, recipe, ingest_run_id),
     )
     conn.commit()
 
@@ -35,17 +37,21 @@ def get(
     entidad_key: str,
     periodo: str,
     kpi: str,
-    recipe: str,
+    recipe: str | None = None,
+    variante: str | None = None,
 ) -> float:
-    cur = conn.execute(
-        """SELECT valor FROM derived_kpi
-            WHERE entidad_tipo=? AND entidad_key=? AND periodo=? AND kpi=? AND recipe=?""",
-        (entidad_tipo, entidad_key, periodo, kpi, recipe),
-    )
+    sql = """SELECT valor FROM derived_kpi
+              WHERE entidad_tipo=? AND entidad_key=? AND periodo=? AND kpi=?
+                AND variante IS ?"""
+    params: list = [entidad_tipo, entidad_key, periodo, kpi, variante]
+    if recipe is not None:
+        sql += " AND recipe = ?"
+        params.append(recipe)
+    cur = conn.execute(sql, params)
     row = cur.fetchone()
     if row is None:
         raise NotFoundError(
-            f"KPI no encontrado: {entidad_tipo}/{entidad_key} {periodo} {kpi} ({recipe})"
+            f"KPI no encontrado: {entidad_tipo}/{entidad_key} {periodo} {kpi} variante={variante}"
         )
     return row["valor"]
 
@@ -58,11 +64,13 @@ def serie_temporal(
     desde: str | None = None,
     hasta: str | None = None,
     recipe: str | None = None,
+    variante: str | None = None,
 ) -> list[sqlite3.Row]:
-    sql = """SELECT periodo, valor, unidad, recipe
+    sql = """SELECT periodo, valor, unidad, recipe, variante
                FROM derived_kpi
-              WHERE entidad_tipo=? AND entidad_key=? AND kpi=?"""
-    params: list = [entidad_tipo, entidad_key, kpi]
+              WHERE entidad_tipo=? AND entidad_key=? AND kpi=?
+                AND variante IS ?"""
+    params: list = [entidad_tipo, entidad_key, kpi, variante]
     if desde is not None:
         sql += " AND periodo >= ?"
         params.append(desde)
@@ -84,10 +92,10 @@ def snapshot_periodo(
     periodo: str,
 ) -> list[sqlite3.Row]:
     cur = conn.execute(
-        """SELECT kpi, valor, unidad, recipe
+        """SELECT kpi, variante, valor, unidad, recipe
              FROM derived_kpi
             WHERE entidad_tipo=? AND entidad_key=? AND periodo=?
-            ORDER BY kpi""",
+            ORDER BY kpi, variante""",
         (entidad_tipo, entidad_key, periodo),
     )
     return cur.fetchall()
