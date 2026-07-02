@@ -104,15 +104,46 @@ Confirmados contra CDG manual del usuario (jun-2025).
 
 ---
 
+## TIR BURSÁTIL desde inicio — método agregado (CONGELADO, validado exacto 2026-07)
+
+> **NUNCA CAMBIAR.** Reconstruye byte a byte la fórmula real de Excel del usuario
+> (`TIR.NO.PER(Tabla1[Bolsa Inicio <serie>]; Tabla1[Fecha])`, confirmada contra su
+> planilla `tablaflujos.xlsx`, corte MAR-2026). Es un método **distinto** al contable:
+> opera en UF **agregadas** de la serie (no UF/cuota, no divisor fijo).
+
+```
+Aporte        → -monto_uf                                (raw_ar_event_line)
+Disminucion   → +monto_uf                                (raw_ar_event_line)
+Canje Cuotas  → -monto_uf   (monto_uf puede ser + o -)    (raw_ar_event_line)
+Dividendo     → +monto_uf_cuota × cuotas_en_circulacion   (raw_dividendo_line × raw_cuota_en_circulacion)
+Terminal      → +precio_uf_bursatil(fecha_corte EXACTA) × cuotas_en_circulacion
+```
+
+- `cuotas_en_circulacion(fecha)` = snapshot más reciente `<= fecha` en `raw_cuota_en_circulacion` (fuente EEFF).
+- El precio bursátil terminal exige **fecha exacta** de corte en `raw_valor_cuota_line` (no "más reciente ≤"; así es la fórmula original — si no hay fila exacta, el KPI no se calcula para ese corte).
+- Implementación: `_calcular_tir_bursatil_agregado` en `tir.py`.
+
+**Valores validados MAR-26:** A=-7.234% · C=-6.111% · I=-0.733%
+(I corregido: la planilla del usuario omite un dividendo real del 29-dic-2021 en
+la columna `Bolsa Inicio I2` — mismo patrón de bug que el ya documentado en TIR U12M
+serie I. Se usa el valor correcto, con el dividendo incluido, no el de la planilla.)
+
+**Inputs a futuro** (para actualizar mes a mes, sin la planilla histórica):
+UF diaria (API) → `fact_uf` · cuotas en circulación (EEFF) → `raw_cuota_en_circulacion` ·
+precio $/cuota (mercado bursátil LarraínValor) → `raw_valor_cuota_line` tipo=`bursatil`.
+
+---
+
 ## Implementación en el skill
 
 Archivo: `skills/real-estate-finance-expert/scripts/tir.py`
-- Función: `_calcular_tir_por_cuota` → TRI y fondos con múltiples aportes
-- Función: `_calcular_tir_simple_uf` → PT y fondos sin aportes post-VNA
-- Dispatch: si `COUNT(Aportes WHERE fecha >= primer_VNA) == 0` → usar `tir_simple_uf`
+- Función: `_calcular_tir_por_cuota` → **CONTABLE** TRI y fondos con múltiples aportes (congelado)
+- Función: `_calcular_tir_simple_uf` → PT y fondos sin aportes post-VNA (fallback contable)
+- Función: `_calcular_tir_bursatil_agregado` → **BURSÁTIL**, todas las series (congelado, ver arriba)
+- Dispatch contable: si `COUNT(Aportes WHERE fecha >= primer_VNA) == 0` → usar `tir_simple_uf`
 
 KPI names para llamar el skill:
-- `tir_contable_desde_inicio`
-- `tir_bursatil_desde_inicio`
+- `tir_contable_desde_inicio` → `_calcular_tir_por_cuota` / `_calcular_tir_simple_uf`
+- `tir_bursatil_desde_inicio` → `_calcular_tir_bursatil_agregado`
 
 Nemotécnicos en la DB: `CFITOERI1A`, `CFITOERI1C`, `CFITOERI1I`, `CFITRIPT-E` (no alias cortos).

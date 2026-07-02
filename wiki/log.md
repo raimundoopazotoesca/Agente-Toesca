@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | TIR desde inicio (contable + bursátil) consolidada en derived_kpi, TRI A/C/I
+
+Implementadas y validadas exacto contra CDG (planilla `tablaflujos.xlsx`, corte MAR-2026) dos metodologías
+**distintas y congeladas** para `tir_contable_desde_inicio` / `tir_bursatil_desde_inicio` — ver
+`wiki/tir_contable_desde_inicio.md`. Contable: `_calcular_tir_por_cuota` (UF/cuota, divisor fijo, ya
+validada previamente). Bursátil: `_calcular_tir_bursatil_agregado` (UF agregadas de la serie, sin
+divisor — reconstruye la fórmula real de Excel `TIR.NO.PER(Tabla1[Bolsa Inicio <serie>])`).
+Bug encontrado en la planilla del usuario: Serie I bursátil omite un dividendo real (29-dic-2021) en su
+columna `Bolsa Inicio I2` — mismo patrón que el bug ya conocido en TIR U12M serie I. Se persistió el
+valor corregido (-0.733% en MAR-26), no el de la planilla (-0.883%).
+
+Consolidado en `derived_kpi`: contable trimestral 2019-12→2026-03 (excluidos 2017-12→2019-09 por
+divisor fijo antes de terminar rondas de aportes — ver metodología), bursátil mensual 2017-12→2026-06,
+78+291 filas, series CFITOERI1A/C/I. Bug de duplicación encontrado y corregido en
+`_common.py::upsert_derived_kpi` (SQLite no deduplica `UNIQUE` con `variante IS NULL`; ahora hace
+DELETE+INSERT explícito). Nota: Serie I bursátil muestra una caída real de precio abr→may-2026
+(0.7347→0.2709 UF/cuota, confirmada en 3 fechas de transacción) — no es error de datos, pendiente de
+entender la causa.
+
 ## [2026-06-11] feat | ingesta EEFF PT en raw_eeff_line completa 2020–2025
 
 Ingesta manual de EEFF trimestrales PT (fondo paraguas, no el activo) desde PDFs vía ChatGPT → JSON → DB.
