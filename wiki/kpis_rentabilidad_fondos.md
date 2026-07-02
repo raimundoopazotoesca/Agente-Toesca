@@ -41,21 +41,32 @@ Dividendos y terminal = igual a TRI
 
 ---
 
-## 2. Rentabilidad YTD acumulada
+## 2. Rentabilidad YTD anualizada (CORREGIDO 2026-07 — CONGELADO, ver más abajo)
+
+> **Corrección**: la entrada anterior de esta sección (retorno simple, "no anualizar")
+> estaba MAL. Reconstruida la fórmula real de Excel (usuario, 2026-07):
+> `=(1+TIR.NO.PER(rango_flujos; rango_fechas))^(MES(fecha_corte)/12) - 1`.
+> El header SÍ refleja un cálculo real de anualización — no es una etiqueta heredada.
+> El "delta ~0.017pp" que se atribuyó a "ruido de planilla" era en realidad la
+> diferencia entre exponente por días (90/365≈0.2466) y exponente por MESES
+> CALENDARIO (3/12=0.25) — un error de metodología, no ruido. Ver
+> `tir_contable_desde_inicio.md` (o `_calcular_rent_ytd` en `tir.py`) para el detalle.
 
 ```
-YTD = (VNA_corte + sum(dividendos_periodo)) / VNA_inicio_año - 1
+flujos = [-VNA(31-dic año anterior), dividendos(fecha_pago real, en (T0, corte]), +VNA(corte)]
+r_xirr = XIRR(flujos)                          # ACT/365, estándar
+YTD_anualizada = (1 + r_xirr) ^ (MES(corte)/12) - 1
 ```
 
-- `VNA_inicio_año` = VNA contable al 31-DIC del año anterior
-- `dividendos_periodo` = dividendos con fecha_pago ≥ 01-ENE-año AND ≤ fecha_corte
-- **No anualizar** (el CDG la llama "anualizada" en el header pero es retorno acumulado simple)
-- Para corte MAR-26: no hubo dividendos Q1-2026 → YTD = puro cambio de VNA
+- `VNA` mismo tipo (contable/bursátil) en T0 y Tn, fecha EXACTA en `raw_valor_cuota_line`
+- Dividendos: `monto_uf_cuota` (per-cuota), entran como flujo propio en el XIRR, NO se
+  suman al terminal
+- Aplica igual para TRI (A/C/I), PT y Apo — mismo `tipo_vr` contable/bursátil que el resto
 
-**Valores validados MAR-26 (libro):** A=1.192% · C=1.238% · I=1.257%
-
-Nota: CDG muestra A=1.209% / C=1.255% / I=1.274%. Delta ~0.017pp sin explicación
-con entradas idénticas — ruido de planilla, no ajustar la metodología.
+**Valores validados MAR-26 (exacto, las 5 series/fondos):**
+A: libro=1.209% / bursátil=9.822% · C: libro=1.255% / bursátil=-0.289% ·
+I: libro=1.274% / bursátil=-0.289% · PT: libro=1.110% / bursátil=-0.289% ·
+Apo: libro=2.298% (sin bursátil, no transa en bolsa)
 
 ---
 

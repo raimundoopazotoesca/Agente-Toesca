@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] fix | Rentabilidad YTD anualizada — fórmula corregida, congelada, consolidada
+
+Corrección importante: la metodología "YTD acumulada" documentada previamente en
+`wiki/kpis_rentabilidad_fondos.md` sección 2 estaba MAL — asumía retorno simple sin anualizar,
+achacando el delta de ~0.017pp vs CDG a "ruido de planilla". Al pedir la fórmula real de Excel
+al usuario se descubrió: `=(1+TIR.NO.PER(flujos;fechas))^(MES(fecha_corte)/12)-1` — un XIRR
+estándar (T0=31-dic año anterior, dividendos reales, Tn=corte) seguido de un ajuste por MESES
+CALENDARIO (no por días). El "ruido" era en realidad la diferencia entre exponente días/365
+(≈0.2466 para marzo) y exponente meses/12 (0.25 exacto) — un error de método, no ruido de datos.
+
+Implementada como `_calcular_rent_ytd` en `tir.py`, kpis `rent_ytd_contable`/`rent_ytd_bursatil`,
+validada EXACTA contra el CDG (corte MAR-2026) para las 5 series/fondos (TRI A/C/I, PT, Apo).
+Congelada — no volver a tocar sin nueva validación explícita del usuario.
+
+Consolidado en `derived_kpi`: TRI contable 2018-03→2026-03 (33/serie), TRI bursátil
+2018-03→2026-06 (96/serie), PT contable 33 + bursátil 96, Apo contable 2020-03→2026-03 (35).
+Total 551 filas. Primer período de cada serie (2017-12) queda sin YTD porque no existe un
+31-dic-2016 previo en la DB para usar como T0 — comportamiento esperado, no error.
+
 ## [2026-07-02] fix | TIR desde inicio PT y Apo — método agregado, corrección de datos faltantes
 
 Extendida la metodología agregada (validada para TRI bursátil el mismo día) a PT y Apo, para
