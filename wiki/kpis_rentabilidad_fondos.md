@@ -115,6 +115,43 @@ DY_bursatil = sum(dividendos_u12m) / VNA_bursatil_corte
 
 ---
 
+## 4.1. Dividend Yield + Amortización (CONGELADO 2026-07-02)
+
+```
+DY_amort_bursatil  = (dividendos_u12m + amort_u12m) / VNA_bursatil_corte
+DY_amort_contable  = (dividendos_u12m + amort_u12m) / VNA_contable_corte
+DY_amort_capital   = (dividendos_u12m + amort_u12m) / capital_suscrito_por_cuota   [solo Apo]
+```
+
+- `amort_u12m` = SUM(`capital_uf`) de `raw_amortizacion` credito_key=`CONSOLIDADO_{fondo}`,
+  período (T-12m, corte], **TAL CUAL, sin excluir refinanciamientos ni pagos extraordinarios**
+  (validado: el CDG no distingue — ver `dividend_yield.py::_get_amort_u12m_por_cuota`).
+- Se probó excluir un pago de refinanciamiento (Sucden, TRI) y el resultado NO calzó con el
+  CDG — la exclusión fue revertida. Nunca reintroducir sin nueva validación explícita.
+- **Apo usa denominador distinto** (`dividend_yield_con_amort_capital`): capital suscrito por
+  cuota (calculado como SUM(Aporte) de `raw_ar_event_line`, para Apo = 1.0 UF/cuota exacto), NO
+  el VNA contable actual. Apo no tiene bursátil (no transa en bolsa).
+- Fondo de amortización consolidada: `CONSOLIDADO_TRI`, `CONSOLIDADO_PT` (fuente: Excel externo
+  vía `ingest_financing.py`), `CONSOLIDADO_Apo` (construido en DB sumando `APO_APO_BTG` +
+  `APO_APO_EUROAMERICA`, no existe en el Excel fuente).
+
+**Valores validados MAR-26 (bursátil/libro):** A=34.644%/18.038% · C=35.316%/18.065% ·
+I=20.184%/18.088% · PT=11.943%/10.313% (=DY normal, sin amortizaciones ese período) ·
+Apo=6.307% (capital, sin bursátil).
+
+**Valores validados Apo DIC-25 (capital):** solo BTG=4.364% · BTG+Euroamérica=5.626%
+(criterio final: incluir ambos créditos).
+
+**Datos corregidos en `raw_amortizacion` (2026-07-02)**:
+- `CONSOLIDADO_TRI`: saldo corregido sumando `TRI_SUCDEN_BICE` (crédito refinanciado ene-2026,
+  faltaba en el Excel fuente) — saldo 31-mar-26 ahora exacto (3.532.590 UF). El `capital_uf`
+  (flujo) NO se tocó — ya estaba correcto en el Excel fuente tal cual.
+- `APO_APO_BTG`: cronograma desde ene-2026 estaba desactualizado (asumía amortización gradual
+  hasta oct-2026); corregido con el cronograma real del usuario — el crédito se pagó completo
+  en mar-2026 (22.877,79 UF).
+- `CONSOLIDADO_Apo`: no existía, creado sumando `APO_APO_BTG` + `APO_APO_EUROAMERICA` (validado
+  exacto contra saldo real 2.602.856 UF).
+
 ## 5. Fuentes de datos
 
 | Dato | Tabla | Campo clave |

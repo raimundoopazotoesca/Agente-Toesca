@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | DY + Amortización consolidado en derived_kpi (kpi='dy_amort'), todos los fondos
+
+Consolidados 550 valores históricos de `dividend_yield_con_amort` (bursátil), `_contable` y
+`_capital` (Apo) en `derived_kpi` bajo `kpi='dy_amort'`, `variante='bursatil'/'contable'/'capital'`
+— mismos rangos ya validados para `kpi='dy'`. TRI/PT: 2018-03→2026-03/06 (33 contable, 97-98
+bursátil por serie/fondo). Apo: 2019-03→2026-03 (29, variante='capital').
+
+Ambas fórmulas quedaron corregidas antes de consolidar (ver `wiki/kpis_rentabilidad_fondos.md`
+sección 4.1): se agregó la variante contable (antes solo existía bursátil), se agregó la variante
+`_capital` específica para Apo (denominador = capital suscrito por cuota, no VNA — Apo está muy
+lejos de la par y el CDG usa ese denominador para este fondo específicamente), y se revirtió un
+intento de excluir pagos de refinanciamiento del cálculo de amortización (el CDG no los excluye).
+
+De paso se corrigieron datos reales de deuda que afectaban el cálculo: saldo de `CONSOLIDADO_TRI`
+(faltaba crédito Sucden refinanciado), cronograma de `APO_APO_BTG` desde ene-2026 (estaba
+desactualizado, asumía amortización gradual cuando el crédito se pagó completo en mar-2026), y se
+creó `CONSOLIDADO_Apo` (no existía). Sin duplicados verificado tras consolidar. Todas las fórmulas
+quedan congeladas — ver `dividend_yield.py` para la implementación.
+
 ## [2026-07-02] fix | DY + Amortización — saldo CONSOLIDADO_TRI/Apo corregido, sin excluir refinanciamiento
 
 Agregada variante `dividend_yield_con_amort_contable` (antes solo existía bursátil) en
