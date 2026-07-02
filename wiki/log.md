@@ -3,6 +3,35 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] fix | DY + Amortización — saldo CONSOLIDADO_TRI/Apo corregido, sin excluir refinanciamiento
+
+Agregada variante `dividend_yield_con_amort_contable` (antes solo existía bursátil) en
+`dividend_yield.py`. Ambas validadas EXACTAS contra CDG (corte MAR-26): A=34.644%/18.038%,
+C=35.316%/18.065%, I=20.184%/18.088% (bursátil/libro).
+
+**Datos de deuda corregidos**: `raw_amortizacion` tenía `CONSOLIDADO_TRI` con saldo desactualizado
+(faltaba `TRI_SUCDEN_BICE`, crédito refinanciado en ene-2026 — el saldo real 31-mar-26 es
+3.532.590 UF, la DB mostraba 3.371.105). Parchado sumando el saldo/capital de SUCDEN_BICE a
+`CONSOLIDADO_TRI` para los 120 períodos donde existe (2018-02→2028-01) — saldo ahora exacto.
+Creado `CONSOLIDADO_Apo` desde cero (no existía) sumando `APO_APO_BTG` + `APO_APO_EUROAMERICA`
+(89 períodos) — también exacto vs foto real (2.602.856 UF).
+
+**Importante — decisión revertida**: se intentó excluir el pago de refinanciamiento de Sucden
+(161.395 UF, dic-2025) del cálculo de amortización para `dividend_yield_con_amort`, razonando que
+un refinanciamiento no representa deleveraging real. El usuario confirmó inicialmente ese criterio,
+pero al comparar contra el CDG real se determinó que el propio CDG **no excluye** ese pago — usa
+`capital_uf` de `CONSOLIDADO_{fondo}` tal cual viene de la planilla fuente. Se revirtió la
+exclusión: `capital_uf` de `CONSOLIDADO_TRI` quedó en su valor ORIGINAL (sin sumar ni restar
+Sucden) — el saldo (`saldo_uf`) sí se mantiene corregido con Sucden incluido, porque para ESE
+campo la corrección sí calzó exacto contra la foto real del usuario. Es decir: mismo crédito, dos
+tratamientos distintos según el campo (saldo sí se corrige, flujo de capital no se toca) — contra-
+intuitivo pero validado dígito por dígito. **No volver a excluir sin nueva validación explícita.**
+
+Pendiente: el archivo fuente de `CONSOLIDADO_TRI`/`CONSOLIDADO_Apo` usado por
+`tools/db/ingest_financing.py` sigue desactualizado (parche aplicado directo en DB, no en el
+Excel origen) — si se re-corre la ingesta completa desde ese Excel sin actualizarlo primero, se
+pierde este parche.
+
 ## [2026-07-02] fix | Dividend Yield — limpieza de datos Apo, sin cambio de fórmula
 
 `dy_v2` (`scripts/compute_kpis_series.py`) ya estaba correcto y validado exacto contra CDG para
