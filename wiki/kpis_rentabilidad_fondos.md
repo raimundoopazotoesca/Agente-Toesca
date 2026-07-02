@@ -89,6 +89,14 @@ Filtro dividendos U12M: `fecha_pago >= fecha_inicio_u12m AND fecha_pago <= fecha
 > **Bug conocido CDG**: Serie I muestra 8.272% porque la fórmula Excel omite el dividendo
 > ABR-29-25 (aparece en fila 512, antes del VNA MAR-25 en fila 520). El valor correcto
 > es 9.30% (confirmado por el usuario jun-2026).
+>
+> **Mismo bug en PT (confirmado 2026-07-02)**: CDG muestra 16.673%/5.830% (libro/bursátil)
+> porque omite el dividendo 29-abr-2025 (mismo patrón: fila posicionada antes del VNA de
+> inicio 31-mar-2025). Valor correcto (con el dividendo): 20.989% libro / 9.963% bursátil.
+> Confirmado por el usuario: "eso es un error mío. El cálculo correcto debería incluirlo."
+> **Patrón general**: cuando el U12M/desde-inicio de una serie no calza con el CDG por un
+> delta que desaparece al excluir un dividendo específico, sospechar primero de este bug de
+> orden de filas — no ajustar la metodología propia, usar el valor completo.
 
 ---
 

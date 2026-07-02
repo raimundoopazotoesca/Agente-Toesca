@@ -3,6 +3,22 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | Rentabilidad U12M — validada (bug de Excel en PT confirmado, no se replica)
+
+Verificado `tir_contable_u12m`/`tir_bursatil_u12m` (ya existían en `tir.py`, sin cambios de código)
+para las 5 series/fondos, corte MAR-2026. TRI y Apo calzan exacto contra referencia previa
+(wiki `kpis_rentabilidad_fondos.md`: A=9.12%/C=9.25%/I=9.30% libro). PT NO calzaba al inicio
+(mío 20.989%/9.963% vs CDG 16.673%/5.830%) — se reconstruyó la fórmula de Excel (`P10`,
+`XIRR(OFFSET(Libro 12M,...))`) celda por celda y se descubrió que el CDG **omite el dividendo
+29-abr-2025 de PT por orden de filas** (mismo patrón que el bug ya documentado en Serie I:
+un dividendo pagado poco después del VNA de inicio queda posicionado antes en la tabla y las
+fórmulas basadas en offset de fila lo saltan). El usuario confirmó explícitamente: "eso es un
+error mío. El cálculo correcto debería incluirlo" — se mantiene el valor completo (con el
+dividendo), NO se replica el bug. Sin cambios de código necesarios.
+
+Consolidado en `derived_kpi`: 512 filas (TRI contable 30/serie, TRI bursátil 89/serie, PT
+contable 30 + bursátil 90, Apo contable 35). Mismo rango que YTD por fondo.
+
 ## [2026-07-02] fix | Rentabilidad YTD anualizada — fórmula corregida, congelada, consolidada
 
 Corrección importante: la metodología "YTD acumulada" documentada previamente en
