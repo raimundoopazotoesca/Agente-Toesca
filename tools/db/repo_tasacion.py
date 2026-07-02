@@ -22,6 +22,12 @@ def upsert_tasacion(
     notas: Optional[str] = None,
     ingest_run_id: Optional[int] = None,
 ) -> None:
+    # COALESCE en columnas opcionales: distintas fuentes traen distintos
+    # subconjuntos de columnas (ej. tablaflujos.xlsx solo trae valor_uf/tasa_dcto,
+    # sin ltv/ltc/cap_rate/leverage_fin). Un re-ingesta parcial NO debe borrar
+    # datos de enriquecimiento ya cargados por otra fuente más completa.
+    # valor_uf y fecha sí se sobrescriben siempre (son el dato core, la fuente
+    # más reciente manda).
     conn.execute(
         """INSERT INTO fact_tasacion
                (activo_key, periodo, tasador, fecha, valor_uf, superficie_m2, uf_m2,
@@ -30,15 +36,15 @@ def upsert_tasacion(
            ON CONFLICT(activo_key, periodo, tasador) DO UPDATE SET
              fecha          = excluded.fecha,
              valor_uf       = excluded.valor_uf,
-             superficie_m2  = excluded.superficie_m2,
-             uf_m2          = excluded.uf_m2,
-             variacion_pct  = excluded.variacion_pct,
-             tasa_dcto      = excluded.tasa_dcto,
-             cap_rate       = excluded.cap_rate,
-             ltv            = excluded.ltv,
-             ltc            = excluded.ltc,
-             leverage_fin   = excluded.leverage_fin,
-             notas          = excluded.notas,
+             superficie_m2  = COALESCE(excluded.superficie_m2, fact_tasacion.superficie_m2),
+             uf_m2          = COALESCE(excluded.uf_m2, fact_tasacion.uf_m2),
+             variacion_pct  = COALESCE(excluded.variacion_pct, fact_tasacion.variacion_pct),
+             tasa_dcto      = COALESCE(excluded.tasa_dcto, fact_tasacion.tasa_dcto),
+             cap_rate       = COALESCE(excluded.cap_rate, fact_tasacion.cap_rate),
+             ltv            = COALESCE(excluded.ltv, fact_tasacion.ltv),
+             ltc            = COALESCE(excluded.ltc, fact_tasacion.ltc),
+             leverage_fin   = COALESCE(excluded.leverage_fin, fact_tasacion.leverage_fin),
+             notas          = COALESCE(excluded.notas, fact_tasacion.notas),
              loaded_at      = strftime('%Y-%m-%dT%H:%M:%S','now')""",
         (activo_key, periodo, tasador, fecha, valor_uf, superficie_m2, uf_m2,
          variacion_pct, tasa_dcto, cap_rate, ltv, ltc, leverage_fin, notas, ingest_run_id),

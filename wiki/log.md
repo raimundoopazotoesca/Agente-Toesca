@@ -3,6 +3,29 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | Leverage financiero consolidado: LTV, LTC, deuda_consolidada históricos en derived_kpi
+
+Implementados en el skill real-estate-finance-expert (`scripts/leverage.py`) y backfilleados
+2020-01→2026-06 en `derived_kpi`: `ltv` (fondo 234 + activo 516), `ltc` (fondo 234 + activo 516),
+`deuda_consolidada` (fondo 234). También `dscr` y `duration_deuda` implementados (sin backfill aún).
+
+**Metodología validada exacto vs Toesca 2026-03** (PT LTV 0.81225 ✓, PT LTC 0.60529 ✓, Apo LTC
+0.59858 ✓): LTV = deuda / tasación (fact_tasacion, tasador='Promedio', año ≤ período);
+LTC = deuda / precio compra 100% (fact_adquisicion.valor_activo_uf). PT/Apo: suma simple de sus
+activos. **TRI: look-through ponderado** (`_TRI_LOOKTHROUGH`) — 0.43×INMOSA, 1×Sucden/Apo3001/Viña,
+0.8×Curicó, 0.3×Apo4501/4700, ⅓ exacto×TorreA/Boulevard. INMOSA sin tasación propia → suma de 6
+residencias; en adquisición → lump-sum 'INMOSA' (5 residencias) + fila Domingo Calderón aparte.
+
+**Errores encontrados y corregidos**: (1) cifra Toesca TRI LTC 0.52990 incluía Machalí en el
+sumaproducto por error (confirmado) — valor correcto sin Machalí: 0.54480; (2)
+`fact_adquisicion.valor_activo_uf` estaba inflado ÷% para activos con participación <100%
+(el precio fuente ya era 100%) — corregido desde hoja 'compra' de tablaflujos.xlsx, que también
+pobló los faltantes (INMOSA, Apo3001, Mall Curicó, Dom. Calderón); (3) `dim_activo` Apo3001
+participación 0.685→1.0 (vía Chañarcillo 100%); (4) ingesta de tasaciones pisaba con NULL las
+columnas ltv/ltc/cap_rate al re-ingestar fuentes parciales — `repo_tasacion.upsert_tasacion`
+ahora usa COALESCE en columnas opcionales; (5) parser `ingest_tasaciones.py` reescrito
+header-driven (soporta hoja 'Tasaciones' de tablaflujos.xlsx y layout legado).
+
 ## [2026-07-02] feature | Dashboard fondos con fact sheets dinámicos
 
 Creado `dashboards/fondos.py`: página Streamlit estética Toesca con vista Portfolio + fact sheet dinámico por fondo (TRI/PT/Apo). Bloques: rentabilidad (derived_kpi), valor cuota, repartos U12M, endeudamiento, NOI, vacancia, tasaciones/LTV. Ver [[agente/dashboard-fondos]]. Aprendido: fact_tasacion tiene fila tasador='Promedio'; raw_dividendo tiene duplicados por doble fuente; raw_valor_cuota_bursatil no tiene superseded_at.
