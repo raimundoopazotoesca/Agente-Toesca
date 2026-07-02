@@ -24,11 +24,13 @@ UNIT = "ratio"  # 0.0413 = 4.13%
 SERIES_CONFIG = {
     # entidad_key → config; "nemo_db" overrides the nemotecnico used for DB lookups
     # when the DB stores a different identifier than the canonical series key.
+    # entidad_key debe coincidir con dim_serie.nemotecnico (consistente con el resto
+    # de derived_kpi: TIR, YTD, U12M usan 'Apo', no 'APO-UNICA' — ver wiki/log.md 2026-07-02).
     "CFITOERI1A": {"fondo": "TRI", "inicio": "2018-03", "bursatil": True},
     "CFITOERI1C": {"fondo": "TRI", "inicio": "2018-03", "bursatil": True},
     "CFITOERI1I": {"fondo": "TRI", "inicio": "2018-03", "bursatil": True},
     "CFITRIPT-E": {"fondo": "PT",  "inicio": "2018-03", "bursatil": True},
-    "APO-UNICA":  {"fondo": "Apo", "inicio": "2019-03", "bursatil": False, "nemo_db": "Apo"},
+    "Apo":        {"fondo": "Apo", "inicio": "2019-03", "bursatil": False},
 }
 
 
@@ -86,54 +88,46 @@ def _get_divs_uf(conn: sqlite3.Connection, nemo: str, desde: date, hasta: date) 
 
 
 def _get_uf(conn: sqlite3.Connection, t: date) -> float | None:
-    """UF más reciente disponible con fecha <= t (de raw_valor_cuota_line)."""
+    """UF del último día del mes de `t` (o la más reciente disponible <=)."""
     cur = conn.execute(
-        """SELECT uf_dia FROM raw_valor_cuota_line
-            WHERE uf_dia IS NOT NULL AND fecha <= ?
+        """SELECT valor FROM raw_uf_diaria
+            WHERE fecha <= date(?, 'start of month', '+1 month', '-1 day')
             ORDER BY fecha DESC LIMIT 1""",
         (t.isoformat(),),
     )
     row = cur.fetchone()
-    return row[0] if row and row[0] else None
+    return row[0] if row else None
 
 
 def _get_precio_contable_uf(conn: sqlite3.Connection, nemo: str, t: date) -> float | None:
-    """Último precio contable en UF con fecha <= t."""
+    """Precio contable en UF del cierre trimestral de `t` (mismo YYYY-MM).
+
+    Contable solo tiene datos a fin de trimestre (mar/jun/sep/dic).
+    Devuelve None si `t` no es cierre trimestral o no hay precio ese mes.
+    """
+    if t.month not in (3, 6, 9, 12):
+        return None
+    periodo = f"{t.year:04d}-{t.month:02d}"
     cur = conn.execute(
-        """SELECT precio_uf FROM raw_valor_cuota_line
-            WHERE nemotecnico = ? AND tipo = 'contable' AND fecha <= ?
+        """SELECT precio_uf FROM raw_valor_cuota_contable_line
+            WHERE nemotecnico = ? AND periodo = ?
               AND precio_uf IS NOT NULL
             ORDER BY fecha DESC LIMIT 1""",
-        (nemo, t.isoformat()),
+        (nemo, periodo),
     )
     row = cur.fetchone()
     return row[0] if row and row[0] else None
 
 
 def _get_precio_bursatil_uf(conn: sqlite3.Connection, nemo: str, t: date) -> float | None:
-    """Precio bursátil en UF con fecha <= t.
-
-    Fuente primaria: raw_precio_cuota_line (LarrainVial, CLP) dividido por UF del día.
-    Fallback: raw_valor_cuota_line tipo='bursatil' con precio_uf directo.
-    """
-    uf = _get_uf(conn, t)
-    if uf:
-        cur = conn.execute(
-            """SELECT precio_clp FROM raw_precio_cuota_line
-                WHERE nemotecnico = ? AND fecha <= ?
-                ORDER BY fecha DESC LIMIT 1""",
-            (nemo, t.isoformat()),
-        )
-        row = cur.fetchone()
-        if row and row[0]:
-            return row[0] / uf
-    # Fallback
+    """Precio bursátil en UF del mismo mes que `t`. None si no hay precio ese mes."""
+    periodo_start = date(t.year, t.month, 1).isoformat()
     cur = conn.execute(
-        """SELECT precio_uf FROM raw_valor_cuota_line
-            WHERE nemotecnico = ? AND tipo = 'bursatil' AND fecha <= ?
+        """SELECT precio_uf FROM raw_valor_cuota_bursatil_line
+            WHERE nemotecnico = ? AND fecha >= ? AND fecha <= ?
               AND precio_uf IS NOT NULL
             ORDER BY fecha DESC LIMIT 1""",
-        (nemo, t.isoformat()),
+        (nemo, periodo_start, t.isoformat()),
     )
     row = cur.fetchone()
     return row[0] if row and row[0] else None
@@ -177,7 +171,7 @@ def run_dy(conn: sqlite3.Connection, desde: str, hasta: str) -> None:
                     kpi="dy",
                     valor=dy,
                     unidad=UNIT,
-                    recipe=RECIPE,
+                    formula=RECIPE,
                     variante=variante,
                 )
                 total += 1

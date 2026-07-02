@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] fix | Dividend Yield — limpieza de datos Apo, sin cambio de fórmula
+
+`dy_v2` (`scripts/compute_kpis_series.py`) ya estaba correcto y validado exacto contra CDG para
+TRI y PT (A=2.152%/4.134%, C=2.375%/4.644%, I=2.468%/2.754% mar-26). Al revisar Apo se encontró
+inconsistencia de datos (no de cálculo):
+
+1. `SERIES_CONFIG` guardaba el DY de Apo bajo `entidad_key='APO-UNICA'`, distinto al resto de
+   `derived_kpi` (TIR/YTD/U12M usan `entidad_key='Apo'`, igual a `dim_serie.nemotecnico`) —
+   corregido en el script (ahora usa `'Apo'` directamente, sin `nemo_db` override).
+2. Existían 34 filas viejas (`Apo`/`dividend_yield_contable`, `Apo`/`dividendo_por_cuota`) de un
+   proceso anterior que SÍ incluía `tipo='disminucion'` en el numerador — la fórmula validada
+   (`dy_v2`) filtra solo `tipo='dividendo'`, igual que el CDG. Estas filas daban valores
+   distintos (ej. dic-2020: 5.418% vs 2.304% correcto) para el rango 2020-12→2022-09, donde Apo
+   tuvo varios eventos de disminución. Borradas.
+
+Migradas las 29 filas de `APO-UNICA`/`dy` a `entidad_key='Apo'`. Sin duplicados tras la limpieza.
+Re-corrido `compute_kpis_series.py --kpi dy` para confirmar que el script corregido reproduce
+exactamente lo mismo.
+
 ## [2026-07-02] feat | Rentabilidad U12M — validada (bug de Excel en PT confirmado, no se replica)
 
 Verificado `tir_contable_u12m`/`tir_bursatil_u12m` (ya existían en `tir.py`, sin cambios de código)
