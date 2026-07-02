@@ -3,6 +3,19 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | leverage_financiero (Deuda/Patrimonio) histórico + fix cuotas TRI en EEFF antiguos
+
+Nuevo `kpi='leverage_financiero'` = deuda consolidada (look-through TRI) / patrimonio contable
+(VNA×cuotas, Σ series). Solo fondo, solo cierres con VNA. Backfilleado: PT 25 pts (2020-03+),
+Apo 35, TRI 9 (2021-12+). Valores 2026-03: PT 4.139, TRI 1.522, Apo 2.325.
+
+**Fix datos**: los EEFF PDF de 2024-06/2025-03/2025-06 tenían cuotas TRI erróneas en
+`raw_valor_cuota_contable` (160.000/242.161/223.948 — línea equivocada del PDF, desinflaba el
+patrimonio ~5x). Corregidas a las canónicas validadas exacto contra `raw_ar_event`
+(aportes−canjes): A 475.667, C 1.252.928, I 1.091.101. Además dedup de 26 filas duplicadas
+(`superseded_at NULL`) en cierres de año; grupo A/2021-12 tenía una fila con cuotas pre-canje
+(502.869) — conservada la post-canje (475.667). Sin duplicados restantes.
+
 ## [2026-07-02] feat | Leverage financiero consolidado: LTV, LTC, deuda_consolidada históricos en derived_kpi
 
 Implementados en el skill real-estate-finance-expert (`scripts/leverage.py`) y backfilleados
