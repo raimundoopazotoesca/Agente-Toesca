@@ -3,6 +3,29 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] fix | TIR desde inicio PT y Apo — método agregado, corrección de datos faltantes
+
+Extendida la metodología agregada (validada para TRI bursátil el mismo día) a PT y Apo, para
+AMBOS trackeos (contable y bursátil) — ver `wiki/tir_contable_desde_inicio.md`. Validado exacto
+contra planilla del usuario (hojas PT/APO de `tablaflujos.xlsx`, corte MAR-2026): PT
+contable=-5.121%, PT bursátil=-6.322%, Apo contable=-1.912%.
+
+Datos faltantes agregados a `raw_ar_event`: Apo no tenía NINGUNA fila (0 aportes registrados,
+faltaba el aporte único 2019-01-02 de 1.585.000 UF); PT le faltaban 2 Disminuciones
+(2019-10-09, 2019-12-30). Cuidado: varias Disminuciones de PT ya estaban fusionadas dentro de
+filas `tipo='dividendo'` de `raw_dividendo_line` — insertarlas de nuevo en `raw_ar_event` duplicó
+el flujo hasta que se detectó comparando contra la planilla fila por fila.
+
+Bug de dispatch encontrado y corregido en `_calcular_tir_por_cuota`: la condición original
+(`COUNT(Aporte WHERE fecha >= primer_VNA) == 0` → usar método simple) fallaba para Apo porque su
+único aporte coincide exactamente con la fecha del primer VNA (`fecha >= ` lo cuenta como
+"posterior"). Reemplazada por `COUNT(Aporte total) <= 1` — no afecta a TRI (16/14/7 aportes cada
+serie).
+
+Consolidado en `derived_kpi`: PT contable trimestral 2017-12→2026-03 (34), PT bursátil mensual
+2017-12→2026-06 (97), Apo contable 2019-03→2026-03 (39, quarterly hasta 2024-12 luego mensual).
+Apo bursátil no aplica (`transa_bolsa=0`).
+
 ## [2026-07-02] feat | TIR desde inicio (contable + bursátil) consolidada en derived_kpi, TRI A/C/I
 
 Implementadas y validadas exacto contra CDG (planilla `tablaflujos.xlsx`, corte MAR-2026) dos metodologías

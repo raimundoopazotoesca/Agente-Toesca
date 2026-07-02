@@ -134,16 +134,41 @@ precio $/cuota (mercado bursátil LarraínValor) → `raw_valor_cuota_line` tipo
 
 ---
 
+## PT y Apo (fondos de un solo aporte) — método agregado también para CONTABLE
+
+> **NUNCA CAMBIAR.** Validado exacto contra planilla del usuario (`tablaflujos.xlsx`,
+> hojas PT/APO, corte MAR-2026). A diferencia de TRI (múltiples rondas de aportes,
+> requiere divisor fijo per-cuota), PT y Apo tienen **un solo aporte histórico** —
+> usan `_calcular_tir_agregado` para AMBOS trackeos (contable Y bursátil), no solo
+> bursátil. Apo no transa en bolsa (`dim_serie.transa_bolsa=0`) → solo contable.
+
+Dispatch: dentro de `_calcular_tir_por_cuota`, si `COUNT(Aporte) <= 1` → usar
+`_calcular_tir_agregado` directamente (no pasa por el divisor fijo). Esto no afecta
+TRI (A/C/I tienen 16/14/7 aportes cada una).
+
+**Valores validados MAR-26:** PT contable=-5.121% · PT bursátil=-6.322% · Apo contable=-1.912%.
+
+**Datos que faltaban y se agregaron a `raw_ar_event` (2026-07-02):**
+- Apo: Aporte único 2019-01-02, 1.585.000 UF / 1.585.000 cuotas (antes: 0 filas para Apo).
+- PT: 2 Disminuciones (2019-10-09, 2019-12-30) que no estaban en ninguna tabla.
+  **Ojo**: varias "Disminución" de la planilla de PT ya estaban *fusionadas* dentro de filas
+  `tipo='dividendo'` de `raw_dividendo_line` (mismo monto, misma fecha) — no volver a
+  insertarlas o se duplica el flujo. Ver commit 2026-07-02 para el detalle de cuáles.
+
 ## Implementación en el skill
 
 Archivo: `skills/real-estate-finance-expert/scripts/tir.py`
-- Función: `_calcular_tir_por_cuota` → **CONTABLE** TRI y fondos con múltiples aportes (congelado)
-- Función: `_calcular_tir_simple_uf` → PT y fondos sin aportes post-VNA (fallback contable)
-- Función: `_calcular_tir_bursatil_agregado` → **BURSÁTIL**, todas las series (congelado, ver arriba)
-- Dispatch contable: si `COUNT(Aportes WHERE fecha >= primer_VNA) == 0` → usar `tir_simple_uf`
+- Función: `_calcular_tir_por_cuota` → **CONTABLE** TRI, divisor fijo per-cuota (congelado)
+- Función: `_calcular_tir_agregado(tipo_vr)` → **BURSÁTIL** todas las series + **CONTABLE y
+  BURSÁTIL de PT/Apo** (congelado, ver arriba). UF agregadas, sin divisor, terminal en
+  fecha EXACTA de corte.
+- Función: `_calcular_tir_simple_uf` → legacy, ya no se usa en el dispatch principal
+  (reemplazada por `_calcular_tir_agregado`), se mantiene por compatibilidad de código.
+- Dispatch contable: `COUNT(Aporte) <= 1` → `_calcular_tir_agregado`; si no, divisor fijo
+  per-cuota (TRI).
 
 KPI names para llamar el skill:
-- `tir_contable_desde_inicio` → `_calcular_tir_por_cuota` / `_calcular_tir_simple_uf`
-- `tir_bursatil_desde_inicio` → `_calcular_tir_bursatil_agregado`
+- `tir_contable_desde_inicio` → `_calcular_tir_por_cuota` (TRI) / `_calcular_tir_agregado` (PT, Apo)
+- `tir_bursatil_desde_inicio` → `_calcular_tir_agregado` (todas)
 
-Nemotécnicos en la DB: `CFITOERI1A`, `CFITOERI1C`, `CFITOERI1I`, `CFITRIPT-E` (no alias cortos).
+Nemotécnicos en la DB: `CFITOERI1A`, `CFITOERI1C`, `CFITOERI1I`, `CFITRIPT-E`, `Apo` (no alias cortos).
