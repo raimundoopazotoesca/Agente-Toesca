@@ -3,6 +3,17 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | duration_deuda v2 — metodología Toesca validada, TRI look-through
+
+Reescrita duration con la fórmula Excel de Toesca: [Σ(meses×cuota_total)/Σ(cuota_total)]/12 sobre
+raw_amortizacion (cuota = capital+intereses, solo períodos futuros). Validado exacto: PT 3.391 ✓,
+Apo 0.743 ✓ (CONSOLIDADO_{PT,Apo}). TRI usa look-through ponderado de créditos individuales
+(no CONSOLIDADO_TRI — su capital_uf está congelado para dy_amort, no tocar): DB da 5.438 vs 5.450
+de Toesca — diferencia explicada por 3 errores en el consolidado manual del usuario (hoja
+'tabla tri': cuota Apo3001 duplicada 2×/3× jul-oct 2028, step-up Viña desfasado 1 mes, +1.7k
+dic-2026). Los cronogramas bancarios individuales de la DB son la fuente correcta. Backfill v2
+completo reemplazó v1: 932 filas (fondo 234 + activo 698), 2020-01→2026-06.
+
 ## [2026-07-02] feat | Backfill completo bloque leverage: dscr + duration_deuda historicos
 
 Backfilleados los 2 KPIs restantes del bloque leverage en derived_kpi (2020-01..2026-06):
