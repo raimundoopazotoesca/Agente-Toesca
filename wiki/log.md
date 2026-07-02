@@ -3,6 +3,13 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feat | Backfill completo bloque leverage: dscr + duration_deuda historicos
+
+Backfilleados los 2 KPIs restantes del bloque leverage en derived_kpi (2020-01..2026-06):
+dscr fondo 234 + activo 415, duration_deuda fondo 234 + activo 698. Bloque completo:
+ltv, ltc, deuda_consolidada, leverage_financiero, dscr, duration_deuda — todos con
+historico en DB. Errores esperados en dscr activo: Apo4501/4700 sin NOI individual.
+
 ## [2026-07-02] feat | leverage_financiero (Deuda/Patrimonio) histórico + fix cuotas TRI en EEFF antiguos
 
 Nuevo `kpi='leverage_financiero'` = deuda consolidada (look-through TRI) / patrimonio contable
