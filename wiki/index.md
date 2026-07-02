@@ -15,6 +15,7 @@
 |--------|-------------|-------------|
 | [[agente/arquitectura]] | Stack técnico, archivos principales, variables de entorno | 2026-05-01 |
 | [[agente/herramientas]] | Catálogo de todos los tools con descripción y archivo fuente | 2026-05-01 |
+| [[agente/dashboard-fondos]] | Dashboard Streamlit fondos — fact sheets dinámicos desde la DB (`dashboards/fondos.py`) | 2026-07-02 |
 
 ## Skills
 

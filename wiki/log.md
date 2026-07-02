@@ -3,6 +3,10 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-02] feature | Dashboard fondos con fact sheets dinámicos
+
+Creado `dashboards/fondos.py`: página Streamlit estética Toesca con vista Portfolio + fact sheet dinámico por fondo (TRI/PT/Apo). Bloques: rentabilidad (derived_kpi), valor cuota, repartos U12M, endeudamiento, NOI, vacancia, tasaciones/LTV. Ver [[agente/dashboard-fondos]]. Aprendido: fact_tasacion tiene fila tasador='Promedio'; raw_dividendo tiene duplicados por doble fuente; raw_valor_cuota_bursatil no tiene superseded_at.
+
 ## [2026-07-02] feat | DY + Amortización consolidado en derived_kpi (kpi='dy_amort'), todos los fondos
 
 Consolidados 550 valores históricos de `dividend_yield_con_amort` (bursátil), `_contable` y
