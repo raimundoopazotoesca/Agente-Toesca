@@ -48,10 +48,12 @@ categoría" (10 categorías por activo por mes, sin desglose de cuenta contable)
   (= Apoquindo 4700 + Apoquindo 4501), no un monto adicional — el parser lo
   descarta sin pérdida de datos (verificado: suma cuadra exacto)
 - **Contribuciones** viene como un solo monto combinado (sin desglose por
-  activo) en los 89 meses históricos. Regla de negocio acordada 2026-07-09
-  con el usuario: split **25% Apo4700 / 75% Apo4501** sobre el valor
-  combinado, aplicado tanto al histórico (donde el excel no trae el
-  desglose) como a los meses futuros
+  activo) en 10 meses históricos (2019-01 a 2019-10) — el resto del
+  histórico (2019-11 a 2026-05) sí trae el desglose real por edificio y se
+  respeta tal cual. Regla de negocio acordada 2026-07-09 con el usuario:
+  split **25% Apo4700 / 75% Apo4501** sobre el valor combinado, aplicado
+  solo donde el excel no trae el desglose (histórico sin dato + meses
+  futuros)
 
 ### Contribuciones futuras (meses sin dato en la planilla) — pendiente
 

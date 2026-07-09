@@ -10,9 +10,9 @@ con el ER histórico de Apo4501/Apo4700 (2019-01 a 2026-05, 1405 filas, 10 categ
 Ingestor nuevo: `tools/db/ingest_er_apoquindo.py`. NOI verificado exacto contra CDG (dic-24 a jun-25).
 Fix incluido: `dim_activo.participacion_fondo_activo` = 1.0 para Apo4501/Apo4700 (antes 0.3 por
 confundir la relación fondo-fondo TRI→Apo con la relación fondo-activo; migración 047). Contribuciones
-viene combinada (sin desglose por edificio) en todo el histórico real — split 25% Apo4700/75% Apo4501
-aplicado por regla de negocio dada por el usuario, misma proporción que la fórmula acordada para meses
-futuros sin dato: `(-165.941.575-62.167.695)/3/UF_mes`. Detalle en [[activos/apoquindo]] y
+viene combinada (sin desglose por edificio) en 10 meses históricos (2019-01 a 2019-10; el resto del
+histórico sí trae desglose real y se respetó tal cual) — split 25% Apo4700/75% Apo4501 aplicado solo
+donde falta el desglose, misma proporción que la fórmula acordada para meses futuros sin dato: `(-165.941.575-62.167.695)/3/UF_mes`. Detalle en [[activos/apoquindo]] y
 `docs/superpowers/specs/2026-07-09-apoquindo-er-ingesta-design.md`.
 
 ## [2026-07-02] feat | duration_deuda v2 — metodología Toesca validada, TRI look-through
