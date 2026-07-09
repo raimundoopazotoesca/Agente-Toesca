@@ -140,4 +140,28 @@ Todos son **best-effort**: si la DB falla, el flujo de Excel sigue (nunca se rom
 - **Dividendos EEFF**: el parser regex no trae fecha ni serie de forma confiable → no persistible aún.
 - **NOI PT agregado (RR JLL)**: hoja multi-activo; se optó por persistir el rent roll detallado en su lugar (más valioso para dashboards). El NOI por activo se derivará en Fase computacional.
 
+### Pendientes EEFF — balance histórico (`ESF.total_activo`) (2026-07)
+
+Detectado al calcular `caja_minima` (= % de activos totales) por fondo/periodo. Estado por fondo:
+
+- **PT**: completo. 2017 no aplica (el fondo no existía). Los "faltantes" 2019-12/2020-12/2023-12
+  eran falso positivo por variante de nombre ("Total activos" plural) — resuelto con matching
+  case/plural-insensitive, no requiere reingesta.
+- **Apo**: completo (29/29 trimestres, 2019-03 a 2025-12). 2020-12 tenía un bug de versionado
+  (`superseded_at` invertido: la fila correcta del reporte quedó marcada superseded y la incorrecta
+  quedó viva) — corregido 2026-07-09 con foto EEFF del usuario (Total activo real = 42.343.358.000,
+  no 125.087.458.000).
+- **TRI**: **9 periodos pendientes**:
+  - Sin parseo de balance (ESF) — solo hay ER/flujo, cero líneas de activo/pasivo/patrimonio:
+    2017-03, 2017-06, 2017-09, 2021-03, 2021-06, 2021-09, 2023-09. Requiere volver a parsear el
+    PDF fuente de esos trimestres.
+  - Filas de "Total activo" duplicadas sin deduplicar (7-8 valores distintos por periodo, mezcla de
+    consolidado + desglose): 2024-12, 2025-06. Requiere revisar `source_file`/hoja de cada fila para
+    identificar el total correcto.
+- **Apo 2026-03**: EEFF más reciente aún no ingestado a `raw_eeff_line`.
+
+`derived_kpi` kpi=`caja_minima` (fondo, %activos: Apo 0.1%, PT/TRI 1%) ya está consolidado para todos
+los periodos donde `ESF.total_activo` existe limpio (67 filas iniciales + Apo 2020-12 corregido).
+Los 9 periodos de TRI y Apo 2026-03 quedan sin `caja_minima` hasta resolver el parseo.
+
 Spec completo: `docs/superpowers/specs/2026-05-25-db-migration-design.md`.

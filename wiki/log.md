@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-09] fix+pendiente | caja_minima consolidada + gaps de balance EEFF (TRI, Apo 2026-03)
+
+Consolidados en `derived_kpi`: `ingresos_u12m`/`noi_u12m`/`tasa_arriendo_ajustada_contable`/
+`cap_rate_implicito_contable` para fondo Apo (26 trimestres, 2019-12 a 2026-03) y `caja_minima`
+(% de activos totales: Apo 0.1%, PT/TRI 1%) para los 3 fondos donde `ESF.total_activo` existe limpio.
+Validado exacto contra cálculo manual del usuario a mar-2026 (tasa arriendo 5,39%, cap rate 4,58%).
+
+Al auditar cobertura de `ESF.total_activo` aparecieron 3 hallazgos:
+1. **Bug de versionado en Apo 2020-12**: la fila correcta (comparativa en 4 reportes posteriores,
+   42.343.358.000) quedó `superseded_at` mientras la incorrecta del reporte propio
+   (125.087.458.000) quedó viva. Corregido con foto EEFF del usuario.
+2. **raw_caja tiene 4 valores mal cargados** vs. tabla histórica del usuario: PT/TRI cruzados en
+   2025-10-31, Apo 2020-07-27 y TRI 2023-05-31 con dígitos distintos. Usuario decidió NO corregirlos
+   por ahora.
+3. **TRI: 9 periodos pendientes** de `ESF.total_activo` — 7 sin parseo de balance completo
+   (2017-03/06/09, 2021-03/06/09, 2023-09) y 2 con filas duplicadas sin resolver (2024-12, 2025-06).
+   Detalle completo en [[db]] sección "Pendientes EEFF — balance histórico". **Apo 2026-03** también
+   pendiente de ingesta.
+
 ## [2026-07-09] ingesta | ER Fondo Apoquindo (Apo4501, Apo4700) desde planilla local raw/NOI.xlsx
 
 Mientras no llegan las respuestas de las APIs de JLL y Tres Asociados, se pobló `raw_er_activo_line`
