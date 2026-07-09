@@ -15,25 +15,38 @@ import openpyxl
 
 # ── Mapeo categoría planilla → pseudo-código + sección + signo ─────────────────
 # Todas las categorías son operacionales (entran al NOI).
+# Incluye variantes reales observadas en raw/NOI.xlsx (SharePoint): mojibake
+# de tildes (é/ó → carácter de reemplazo U+FFFD) y un typo de origen
+# ("Constultores" en vez de "Constructores").
 _CATEGORIAS: dict[str, dict] = {
     "ingresos por arriendos":                {"codigo": "APO_ING_ARR",   "seccion": "INGRESOS_OPERACION"},
     "gastos comunes/vacancia":               {"codigo": "APO_GC_VAC",    "seccion": "GASTOS_OPERACION"},
     "gastos comunes / vacancia":             {"codigo": "APO_GC_VAC",    "seccion": "GASTOS_OPERACION"},
+    "gastos comunes vacancia":               {"codigo": "APO_GC_VAC",    "seccion": "GASTOS_OPERACION"},
     "comisión corredor":                     {"codigo": "APO_COM_CORR",  "seccion": "GASTOS_OPERACION"},
     "comision corredor":                     {"codigo": "APO_COM_CORR",  "seccion": "GASTOS_OPERACION"},
+    "comisi�n corredor":                 {"codigo": "APO_COM_CORR",  "seccion": "GASTOS_OPERACION"},
     "administración":                        {"codigo": "APO_ADM",       "seccion": "GASTOS_OPERACION"},
     "administracion":                        {"codigo": "APO_ADM",       "seccion": "GASTOS_OPERACION"},
+    "administraci�n":                    {"codigo": "APO_ADM",       "seccion": "GASTOS_OPERACION"},
     "provisión reparaciones":                {"codigo": "APO_PROV_REP",  "seccion": "GASTOS_OPERACION"},
     "provision reparaciones":                {"codigo": "APO_PROV_REP",  "seccion": "GASTOS_OPERACION"},
     "gastos bono + legales + otros":         {"codigo": "APO_BONOS_LEG", "seccion": "GASTOS_OPERACION"},
     "gastos bono+legales+otros":             {"codigo": "APO_BONOS_LEG", "seccion": "GASTOS_OPERACION"},
     "gastos constructores asociados":        {"codigo": "APO_CONSTRUCT", "seccion": "GASTOS_OPERACION"},
     "gastos constructores asociados (contabilidad)": {"codigo": "APO_CONSTRUCT", "seccion": "GASTOS_OPERACION"},
+    "gastos constultores asociados (contabilidad)":  {"codigo": "APO_CONSTRUCT", "seccion": "GASTOS_OPERACION"},
     "gastos iva no recuperado":              {"codigo": "APO_IVA_NR",    "seccion": "GASTOS_OPERACION"},
     "gastos iva no recuperado/otros gastos": {"codigo": "APO_IVA_NR",    "seccion": "GASTOS_OPERACION"},
+    "gastos iva no recuperado/ otros gastos": {"codigo": "APO_IVA_NR",   "seccion": "GASTOS_OPERACION"},
     "contribuciones":                        {"codigo": "APO_CONTRIB",   "seccion": "GASTOS_OPERACION"},
     "seguros":                               {"codigo": "APO_SEG",       "seccion": "GASTOS_OPERACION"},
 }
+
+# Split de negocio para montos que la planilla trae combinados (sin desglose
+# por activo) — regla acordada 2026-07-09 con el usuario, misma proporción
+# usada para la fórmula de contribuciones futuras.
+_SPLIT_COMBINADO = {"Apo4700": 0.25, "Apo4501": 0.75}
 
 # activo_key por nombre de sub-fila en la planilla
 _ACTIVOS = {"4501": "Apo4501", "4700": "Apo4700"}
@@ -130,42 +143,94 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
     if header_row_idx is None:
         raise ValueError(f"No se encontró fila de header con meses en {xlsx_path}")
 
-    # 2) Recorrer filas: cuando A matchea una categoría, la siguiente(s) fila(s)
-    #    con activo dan los valores.
+    # La columna de etiqueta es la inmediatamente anterior a la primera
+    # columna de período (col A + col B en la planilla real de SharePoint
+    # están vacías; la etiqueta vive en col C, no en col A).
+    label_col_1idx = min(period_by_col.keys()) - 1
+    label_col_0idx = label_col_1idx - 1
+
+    def _label_of(row) -> object:
+        return row[label_col_0idx].value if 0 <= label_col_0idx < len(row) else None
+
+    # 2) Recorrer filas: cuando la col de etiqueta matchea una categoría, la(s)
+    #    siguiente(s) fila(s) con activo dan los valores. Para Contribuciones,
+    #    la propia fila de categoría puede traer un valor combinado (sin
+    #    desglose por activo) — se completa con split 25/75 (regla 2026-07-09).
     out: list[dict] = []
     current_cat: Optional[dict] = None
+    current_cat_row: Optional[int] = None
+    current_cat_combined: dict[str, float] = {}
+    current_cat_seen: dict[str, set] = {}  # periodo -> {activo_key con dato real}
+
+    def _flush_contrib_split() -> None:
+        if current_cat is None or current_cat.get("codigo") != "APO_CONTRIB":
+            return
+        for periodo, combinado in current_cat_combined.items():
+            ya_visto = current_cat_seen.get(periodo, set())
+            for activo_key, frac in _SPLIT_COMBINADO.items():
+                if activo_key in ya_visto:
+                    continue  # el excel ya trae el desglose real, respetarlo
+                out.append({
+                    "activo_key":     activo_key,
+                    "periodo":        periodo,
+                    "cuenta_codigo":  "APO_CONTRIB",
+                    "cuenta_nombre":  f"Contribuciones (split {int(frac*100)}% s/combinado, regla 2026-07-09)",
+                    "monto_clp":      combinado * frac,
+                    "monto_uf":       None,
+                    "seccion":        "GASTOS_OPERACION",
+                    "es_operacional": 1,
+                    "source_file":    xlsx_path,
+                    "source_sheet":   sheet_name,
+                    "source_row":     current_cat_row,
+                })
+
     for i in range(header_row_idx + 1, len(all_rows)):
         row = all_rows[i]
-        label_cell = row[0]
-        label = _norm(label_cell.value)
+        raw_label = _label_of(row)
+        label = _norm(raw_label)
         if not label:
             continue
         if label in _IGNORE_LABELS:
-            current_cat = None
+            _flush_contrib_split()
+            current_cat, current_cat_combined, current_cat_seen = None, {}, {}
             continue
         # ¿Es una categoría?
         cat_meta = _CATEGORIAS.get(label)
         if cat_meta is not None:
+            _flush_contrib_split()
             current_cat = cat_meta
+            current_cat_row = i + 1
+            current_cat_combined, current_cat_seen = {}, {}
+            # Capturar valores propios de la fila de categoría (caso Contribuciones:
+            # viene un solo monto combinado, sin desglose por activo debajo).
+            for col, periodo in period_by_col.items():
+                cell = row[col - 1] if col - 1 < len(row) else None
+                if cell is None or cell.value is None:
+                    continue
+                try:
+                    current_cat_combined[periodo] = float(cell.value)
+                except (TypeError, ValueError):
+                    continue
             continue
         # ¿Es una sub-fila de activo bajo la categoría actual?
-        activo_key = _detectar_activo(label_cell.value)
+        activo_key = _detectar_activo(raw_label)
         if activo_key is None or current_cat is None:
             continue
         for col, periodo in period_by_col.items():
             # openpyxl usa 1-index; row es tupla ordenada por columna
-            cell = next((c for c in row if c.column == col), None)
+            cell = row[col - 1] if col - 1 < len(row) else None
             if cell is None or cell.value is None:
                 continue
             try:
                 monto = float(cell.value)
             except (TypeError, ValueError):
                 continue
+            current_cat_seen.setdefault(periodo, set()).add(activo_key)
             out.append({
                 "activo_key":     activo_key,
                 "periodo":        periodo,
                 "cuenta_codigo":  current_cat["codigo"],
-                "cuenta_nombre":  str(label_cell.value).strip(),
+                "cuenta_nombre":  str(raw_label).strip(),
                 "monto_clp":      monto,
                 "monto_uf":       None,
                 "seccion":        current_cat["seccion"],
@@ -174,6 +239,7 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
                 "source_sheet":   sheet_name,
                 "source_row":     i + 1,
             })
+    _flush_contrib_split()  # última categoría del archivo
     return out
 
 
