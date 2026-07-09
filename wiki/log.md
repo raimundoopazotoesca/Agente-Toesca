@@ -3,6 +3,27 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-09] doc+fix | Metodología NOI/caja mínima/tasa arriendo/cap rate consolidada (Apo) + cierre 2026-03
+
+Nueva página [[kpis_noi_cap_rate_apo]] con toda la metodología aprendida en la sesión: fórmulas de
+`ingresos_u12m`/`noi_u12m`/`ingresos_mes`/`noi_mes`/`caja_minima`/`tasa_arriendo_ajustada_contable`/
+`cap_rate_implicito_contable`, más los 4 hallazgos de datos (bug versionado Apo 2020-12, 4 valores
+de `raw_caja` no corregidos por decisión del usuario, origen no trazable de `raw_caja`, variantes
+de nombre sin canonicalizar en `raw_eeff_line`). Enlazada desde `wiki/index.md`.
+
+Con el EEFF Apo 2026-03 ya ingestado (ver entrada siguiente), se cerró el último trimestre
+pendiente: `caja_minima` (65.121.454 CLP, usando la fila `TOTAL ACTIVO`=65.121.454.000 — el JSON
+también trae una fila `Total activos`=187.625.357.000 que no cuadra con corriente+no_corriente y
+se descartó) y recalculados `tasa_arriendo_ajustada_contable`/`cap_rate_implicito_contable` para
+2026-03: **5,39% / 4,58%**, exacto contra el cálculo manual del usuario. Serie ahora completa:
+26/26 trimestres, 2019-12 a 2026-03.
+
+Desplegado en `factsheet.html`: tabla "Otros Indicadores" (antes 100% placeholder para los 3
+fondos) ahora dinámica — Tasa Arriendo, Cap Rate, Ingresos U12M/mes, NOI U12M/mes, con trazabilidad
+(modal formula/SQL). Fix incluido: el label "Ingresos/NOI [mes]" no mostraba el mes real porque el
+reemplazo de `.oi-mes` corría antes de insertar esas filas en el DOM — resuelto interpolando el mes
+directo en el template en vez de depender de un span reemplazado después.
+
 ## [2026-07-09] ingesta | Apo EEFF 2026-03 completa — ESF, valor cuota, capital suscrito
 
 Ingestionado desde JSON parseado de PDF (ChatGPT):

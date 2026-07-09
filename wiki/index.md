@@ -59,6 +59,7 @@
 |--------|-------------|-------------|
 | [[tir_contable_desde_inicio]] | Metodología canónica TIR desde inicio — fuentes, flujos, valores referencia | 2026-06-11 |
 | [[kpis_rentabilidad_fondos]] | **Metodología validada**: TIR, YTD, U12M, Dividend Yield — fórmulas + valores MAR-26 confirmados vs CDG | 2026-06-17 |
+| [[kpis_noi_cap_rate_apo]] | **Metodología validada (solo Apo)**: NOI/Ingresos U12M y mensual, Caja Mínima, Tasa de Arriendo y Cap Rate Implícito Contable | 2026-07-09 |
 
 ## Proyecto
 
