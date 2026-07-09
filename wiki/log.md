@@ -3,11 +3,15 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
-## [2026-07-09] ingesta | Apo EEFF 2026-03 — valor cuota contable
+## [2026-07-09] ingesta | Apo EEFF 2026-03 completa — ESF, valor cuota, capital suscrito
 
-Ingestionado en `raw_valor_cuota_contable`: Apo 2026-03-31, valor_cuota_libro_uf=0.700085245, cuotas=1.585.000.
-Fuente: JSON parseado de PDF (ESF consolidado: total_activo=CLP 65.121M, pasivo=CLP 20.911M, patrimonio=CLP 44.209M).
-**Pendiente aún**: ESF línea a línea en `raw_eeff_line` (balance histórico TRI 7 períodos).
+Ingestionado desde JSON parseado de PDF (ChatGPT):
+- `raw_valor_cuota_contable`: valor_cuota_libro_uf=0.700085245, cuotas=1.585.000
+- `raw_eeff_line` (ESF línea a línea): total_activo=CLP 65.121M, total_pasivo=CLP 20.911M, patrimonio=CLP 44.209M
+- `raw_capital_suscrito`: capital_acumulado=980.794,96 UF
+
+Sin dividendos ni disminuciones en el período (confirmado en notas del PDF).
+**Pendiente aún**: ESF línea a línea TRI (7 períodos 2017-2023) + 2 períodos 2024-12/2025-06 con duplicados.
 
 ## [2026-07-09] fix+pendiente | caja_minima consolidada + gaps de balance EEFF (TRI, Apo 2026-03)
 
