@@ -175,3 +175,119 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
                 "source_row":     i + 1,
             })
     return out
+
+
+# ── Persistencia ────────────────────────────────────────────────────────────
+
+_ACTIVO_KEYS = tuple(_ACTIVOS.values())  # ('Apo4501', 'Apo4700')
+
+
+def persist(xlsx_path: str,
+            conn: "sqlite3.Connection | None" = None) -> dict:
+    """Ingesta idempotente de la planilla ER Apoquindo en raw_er_activo_line.
+
+    Comportamiento:
+    - Si ya existen filas activas (superseded_at IS NULL) con el mismo
+      file_hash → no hace nada, retorna status 'skipped_idempotent'.
+    - Si existen filas activas de una ingesta anterior de este ingestor
+      (mismo activo_key, otro file_hash) → las marca superseded e inserta
+      las nuevas ('superseded_and_reinserted').
+    - Si no hay filas previas → inserta directo ('inserted').
+    """
+    import sqlite3
+
+    from tools.db import repo_audit, repo_er_activo
+
+    owns_conn = conn is None
+    if owns_conn:
+        from tools.db.connection import get_conn
+        conn = get_conn()
+
+    try:
+        file_hash = _file_hash(xlsx_path)
+
+        # 1) Idempotencia: ¿ya hay filas activas con este file_hash?
+        prev = conn.execute(
+            """SELECT 1 FROM raw_er_activo_line
+                WHERE file_hash = ? AND superseded_at IS NULL
+                LIMIT 1""",
+            (file_hash,),
+        ).fetchone()
+        if prev is not None:
+            return {"status": "skipped_idempotent", "rows": 0,
+                    "file_hash": file_hash, "ingest_run_id": None}
+
+        # 2) Parsear
+        lines = parse_planilla(xlsx_path)
+        for line in lines:
+            line["file_hash"] = file_hash
+
+        # 3) ¿Hay filas activas de una ingesta anterior (otro file_hash) para
+        #    estos activos? Marcarlas superseded (una llamada por hash previo).
+        placeholders = ", ".join(["?"] * len(_ACTIVO_KEYS))
+        prev_hashes = conn.execute(
+            f"""SELECT DISTINCT file_hash FROM raw_er_activo_line
+                 WHERE activo_key IN ({placeholders})
+                   AND file_hash != ?
+                   AND superseded_at IS NULL""",
+            (*_ACTIVO_KEYS, file_hash),
+        ).fetchall()
+
+        if prev_hashes:
+            for row in prev_hashes:
+                repo_er_activo.mark_superseded(conn, file_hash=row[0])
+            status = "superseded_and_reinserted"
+        else:
+            status = "inserted"
+
+        # 4) Registrar corrida e insertar
+        run_id = repo_audit.start_ingest_run(
+            conn, tool="ingest_er_apoquindo",
+            source_file=xlsx_path, file_hash=file_hash,
+        )
+        inserted = repo_er_activo.insert_lines(conn, lines, run_id)
+        repo_audit.finish_ingest_run(
+            conn, run_id, rows_in=len(lines), rows_loaded=inserted, status="ok",
+        )
+
+        return {"status": status, "rows": inserted,
+                "file_hash": file_hash, "ingest_run_id": run_id}
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────
+
+def main(argv: Optional[list[str]] = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("xlsx", help="Path a la planilla xlsx")
+    ap.add_argument("--dry-run", action="store_true",
+                     help="Parsea e imprime resumen, no escribe DB")
+    args = ap.parse_args(argv)
+
+    if args.dry_run:
+        rows = parse_planilla(args.xlsx)
+        print(f"Parsed {len(rows)} filas de {args.xlsx}")
+        periodos = sorted({r["periodo"] for r in rows})
+        activos = sorted({r["activo_key"] for r in rows})
+        print(f"  periodos: {periodos}")
+        print(f"  activos:  {activos}")
+        # Mostrar NOI por activo/periodo
+        from collections import defaultdict
+        noi = defaultdict(float)
+        for r in rows:
+            noi[(r["activo_key"], r["periodo"])] += r["monto_clp"]
+        print("  NOI (M$):")
+        for k in sorted(noi.keys()):
+            print(f"    {k[0]} {k[1]}: {noi[k]:>15,.0f}")
+        return 0
+
+    res = persist(args.xlsx)
+    print(res)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
