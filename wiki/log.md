@@ -3,6 +3,18 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-09] ingesta | ER Fondo Apoquindo (Apo4501, Apo4700) desde planilla local raw/NOI.xlsx
+
+Mientras no llegan las respuestas de las APIs de JLL y Tres Asociados, se pobló `raw_er_activo_line`
+con el ER histórico de Apo4501/Apo4700 (2019-01 a 2026-05, 1405 filas, 10 categorías por activo/mes).
+Ingestor nuevo: `tools/db/ingest_er_apoquindo.py`. NOI verificado exacto contra CDG (dic-24 a jun-25).
+Fix incluido: `dim_activo.participacion_fondo_activo` = 1.0 para Apo4501/Apo4700 (antes 0.3 por
+confundir la relación fondo-fondo TRI→Apo con la relación fondo-activo; migración 047). Contribuciones
+viene combinada (sin desglose por edificio) en todo el histórico real — split 25% Apo4700/75% Apo4501
+aplicado por regla de negocio dada por el usuario, misma proporción que la fórmula acordada para meses
+futuros sin dato: `(-165.941.575-62.167.695)/3/UF_mes`. Detalle en [[activos/apoquindo]] y
+`docs/superpowers/specs/2026-07-09-apoquindo-er-ingesta-design.md`.
+
 ## [2026-07-02] feat | duration_deuda v2 — metodología Toesca validada, TRI look-through
 
 Reescrita duration con la fórmula Excel de Toesca: [Σ(meses×cuota_total)/Σ(cuota_total)]/12 sobre
