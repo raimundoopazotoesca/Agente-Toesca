@@ -4,6 +4,27 @@
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
 
+## [2026-07-13] feat | Fact sheet con navegadores independientes contable/bursátil vs operacional
+
+Reemplazó la arquitectura de un solo período (`buildPeriodPicker`) con dos navegadores independientes en `build_factsheet.py`:
+- **EEFF & Bursátil**: trimestral (4T 2025, 1T 2026...) — controla balance, gastos, rentabilidad
+- **Operacional**: mensual (Ene 2026, Mar 2026...) — controla exclusivamente "Otros Indicadores" (tasa arriendo, cap rate, ingresos/NOI U12M/mes)
+
+Nueva función `initPeriodNav(periodos, defVal, suffix, format)` reemplaza `buildPeriodPicker()`:
+- Navegadores ‹ › para ir período anterior/siguiente
+- Clic en fecha abre dropdown flotante con todos los períodos (más reciente arriba)
+- Período activo resaltado en verde, autoscroll en extremos
+
+Variables en `render()`:
+- `pc`/`pb` siguen siendo contable/bursátil trimestral
+- Nuevo `periodoOp`/`usadoOp`/`tOp` para operacional mensual
+- "Otros Indicadores" renderiza desde `tOp` (no desde `t`)
+
+CSS nuevo: `.period-nav-group`, `.period-nav-label`, `.period-nav-controls`, `.nav-arrow`, `.period-display`, `.period-dropdown`, `.period-dropdown-item`.
+
+Commit: 149e62c. Datos: 103 KPIs/fondo (83 mensuales + 26 trimestrales consolidados en sesión anterior).
+
+
 ## [2026-07-13] ingesta | ER/NOI Fondo PT (Torre A + Boulevard) desde NOI PT.xlsx
 
 Nuevo ingestor `tools/db/ingest_er_pt.py`. Persiste 945 líneas en `raw_er_activo_line`
