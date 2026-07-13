@@ -1,0 +1,634 @@
+# Mapeo de cuentas EEFF: cuenta_codigo_canonical → variantes de nombre normalizadas
+#
+# Normalización aplicada antes de comparar:
+#   1. NFKD + ascii → elimina acentos y encoding roto
+#   2. lowercase
+#   3. strip trailing "(+ o -)", "(+)", "(-)", "(+ o -)", "(+ o -)" y variantes
+#   4. strip trailing "- Trimestre ..." (breakdowns APO)
+#   5. strip whitespace
+#
+# patterns: lista de strings normalizados. Se usa startswith() para capturar
+# variantes menores que no valga la pena listar exhaustivamente.
+
+# ─── Estado de Resultados (ER) ───────────────────────────────────────────────
+
+ER.ingreso_arriendo:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Ingresos por arriendo de bienes raíces
+  patterns:
+    - "ingreso por arriendo de bienes raices"
+    - "ingresos por arriendo de bienes raices"
+
+ER.intereses_reajustes:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Intereses y reajustes
+  patterns:
+    - "intereses y reajustes"
+
+ER.ingresos_dividendos:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Ingresos por dividendos
+  patterns:
+    - "ingresos por dividendos"
+
+ER.resultado_participacion:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Resultado en inversiones valorizadas por método de participación
+  patterns:
+    - "resultado en inversiones valorizadas por el metodo de la participacion"
+    - "resultado de inversiones valorizadas por el metodo de la participacion"
+    - "resultado en inversiones valorizadas por metodo de la participacion"
+
+ER.resultado_venta_instrumentos:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Resultado en venta de instrumentos financieros
+  patterns:
+    - "resultado en venta de instrumentos financieros"
+
+ER.resultado_venta_inmuebles:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Resultado por venta de inmuebles
+  patterns:
+    - "resultado por venta de inmuebles"
+    - "resultados por venta de inmuebles"
+
+ER.var_valor_razonable_prop:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Variaciones en valor razonable de propiedades de inversión
+  patterns:
+    - "variaciones en valor razonable de propiedades de inversion"
+
+ER.var_valor_razonable_activos:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Cambios netos en valor razonable de activos financieros y pasivos financieros
+  patterns:
+    - "cambios netos en valor razonable de activos financieros y pasivos financieros a valor razonable con efecto en resultados"
+    - "cambios netos en valor razonable de activos financieros y pasivos a valor razonable con efecto en resultados"
+
+ER.diferencias_cambio:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Diferencias de cambio netas sobre efectivo y equivalentes
+  patterns:
+    - "diferencias de cambio netas sobre efectivo y efectivo equivalente"
+    - "diferencias de cambio netas sobre activos financieros a costo amortizado"
+
+ER.total_ingresos_operacion:
+  source_sheet: ER
+  grupo: subtotal
+  descripcion: Total ingresos/(pérdidas) netos de la operación
+  es_subtotal: true
+  patterns:
+    - "total ingresos/(perdidas) netos de la operacion"
+    - "total ingresos netos de la operacion"
+    - "total ingresos/(perdidas) netos de la operacion"
+
+ER.comision_admin:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Comisión de administración
+  patterns:
+    - "comision de administracion"
+
+ER.honorarios_custodia:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Honorarios por custodia y administración
+  patterns:
+    - "honorarios por custodia y administracion"
+
+ER.remun_comite:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Remuneración del Comité de Vigilancia
+  patterns:
+    - "remuneracion del comite de vigilancia"
+
+ER.costos_transaccion:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Costos de transacción
+  patterns:
+    - "costos de transaccion"
+
+ER.depreciaciones:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Depreciaciones
+  patterns:
+    - "depreciaciones"
+
+ER.otros_gastos:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Otros gastos de operación
+  patterns:
+    - "otros gastos de operacion"
+
+ER.total_gastos_operacion:
+  source_sheet: ER
+  grupo: subtotal
+  descripcion: Total gastos de operación
+  es_subtotal: true
+  patterns:
+    - "total gastos de operacion"
+
+ER.utilidad_operacion:
+  source_sheet: ER
+  grupo: subtotal
+  descripcion: Utilidad/(Pérdida) de la operación
+  es_subtotal: true
+  patterns:
+    - "utilidad de la operacion"
+    - "utilidad/(perdida) de la operacion"
+
+ER.costos_financieros:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Costos financieros
+  patterns:
+    - "costos financieros"
+
+ER.utilidad_antes_impuesto:
+  source_sheet: ER
+  grupo: subtotal
+  descripcion: Utilidad/(Pérdida) antes de impuesto
+  es_subtotal: true
+  patterns:
+    - "utilidad/(perdida) antes de impuesto"
+    - "utilidad antes de impuesto"
+
+ER.resultado_ejercicio:
+  source_sheet: ER
+  grupo: resultado
+  descripcion: Resultado del ejercicio
+  es_subtotal: true
+  patterns:
+    - "resultado del ejercicio"
+
+ER.ajustes_conversion:
+  source_sheet: ER
+  grupo: resultado_integral
+  descripcion: Ajustes por conversión
+  patterns:
+    - "ajustes por conversion"
+
+ER.ajustes_participacion_oi:
+  source_sheet: ER
+  grupo: resultado_integral
+  descripcion: Ajustes provenientes de inversiones valorizadas por método de participación
+  patterns:
+    - "ajustes provenientes de inversiones valorizadas por el metodo de la participacion"
+    - "ajustes de inversiones valorizadas por el metodo de la participacion"
+
+ER.cobertura_flujo_caja:
+  source_sheet: ER
+  grupo: resultado_integral
+  descripcion: Cobertura de Flujo de Caja
+  patterns:
+    - "cobertura de flujo de caja"
+
+ER.otros_ajustes_patrimonio:
+  source_sheet: ER
+  grupo: resultado_integral
+  descripcion: Otros Ajustes al Patrimonio Neto
+  patterns:
+    - "otros ajustes al patrimonio neto"
+
+ER.total_resultado_integral:
+  source_sheet: ER
+  grupo: resultado
+  descripcion: Total resultado integral
+  es_subtotal: true
+  patterns:
+    - "total resultado integral"
+    - "total de otros resultados integrales"
+    - "total otros resultados integrales"
+
+ER.total_ingresos_operacion_alt:
+  source_sheet: ER
+  grupo: subtotal
+  descripcion: Total ingresos/pérdidas de la operación (variantes de nombre)
+  es_subtotal: true
+  patterns:
+    - "total ingresos/perdidas de la operacion"
+    - "total ingresos/perdida de la operacion"
+    - "total ingresos/perdidas netos de operacion"
+    - "total operacion"
+    - "ingresos/(perdidas) netos de la operacion"
+
+ER.resultado_participacion_alt:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Resultado de inversiones valorizadas por método de participación (sin "en")
+  patterns:
+    - "resultado de inversiones valorizadas por el metodo de participacion"
+    - "resultado en inversiones metodo participacion"
+    - "resultado en inversiones valorizadas por metodo de participacion"
+
+ER.impuesto_ganancias_exterior:
+  source_sheet: ER
+  grupo: gasto
+  descripcion: Impuesto a las ganancias por inversiones en el exterior
+  patterns:
+    - "impuesto a las ganancias por inversiones en el exterior"
+
+ER.otros_ingresos:
+  source_sheet: ER
+  grupo: ingreso
+  descripcion: Otros ingresos de la operación
+  patterns:
+    - "otros ingresos/(perdida) de la operacion"
+    - "otros ingresos/(perdida)"
+    - "otros ingresos/perdida de la operacion"
+    - "otros ingresos operacion"
+
+# ─── Estado de Situación Financiera (ESF) ────────────────────────────────────
+
+ESF.efectivo:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Efectivo y equivalentes al efectivo
+  patterns:
+    - "efectivo y efectivo equivalente"
+    - "efectivo y equivalentes al efectivo"
+
+ESF.activos_financieros_vr_resultados:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Activos financieros a valor razonable con efecto en resultados
+  patterns:
+    - "activos financieros a valor razonable con efecto en resultados"
+
+ESF.activos_financieros_vr_ori:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Activos financieros a valor razonable con efecto en otros resultados integrales
+  patterns:
+    - "activos financieros a valor razonable con efecto en otros resultados integrales"
+
+ESF.activos_costo_amortizado:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Activos financieros a costo amortizado
+  patterns:
+    - "activos financieros a costo amortizado"
+
+ESF.inversiones_participacion:
+  source_sheet: ESF
+  grupo: activo_no_corriente
+  descripcion: Inversiones valorizadas por el método de la participación
+  patterns:
+    - "inversiones valorizadas por el metodo de la participacion"
+
+ESF.cuentas_cobrar:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Cuentas y documentos por cobrar por operaciones
+  patterns:
+    - "cuentas y documentos por cobrar por operaciones"
+    - "cuentas y documentos por cobrar en operaciones"
+
+ESF.otros_activos_corrientes:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Otros activos corrientes
+  patterns:
+    - "otros activos corrientes"
+
+ESF.total_activo_corriente:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total activo corriente
+  es_subtotal: true
+  patterns:
+    - "total activo corriente"
+
+ESF.propiedades_inversion:
+  source_sheet: ESF
+  grupo: activo_no_corriente
+  descripcion: Propiedades de inversión
+  patterns:
+    - "propiedades de inversion"
+
+ESF.total_activo_no_corriente:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total activo no corriente
+  es_subtotal: true
+  patterns:
+    - "total activo no corriente"
+
+ESF.total_activo:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total activo
+  es_subtotal: true
+  patterns:
+    - "total activo"
+
+ESF.prestamos:
+  source_sheet: ESF
+  grupo: pasivo
+  descripcion: Préstamos
+  patterns:
+    - "prestamos"
+
+ESF.cuentas_pagar:
+  source_sheet: ESF
+  grupo: pasivo_corriente
+  descripcion: Cuentas y documentos por pagar por operaciones
+  patterns:
+    - "cuentas y documentos por pagar por operaciones"
+    - "cuentas y documentos por pagar en operaciones"
+
+ESF.otros_documentos_pagar:
+  source_sheet: ESF
+  grupo: pasivo
+  descripcion: Otros documentos y cuentas por pagar
+  patterns:
+    - "otros documentos y cuentas por pagar"
+
+ESF.pasivos_financieros_vr:
+  source_sheet: ESF
+  grupo: pasivo
+  descripcion: Pasivos financieros a valor razonable con efecto en resultados
+  patterns:
+    - "pasivos financieros a valor razonable con efecto en resultados"
+
+ESF.ingresos_anticipados:
+  source_sheet: ESF
+  grupo: pasivo
+  descripcion: Ingresos anticipados
+  patterns:
+    - "ingresos anticipados"
+
+ESF.otros_pasivos:
+  source_sheet: ESF
+  grupo: pasivo
+  descripcion: Otros pasivos
+  patterns:
+    - "otros pasivos"
+
+ESF.total_pasivo_corriente:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total pasivo corriente
+  es_subtotal: true
+  patterns:
+    - "total pasivo corriente"
+
+ESF.total_pasivo_no_corriente:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total pasivo no corriente
+  es_subtotal: true
+  patterns:
+    - "total pasivo no corriente"
+
+ESF.total_pasivo:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total pasivo
+  es_subtotal: true
+  patterns:
+    - "total pasivo"
+
+ESF.patrimonio_neto:
+  source_sheet: ESF
+  grupo: patrimonio
+  descripcion: Total patrimonio neto
+  es_subtotal: true
+  patterns:
+    - "total patrimonio neto"
+    - "patrimonio neto"
+
+ESF.total_pasivo_patrimonio:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total pasivo y patrimonio neto
+  es_subtotal: true
+  patterns:
+    - "total pasivo y patrimonio neto"
+
+ESF.resultado_ejercicio_esf:
+  source_sheet: ESF
+  grupo: patrimonio
+  descripcion: Resultado del ejercicio (en ESF, dentro de patrimonio)
+  patterns:
+    - "resultado del ejercicio"
+
+ESF.resultados_acumulados:
+  source_sheet: ESF
+  grupo: patrimonio
+  descripcion: Resultados acumulados
+  patterns:
+    - "resultados acumulados"
+    - "ganancias (perdidas) acumuladas"
+
+ESF.otras_reservas:
+  source_sheet: ESF
+  grupo: patrimonio
+  descripcion: Otras reservas de patrimonio
+  patterns:
+    - "otras reservas"
+
+ESF.dividendos_provisorios_esf:
+  source_sheet: ESF
+  grupo: patrimonio
+  descripcion: Dividendos provisorios (deducción patrimonio)
+  patterns:
+    - "dividendos provisorios"
+
+ESF.total_patrimonio:
+  source_sheet: ESF
+  grupo: subtotal
+  descripcion: Total patrimonio (alternativa a total patrimonio neto)
+  es_subtotal: true
+  patterns:
+    - "total patrimonio"
+
+ESF.remun_soc_admin_pasivo:
+  source_sheet: ESF
+  grupo: pasivo_corriente
+  descripcion: Remuneración Sociedad Administradora (pasivo)
+  patterns:
+    - "remuneracion sociedad administradora"
+    - "remuneraciones sociedad administradora"
+
+ESF.otros_activos:
+  source_sheet: ESF
+  grupo: activo
+  descripcion: Otros activos (corrientes y no corrientes)
+  patterns:
+    - "otros activos"
+
+ESF.otros_cuentas_cobrar:
+  source_sheet: ESF
+  grupo: activo_corriente
+  descripcion: Otros documentos y cuentas por cobrar
+  patterns:
+    - "otros documentos y cuentas por cobrar"
+
+# ─── Estado de Flujos de Efectivo (EFE) ──────────────────────────────────────
+
+EFE.flujos_operacion:
+  source_sheet: EFE
+  grupo: flujo
+  descripcion: Flujos de efectivo netos de actividades de operación
+  patterns:
+    - "flujos de efectivo netos procedentes de actividades de operacion"
+    - "flujos de efectivo netos actividades de operacion"
+    - "flujos netos actividades de operacion"
+    - "flujo neto originado por actividades de la operacion"
+
+EFE.flujos_inversion:
+  source_sheet: EFE
+  grupo: flujo
+  descripcion: Flujos de efectivo netos de actividades de inversión
+  patterns:
+    - "flujos de efectivo netos procedentes de actividades de inversion"
+    - "flujos de efectivo netos actividades de inversion"
+    - "flujos netos actividades de inversion"
+    - "flujo neto originado por actividades de inversion"
+
+EFE.flujos_financiamiento:
+  source_sheet: EFE
+  grupo: flujo
+  descripcion: Flujos de efectivo netos de actividades de financiamiento
+  patterns:
+    - "flujos de efectivos netos procedentes de actividades de financiamiento"
+    - "flujos de efectivo netos procedentes de actividades de financiamiento"
+    - "flujos de efectivo netos actividades de financiamiento"
+    - "flujos netos actividades de financiamiento"
+    - "flujo neto originado por actividades de financiamiento"
+
+EFE.variacion_neta_efectivo:
+  source_sheet: EFE
+  grupo: subtotal
+  descripcion: Aumento (disminución) neto de efectivo y efectivo equivalente
+  es_subtotal: true
+  patterns:
+    - "aumento (disminucion) neto de efectivo y efectivo equivalente"
+    - "incremento neto en efectivo y equivalentes"
+
+EFE.saldo_inicial_efectivo:
+  source_sheet: EFE
+  grupo: referencia
+  descripcion: Saldo inicial efectivo y equivalentes al efectivo
+  patterns:
+    - "saldo inicial efectivo y equivalentes al efectivo"
+
+EFE.saldo_final_efectivo:
+  source_sheet: EFE
+  grupo: referencia
+  descripcion: Saldo final efectivo y equivalentes al efectivo
+  patterns:
+    - "saldo final efectivo y equivalentes al efectivo"
+    - "efectivo y equivalentes al efectivo"
+
+EFE.cobro_arrendamiento:
+  source_sheet: EFE
+  grupo: flujo_operacion
+  descripcion: Cobro de arrendamiento de bienes raíces
+  patterns:
+    - "cobro de arrendamiento de bienes raices"
+
+EFE.dividendos_recibidos:
+  source_sheet: EFE
+  grupo: flujo_inversion
+  descripcion: Dividendos recibidos
+  patterns:
+    - "dividendos recibidos"
+
+EFE.cobranza_cuentas:
+  source_sheet: EFE
+  grupo: flujo_operacion
+  descripcion: Cobranza de cuentas y documentos por cobrar
+  patterns:
+    - "cobranza de cuentas y documentos por cobrar"
+
+EFE.compra_activos_fin:
+  source_sheet: EFE
+  grupo: flujo_inversion
+  descripcion: Compra de activos financieros
+  patterns:
+    - "compra de activos financieros"
+
+EFE.venta_activos_fin:
+  source_sheet: EFE
+  grupo: flujo_inversion
+  descripcion: Venta de activos financieros
+  patterns:
+    - "venta de activos financieros"
+
+EFE.venta_inmuebles:
+  source_sheet: EFE
+  grupo: flujo_inversion
+  descripcion: Venta de inmuebles
+  patterns:
+    - "venta de inmuebles"
+
+EFE.prestamos_obtenidos:
+  source_sheet: EFE
+  grupo: flujo_financiamiento
+  descripcion: Préstamos obtenidos
+  patterns:
+    - "obtenci"
+    - "otros pasivos financieros obtenidos"
+    - "prestamos"
+
+EFE.pago_prestamos:
+  source_sheet: EFE
+  grupo: flujo_financiamiento
+  descripcion: Pago de préstamos
+  patterns:
+    - "pago de prestamos"
+
+EFE.repartos_dividendos:
+  source_sheet: EFE
+  grupo: flujo_financiamiento
+  descripcion: Repartos de dividendos / patrimonio
+  patterns:
+    - "repartos de dividendos"
+    - "repartos de patrimonio"
+
+EFE.aportes_financiamiento:
+  source_sheet: EFE
+  grupo: flujo_financiamiento
+  descripcion: Aportes de capital (financiamiento)
+  patterns:
+    - "aportes"
+
+# ─── Estado de Cambios en el Patrimonio (ECP) ────────────────────────────────
+
+ECP.aportes:
+  source_sheet: ECP
+  grupo: movimiento
+  descripcion: Aportes del ejercicio
+  patterns:
+    - "aportes"
+
+ECP.dividendos_pagados:
+  source_sheet: ECP
+  grupo: movimiento
+  descripcion: Dividendos pagados
+  patterns:
+    - "dividendos pagados"
+    - "repartos de dividendos"
+    - "dividendos provisorios"
+
+ECP.disminucion_patrimonio:
+  source_sheet: ECP
+  grupo: movimiento
+  descripcion: Disminución de patrimonio
+  patterns:
+    - "disminucion de patrimonio"

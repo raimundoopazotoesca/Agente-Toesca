@@ -1,5 +1,6 @@
 import json
 import base64
+import os
 import streamlit as st
 from pathlib import Path
 
@@ -146,11 +147,20 @@ if st.session_state.get("authentication_status") is True:
 
 # ─── Autenticación y Pantalla de Login Elegante ──────────────────────────────
 import yaml
-from yaml.loader import SafeLoader
 import streamlit_authenticator as stauth
 
-with open('config.yaml', encoding='utf-8') as file:
-    config = yaml.load(file, Loader=SafeLoader)
+_APP_DIR = Path(__file__).resolve().parent
+with (_APP_DIR / "config.yaml").open(encoding="utf-8") as file:
+    config = yaml.safe_load(file)
+
+_cookie_key = os.environ.get("AUTH_COOKIE_KEY", "")
+if len(_cookie_key) < 32:
+    st.error(
+        "Configuración de autenticación incompleta: define AUTH_COOKIE_KEY "
+        "con al menos 32 caracteres aleatorios."
+    )
+    st.stop()
+config["cookie"]["key"] = _cookie_key
 
 authenticator = stauth.Authenticate(
     config['credentials'],
@@ -214,7 +224,7 @@ if st.session_state.get("authentication_status") is not True:
         st.stop()
 
     # UI personalizada: iframe completo, sin interferencia del parser de Markdown
-    _html = open('login_template.html', encoding='utf-8').read().replace('__ERR__', _err_msg)
+    _html = (_APP_DIR / "login_template.html").read_text(encoding="utf-8").replace('__ERR__', _err_msg)
     st.iframe(_html, height=720)
 
     st.stop()
@@ -229,7 +239,7 @@ else:
         pass
 
 # ─── Inyectar CSS desde archivo externo ───────────────────────────────────────
-css = Path("style.css").read_text(encoding="utf-8")
+css = (_APP_DIR / "style.css").read_text(encoding="utf-8")
 st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 # ─── Botón sidebar ─────────────────────────────────────────────────────────────
@@ -563,7 +573,7 @@ if should_generate_response:
     else:
         recent_history = " ".join([m["content"] for m in st.session_state.messages[-5:-1] if m["role"] == "user"])
         grupos = get_intent_groups(recent_history + " " + user_msg_text)
-        selected_tools = _select_tools(grupos)
+        selected_tools = _select_tools(grupos, user_msg_text)
 
         system_content = BASE_PROMPT
         if "cdg" in grupos: system_content += "\n\n" + PROMPT_CDG
@@ -584,6 +594,7 @@ if should_generate_response:
 
     tools_used = []
     final_response = ""
+    allowed_tool_names = {tool["function"]["name"] for tool in selected_tools}
 
     _generation_container = st.empty()
     with _generation_container.container():
@@ -644,7 +655,7 @@ if should_generate_response:
                         + "".join(tool_lines),
                         unsafe_allow_html=True,
                     )
-                    result = _dispatch(name, args)
+                    result = _dispatch(name, args, allowed_tool_names)
 
                     # Agente pide ayuda al usuario — pausar y retomar en el próximo turno
                     if result.startswith(_SENTINEL_PREFIX):

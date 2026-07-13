@@ -32,6 +32,7 @@ import shutil
 from datetime import date
 
 from config import SHAREPOINT_DIR
+from tools.path_security import UnsafePathError, resolve_within
 
 _TOOLS_DIR = os.path.join(os.path.dirname(__file__))
 _WIKI_DIR  = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
@@ -259,14 +260,14 @@ def reemplazar_en_tool(nombre_archivo: str, texto_viejo: str, texto_nuevo: str) 
 
     Retorna cuántas ocurrencias se reemplazaron.
     """
-    # Resolver ruta
-    if os.path.isabs(nombre_archivo) and os.path.isfile(nombre_archivo):
-        ruta = nombre_archivo
-    else:
-        ruta = os.path.join(_TOOLS_DIR, nombre_archivo)
-        if not os.path.isfile(ruta):
-            # Intentar en raíz del proyecto
-            ruta = os.path.join(os.path.dirname(_TOOLS_DIR), nombre_archivo)
+    project_dir = os.path.dirname(_TOOLS_DIR)
+    try:
+        ruta = resolve_within(project_dir, nombre_archivo)
+    except UnsafePathError as e:
+        return f"Ruta de código no permitida: {e}"
+
+    if not ruta.lower().endswith(".py"):
+        return "Solo se permiten archivos Python (.py) dentro del proyecto."
 
     if not os.path.isfile(ruta):
         return f"Archivo no encontrado: {nombre_archivo}"
@@ -294,10 +295,10 @@ def reemplazar_en_wiki(nombre_archivo: str, texto_viejo: str, texto_nuevo: str) 
     texto_nuevo: cadena de reemplazo
     """
     # Intentar ruta relativa dentro del wiki
-    candidatos = [
-        os.path.join(_WIKI_DIR, nombre_archivo),
-        os.path.join(_WIKI_DIR, nombre_archivo.replace("/", os.sep)),
-    ]
+    try:
+        candidatos = [resolve_within(_WIKI_DIR, nombre_archivo)]
+    except UnsafePathError as e:
+        return f"Ruta wiki no permitida: {e}"
     # Buscar recursivamente si no coincide directo
     ruta = None
     for c in candidatos:

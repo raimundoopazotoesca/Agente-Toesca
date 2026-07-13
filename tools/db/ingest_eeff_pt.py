@@ -3,15 +3,15 @@ Parser de EEFF PDFs de PT (Toesca Rentas Inmobiliarias PT).
 
 PT tiene SERIE ÚNICA (nemotécnico CFITRIPT-E). Extrae:
   - Valor cuota libro (tipo='contable')
-  - Cuotas suscritas (raw_cuota_en_circulacion_line)
+  - Cuotas suscritas (raw_cuota_en_circulacion)
 
 Patrón del PDF:
   "al DD de MES de YYYY tienen un valor cuota de $ X.XXX,XXXX para la Serie UNICA"
   Tabla cuotas: "Suscritas\n1.640.000"
 
 Escribe a:
-  - raw_valor_cuota_line (tipo='contable')
-  - raw_cuota_en_circulacion_line
+  - raw_valor_cuota_contable (tipo='contable')
+  - raw_cuota_en_circulacion
 """
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def ingest_eeff_pt_pdf(pdf_path: str, db_path: Optional[str] = None) -> Dict:
     for fecha, datos in parsed.items():
         fecha_obj_str = fecha[:7]  # YYYY-MM
 
-        # VR Contable → raw_valor_cuota_line
+        # VR Contable → raw_valor_cuota_contable
         if "valor_cuota" in datos:
             # Precio CLP del PDF: no disponible directamente en el texto parseado
             # (el PDF solo da el número, sin UF del día); se pone NULL precio_clp
@@ -167,29 +167,29 @@ def ingest_eeff_pt_pdf(pdf_path: str, db_path: Optional[str] = None) -> Dict:
             precio_clp = datos["valor_cuota"]  # el PDF da el valor en CLP
 
             existing = conn.execute("""
-                SELECT 1 FROM raw_valor_cuota_line
-                WHERE fondo_key=? AND nemotecnico=? AND fecha=? AND tipo='contable'
+                SELECT 1 FROM raw_valor_cuota_contable
+                WHERE fondo_key=? AND nemotecnico=? AND fecha=?
                   AND source_file NOT LIKE '%cdg%'
             """, (FONDO, NEMO, fecha)).fetchone()
 
             if not existing:
                 try:
                     conn.execute("""
-                        INSERT OR IGNORE INTO raw_valor_cuota_line
-                        (fondo_key, nemotecnico, fecha, tipo, precio_clp, precio_uf,
+                        INSERT OR IGNORE INTO raw_valor_cuota_contable
+                        (fondo_key, nemotecnico, fecha, precio_clp, precio_uf,
                          periodo, source_file, file_hash)
-                        VALUES (?, ?, ?, 'contable', ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (FONDO, NEMO, fecha, precio_clp, precio_uf,
                           fecha_obj_str, source_file, file_hash))
                     vc_ins += conn.execute("SELECT changes()").fetchone()[0]
                 except Exception:
                     pass
 
-        # Cuotas → raw_cuota_en_circulacion_line
+        # Cuotas → raw_cuota_en_circulacion
         if "cuotas" in datos:
             try:
                 conn.execute("""
-                    INSERT OR IGNORE INTO raw_cuota_en_circulacion_line
+                    INSERT OR IGNORE INTO raw_cuota_en_circulacion
                     (fondo_key, nemotecnico, fecha, cuotas, periodo, source_file, file_hash)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (FONDO, NEMO, fecha, datos["cuotas"],

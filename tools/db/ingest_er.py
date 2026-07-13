@@ -157,21 +157,24 @@ def persist_er_lines(
     Retorna: número de líneas insertadas.
     Nunca propaga errores: si la DB falla, el flujo de Excel debe seguir.
     """
+    mall_alias = activo_key if activo_key in _ER_ACTIVO_KEY else None
+    activo_key = _ER_ACTIVO_KEY.get(activo_key, activo_key)
     if not activo_key or not eeff_values:
         return 0
     meta_map = meta_map or {}
     try:
-        # El path original se pierde — se usa source_file para el hash
-        # En el flujo real, caller pasa os.path.abspath(eeff_path) y después
-        # hashea. Aquí asumimos que se hace en el caller.
-        # Por ahora, usar un hash sintético si no tenemos la ruta original.
+        fh = (
+            _file_hash(source_file)
+            if os.path.isfile(source_file)
+            else hashlib.sha256(source_file.encode("utf-8")).hexdigest()
+        )
         conn = _db_get_conn()
         try:
             run_id = repo_audit.start_ingest_run(
                 conn,
-                tool="ingest_er",
-                source_file=source_file,
-                file_hash="",  # El caller debería pasar esto
+                tool=f"actualizar_er_{mall_alias}" if mall_alias else "ingest_er",
+                source_file=os.path.basename(source_file),
+                file_hash=fh,
             )
             lines = []
             for i, (codigo, clp_val) in enumerate(eeff_values.items()):
@@ -185,10 +188,10 @@ def persist_er_lines(
                     "monto_uf": None,
                     "seccion": meta.get("seccion"),
                     "es_operacional": meta.get("es_operacional"),
-                    "source_file": source_file,
+                    "source_file": os.path.basename(source_file),
                     "source_sheet": "ESTADO DE RESULTADO",
                     "source_row": i,
-                    "file_hash": "",  # El caller debería pasar esto
+                    "file_hash": fh,
                 })
             n = repo_er_activo.insert_lines(conn, lines, run_id)
             repo_audit.finish_ingest_run(

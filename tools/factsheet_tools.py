@@ -15,6 +15,7 @@ from datetime import date, datetime
 from calendar import monthrange
 
 from config import WORK_DIR
+from tools.path_security import UnsafePathError, resolve_within
 from tools.sharepoint_paths import APO_FACT_SHEETS_DIR, PT_FACT_SHEETS_DIR, TRI_FACT_SHEETS_DIR
 
 # ── Paths canonicos dentro de SHAREPOINT_DIR ───────────────────────────────
@@ -349,7 +350,10 @@ def leer_repartos_fs(nombre_archivo: str, fondo_key: str, año_fs: int, mes_fs: 
     if not cfg:
         return json.dumps({"error": f"No hay INPUT_CFG para '{input_key}'"})
 
-    path = os.path.join(WORK_DIR, nombre_archivo)
+    try:
+        path = resolve_within(WORK_DIR, nombre_archivo)
+    except UnsafePathError as exc:
+        return json.dumps({"error": f"Ruta no permitida: {exc}"}, ensure_ascii=False)
     if not os.path.exists(path):
         return json.dumps({"error": f"Archivo '{nombre_archivo}' no encontrado en WORK_DIR"})
 

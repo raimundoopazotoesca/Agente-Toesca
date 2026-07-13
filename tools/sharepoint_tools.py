@@ -7,6 +7,7 @@ import os
 import shutil
 from datetime import datetime
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.path_security import UnsafePathError, resolve_within
 
 _WIKI_INDEX = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "wiki", "sharepoint", "index.md"
@@ -36,7 +37,7 @@ def list_sharepoint_files(subfolder: str = "") -> str:
         return err
 
     try:
-        base = os.path.join(SHAREPOINT_DIR, subfolder) if subfolder else SHAREPOINT_DIR
+        base = resolve_within(SHAREPOINT_DIR, subfolder)
 
         if not os.path.exists(base):
             return f"La subcarpeta '{subfolder}' no existe en SharePoint."
@@ -76,7 +77,7 @@ def search_sharepoint_files(keyword: str, subfolder: str = "") -> str:
         return err
 
     try:
-        base = os.path.join(SHAREPOINT_DIR, subfolder) if subfolder else SHAREPOINT_DIR
+        base = resolve_within(SHAREPOINT_DIR, subfolder)
         if not os.path.exists(base):
             return f"La subcarpeta '{subfolder}' no existe en SharePoint."
 
@@ -113,16 +114,18 @@ def copy_from_sharepoint(filename: str, subfolder: str = "") -> str:
 
     try:
         os.makedirs(WORK_DIR, exist_ok=True)
-        base = os.path.join(SHAREPOINT_DIR, subfolder) if subfolder else SHAREPOINT_DIR
-        source = os.path.join(base, filename)
+        base = resolve_within(SHAREPOINT_DIR, subfolder)
+        source = resolve_within(SHAREPOINT_DIR, subfolder, filename)
 
         if not os.path.exists(source):
             return f"Archivo '{filename}' no encontrado en SharePoint ({base})."
 
-        dest = os.path.join(WORK_DIR, filename)
+        dest = resolve_within(WORK_DIR, os.path.basename(filename))
         shutil.copy2(source, dest)
         return f"'{filename}' copiado de SharePoint al directorio de trabajo: {dest}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al copiar de SharePoint: {e}"
 
@@ -195,8 +198,14 @@ def mover_en_sharepoint(origen: str, destino: str) -> str:
     if err:
         return err
 
-    src = os.path.join(SHAREPOINT_DIR, *origen.replace("\\", "/").split("/"))
-    dst_dir = os.path.join(SHAREPOINT_DIR, *destino.replace("\\", "/").split("/"))
+    try:
+        src = resolve_within(SHAREPOINT_DIR, origen)
+        dst_dir = resolve_within(SHAREPOINT_DIR, destino)
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
+
+    if src == os.path.abspath(SHAREPOINT_DIR):
+        return "Error: no se puede mover la raíz de SharePoint."
 
     if not os.path.exists(src):
         return f"No encontrado: {origen}"
@@ -210,17 +219,22 @@ def mover_en_sharepoint(origen: str, destino: str) -> str:
             shutil.move(src, dst_file)
             return f"Archivo movido: {origen} → {destino}/{os.path.basename(src)}"
         elif os.path.isdir(src):
-            # Mover contenido recursivamente
-            import subprocess, sys
-            if sys.platform == "win32":
-                subprocess.run(
-                    ["robocopy", src, dst_dir, "/E", "/MOVE", "/NFL", "/NDL", "/NJS", "/NJH", "/NC", "/NS"],
-                    capture_output=True
+            try:
+                if os.path.commonpath((src, dst_dir)) == src:
+                    return "Error: el destino no puede estar dentro de la carpeta de origen."
+            except ValueError:
+                return "Error: origen y destino no pertenecen al mismo árbol de rutas."
+
+            items = os.listdir(src)
+            conflicts = [item for item in items if os.path.exists(os.path.join(dst_dir, item))]
+            if conflicts:
+                return (
+                    "Error: ya existen elementos en el destino: "
+                    + ", ".join(conflicts[:10])
                 )
-            else:
-                for item in os.listdir(src):
-                    shutil.move(os.path.join(src, item), os.path.join(dst_dir, item))
-                shutil.rmtree(src, ignore_errors=True)
+            for item in items:
+                shutil.move(os.path.join(src, item), os.path.join(dst_dir, item))
+            os.rmdir(src)
             return f"Carpeta movida: {origen} → {destino}"
         else:
             return f"Tipo no reconocido: {origen}"
@@ -233,7 +247,12 @@ def crear_carpeta_sharepoint(ruta: str) -> str:
     err = _check_dir()
     if err:
         return err
-    full = os.path.join(SHAREPOINT_DIR, *ruta.replace("\\", "/").split("/"))
+    try:
+        full = resolve_within(SHAREPOINT_DIR, ruta)
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
+    if full == os.path.abspath(SHAREPOINT_DIR):
+        return "Error: indica una subcarpeta de SharePoint."
     if os.path.exists(full):
         return f"Ya existe: {ruta}"
     os.makedirs(full, exist_ok=True)
@@ -245,7 +264,12 @@ def eliminar_carpeta_sharepoint(ruta: str) -> str:
     err = _check_dir()
     if err:
         return err
-    full = os.path.join(SHAREPOINT_DIR, *ruta.replace("\\", "/").split("/"))
+    try:
+        full = resolve_within(SHAREPOINT_DIR, ruta)
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
+    if full == os.path.abspath(SHAREPOINT_DIR):
+        return "Error: no se puede eliminar la raíz de SharePoint."
     if not os.path.exists(full):
         return f"No existe: {ruta}"
     archivos = [f for f in os.listdir(full) if os.path.isfile(os.path.join(full, f))]
@@ -263,16 +287,18 @@ def save_to_sharepoint(filename: str, dest_subfolder: str = "") -> str:
         return err
 
     try:
-        source = os.path.join(WORK_DIR, filename)
+        source = resolve_within(WORK_DIR, filename)
         if not os.path.exists(source):
             return f"'{filename}' no encontrado en el directorio de trabajo."
 
-        dest_dir = os.path.join(SHAREPOINT_DIR, dest_subfolder) if dest_subfolder else SHAREPOINT_DIR
+        dest_dir = resolve_within(SHAREPOINT_DIR, dest_subfolder)
         os.makedirs(dest_dir, exist_ok=True)
 
-        dest = os.path.join(dest_dir, filename)
+        dest = resolve_within(dest_dir, os.path.basename(filename))
         shutil.copy2(source, dest)
         return f"'{filename}' guardado en SharePoint: {dest}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al guardar en SharePoint: {e}"

@@ -106,7 +106,8 @@ def _make_db(tmp_db_path):
     apply_migrations(tmp_db_path)
     conn = get_conn_for(tmp_db_path)
     conn.execute(
-        "INSERT OR IGNORE INTO fact_uf(fecha, valor_clp) VALUES('2025-12-31', 39695.94)"
+        """INSERT OR IGNORE INTO raw_uf_diaria(fecha, valor, fuente)
+           VALUES('2025-12-31', 39695.94, 'test')"""
     )
     conn.commit()
     conn.close()
@@ -124,8 +125,8 @@ def test_ingest_escribe_valor_cuota_contable(tmp_db_path):
 
     conn = sqlite3.connect(tmp_db_path)
     rows = conn.execute(
-        "SELECT nemotecnico, precio_clp, precio_uf FROM raw_valor_cuota_line "
-        "WHERE tipo='contable' AND fecha='2025-12-31' ORDER BY nemotecnico"
+        "SELECT nemotecnico, precio_clp, precio_uf FROM raw_valor_cuota_contable "
+        "WHERE fecha='2025-12-31' ORDER BY nemotecnico"
     ).fetchall()
     conn.close()
 
@@ -150,7 +151,7 @@ def test_ingest_escribe_cuotas_en_circulacion(tmp_db_path):
 
     conn = sqlite3.connect(tmp_db_path)
     rows = conn.execute(
-        "SELECT nemotecnico, cuotas FROM raw_cuota_en_circulacion_line "
+        "SELECT nemotecnico, cuotas FROM raw_cuota_en_circulacion "
         "WHERE fecha='2025-12-31' ORDER BY nemotecnico"
     ).fetchall()
     conn.close()
@@ -176,7 +177,7 @@ def test_ingest_idempotente(tmp_db_path):
 
     conn = sqlite3.connect(tmp_db_path)
     n = conn.execute(
-        "SELECT COUNT(*) FROM raw_valor_cuota_line WHERE file_hash='samehash'"
+        "SELECT COUNT(*) FROM raw_valor_cuota_contable WHERE file_hash='samehash'"
     ).fetchone()[0]
     conn.close()
     assert n == 1

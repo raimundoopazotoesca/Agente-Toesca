@@ -224,9 +224,12 @@ def ensure_ingest_run(con: sqlite3.Connection, source_file: str, fhash: str) -> 
 def insert_lines(con: sqlite3.Connection, lineas: list[dict], fondo_key: str, source_file: str, fhash: str, run_id: int):
     rows = []
     for L in lineas:
+        periodo = L.get("periodo")
+        if periodo and len(periodo) > 7:
+            periodo = periodo[:7]  # normalizar a YYYY-MM
         rows.append((
             fondo_key,
-            L.get("periodo"),
+            periodo,
             L.get("cuenta_codigo"),
             L.get("cuenta_nombre"),
             L.get("monto_clp"),

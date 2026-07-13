@@ -127,12 +127,11 @@ CREATE TABLE raw_dividendo_line (
 );
 
 -- Valor cuota contable y bursátil + cuotas en circulación (tipo: 'contable'|'bursatil')
-CREATE TABLE raw_valor_cuota_line (
+CREATE TABLE raw_valor_cuota_contable_line (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    fondo_key     TEXT NOT NULL REFERENCES dim_fondo(fondo_key),
+    fondo_key     TEXT REFERENCES dim_fondo(fondo_key),
     nemotecnico   TEXT NOT NULL,
     fecha         TEXT NOT NULL,
-    tipo          TEXT NOT NULL,   -- 'contable' | 'bursatil'
     precio_clp    REAL,
     precio_uf     REAL,
     uf_dia        REAL,
@@ -141,7 +140,8 @@ CREATE TABLE raw_valor_cuota_line (
     source_file   TEXT,
     file_hash     TEXT,
     loaded_at     TEXT DEFAULT (datetime('now')),
-    superseded_at TEXT
+    superseded_at TEXT,
+    UNIQUE(nemotecnico, fecha, source_file)
 );
 
 -- Capital suscrito por serie y periodo
@@ -158,13 +158,17 @@ CREATE TABLE raw_capital_suscrito_line (
 );
 
 -- Precios bolsa scrapeados (renombrado desde fact_precio_cuota)
-CREATE TABLE raw_precio_cuota_line (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    nemotecnico TEXT NOT NULL,
-    fecha       TEXT NOT NULL,
-    precio_clp  REAL,
-    fuente      TEXT,
-    loaded_at   TEXT DEFAULT (datetime('now')),
+CREATE TABLE raw_valor_cuota_bursatil_line (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    nemotecnico           TEXT NOT NULL,
+    fecha                 TEXT NOT NULL,
+    precio_clp            REAL,
+    uf_dia                REAL,
+    precio_uf             REAL,
+    n_cuotas              REAL,
+    patrimonio_bursatil_uf REAL,
+    fuente                TEXT,
+    loaded_at             TEXT DEFAULT (datetime('now')),
     UNIQUE(nemotecnico, fecha)
 );
 
@@ -217,5 +221,5 @@ CREATE INDEX idx_raw_flujo_activo_periodo   ON raw_flujo_line(activo_key, period
 CREATE INDEX idx_raw_rr_activo_periodo      ON raw_rent_roll_line(activo_key, periodo);
 CREATE INDEX idx_raw_div_nemo               ON raw_dividendo_line(nemotecnico, fecha_pago);
 CREATE INDEX idx_raw_vc_nemo_fecha          ON raw_valor_cuota_line(nemotecnico, fecha);
-CREATE INDEX idx_raw_precio_nemo_fecha      ON raw_precio_cuota_line(nemotecnico, fecha);
+CREATE INDEX idx_raw_valor_cuota_bursatil_nemo_fecha ON raw_valor_cuota_bursatil_line(nemotecnico, fecha);
 CREATE INDEX idx_derived_kpi_lookup         ON derived_kpi(entidad_tipo, entidad_key, periodo, kpi);

@@ -25,6 +25,7 @@ from typing import Optional
 import openpyxl
 
 from config import WORK_DIR, SHAREPOINT_DIR
+from tools.path_security import UnsafePathError, resolve_within
 from tools.email_tools import send_email
 from tools.sharepoint_paths import (
     RR_JLL_DIR,
@@ -685,7 +686,10 @@ def consolidar_absorcion(año: int, mes: int, nombre_cdg: str) -> str:
     """
     from config import WORK_DIR
 
-    cdg_path = os.path.join(WORK_DIR, nombre_cdg)
+    try:
+        cdg_path = resolve_within(WORK_DIR, nombre_cdg)
+    except UnsafePathError as exc:
+        return f"Error: ruta no permitida: {exc}"
     if not os.path.exists(cdg_path):
         return f"Error: no se encontró '{nombre_cdg}' en WORK_DIR ({WORK_DIR})"
 
@@ -1220,7 +1224,10 @@ def consolidar_rent_rolls(año: int, mes: int, nombre_cdg: str) -> str:
     """
     from config import WORK_DIR
 
-    cdg_path = os.path.join(WORK_DIR, nombre_cdg)
+    try:
+        cdg_path = resolve_within(WORK_DIR, nombre_cdg)
+    except UnsafePathError as exc:
+        return f"Error: ruta no permitida: {exc}"
     if not os.path.exists(cdg_path):
         return f"Error: no se encontró '{nombre_cdg}' en WORK_DIR ({WORK_DIR})"
 

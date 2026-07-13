@@ -17,7 +17,7 @@ _KPI = "noi_mensual"
 _RECIPE = "cdg_noi_real_v1"
 _SPLIT_RECIPE = "cdg_noi_split_v1"
 
-# Categorías → fuentes (entidad_key, recipe). PT se separa en Torre A (oficinas)
+# Categorías → fuentes (entidad_key, formula). PT se separa en Torre A (oficinas)
 # y Boulevard/CDC (comercial). 'Comercial' = Centros Comerciales + Boulevard.
 _CATEGORIA_FUENTE = {
     "Oficinas": [
@@ -37,25 +37,25 @@ _SPLIT_PART = {"PT Torre A": 0.333, "PT Boulevard": 0.333}
 
 
 def _activos_meta(conn) -> dict:
-    """activo_key → {fondo_key, participacion, categoria} (solo activos con NOI)."""
+    """activo_key → {fondo_key, participacion_fondo_activo, categoria} (solo activos con NOI)."""
     out = {}
     for r in conn.execute(
-        "SELECT activo_key, fondo_key, participacion, categoria FROM dim_activo"
+        "SELECT activo_key, fondo_key, participacion_fondo_activo, categoria FROM dim_activo"
     ):
         out[r["activo_key"]] = {
             "fondo_key": r["fondo_key"],
-            "participacion": r["participacion"] if r["participacion"] is not None else 1.0,
+            "participacion_fondo_activo": r["participacion_fondo_activo"] if r["participacion_fondo_activo"] is not None else 1.0,
             "categoria": r["categoria"],
         }
     return out
 
 
-def _noi_activo(conn, activo_key: str, recipe: str = _RECIPE) -> dict:
+def _noi_activo(conn, activo_key: str, formula: str = _RECIPE) -> dict:
     """{periodo: valor} NOI mensual al 100% de un activo (o sub-activo)."""
     cur = conn.execute(
-        "SELECT periodo, valor FROM derived_kpi WHERE kpi=? AND recipe=? AND "
+        "SELECT periodo, valor FROM derived_kpi WHERE kpi=? AND formula=? AND "
         "entidad_tipo='activo' AND entidad_key=? ORDER BY periodo",
-        (_KPI, recipe, activo_key),
+        (_KPI, formula, activo_key),
     )
     return {r["periodo"]: r["valor"] for r in cur.fetchall()}
 
@@ -63,7 +63,7 @@ def _noi_activo(conn, activo_key: str, recipe: str = _RECIPE) -> dict:
 def _activos_de(conn, nivel: str, clave: str | None) -> list[str]:
     meta = _activos_meta(conn)
     con_noi = {a for (a,) in conn.execute(
-        "SELECT DISTINCT entidad_key FROM derived_kpi WHERE kpi=? AND entidad_tipo='activo' AND recipe=?",
+        "SELECT DISTINCT entidad_key FROM derived_kpi WHERE kpi=? AND entidad_tipo='activo' AND formula=?",
         (_KPI, _RECIPE),
     )}
     if nivel == "activo":
@@ -86,18 +86,18 @@ def serie_mensual(conn, nivel: str, clave: str | None, ponderado: bool = False) 
         fuentes = _CATEGORIA_FUENTE.get(clave)
         if not fuentes:
             return {}
-        for entidad, recipe in fuentes:
+        for entidad, formula in fuentes:
             if entidad in _SPLIT_PART:
                 factor = _SPLIT_PART[entidad] if ponderado else 1.0
             else:
-                factor = meta.get(entidad, {}).get("participacion", 1.0) if ponderado else 1.0
-            for per, val in _noi_activo(conn, entidad, recipe).items():
+                factor = meta.get(entidad, {}).get("participacion_fondo_activo", 1.0) if ponderado else 1.0
+            for per, val in _noi_activo(conn, entidad, formula).items():
                 acc[per] = acc.get(per, 0.0) + val * factor
         return dict(sorted(acc.items()))
 
     activos = _activos_de(conn, nivel, clave)
     for a in activos:
-        factor = meta.get(a, {}).get("participacion", 1.0) if ponderado else 1.0
+        factor = meta.get(a, {}).get("participacion_fondo_activo", 1.0) if ponderado else 1.0
         for per, val in _noi_activo(conn, a).items():
             acc[per] = acc.get(per, 0.0) + val * factor
     return dict(sorted(acc.items()))

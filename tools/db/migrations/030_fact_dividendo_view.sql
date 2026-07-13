@@ -2,7 +2,7 @@
 -- fact_dividendo.monto = CLP por cuota (para usar con rentabilidades en CLP)
 -- fact_dividendo.monto_uf = UF por cuota (para dividend_yield)
 
-DROP VIEW IF EXISTS fact_dividendo;
+DROP TABLE IF EXISTS fact_dividendo;
 CREATE VIEW fact_dividendo AS
 SELECT
     nemotecnico,

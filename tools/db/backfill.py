@@ -646,7 +646,7 @@ def backfill_dividendos(verbose: bool = True) -> dict:
 
 
 def backfill_eeff_pt(verbose: bool = True) -> dict:
-    """Backfill de EEFF PDFs de PT → raw_valor_cuota_line + raw_cuota_en_circulacion_line."""
+    """Backfill de EEFF PDFs de PT → raw_valor_cuota_contable + raw_cuota_en_circulacion."""
     from tools.db.ingest_eeff_pt import backfill_eeff_pt_pdfs
     res = backfill_eeff_pt_pdfs(verbose=verbose)
     if verbose:

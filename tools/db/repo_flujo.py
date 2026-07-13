@@ -27,13 +27,27 @@ def insert_lines(
     return inserted
 
 
-def mark_superseded(conn: sqlite3.Connection, file_hash: str) -> None:
-    conn.execute(
-        """UPDATE raw_flujo_line
-              SET superseded_at = datetime('now')
-            WHERE file_hash = ? AND superseded_at IS NULL""",
-        (file_hash,),
-    )
+def mark_superseded(
+    conn: sqlite3.Connection,
+    file_hash: str,
+    periodo: str | None = None,
+) -> None:
+    """Marca filas como reemplazadas. Si se pasa periodo, filtra por él (útil cuando
+    un mismo archivo contiene varios períodos y solo se recarga uno)."""
+    if periodo is None:
+        conn.execute(
+            """UPDATE raw_flujo_line
+                  SET superseded_at = datetime('now')
+                WHERE file_hash = ? AND superseded_at IS NULL""",
+            (file_hash,),
+        )
+    else:
+        conn.execute(
+            """UPDATE raw_flujo_line
+                  SET superseded_at = datetime('now')
+                WHERE file_hash = ? AND periodo = ? AND superseded_at IS NULL""",
+            (file_hash, periodo),
+        )
     conn.commit()
 
 

@@ -14,11 +14,11 @@ cur.execute("""
 """)
 for r in cur.fetchall(): print(r)
 
-# raw_valor_cuota_line for PT - latest
-print("\n=== raw_valor_cuota_line PT latest ===")
+# raw_valor_cuota_contable_line for PT - latest
+print("\n=== raw_valor_cuota_contable_line PT latest ===")
 cur.execute("""
     SELECT nemotecnico, fecha, tipo, precio_clp, precio_uf, cuotas, periodo
-    FROM raw_valor_cuota_line
+    FROM raw_valor_cuota_contable_line
     WHERE fondo_key = 'PT' AND superseded_at IS NULL
     ORDER BY fecha DESC LIMIT 10
 """)
@@ -36,16 +36,14 @@ cur.execute("""
 """)
 for r in cur.fetchall(): print(dict(zip(cols, r)))
 
-# raw_patrimonio_bursatil_line for PT
-print("\n=== raw_patrimonio_bursatil_line PT ===")
-cur.execute("PRAGMA table_info(raw_patrimonio_bursatil_line)")
-cols3 = [c[1] for c in cur.fetchall()]
-print("Cols:", cols3)
+# Patrimonio bursátil PT (ahora vive en raw_valor_cuota_bursatil_line)
+print("\n=== raw_valor_cuota_bursatil_line PT (patrimonio) ===")
 cur.execute("""
-    SELECT * FROM raw_patrimonio_bursatil_line
-    WHERE fondo_key = 'PT'
-    ORDER BY periodo DESC LIMIT 10
+    SELECT nemotecnico, fecha, precio_uf, n_cuotas, patrimonio_bursatil_uf, fuente
+    FROM raw_valor_cuota_bursatil_line
+    WHERE nemotecnico = 'CFITRIPT-E' AND patrimonio_bursatil_uf IS NOT NULL
+    ORDER BY fecha DESC LIMIT 10
 """)
-for r in cur.fetchall(): print(dict(zip(cols3, r)))
+for r in cur.fetchall(): print(r)
 
 con.close()

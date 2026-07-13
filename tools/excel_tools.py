@@ -3,13 +3,12 @@ import os
 import openpyxl
 import pandas as pd
 from config import WORK_DIR
+from tools.path_security import UnsafePathError, resolve_within
 
 
 def _resolve(filepath: str) -> str:
-    """Si la ruta no es absoluta, busca en el directorio de trabajo."""
-    if not os.path.isabs(filepath):
-        return os.path.join(WORK_DIR, filepath)
-    return filepath
+    """Resuelve únicamente archivos dentro del directorio de trabajo."""
+    return resolve_within(WORK_DIR, filepath)
 
 
 def read_excel_file(filepath: str, sheet_name: str = None) -> str:
@@ -42,6 +41,8 @@ def read_excel_file(filepath: str, sheet_name: str = None) -> str:
             result += f"\n\n... y {len(df) - 20} fila(s) más."
         return result
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al leer Excel: {e}"
 
@@ -84,6 +85,8 @@ def validate_excel_file(filepath: str, required_columns: str = None) -> str:
 
         return result
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al validar Excel: {e}"
 
@@ -109,6 +112,8 @@ def update_excel_cell(filepath: str, sheet: str, cell: str, value: str) -> str:
         wb.save(path)
         return f"✅ Celda {cell} (hoja '{sheet}') actualizada a: {value}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al actualizar celda: {e}"
 

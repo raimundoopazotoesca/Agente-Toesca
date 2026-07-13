@@ -33,6 +33,20 @@ wiki/.obsidian/workspace.json
 # Backups binarios de la DB del agente
 memory/backups/*.db
 .pytest_cache/
+.uv-cache/
+
+# Estado privado y artefactos locales (la DB de negocio v2 sí es canónica).
+memory/agente_state.db*
+memory/agente_toesca.db
+memory/*.db-wal
+memory/*.db-shm
+memory/*.db.bak*
+logs/*.log
+scripts/_*.py
+scripts/_prompt_*.md
+scripts/*_out*.txt
+scripts/*_results*.txt
+scripts/flujos_tri_*.txt
 
 # Dashboard generado (regenerable con: python -m tools.db.dashboard)
 dashboard.html

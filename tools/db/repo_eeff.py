@@ -1,10 +1,12 @@
 """Repo de raw_eeff_line."""
 import sqlite3
+from tools.db.eeff_cuenta_mapper import get_canonical_code
 
 _INSERT_COLS = [
     "fondo_key", "periodo", "cuenta_codigo", "cuenta_nombre",
     "monto_clp", "monto_uf",
     "source_file", "source_sheet", "source_row", "file_hash", "ingest_run_id",
+    "cuenta_codigo_canonical",
 ]
 
 
@@ -18,8 +20,12 @@ def insert_lines(
     sql = f"INSERT OR IGNORE INTO raw_eeff_line ({cols_sql}) VALUES ({placeholders})"
     inserted = 0
     for line in lines:
+        canonical = get_canonical_code(line.get("cuenta_nombre"), line.get("source_sheet"))
         values = tuple(
-            ingest_run_id if c == "ingest_run_id" else line.get(c) for c in _INSERT_COLS
+            ingest_run_id if c == "ingest_run_id"
+            else canonical if c == "cuenta_codigo_canonical"
+            else line.get(c)
+            for c in _INSERT_COLS
         )
         cur = conn.execute(sql, values)
         inserted += cur.rowcount if cur.rowcount > 0 else 0

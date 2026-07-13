@@ -44,6 +44,12 @@ Editar `.env` con los valores correctos para Mac:
 ```env
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 
+# Requerido solo para la interfaz Streamlit (mínimo 32 caracteres)
+AUTH_COOKIE_KEY=un_secreto_aleatorio_largo_y_unico
+
+# Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
+AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
+
 # Ruta de OneDrive sincronizado en Mac (buscar en Finder)
 # Suele ser algo como:
 SHAREPOINT_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos
@@ -90,6 +96,12 @@ Editar `.env`:
 ```env
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 
+# Requerido solo para la interfaz Streamlit (mínimo 32 caracteres)
+AUTH_COOKIE_KEY=un_secreto_aleatorio_largo_y_unico
+
+# Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
+AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
+
 # Ruta de la carpeta Comercial (SharePoint o R:)
 RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
 
@@ -100,8 +112,23 @@ RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesc
 ### 4. Ejecutar
 
 ```bash
-python agent.py
+python -X utf8 agent.py
 ```
+
+## Seguridad del servidor HTTP
+
+El servidor opcional escucha en `127.0.0.1` por defecto y rechaza el arranque
+si `AGENT_SERVER_API_TOKEN` no tiene al menos 32 caracteres. Las solicitudes a
+`POST /run` deben enviar:
+
+```http
+Authorization: Bearer <AGENT_SERVER_API_TOKEN>
+Content-Type: application/json
+```
+
+No expongas `AGENT_SERVER_HOST=0.0.0.0` sin firewall, TLS mediante un proxy y
+control de acceso de red. `AUTH_COOKIE_KEY` y `AGENT_SERVER_API_TOKEN` deben ser
+secretos distintos y nunca deben guardarse en Git.
 
 ---
 

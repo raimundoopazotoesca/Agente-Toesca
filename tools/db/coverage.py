@@ -3,33 +3,61 @@ Auditoría de cobertura de la DB del agente.
 Reporta: qué activos/fondos tienen datos, en qué períodos, y dónde hay gaps mensuales.
 """
 from collections import defaultdict
+from contextlib import closing, nullcontext
 
 from tools.db.connection import get_conn
 
 
-def audit_coverage() -> dict:
+def audit_coverage(conn=None) -> dict:
     """Devuelve un dict con cobertura por tabla raw_*."""
-    conn = get_conn()
     out = {}
-    for tabla, keycol in [
-        ("raw_rent_roll_line", "activo_key"),
-        ("raw_er_activo_line", "activo_key"),
-        ("raw_flujo_line", "activo_key"),
-        ("raw_eeff_line", "fondo_key"),
-    ]:
-        cur = conn.execute(
-            f"SELECT {keycol}, periodo, COUNT(*) FROM {tabla} "
-            f"WHERE superseded_at IS NULL GROUP BY {keycol}, periodo"
-        )
-        por_key = defaultdict(list)
-        total = 0
-        for k, periodo, n in cur:
-            por_key[k].append(periodo)
-            total += n
-        out[tabla] = {
-            "por_clave": {k: sorted(v) for k, v in por_key.items()},
-            "total_filas": total,
-        }
+    manager = closing(get_conn()) if conn is None else nullcontext(conn)
+    with manager as conn:
+        for tabla, keycol in [
+            ("raw_rent_roll_line", "activo_key"),
+            ("raw_er_activo_line", "activo_key"),
+            ("raw_flujo_line", "activo_key"),
+            ("raw_eeff_line", "fondo_key"),
+        ]:
+            cur = conn.execute(
+                f"SELECT {keycol}, periodo, COUNT(*) FROM {tabla} "
+                f"WHERE superseded_at IS NULL GROUP BY {keycol}, periodo"
+            )
+            por_key = defaultdict(list)
+            total = 0
+            for k, periodo, n in cur:
+                por_key[k].append(periodo)
+                total += n
+            out[tabla] = {
+                "por_clave": {k: sorted(v) for k, v in por_key.items()},
+                "total_filas": total,
+            }
+
+        for tabla, keycol, datecol, active_filter in [
+            ("raw_uf_diaria", None, "fecha", ""),
+            ("raw_valor_cuota_contable", "nemotecnico", "fecha", "WHERE superseded_at IS NULL"),
+            ("raw_valor_cuota_bursatil", "nemotecnico", "fecha", ""),
+            ("raw_dividendo", "nemotecnico", "fecha_pago", "WHERE superseded_at IS NULL"),
+            ("derived_kpi", "entidad_key", "periodo", ""),
+        ]:
+            key_expr = keycol or "'UF'"
+            rows = conn.execute(
+                f"SELECT {key_expr}, {datecol}, COUNT(*) FROM {tabla} "
+                f"{active_filter} GROUP BY {key_expr}, {datecol}"
+            ).fetchall()
+            por_key = defaultdict(list)
+            total = 0
+            for key, period, count in rows:
+                if period:
+                    por_key[key].append(period)
+                total += count
+            periods = sorted({period for values in por_key.values() for period in values})
+            out[tabla] = {
+                "por_clave": {key: sorted(values) for key, values in por_key.items()},
+                "total_filas": total,
+                "desde": periods[0] if periods else None,
+                "hasta": periods[-1] if periods else None,
+            }
     out["gaps"] = _detect_gaps(out)
     return out
 
@@ -37,10 +65,7 @@ def audit_coverage() -> dict:
 def _detect_gaps(coverage: dict) -> dict:
     gaps = {}
     for tabla, info in coverage.items():
-        if tabla == "gaps":
-            continue
-        # Skip EEFF gaps detection — usa fechas completas (YYYY-MM-DD), no YYYY-MM
-        if tabla == "raw_eeff_line":
+        if tabla not in {"raw_rent_roll_line", "raw_er_activo_line", "raw_flujo_line"}:
             continue
         tabla_gaps = []
         for k, periodos in info.get("por_clave", {}).items():

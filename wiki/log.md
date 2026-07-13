@@ -3,6 +3,26 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-13] seguridad/fix | Auditoría integral de código, esquema e interfaces
+
+Auditoría completa del estado actual. Se corrigió la cadena de migraciones para
+DB nuevas y se hizo atómica por archivo; importar el agente ya no migra la DB de
+negocio. Se preparó migración 048 para deduplicar `derived_kpi` cuando
+`variante IS NULL`, sin aplicarla a la DB canónica (continúa en v46).
+
+Se confinaron rutas de archivos a sus raíces autorizadas, se bloquearon las
+herramientas de autoedición del modelo, se filtran herramientas mutables según
+la intención original y se reforzó el prompt contra instrucciones embebidas en
+correo/documentos. El servidor Flask ahora requiere bearer token, escucha en
+localhost y limita tamaño/concurrencia; Streamlit exige `AUTH_COOKIE_KEY` externo.
+
+También se corrigieron escrituras a vistas legacy (`fact_uf`, `fact_dividendo`,
+tablas `_line`), idempotencia de ER/KPI/dividendos, conservación de fechas
+diarias y migración v1→v2 segura. El extractor CDG antiguo que infería columnas
+y nemotécnicos erróneos quedó deshabilitado. Dependencias directas completadas y
+`lxml` actualizado a 6.1.0. Verificación: 124 tests pasan, 1 omitido; compilación,
+Ruff F821, `git diff --check` y `pip-audit` sin hallazgos.
+
 ## [2026-07-13] feat | Tasa arriendo ajustada bursátil y cap rate implícito bursátil — Fondo PT
 
 Nuevo script `scripts/consolidate_kpis_bursatil_pt.py`, réplica de la metodología ya validada

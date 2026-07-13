@@ -681,6 +681,7 @@ function initPeriodNav(periodos, defVal, suffix, format){
     sel.appendChild(o);
   });
   sel.value = initial;
+  sel.dataset.periodFmt = format;
 
   function fmtMonth(p){
     const [y, m] = p.split("-");
@@ -698,46 +699,45 @@ function initPeriodNav(periodos, defVal, suffix, format){
   }
 
   window["navPeriod"] = function(delta, suf){
-    const selId = "sel-periodo-" + suf;
-    const sel2 = document.getElementById(selId);
-    const idx = periodos.indexOf(sel2.value);
-    const newIdx = Math.max(0, Math.min(periodos.length - 1, idx + delta));
-    sel2.value = periodos[newIdx];
-    sel2.dispatchEvent(new Event("change"));
+    const s = document.getElementById("sel-periodo-" + suf);
+    const opts = Array.from(s.options).map(function(o){ return o.value; });
+    const idx = opts.indexOf(s.value);
+    const newIdx = Math.max(0, Math.min(opts.length - 1, idx + delta));
+    s.value = opts[newIdx];
+    s.dispatchEvent(new Event("change"));
   };
 
   window["togglePeriodDropdown"] = function(suf){
     const dd = document.getElementById("period-dropdown-" + suf);
-    if (dd.style.display === "none") showPeriodDropdown(suf);
-    else hidePeriodDropdown();
+    if (!dd.style.display || dd.style.display === "none") window["showPeriodDropdown"](suf);
+    else window["hidePeriodDropdown"]();
   };
 
   window["showPeriodDropdown"] = function(suf){
+    window["hidePeriodDropdown"]();
     const dd = document.getElementById("period-dropdown-" + suf);
-    const dispBtn2 = document.getElementById("period-display-" + suf);
-    const sel3 = document.getElementById("sel-periodo-" + suf);
+    const dispEl = document.getElementById("period-display-" + suf);
+    const s = document.getElementById("sel-periodo-" + suf);
+    const fmt = s.dataset.periodFmt || "month";
+    const opts = Array.from(s.options).map(function(o){ return o.value; }).reverse();
     dd.innerHTML = "";
-    const sorted = [...periodos].reverse();
-    sorted.forEach(p => {
+    opts.forEach(function(p){
       const item = document.createElement("div");
-      item.className = "period-dropdown-item";
-      item.textContent = format === "quarter" ? fmtQ(p) : fmtMonth(p);
-      if (p === sel3.value) item.classList.add("active");
-      item.onclick = () => {
-        sel3.value = p;
-        sel3.dispatchEvent(new Event("change"));
-      };
+      item.className = "period-dropdown-item" + (p === s.value ? " active" : "");
+      item.textContent = fmt === "quarter" ? fmtQ(p) : mesEspanol(p);
+      item.onclick = function(){ s.value = p; s.dispatchEvent(new Event("change")); };
       dd.appendChild(item);
     });
-    const rect = dispBtn2.getBoundingClientRect();
-    dd.style.top = (rect.bottom + 4) + "px";
-    dd.style.left = rect.left + "px";
+    const rect = dispEl.getBoundingClientRect();
+    dd.style.top = (rect.bottom + 5) + "px";
+    dd.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - 160)) + "px";
     dd.style.display = "block";
+    const act = dd.querySelector(".active");
+    if (act) act.scrollIntoView({ block: "nearest" });
   };
 
   window["hidePeriodDropdown"] = function(){
-    const dds = document.querySelectorAll(".period-dropdown");
-    dds.forEach(dd => dd.style.display = "none");
+    document.querySelectorAll(".period-dropdown").forEach(function(dd){ dd.style.display = "none"; });
   };
 
   document.addEventListener("click", (e) => {
@@ -806,7 +806,7 @@ function switchFund(f){
   // Repopular navegadores de período — contable/bursátil (trimestral) vs operacional (mensual)
   const periodoActualCb = document.getElementById("sel-periodo-cb").value;
   const periodoActualOp = document.getElementById("sel-periodo-op").value;
-  const periodosCb = Object.keys(F.contable).sort();
+  const periodosCb = Object.keys(F.contable).filter(p => ["03","06","09","12"].includes(p.slice(-2))).sort();
   const periodosOp = Object.keys(F.fondo_kpi).sort();
   initPeriodNav(periodosCb, periodoActualCb, "cb", "quarter");
   initPeriodNav(periodosOp, periodoActualOp, "op", "month");

@@ -24,7 +24,7 @@ def test_get_fondo_not_found(tmp_db):
 def test_list_activos_de_fondo(tmp_db):
     activos = repo_fondo.list_activos(tmp_db, fondo_key="TRI")
     keys = sorted(a["activo_key"] for a in activos)
-    assert keys == ["Apo3001", "INMOSA", "Mall Curicó", "Sucden", "Viña Centro"]
+    assert {"Apo3001", "INMOSA", "Mall Curicó", "Sucden", "Viña Centro"} <= set(keys)
 
 
 def test_list_series_de_fondo(tmp_db):

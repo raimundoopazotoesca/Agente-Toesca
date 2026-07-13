@@ -12,9 +12,8 @@ PDFs / Excel proveedor
         │
         ▼
   raw_*          ← línea por línea del documento, idempotente por file_hash
-  (raw_eeff_line, raw_valor_cuota_line, raw_dividendo_line,
-   raw_cuota_en_circulacion_line, raw_precio_cuota_line,
-   raw_patrimonio_bursatil_line)
+  (raw_eeff_line, raw_valor_cuota_contable_line, raw_dividendo_line,
+   raw_cuota_en_circulacion_line, raw_valor_cuota_bursatil_line)
         │
         ▼
   fact_*         ← valor único por (entidad, fecha): precios bursátiles, UF, dividendos con nemotécnico
@@ -69,12 +68,11 @@ PDFs / Excel proveedor
 
 | Detalle | PT | TRI | Apo | Tabla destino |
 |---|---|---|---|---|
-| `VR Contable` | ✓ | ✓ | ✓ | `raw_valor_cuota_line` (tipo=`contable`) |
+| `VR Contable` | ✓ | ✓ | ✓ | `raw_valor_cuota_contable_line` (tipo=`contable`) |
 | Cuotas de `VR Contable` | ✓ | ✓ | ✓ | `raw_cuota_en_circulacion_line` |
 | `Dividendo` | ✓ | ✓ | ✓ | `raw_dividendo_line` (tipo=`dividendo`) |
 | `Disminución` | ✗ | ✗ | ✓ | `raw_dividendo_line` (tipo=`disminucion`) |
-| `VR Bursátil` precio | ✓ | ✗* | ✗ | `raw_precio_cuota_line` |
-| `VR Bursátil` patrimonio | ✓ | ✓ | ✗ | `raw_patrimonio_bursatil_line` |
+| `VR Bursátil` precio + patrimonio | ✓ | ✓ | ✗ | `raw_valor_cuota_bursatil_line` (col `patrimonio_bursatil_uf`) |
 
 *TRI precio bursátil viene de LarrainVial datachart, no del extract.
 
@@ -217,28 +215,27 @@ Para que los KPIs derivados funcionen, necesitamos al menos:
 
 | Tabla | Filas | Rango |
 |---|---|---|
-| `raw_valor_cuota_line` (fondo_key='TRI') | 462 | 2017-12 → 2026-03 |
+| `raw_valor_cuota_contable_line` (fondo_key='TRI') | 462 | 2017-12 → 2026-03 |
 | `raw_dividendo_line` (fondo_key='TRI') | 167 | 2018-04 → 2025-12 |
 | `raw_cuota_en_circulacion_line` (fondo_key='TRI') | 153 | — |
 | `raw_eeff_line` (fondo_key='TRI') | ~1.000+ | — |
-| `raw_precio_cuota_line` (3 nemos) | 25/nemo | 2024-05 → 2026-05 |
+| `raw_valor_cuota_bursatil_line` (3 nemos) | 25/nemo | 2024-05 → 2026-05 |
 
 ### PT ✅ Completo (EEFF histórico parcial)
 
 | Tabla | Filas | Rango | Notas |
 |---|---|---|---|
 | `raw_eeff_line` (fondo_key='PT') | 4.523 | 2017 → 2025-12 | PDFs 2017-2019 vía Gemini; 2020-2025 vía ChatGPT manual |
-| `raw_valor_cuota_line` (fondo_key='PT') | 33 | 2017-12 → 2025-12 | VR Contable trimestral del CDG extract |
+| `raw_valor_cuota_contable_line` (fondo_key='PT') | 33 | 2017-12 → 2025-12 | VR Contable trimestral del CDG extract |
 | `raw_dividendo_line` (fondo_key='PT') | 27 | — | CDG extract |
 | `raw_cuota_en_circulacion_line` (fondo_key='PT') | 33 | — | CDG extract |
-| `raw_precio_cuota_line` (CFITRIPT-E) | 97 | — | CDG extract (histórico) + LarrainVial |
-| `raw_patrimonio_bursatil_line` | 108 | — | CDG extract |
+| `raw_valor_cuota_bursatil_line` (incluye col `patrimonio_bursatil_uf`) | 506 | — | CDG extract + LarrainVial |
 
 ### Apoquindo 🟡 En progreso (2026-06-15)
 
 | Tabla | Filas | Rango | Estado |
 |---|---|---|---|
-| `raw_valor_cuota_line` (fondo_key='Apo') | **28** | 2019-03 → 2025-12 | ✅ CDG extract (trimestral) |
+| `raw_valor_cuota_contable_line` (fondo_key='Apo') | **28** | 2019-03 → 2025-12 | ✅ CDG extract (trimestral) |
 | `raw_cuota_en_circulacion_line` (fondo_key='Apo') | **28** | 2019-03 → 2025-12 | ✅ CDG extract |
 | `raw_dividendo_line` (fondo_key='Apo') | **12** | 2019-12 → 2022-10 | ✅ 6 dividendos + 6 disminuciones |
 | `raw_eeff_line` (fondo_key='APO') | **0** | — | ❌ **Pendiente** |
@@ -290,9 +287,9 @@ for fondo in ['PT', 'TRI', 'APO', 'Apo']:
 # VR Contable
 for fondo in ['PT', 'TRI', 'Apo']:
     n = conn.execute(
-        "SELECT COUNT(*), MIN(fecha), MAX(fecha) FROM raw_valor_cuota_line WHERE fondo_key=?", (fondo,)
+        "SELECT COUNT(*), MIN(fecha), MAX(fecha) FROM raw_valor_cuota_contable_line WHERE fondo_key=?", (fondo,)
     ).fetchone()
-    print(f"raw_valor_cuota_line [{fondo}]: {n}")
+    print(f"raw_valor_cuota_contable_line [{fondo}]: {n}")
 
 # Dividendos
 for r in conn.execute(
@@ -329,7 +326,7 @@ python -X utf8 -m tools.db.backfill
 ## Idempotencia
 
 Todos los scripts son seguros para correr N veces:
-- `raw_valor_cuota_line`: `UNIQUE(nemotecnico, fecha, tipo, file_hash)` → `INSERT OR IGNORE`
+- `raw_valor_cuota_contable_line`: `UNIQUE(nemotecnico, fecha, tipo, file_hash)` → `INSERT OR IGNORE`
 - `raw_cuota_en_circulacion_line`: `UNIQUE(nemotecnico, fecha, file_hash)` → `INSERT OR IGNORE`
 - `raw_dividendo_line`: sin UNIQUE; guarda por `(fondo_key, file_hash)` antes de insertar
 - `raw_eeff_line`: verifica `file_hash` antes de procesar el PDF

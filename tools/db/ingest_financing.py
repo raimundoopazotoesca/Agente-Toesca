@@ -3,7 +3,7 @@ Ingesta planilla resumen deudas y financiamiento.xlsx → agente_toesca_v2.db
 
 Tablas destino:
   dim_credito              (migracion 020)
-  raw_deuda_saldo_line     (migracion 021)
+  raw_saldo_deuda     (migracion 021)
   raw_pagare_intercompania (migracion 022)
 """
 
@@ -76,21 +76,6 @@ CREDITO_ACTIVO_KEY = {
     "APO_APO_EUROAMERICA":     "Apo4501",
     "APO_APO_BTG":             "Apo4700",
 }
-
-
-_MIGRATION_FILES = {
-    20: "020_dim_credito.sql",
-    21: "021_raw_deuda_saldo_line.sql",
-    22: "022_raw_pagare_intercompania.sql",
-    23: "023_raw_amortizacion_line.sql",
-}
-
-
-def _apply_migrations(conn: sqlite3.Connection) -> None:
-    for n in sorted(_MIGRATION_FILES):
-        sql_file = MIGRATIONS_DIR / _MIGRATION_FILES[n]
-        conn.executescript(sql_file.read_text(encoding="utf-8"))
-    conn.commit()
 
 
 def _parse_date(val) -> str | None:
@@ -197,7 +182,7 @@ def ingest_saldos_historicos(conn: sqlite3.Connection, wb: openpyxl.Workbook) ->
             rows_to_insert.append((run_id, ckey, periodo, saldo, is_proy))
 
     conn.executemany(
-        """INSERT OR REPLACE INTO raw_deuda_saldo_line
+        """INSERT OR REPLACE INTO raw_saldo_deuda
            (run_id, credito_key, periodo, saldo_uf, is_proyeccion)
            VALUES (?,?,?,?,?)""",
         rows_to_insert,
@@ -337,9 +322,9 @@ def ingest_amortizacion(conn: sqlite3.Connection, wb: openpyxl.Workbook) -> int:
 
             rows_to_insert.append((credito_key, periodo, capital, intereses, saldo))
 
-    conn.execute("DELETE FROM raw_amortizacion_line")
+    conn.execute("DELETE FROM raw_amortizacion")
     conn.executemany(
-        """INSERT OR REPLACE INTO raw_amortizacion_line
+        """INSERT OR REPLACE INTO raw_amortizacion
            (credito_key, periodo, capital_uf, intereses_uf, saldo_uf)
            VALUES (?,?,?,?,?)""",
         rows_to_insert,
@@ -354,9 +339,11 @@ def main():
     parser.add_argument("--db", required=True)
     args = parser.parse_args()
 
+    from tools.db.connection import apply_migrations
+
+    print("Verificando migraciones de la DB...")
+    apply_migrations(args.db)
     conn = sqlite3.connect(args.db)
-    print("Aplicando migraciones 020-023...")
-    _apply_migrations(conn)
 
     print("Cargando workbook...")
     wb = openpyxl.load_workbook(args.xlsx, read_only=True, data_only=True)
@@ -365,7 +352,7 @@ def main():
     n_creditos = ingest_dim_credito(conn)
     print(f"  -> {n_creditos} creditos")
 
-    print("Insertando raw_deuda_saldo_line...")
+    print("Insertando raw_saldo_deuda...")
     n_saldos = ingest_saldos_historicos(conn, wb)
     print(f"  -> {n_saldos} filas de saldo")
 
@@ -373,7 +360,7 @@ def main():
     n_pagares = ingest_pagares(conn, wb)
     print(f"  -> {n_pagares} pagares")
 
-    print("Insertando raw_amortizacion_line (Hoja2)...")
+    print("Insertando raw_amortizacion (Hoja2)...")
     n_amort = ingest_amortizacion(conn, wb)
     print(f"  -> {n_amort} filas de amortizacion")
 
@@ -430,7 +417,7 @@ def _parse_amort_table(ws, col_fecha: int, col_saldo: int):
 
 def reload_deuda_from_amort_tables(xlsx_path: str, db_path: str) -> None:
     """
-    Trunca raw_deuda_saldo_line y la repuebla desde las tablas de amortización
+    Trunca raw_saldo_deuda y la repuebla desde las tablas de amortización
     del Excel 'Financiamiento agente.xlsx'. Corrige también los estados de
     dim_credito para APO Euroamérica y BTG (PAGADO → VIGENTE).
     """
@@ -451,9 +438,9 @@ def reload_deuda_from_amort_tables(xlsx_path: str, db_path: str) -> None:
         print(f"  {credito_key}: {len(seen)} periodos ({len(data)} filas raw)")
 
     with conn:
-        conn.execute("DELETE FROM raw_deuda_saldo_line")
+        conn.execute("DELETE FROM raw_saldo_deuda")
         conn.executemany(
-            "INSERT INTO raw_deuda_saldo_line (credito_key, periodo, saldo_uf, is_proyeccion) "
+            "INSERT INTO raw_saldo_deuda (credito_key, periodo, saldo_uf, is_proyeccion) "
             "VALUES (?, ?, ?, ?)",
             rows,
         )
@@ -463,6 +450,6 @@ def reload_deuda_from_amort_tables(xlsx_path: str, db_path: str) -> None:
             )
             print(f"  dim_credito: {ck} = VIGENTE")
 
-    print(f"\n  {len(rows)} filas insertadas en raw_deuda_saldo_line")
+    print(f"\n  {len(rows)} filas insertadas en raw_saldo_deuda")
     conn.close()
     wb.close()

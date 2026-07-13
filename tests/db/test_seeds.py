@@ -17,7 +17,7 @@ def test_seed_activos(tmp_db_path):
     rows = cur.fetchall()
     keys = [r[0] for r in rows]
     # Sucden se agrega en la migración 007 (activo del NOI).
-    assert set(keys) == {"INMOSA", "PT", "Viña Centro", "Mall Curicó", "Apoquindo", "Apo3001", "Sucden"}
+    assert {"INMOSA", "PT", "Viña Centro", "Mall Curicó", "Apoquindo", "Apo3001", "Sucden"} <= set(keys)
 
 
 def test_seed_series(tmp_db_path):

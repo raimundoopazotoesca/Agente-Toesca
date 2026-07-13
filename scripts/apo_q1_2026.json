@@ -1,0 +1,881 @@
+{
+"periodos_reportados": [
+"2026-03-31",
+"2025-12-31",
+"2025-03-31"
+],
+"lineas": [
+{
+"periodo": "2026-03-31",
+"section": "Activo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Efectivo y efectivo equivalente",
+"monto_clp": 99637000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Activo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Efectivo y efectivo equivalente",
+"monto_clp": 113332000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Activo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO CORRIENTE",
+"monto_clp": 99637000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Activo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO CORRIENTE",
+"monto_clp": 113332000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Activo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Activos financieros a costo amortizado",
+"monto_clp": 65021817000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Activo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Activos financieros a costo amortizado",
+"monto_clp": 64078322000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Activo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO NO CORRIENTE",
+"monto_clp": 65021817000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Activo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO NO CORRIENTE",
+"monto_clp": 64078322000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Situación Financiera",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO",
+"monto_clp": 65121454000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Estado de Situación Financiera",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL ACTIVO",
+"monto_clp": 64191654000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cuentas y documentos por pagar por operaciones",
+"monto_clp": 293000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cuentas y documentos por pagar por operaciones",
+"monto_clp": 293000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Remuneraciones sociedad administradora",
+"monto_clp": 233669000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Remuneraciones sociedad administradora",
+"monto_clp": 178854000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otros documentos y cuentas por pagar",
+"monto_clp": 24937000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otros documentos y cuentas por pagar",
+"monto_clp": 30152000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO CORRIENTE",
+"monto_clp": 258899000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO CORRIENTE",
+"monto_clp": 209299000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otros pasivos",
+"monto_clp": 20652786000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otros pasivos",
+"monto_clp": 20875748000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Pasivo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO NO CORRIENTE",
+"monto_clp": 20652786000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Pasivo No Corriente",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO NO CORRIENTE",
+"monto_clp": 20875748000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otras Reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otras Reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados Acumulados",
+"monto_clp": 4028872000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados Acumulados",
+"monto_clp": -2266886000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultado del ejercicio",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultado del ejercicio",
+"monto_clp": 6295758000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PATRIMONIO NETO",
+"monto_clp": 44209769000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Patrimonio Neto",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PATRIMONIO NETO",
+"monto_clp": 43106607000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Situación Financiera",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO",
+"monto_clp": 65121454000,
+"monto_uf": null
+},
+{
+"periodo": "2025-12-31",
+"section": "Estado de Situación Financiera",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL PASIVO",
+"monto_clp": 64191654000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Intereses y reajustes",
+"monto_clp": 943495000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Intereses y reajustes",
+"monto_clp": 1242837000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultado en venta de instrumentos financieros",
+"monto_clp": 34000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultado en inversiones valorizadas por el método de la participación",
+"monto_clp": 222961000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultado en inversiones valorizadas por el método de la participación",
+"monto_clp": -93312000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Otros",
+"monto_clp": 726000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL INGRESOS/(PÉRDIDAS) NETOS DE LA OPERACIÓN",
+"monto_clp": 1167216000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Ingresos/Pérdidas de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL INGRESOS/(PÉRDIDAS) NETOS DE LA OPERACIÓN",
+"monto_clp": 1149525000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Remuneración del Comité de Vigilancia",
+"monto_clp": -1519000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Remuneración del Comité de Vigilancia",
+"monto_clp": -1566000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Comisión de administración",
+"monto_clp": -54815000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Comisión de administración",
+"monto_clp": -54686000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Honorarios por custodia y administración",
+"monto_clp": -7720000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "Honorarios por custodia y administración",
+"monto_clp": -10052000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL GASTOS DE OPERACIÓN",
+"monto_clp": -64054000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Gastos",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL GASTOS DE OPERACIÓN",
+"monto_clp": -66304000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "UTILIDAD/(PÉRDIDA) DE LA OPERACIÓN",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "UTILIDAD/(PÉRDIDA) DE LA OPERACIÓN",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "UTILIDAD/(PÉRDIDA) ANTES DE IMPUESTO",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "UTILIDAD/(PÉRDIDA) ANTES DE IMPUESTO",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "RESULTADO DEL EJERCICIO",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "RESULTADO DEL EJERCICIO",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL RESULTADO INTEGRAL",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Resultados",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTAL RESULTADO INTEGRAL",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Resultados acumulados",
+"monto_clp": -2266886000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Resultado del ejercicio",
+"monto_clp": 6295758000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Total",
+"monto_clp": 43106607000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cambios contables - Resultados acumulados",
+"monto_clp": 6295758000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cambios contables - Resultado del ejercicio",
+"monto_clp": -6295758000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Resultados acumulados",
+"monto_clp": 4028872000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Total",
+"monto_clp": 43106607000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados integrales del ejercicio - Resultado del ejercicio",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados integrales del ejercicio - Total",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Resultados acumulados",
+"monto_clp": 4028872000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Resultado del ejercicio",
+"monto_clp": 1103162000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Total",
+"monto_clp": 44209769000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Resultados acumulados",
+"monto_clp": -11144474000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Resultado del ejercicio",
+"monto_clp": 8877588000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicio - Total",
+"monto_clp": 36810849000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cambios contables - Resultados acumulados",
+"monto_clp": 8877588000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Cambios contables - Resultado del ejercicio",
+"monto_clp": -8877588000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Resultados acumulados",
+"monto_clp": -2266886000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "SUBTOTAL - Total",
+"monto_clp": 36810849000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados integrales del ejercicio - Resultado del ejercicio",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "Resultados integrales del ejercicio - Total",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Aportes",
+"monto_clp": 39076558000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Otras",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Total otras reservas",
+"monto_clp": 1177000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Resultados acumulados",
+"monto_clp": -2266886000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Resultado del ejercicio",
+"monto_clp": 1083221000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Cambios en el Patrimonio",
+"cuenta_codigo": null,
+"cuenta_nombre": "TOTALES - Total",
+"monto_clp": 37894070000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Flujos de Efectivo Originado por Actividades de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Compra de activos financieros",
+"monto_clp": -19420000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Flujos de Efectivo Originado por Actividades de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Venta de activos financieros",
+"monto_clp": 5000000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Flujos de Efectivo Originado por Actividades de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "Intereses, diferencias de cambio y reajustes recibidos",
+"monto_clp": 725000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Flujos de Efectivo Originado por Actividades de la Operación",
+"cuenta_codigo": null,
+"cuenta_nombre": "FLUJO NETO ORIGINADO POR ACTIVIDADES DE LA OPERACIÓN",
+"monto_clp": -13695000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Flujos de Efectivo",
+"cuenta_codigo": null,
+"cuenta_nombre": "AUMENTO (DISMINUCIÓN) NETO DE EFECTIVO Y EFECTIVO EQUIVALENTE",
+"monto_clp": -13695000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Flujos de Efectivo",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicial de efectivo y efectivo equivalente",
+"monto_clp": 113332000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Flujos de Efectivo",
+"cuenta_codigo": null,
+"cuenta_nombre": "Saldo inicial de efectivo y efectivo equivalente",
+"monto_clp": 4000,
+"monto_uf": null
+},
+{
+"periodo": "2026-03-31",
+"section": "Estado de Flujos de Efectivo",
+"cuenta_codigo": null,
+"cuenta_nombre": "SALDO FINAL DE EFECTIVO Y EFECTIVO EQUIVALENTE",
+"monto_clp": 99637000,
+"monto_uf": null
+},
+{
+"periodo": "2025-03-31",
+"section": "Estado de Flujos de Efectivo",
+"cuenta_codigo": null,
+"cuenta_nombre": "SALDO FINAL DE EFECTIVO Y EFECTIVO EQUIVALENTE",
+"monto_clp": 4000,
+"monto_uf": null
+}
+]
+}

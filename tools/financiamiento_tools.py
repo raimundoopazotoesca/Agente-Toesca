@@ -1,6 +1,6 @@
 """
 Consultas sobre deuda, amortización y financiamiento del portfolio Toesca.
-Fuentes: dim_credito, raw_amortizacion_line, raw_deuda_saldo_line, raw_pagare_intercompania.
+Fuentes: dim_credito, raw_amortizacion, raw_saldo_deuda, raw_pagare_intercompania.
 """
 from tools.db.connection import get_conn
 
@@ -64,10 +64,10 @@ def _creditos_vigentes(conn, fondo):
     saldos = {}
     for r in conn.execute("""
         SELECT credito_key, MAX(periodo) periodo, saldo_uf
-        FROM raw_amortizacion_line
+        FROM raw_amortizacion
         GROUP BY credito_key
     """):
-        # usar saldo de raw_amortizacion_line si disponible
+        # usar saldo de raw_amortizacion si disponible
         pass
 
     from datetime import date
@@ -76,10 +76,10 @@ def _creditos_vigentes(conn, fondo):
     saldo_map = {}
     for ck, periodo, saldo in conn.execute("""
         SELECT a.credito_key, a.periodo, a.saldo_uf
-        FROM raw_amortizacion_line a
+        FROM raw_amortizacion a
         WHERE a.credito_key NOT LIKE '%CONSOLIDADO%'
           AND a.periodo = (
-            SELECT MAX(a2.periodo) FROM raw_amortizacion_line a2
+            SELECT MAX(a2.periodo) FROM raw_amortizacion a2
             WHERE a2.credito_key=a.credito_key AND a2.periodo<=?
         )
     """, (hoy,)):
@@ -114,13 +114,13 @@ def _amortizacion(conn, fondo, credito_key, desde, hasta):
         clave = None
 
     if clave:
-        q = "SELECT periodo, capital_uf FROM raw_amortizacion_line WHERE credito_key=?"
+        q = "SELECT periodo, capital_uf FROM raw_amortizacion WHERE credito_key=?"
         params = [clave]
     else:
         # Suma por fondo via JOIN
         q = """
             SELECT a.periodo, SUM(a.capital_uf)
-            FROM raw_amortizacion_line a
+            FROM raw_amortizacion a
             JOIN dim_credito c ON a.credito_key=c.credito_key
             WHERE a.credito_key NOT LIKE '%CONSOLIDADO%'
         """
@@ -159,19 +159,19 @@ def _saldo_deuda(conn, fondo, credito_key):
     if credito_key:
         rows = conn.execute("""
             SELECT a.credito_key, a.periodo, a.saldo_uf
-            FROM raw_amortizacion_line a
+            FROM raw_amortizacion a
             WHERE a.credito_key=?
-              AND a.periodo=(SELECT MAX(a2.periodo) FROM raw_amortizacion_line a2
+              AND a.periodo=(SELECT MAX(a2.periodo) FROM raw_amortizacion a2
                              WHERE a2.credito_key=? AND a2.periodo<=?)
         """, (credito_key, credito_key, hoy)).fetchall()
     else:
         q = """
             SELECT a.credito_key, a.periodo, a.saldo_uf
-            FROM raw_amortizacion_line a
+            FROM raw_amortizacion a
             JOIN dim_credito c ON a.credito_key=c.credito_key
             WHERE a.credito_key NOT LIKE '%CONSOLIDADO%'
               AND a.periodo=(
-                  SELECT MAX(a2.periodo) FROM raw_amortizacion_line a2
+                  SELECT MAX(a2.periodo) FROM raw_amortizacion a2
                   WHERE a2.credito_key=a.credito_key AND a2.periodo<=?
               )
         """
@@ -204,7 +204,7 @@ def _perfil_vencimientos(conn, fondo):
 
     rows = conn.execute("""
         SELECT SUBSTR(periodo,1,4) yr, ROUND(SUM(capital_uf),0) amort
-        FROM raw_amortizacion_line
+        FROM raw_amortizacion
         WHERE credito_key=?
         GROUP BY yr
         ORDER BY yr
@@ -275,7 +275,7 @@ def _dy_amort(conn, fecha_corte: str | None = None, tipo_valor: str = "bursatil"
 
     # Amortización U12M
     amort_u12m = conn.execute("""
-        SELECT ROUND(SUM(capital_uf), 2) FROM raw_amortizacion_line
+        SELECT ROUND(SUM(capital_uf), 2) FROM raw_amortizacion
         WHERE credito_key='CONSOLIDADO_TRI' AND periodo BETWEEN ? AND ?
     """, (desde, hasta)).fetchone()[0] or 0.0
 
@@ -283,7 +283,7 @@ def _dy_amort(conn, fecha_corte: str | None = None, tipo_valor: str = "bursatil"
     divs = {nemo: div for nemo, div in conn.execute("""
         SELECT nemotecnico, ROUND(SUM(div_pago), 2)
         FROM (SELECT nemotecnico, periodo, MAX(monto_clp_cuota) div_pago
-              FROM raw_dividendo_line
+              FROM raw_dividendo
               WHERE superseded_at IS NULL AND fondo_key='TRI' AND periodo BETWEEN ? AND ?
               GROUP BY nemotecnico, periodo)
         GROUP BY nemotecnico
@@ -293,26 +293,34 @@ def _dy_amort(conn, fecha_corte: str | None = None, tipo_valor: str = "bursatil"
     total_q = sum(r[0] for r in conn.execute("""
         SELECT cuotas FROM (
             SELECT cuotas, ROW_NUMBER() OVER (PARTITION BY nemotecnico ORDER BY periodo DESC) rn
-            FROM raw_cuota_en_circulacion_line
+            FROM raw_cuota_en_circulacion
             WHERE superseded_at IS NULL AND fondo_key='TRI' AND periodo <= ?
         ) WHERE rn=1
     """, (hasta,)))
 
     # UF promedio del período
     uf_prom = conn.execute("""
-        SELECT ROUND(AVG(uf_dia), 2) FROM raw_valor_cuota_line
+        SELECT ROUND(AVG(uf_dia), 2) FROM raw_valor_cuota_contable
         WHERE fondo_key='TRI' AND uf_dia IS NOT NULL AND SUBSTR(fecha,1,7) BETWEEN ? AND ?
     """, (desde, hasta)).fetchone()[0] or 39000.0
 
     amort_clp_cuota = amort_u12m * uf_prom / total_q if total_q else None
 
     # Valor cuota (bursatil o contable) más reciente <= hasta
-    val_cuota = {nemo: (precio, fecha) for nemo, precio, fecha in conn.execute("""
-        SELECT nemotecnico, precio_clp, MAX(fecha)
-        FROM raw_valor_cuota_line
-        WHERE fondo_key='TRI' AND tipo=? AND SUBSTR(fecha,1,7) <= ?
-        GROUP BY nemotecnico
-    """, (tipo_valor, hasta))}
+    if tipo_valor == "contable":
+        val_cuota = {nemo: (precio, fecha) for nemo, precio, fecha in conn.execute("""
+            SELECT nemotecnico, precio_clp, MAX(fecha)
+            FROM raw_valor_cuota_contable
+            WHERE fondo_key='TRI' AND SUBSTR(fecha,1,7) <= ?
+            GROUP BY nemotecnico
+        """, (hasta,))}
+    else:
+        val_cuota = {nemo: (precio, fecha) for nemo, precio, fecha in conn.execute("""
+            SELECT nemotecnico, precio_clp, MAX(fecha)
+            FROM raw_valor_cuota_bursatil
+            WHERE nemotecnico LIKE 'CFITOERI1%' AND SUBSTR(fecha,1,7) <= ?
+            GROUP BY nemotecnico
+        """, (hasta,))}
 
     SERIES = [("CFITOERI1A", "A"), ("CFITOERI1C", "C"), ("CFITOERI1I", "I")]
 

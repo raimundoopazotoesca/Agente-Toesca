@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sqlite3
 from typing import Optional
 
 import openpyxl
@@ -260,8 +261,6 @@ def persist(xlsx_path: str,
       las nuevas ('superseded_and_reinserted').
     - Si no hay filas previas → inserta directo ('inserted').
     """
-    import sqlite3
-
     from tools.db import repo_audit, repo_er_activo
 
     owns_conn = conn is None

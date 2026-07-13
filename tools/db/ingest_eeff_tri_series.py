@@ -6,8 +6,8 @@ Extrae de la nota 'Cuotas emitidas':
   - Cuotas suscritas por serie por período
 
 Escribe a:
-  - raw_valor_cuota_line (tipo='contable')
-  - raw_cuota_en_circulacion_line
+  - raw_valor_cuota_contable (tipo='contable')
+  - raw_cuota_en_circulacion
 """
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def ingest_parsed_data(
 
             # UF del día
             uf_row = conn.execute(
-                "SELECT valor_clp FROM fact_uf WHERE fecha = ?", (fecha,)
+                "SELECT valor FROM fact_uf WHERE fecha = ?", (fecha,)
             ).fetchone()
             uf_dia = uf_row[0] if uf_row else None
 
@@ -171,20 +171,20 @@ def ingest_parsed_data(
                 precio_uf = (precio_clp / uf_dia) if uf_dia else None
                 cuotas_val = data.get("cuotas", {}).get(serie)
                 conn.execute(
-                    """INSERT OR IGNORE INTO raw_valor_cuota_line
-                       (fondo_key, nemotecnico, fecha, tipo, precio_clp, precio_uf,
+                    """INSERT OR IGNORE INTO raw_valor_cuota_contable
+                       (fondo_key, nemotecnico, fecha, precio_clp, precio_uf,
                         uf_dia, cuotas, periodo, source_file, file_hash)
-                       VALUES ('TRI', ?, ?, 'contable', ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES ('TRI', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (nemo, fecha, precio_clp, precio_uf, uf_dia, cuotas_val,
                      periodo, source_file, file_hash),
                 )
                 vc_count += conn.execute("SELECT changes()").fetchone()[0]
-                # Superseder valores CDG para la misma fecha/nemotécnico/tipo
+                # Superseder valores CDG para la misma fecha/nemotécnico
                 # (EEFF auditado tiene precedencia sobre CDG)
                 conn.execute(
-                    """UPDATE raw_valor_cuota_line
+                    """UPDATE raw_valor_cuota_contable
                        SET superseded_at = CURRENT_TIMESTAMP
-                       WHERE nemotecnico = ? AND fecha = ? AND tipo = 'contable'
+                       WHERE nemotecnico = ? AND fecha = ?
                          AND source_file = 'cdg_extract.xlsx'
                          AND superseded_at IS NULL""",
                     (nemo, fecha),
@@ -196,7 +196,7 @@ def ingest_parsed_data(
                 if not nemo or cuotas is None:
                     continue
                 conn.execute(
-                    """INSERT OR IGNORE INTO raw_cuota_en_circulacion_line
+                    """INSERT OR IGNORE INTO raw_cuota_en_circulacion
                        (fondo_key, nemotecnico, fecha, cuotas, periodo,
                         source_file, file_hash)
                        VALUES ('TRI', ?, ?, ?, ?, ?, ?)""",

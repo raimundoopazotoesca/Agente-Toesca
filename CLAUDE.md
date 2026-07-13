@@ -38,6 +38,30 @@ Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
 5. Leer solo la sección necesaria de un archivo, nunca el archivo completo si no hace falta
 6. Si la memoria o el contexto ya tienen la respuesta, no buscar en el código
 
+## Base de datos
+
+- **Path negocio**: `memory/agente_toesca_v2.db` — EEFF, rent roll, precios, KPIs derivados, etc.
+- **Path estado agente**: `memory/agente_state.db` — historial_chat, contexto y kpis por usuario. Se gestiona desde `tools/memory_tools.py`.
+- `memory/agente_toesca.db` está vacía — ignorar.
+- Módulo de acceso a la DB de negocio: `tools.db.connection.get_conn()`.
+- Estructura:
+  - `dim_*` (fondo, activo, serie, cuenta_eeff, credito) — catálogos maestros
+  - `raw_*_line` — una fila por línea de documento fuente: `raw_eeff_line`, `raw_er_activo_line`, `raw_flujo_line`, `raw_rent_roll_line`
+  - `raw_*` (sin `_line`) — snapshots/observaciones/eventos: `raw_caja`, `raw_capital_suscrito`, `raw_cuota_en_circulacion`, `raw_saldo_deuda`, `raw_valor_cuota_bursatil`, `raw_valor_cuota_contable`, `raw_ar_event` (aportes/dism/canjes), `raw_dividendo`, `raw_amortizacion`, `raw_pagare_intercompania`
+  - `fact_adquisicion`, `fact_tasacion` — hechos derivados
+  - `derived_kpi` — cache de KPIs (`entidad_tipo`+`kpi`+`variante`+`formula`)
+  - Vistas: `v_serie_patrimonio`, `v_capital_suscrito_serie`, `v_flujos_tir_serie`, `raw_valor_cuota_line` (unión bursátil+contable), `fact_precio_cuota`, `fact_dividendo`, `fact_uf`, y vistas de compat con nombres viejos (`raw_dividendo_line`, etc.) para consumidores externos.
+  - Trazabilidad: `ingest_run`, `schema_version`
+- **Plan de cuentas**: `dim_cuenta_eeff` (`cuenta_codigo`, `source_sheet`, `grupo`, `descripcion`, `es_subtotal`). No tiene columna `signo` — el signo contable ya viene aplicado en `raw_eeff_line.monto_clp`.
+- **Formato `periodo`**: siempre `YYYY-MM` (string). Todas las tablas normalizadas 2026-07-01. Las ingestas deben truncar `YYYY-MM-DD → YYYY-MM` al persistir.
+- **Formato `loaded_at`**: siempre `'YYYY-MM-DD HH:MM:SS'` (string, sin `T`). DEFAULT `datetime('now')` en la mayoría; `fact_adquisicion` y `fact_tasacion` tienen DEFAULT ISO con `T` — los datos existentes fueron normalizados, pero al insertar filas nuevas ahí queda con `T` hasta que se recreen esas tablas.
+- **Enums válidos** (no enforced por CHECK en SQLite, respetar al insertar):
+  - `derived_kpi.entidad_tipo`: `fondo` | `activo` | `serie`
+  - `dim_credito.estado`: `VIGENTE` | `PAGADO`
+  - `raw_dividendo.tipo`: `dividendo` | `disminucion`
+  - `dim_serie.transa_bolsa`: `0` | `1`
+- Filtrar siempre `WHERE superseded_at IS NULL` en tablas raw versionadas.
+
 ## Stack
 
 - Python + Gemini 2.5 Flash vía API compatible con OpenAI (`generativelanguage.googleapis.com/v1beta/openai/`)
@@ -53,7 +77,7 @@ agent.py              # runner principal: loop de conversación, system prompt
 config.py             # variables de entorno
 tools/
   registry.py         # TOOL_DEFINITIONS, _dispatch, selección dinámica por intent
-  memory_tools.py     # contexto, historial, KPIs (SQLite agente_toesca.db)
+  memory_tools.py     # contexto, historial, KPIs (SQLite memory/agente_toesca_v2.db)
   email_tools.py      # Outlook: listar, descargar adjuntos, enviar, buscar
   sharepoint_tools.py # listar/copiar desde/hacia SharePoint
   local_tools.py      # listar/copiar desde/hacia servidor R:

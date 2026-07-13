@@ -106,7 +106,7 @@ def _recolectar(conn) -> dict:
 
     # ── UF: serie mensual (último valor de cada mes) ──────────────────────────
     uf_mes: dict = {}
-    for fecha, valor in conn.execute("SELECT fecha, valor_clp FROM fact_uf ORDER BY fecha"):
+    for fecha, valor in conn.execute("SELECT fecha, valor FROM fact_uf ORDER BY fecha"):
         uf_mes[fecha[:7]] = {"x": fecha, "y": valor}  # último del mes gana
     data["uf"] = list(uf_mes.values())
 
@@ -117,12 +117,12 @@ def _recolectar(conn) -> dict:
         data["dividendos"].setdefault(nemo, []).append({"x": fecha, "y": monto})
 
     # ── KPI ────────────────────────────────────────────────────────────────────
-    for et, ek, per, kpi, val, uni, recipe in conn.execute(
-        "SELECT entidad_tipo, entidad_key, periodo, kpi, valor, unidad, recipe "
+    for et, ek, per, kpi, val, uni, formula in conn.execute(
+        "SELECT entidad_tipo, entidad_key, periodo, kpi, valor, unidad, formula "
         "FROM derived_kpi ORDER BY kpi, entidad_key, periodo"
     ):
         data["kpi"].append({"entidad_tipo": et, "entidad_key": ek, "periodo": per,
-                            "kpi": kpi, "valor": val, "unidad": uni, "recipe": recipe})
+                            "kpi": kpi, "valor": val, "unidad": uni, "formula": formula})
 
     # ── Vacancia: serie m² vacantes por segmento ───────────────────────────────
     data["vacancia"] = {}
@@ -381,7 +381,7 @@ renderExpl();
 // ── KPI ────────────────────────────────────────────────────────────────────
 if(DATA.kpi.length){
   let html='<table><thead><tr><th>tipo</th><th>entidad</th><th>período</th><th>kpi</th><th>valor</th><th>unidad</th><th>receta</th></tr></thead><tbody>';
-  for(const k of DATA.kpi){ html+=`<tr><td>${k.entidad_tipo}</td><td>${k.entidad_key}</td><td>${k.periodo}</td><td>${k.kpi}</td><td style="text-align:right">${(k.valor==null?'':k.valor.toLocaleString('es-CL'))}</td><td>${k.unidad||''}</td><td class="muted">${k.recipe}</td></tr>`; }
+  for(const k of DATA.kpi){ html+=`<tr><td>${k.entidad_tipo}</td><td>${k.entidad_key}</td><td>${k.periodo}</td><td>${k.kpi}</td><td style="text-align:right">${(k.valor==null?'':k.valor.toLocaleString('es-CL'))}</td><td>${k.unidad||''}</td><td class="muted">${k.formula}</td></tr>`; }
   html+='</tbody></table>'; $('#kpi').innerHTML=html;
 } else { $('#kpi').innerHTML='<p class="muted">Sin KPIs.</p>'; }
 </script>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Refresh mensual UF + precios bursatiles + KPIs. Corre el ultimo dia del mes a las 18:00 (post-cierre bursatil).</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-07-31T18:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByMonth>
+        <DaysOfMonth><Day>Last</Day></DaysOfMonth>
+        <Months>
+          <January/><February/><March/><April/><May/><June/>
+          <July/><August/><September/><October/><November/><December/>
+        </Months>
+      </ScheduleByMonth>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>cmd.exe</Command>
+      <Arguments>/c "C:\Users\raimundo.opazo\automation_agent\scripts\refresh_market_data.bat"</Arguments>
+    </Exec>
+  </Actions>
+</Task>

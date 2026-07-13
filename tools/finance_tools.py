@@ -219,8 +219,8 @@ def listar_indicadores_disponibles() -> str:
             {"kpi": "tir_contable_ytd",          "descripcion": "TIR XIRR contable YTD (T0=31-dic año anterior)"},
             {"kpi": "tir_bursatil_u12m",         "descripcion": "TIR XIRR bursátil últimos 12 meses"},
             {"kpi": "tir_contable_u12m",         "descripcion": "TIR XIRR contable últimos 12 meses"},
-            {"kpi": "tir_bursatil_desde_inicio", "descripcion": "TIR bursátil desde primer aporte — XIRR por cuota usando raw_ar_event_line (Aporte/Dividendo/Disminucion + VR Bursátil terminal)"},
-            {"kpi": "tir_contable_desde_inicio", "descripcion": "TIR contable desde primer aporte — XIRR por cuota. Aportes: -(monto_uf/cuotas_totales_aporte). Dividendos/Disminuciones: +(monto_uf/cuotas_row). Canjes y VR intermedios: 0. Terminal: precio_uf de raw_valor_cuota_line tipo=contable en fecha_corte."},
+            {"kpi": "tir_bursatil_desde_inicio", "descripcion": "TIR bursátil desde primer aporte — XIRR por cuota. Aportes/Disminuciones desde raw_ar_event; Dividendos desde raw_dividendo (fuente canónica); Terminal = precio_uf de raw_valor_cuota_bursatil en fecha_corte."},
+            {"kpi": "tir_contable_desde_inicio", "descripcion": "TIR contable desde primer aporte — XIRR por cuota. Aportes: -(monto_uf/cuotas_totales_aporte) desde raw_ar_event. Dividendos: +monto_uf_cuota desde raw_dividendo. Disminuciones: +(monto_uf/cuotas_row) desde raw_ar_event. Terminal: precio_uf de raw_valor_cuota_contable en fecha_corte."},
         ],
         "pendiente_revision": [],
         "placeholders": [

@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import unicodedata
 from tools.memory_tools import (
     load_memory,
     guardar_tarea,
@@ -1196,7 +1198,7 @@ TOOL_DEFINITIONS = [
             "name": "consultar_db_valor_libro",
             "description": (
                 "Consulta el VR Contable (valor libro) por cuota por serie TRI en UF. "
-                "Fuente: raw_valor_cuota_line tipo='contable' (EEFF PDFs prioritario, fallback A&R Rentas). "
+                "Fuente: raw_valor_cuota_contable tipo='contable' (EEFF PDFs prioritario, fallback A&R Rentas). "
                 "Dato trimestral. Devuelve precio_uf = UF por cuota a la fecha exacta solicitada."
             ),
             "parameters": {
@@ -1970,7 +1972,7 @@ TOOL_DEFINITIONS = [
                 "'tir_contable_ytd' (XIRR contable YTD), "
                 "'tir_bursatil_u12m' (XIRR bursátil U12M), "
                 "'tir_contable_u12m' (XIRR contable U12M), "
-                "'tir_bursatil_desde_inicio' (XIRR bursátil desde primer aporte, método por cuota vía raw_ar_event_line). "
+                "'tir_bursatil_desde_inicio' (XIRR bursátil desde primer aporte, método por cuota: aportes/disminuciones de raw_ar_event + dividendos de raw_dividendo). "
                 "Para TIR de todas las series de un fondo usar calcular_tir_fondo. "
                 "PENDIENTE: 'tir_contable_desde_inicio' (metodología por definir)."
             ),
@@ -2094,8 +2096,8 @@ TOOL_DEFINITIONS = [
                 "Devuelve una fila por serie con: tir_bursatil_desde_inicio, tir_contable_desde_inicio, "
                 "tir_bursatil_ytd, tir_contable_ytd, tir_bursatil_u12m, tir_contable_u12m. "
                 "T0 para YTD = 31-dic año anterior; T0 para U12M = mismo mes año anterior. "
-                "tir_*_desde_inicio: XIRR por cuota desde primer aporte vía raw_ar_event_line, "
-                "terminal = VR Bursátil o VR Contable en FECHA_CORTE."
+                "tir_*_desde_inicio: XIRR por cuota desde primer aporte. Aportes/disminuciones desde raw_ar_event, "
+                "dividendos desde raw_dividendo (canónica). Terminal = VR Bursátil o VR Contable en FECHA_CORTE."
             ),
             "parameters": {
                 "type": "object",
@@ -2156,7 +2158,15 @@ def _enforce_vagente_write_permission(name: str, args: dict) -> str | None:
     return None
 
 
-def _dispatch(name: str, args: dict) -> str:
+_DISABLED_MODEL_TOOLS = {"reemplazar_en_tool", "reemplazar_en_wiki"}
+
+
+def _dispatch(name: str, args: dict, allowed_tool_names: set[str] | None = None) -> str:
+    if name in _DISABLED_MODEL_TOOLS:
+        return f"Error: herramienta '{name}' deshabilitada por seguridad."
+    if allowed_tool_names is not None and name not in allowed_tool_names:
+        return f"Error: herramienta '{name}' no autorizada para esta instrucción."
+
     permission_error = _enforce_vagente_write_permission(name, args)
     if permission_error:
         return permission_error
@@ -2294,7 +2304,9 @@ def _dispatch(name: str, args: dict) -> str:
     if fn is None:
         return f"Error: herramienta '{name}' no reconocida."
     result = fn(args)
-    if isinstance(result, str) and len(result) > _MAX_TOOL_RESULT:
+    if not isinstance(result, str):
+        result = json.dumps(result, ensure_ascii=False, default=str)
+    if len(result) > _MAX_TOOL_RESULT:
         result = result[:_MAX_TOOL_RESULT] + f"\n\n[...resultado truncado — {len(result):,} chars totales. Llama con parámetros más específicos para obtener datos concretos.]"
     return result
 
@@ -2353,14 +2365,52 @@ _TOOLS_FACTSHEET = {
 _TOOL_INDEX = {t["function"]["name"]: t for t in TOOL_DEFINITIONS}
 
 
-def _select_tools(grupos: set) -> list:
-    if not grupos:
-        return [_TOOL_INDEX[n] for n in _TOOLS_GENERAL if n in _TOOL_INDEX]
+_MUTATING_TOOL_PREFIXES = (
+    "actualizar_", "agregar_", "consolidar_", "crear_", "descargar_",
+    "eliminar_", "enviar_", "guardar_", "ingestar_", "invalidar_",
+    "mover_", "ordenar_", "preparar_", "registrar_", "reemplazar_",
+)
+_SEND_TOOLS = {"enviar_correo", "enviar_correos_solicitud_cdg", "enviar_emails_rent_roll"}
+_MUTATION_INTENT_RE = re.compile(
+    r"\b(actualiz\w*|agreg\w*|cambi\w*|consolid\w*|copi\w*|cre\w*|"
+    r"descarg\w*|elimin\w*|envi\w*|guard\w*|ingest\w*|invalid\w*|"
+    r"mand\w*|modific\w*|mov\w*|orden\w*|prepar\w*|registr\w*|"
+    r"reemplaz\w*|respond\w*)\b",
+    re.IGNORECASE,
+)
+_SEND_INTENT_RE = re.compile(
+    r"\b(avis\w*|envi\w*|mand\w*|respond\w*)\b.*\b(correo\w*|email\w*|mail\w*)\b|"
+    r"\b(correo\w*|email\w*|mail\w*)\b.*\b(avis\w*|envi\w*|mand\w*|respond\w*)\b",
+    re.IGNORECASE,
+)
 
-    nombres = set(_TOOLS_GENERAL)
-    if "cdg"        in grupos: nombres |= _TOOLS_CDG
-    if "rentroll"   in grupos: nombres |= _TOOLS_RENTROLL
-    if "factsheet"  in grupos: nombres |= _TOOLS_FACTSHEET
+
+def _is_mutating_tool(name: str) -> bool:
+    return name.startswith(_MUTATING_TOOL_PREFIXES)
+
+
+def _normalized_intent(text: str) -> str:
+    return "".join(
+        char for char in unicodedata.normalize("NFKD", str(text or ""))
+        if not unicodedata.combining(char)
+    )
+
+
+def _select_tools(grupos: set, user_input: str = "") -> list:
+    if not grupos:
+        nombres = set(_TOOLS_GENERAL)
+    else:
+        nombres = set(_TOOLS_GENERAL)
+        if "cdg"        in grupos: nombres |= _TOOLS_CDG
+        if "rentroll"   in grupos: nombres |= _TOOLS_RENTROLL
+        if "factsheet"  in grupos: nombres |= _TOOLS_FACTSHEET
+
+    nombres -= _DISABLED_MODEL_TOOLS
+    normalized_input = _normalized_intent(user_input)
+    if not _MUTATION_INTENT_RE.search(normalized_input):
+        nombres = {name for name in nombres if not _is_mutating_tool(name)}
+    if not _SEND_INTENT_RE.search(normalized_input):
+        nombres -= _SEND_TOOLS
 
     return [_TOOL_INDEX[n] for n in nombres if n in _TOOL_INDEX]
 

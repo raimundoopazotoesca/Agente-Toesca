@@ -2,78 +2,34 @@
 
 Eres un agente de código. Este proyecto mantiene `memory/agente_toesca_v2.db` (SQLite) como fuente única de datos de los fondos inmobiliarios Toesca (PT, TRI, Apoquindo).
 
+**Memoria larga para Codex**: `CODEX.md` ← leer al inicio de sesiones largas o antes de continuar trabajo dejado por Claude.
+
 **Guía detallada de poblar la DB por fondo**: `docs/db-poblar-fondos.md` ← leer antes de tocar cualquier script de ingesta.
 
 ---
 
-## Contexto inmediato (tarea activa)
+## Contexto actual verificado por Codex (2026-07-13)
 
-### Fondo Apoquindo — estado 2026-06-15
-
-**Ya hecho:**
-- `raw_valor_cuota_line` (fondo_key='Apo'): 28 filas, 2019-03 → 2025-12 (VR Contable trimestral)
-- `raw_cuota_en_circulacion_line` (fondo_key='Apo'): 28 filas
-- `raw_dividendo_line` (fondo_key='Apo'): 12 filas (6 dividendos + 6 disminuciones, 2019-12 → 2022-10)
-- Fuente: `work/eeff_ingesta/TRI/cdg_extract.xlsx`, hoja `A&R Apoquindo`, función `ingest_ar_apo()`
-
-**Pendiente:**
-- `raw_eeff_line` (fondo_key='APO'): **0 filas** — los EEFF PDFs aún no están ingestados.
-
-### PDF disponible hoy
-
-```
-C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\
-  Fondos\Rentas Apoquindo\EEFF\2025\4T\
-    Toesca Rentas Inmobiliarias Apoquindo 2025 12 con Opinión.pdf
-```
-
-Los PDFs 2019-2024 no están en local todavía — hay que conseguirlos o usar ChatGPT con ellos.
-
-### Cómo ingestar el PDF 2025-12
-
-```bash
-# Paso 1: convertir a MD (MarkItDown está instalado: pip install markitdown[all])
-python -m markitdown "C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondos/Rentas Apoquindo/EEFF/2025/4T/Toesca Rentas Inmobiliarias Apoquindo 2025 12 con Opinión.pdf" > work/eeff_ingesta/APO/md/EEFF_APO_202512.md
-
-# Copiar PDF al directorio de trabajo (IMPORTANTE: el script lo necesita para el file_hash)
-copy "C:/Users/raimundo.opazo/OneDrive - Toesca/Inmobiliario Toesca - Documentos/Fondos/Rentas Apoquindo/EEFF/2025/4T/Toesca Rentas Inmobiliarias Apoquindo 2025 12 con Opinión.pdf" work/eeff_ingesta/APO/pdf/EEFF_APO_202512.pdf
-
-# Paso 2: extraer con Gemini y persistir en raw_eeff_line
-python -X utf8 scripts/ingest_eeff.py --fondo APO --file work/eeff_ingesta/APO/md/EEFF_APO_202512.md
-```
-
-### Cómo ingestar PDFs históricos (vía JSON manual)
-
-Si usas ChatGPT para extraer el PDF, guarda el JSON en:
-`work/eeff_ingesta/APO/json/EEFF_APO_<YYYYMM>.json`
-
-El JSON debe tener este formato (ver prompt exacto en `docs/db-poblar-fondos.md`):
-```json
-{
-  "periodos_reportados": ["2024-12-31"],
-  "lineas": [
-    {"section": "ESF", "cuenta_nombre": "Total Activos", "periodo": "2024-12-31", "monto_clp": 123456789, "monto_uf": null},
-    ...
-  ]
-}
-```
-
-Luego:
-```bash
-python scripts/ingest_from_json.py --fondo APO --json work/eeff_ingesta/APO/json/EEFF_APO_202412.json
-```
+- La DB consultada reporta `schema_version=46`; existe migración 047 en repo, verificar antes de aplicar.
+- `raw_eeff_line` ya tiene datos para `APO` (18.009 filas, 2019-03 → 2026-03). La instrucción antigua que decía `0 filas` está obsoleta.
+- `raw_valor_cuota_contable` tiene `Apo` y `APO`; para Apoquindo usar filtros robustos (`UPPER(fondo_key)='APO'`) cuando corresponda.
+- Tablas snapshot/evento ya no usan `_line` como tabla real (`raw_dividendo`, `raw_valor_cuota_contable`, etc.); existen vistas legacy con `_line`.
+- Las ingestas ER recientes de Apo/PT guardan valores UF en `raw_er_activo_line.monto_clp` por convención heredada. No "corregir" sin revisar dependencias.
+- Ultimos logs importantes están en `wiki/log.md` (2026-07-09 y 2026-07-13).
 
 ---
 
 ## Reglas irrompibles
 
-1. **DB = `memory/agente_toesca_v2.db`** (no la v1, ya eliminada).
+1. **DB = `memory/agente_toesca_v2.db`** (no `memory/agente_toesca.db` ni v1).
 2. **Nunca leer el CDG completo** (`*Control De Gestión*.xlsx`, 14 MB). Usar `work/eeff_ingesta/TRI/cdg_extract.xlsx`.
 3. **Machalí EXCLUIDO** del portfolio. No ingesta, no cálculos.
 4. **fondo_key**: `PT`, `TRI`, `Apo` (nunca "A&R PT", "Rentas Apoquindo", etc.).
-5. **fondo_key en raw_eeff_line**: usar `APO` en mayúsculas (el script `ingest_eeff.py` pide `--fondo APO`).
+5. **fondo_key en raw_eeff_line**: usar `APO` en mayúsculas para `scripts/ingest_eeff.py --fondo APO`; la DB también puede tener filas legacy `Apo`, verificar.
 6. **Idempotencia**: todos los inserts son seguros de repetir. Verificar siempre por `file_hash`.
 7. **Siempre `python -X utf8`** para evitar problemas con consola cp1252 en Windows.
+8. **DB primero** para consultas de datos; abrir Excel solo si la DB no tiene cobertura o se está ingestado/verificando fuente.
+9. **No inventar resultados**: si no se ejecutó una consulta/herramienta, no afirmar que se verificó.
 
 ---
 
@@ -81,18 +37,11 @@ python scripts/ingest_from_json.py --fondo APO --json work/eeff_ingesta/APO/json
 
 ```bash
 python -X utf8 -c "
-import sqlite3; conn = sqlite3.connect('memory/agente_toesca_v2.db')
-for t,fk in [('raw_eeff_line','APO'),('raw_valor_cuota_line','Apo'),('raw_dividendo_line','Apo')]:
-    r = conn.execute('SELECT COUNT(*), MIN(periodo if period is not null else fecha_pago), MAX(periodo if period is not null else fecha_pago) FROM '+t+' WHERE fondo_key=?',(fk,)).fetchone()
-    print(t,'['+fk+']:', r)
-conn.close()
-"
-# O más simple:
-python -X utf8 -c "
 import sqlite3; c=sqlite3.connect('memory/agente_toesca_v2.db')
-print('EEFF APO:', c.execute(\"SELECT COUNT(*) FROM raw_eeff_line WHERE fondo_key='APO'\").fetchone()[0])
-print('VR Contable Apo:', c.execute(\"SELECT COUNT(*), MIN(fecha), MAX(fecha) FROM raw_valor_cuota_line WHERE fondo_key='Apo'\").fetchone())
-print('Dividendos Apo:', c.execute(\"SELECT tipo, COUNT(*) FROM raw_dividendo_line WHERE fondo_key='Apo' GROUP BY tipo\").fetchall())
+print('schema_version:', c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0])
+print('EEFF:', c.execute(\"SELECT fondo_key, COUNT(*), MIN(periodo), MAX(periodo) FROM raw_eeff_line GROUP BY fondo_key\").fetchall())
+print('VR Contable:', c.execute(\"SELECT fondo_key, COUNT(*), MIN(fecha), MAX(fecha) FROM raw_valor_cuota_contable GROUP BY fondo_key\").fetchall())
+print('Dividendos:', c.execute(\"SELECT fondo_key, tipo, COUNT(*), MIN(fecha_pago), MAX(fecha_pago) FROM raw_dividendo GROUP BY fondo_key,tipo\").fetchall())
 "
 ```
 

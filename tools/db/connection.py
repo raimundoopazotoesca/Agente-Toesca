@@ -16,6 +16,7 @@ def get_conn_for(db_path: str) -> sqlite3.Connection:
     """Conexión a un .db específico, con foreign keys activadas."""
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -56,61 +57,41 @@ def _discover_migrations() -> list[tuple[int, Path]]:
         if not version_str.isdigit():
             continue
         out.append((int(version_str), path))
+    versions = [version for version, _ in out]
+    duplicates = sorted({version for version in versions if versions.count(version) > 1})
+    if duplicates:
+        raise RuntimeError(f"Versiones de migración duplicadas: {duplicates}")
     return out
 
 
 def _execute_migration(conn: sqlite3.Connection, sql: str) -> None:
-    """Ejecuta un archivo de migración.
+    """Ejecuta sentencias SQL sin hacer commits implícitos.
 
-    Usa executescript para SQL multi-statement. Si falla con 'duplicate column
-    name', intenta ejecutar las líneas de ALTER TABLE individualmente, tolerando
-    las que ya se aplicaron.
+    ``executescript`` confirma cualquier transacción pendiente antes de ejecutar,
+    lo que podía dejar una migración aplicada a medias pero sin registrar su
+    versión. ``complete_statement`` permite conservar una sola transacción para
+    el DDL, los datos y ``schema_version``.
     """
-    try:
-        conn.executescript(sql)
-        return
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" not in str(e).lower():
-            raise
-
-    # Segunda pasada: extraer ALTER TABLE ... ADD COLUMN y ejecutarlos con tolerancia
-    import re
-    lines = sql.splitlines()
-    alter_stmts = []
-    in_alter = False
-    buf = []
-    for line in lines:
-        stripped = line.strip()
-        if re.match(r"ALTER\s+TABLE\b", stripped, re.IGNORECASE):
-            in_alter = True
-            buf = [line]
-        elif in_alter:
-            buf.append(line)
-            if stripped.endswith(";"):
-                alter_stmts.append(" ".join(buf))
-                in_alter = False
-                buf = []
-        if not in_alter and stripped.endswith(";") and buf:
-            in_alter = False
-            buf = []
-
-    # Reemplazar cada ALTER TABLE en el SQL por un marcador y ejecutar sin ellos
-    sql_no_alter = re.sub(
-        r"ALTER\s+TABLE\b[^;]+;",
-        "",
-        sql,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    conn.executescript(sql_no_alter)
-
-    # Ejecutar los ALTER TABLE tolerando duplicados
-    for stmt in alter_stmts:
-        try:
-            conn.execute(stmt)
-            conn.commit()
-        except sqlite3.OperationalError as ex:
-            if "duplicate column name" not in str(ex).lower():
-                raise
+    statement = ""
+    for line in sql.splitlines(keepends=True):
+        statement += line
+        if not sqlite3.complete_statement(statement):
+            continue
+        if statement.strip().strip(";"):
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError as exc:
+                # Compatibilidad con DBs antiguas donde un ADD COLUMN fue
+                # aplicado manualmente pero la versión no quedó registrada.
+                if "duplicate column name" not in str(exc).lower():
+                    raise
+        statement = ""
+    remaining = "\n".join(
+        line for line in statement.splitlines()
+        if line.strip() and not line.lstrip().startswith("--")
+    ).strip()
+    if remaining:
+        raise sqlite3.OperationalError("Migración contiene una sentencia SQL incompleta")
 
 
 def apply_migrations(db_path: str) -> list[int]:
@@ -126,11 +107,18 @@ def apply_migrations(db_path: str) -> list[int]:
             if version in done:
                 continue
             sql = path.read_text(encoding="utf-8")
-            _execute_migration(conn, sql)
-            conn.execute(
-                "INSERT INTO schema_version (version) VALUES (?)", (version,)
-            )
-            conn.commit()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                _execute_migration(conn, sql)
+                conn.execute(
+                    "INSERT INTO schema_version (version) VALUES (?)", (version,)
+                )
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                raise RuntimeError(
+                    f"Falló migración {version:03d} ({path.name}): {exc}"
+                ) from exc
             applied.append(version)
     finally:
         conn.close()

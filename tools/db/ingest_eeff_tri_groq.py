@@ -7,9 +7,9 @@ Extrae de la nota 'Cuotas emitidas':
   - Capital suscrito en UF por serie por período (si está disponible)
 
 Escribe a:
-  - raw_valor_cuota_line (tipo='contable')
-  - raw_cuota_en_circulacion_line
-  - raw_capital_suscrito_line
+  - raw_valor_cuota_contable (tipo='contable')
+  - raw_cuota_en_circulacion
+  - raw_capital_suscrito
 """
 from __future__ import annotations
 
@@ -177,7 +177,7 @@ def extract_with_groq(text: str) -> Optional[dict]:
 
 def _parse_fecha(s: str) -> Optional[str]:
     """'2024-06-30' → '2024-06-30' (validación básica)."""
-    if re.match(r"\d{4}-\d{2}-\d{2}", s):
+    if isinstance(s, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
         return s
     return None
 
@@ -206,7 +206,7 @@ def ingest_groq_result(
 
             # UF del día para precio_uf
             uf_row = conn.execute(
-                "SELECT valor_clp FROM fact_uf WHERE fecha = ?", (fecha,)
+                "SELECT valor FROM fact_uf WHERE fecha = ?", (fecha,)
             ).fetchone()
             uf_dia = uf_row[0] if uf_row else None
 
@@ -223,19 +223,19 @@ def ingest_groq_result(
                     precio_uf = (precio_clp / uf_dia) if uf_dia else None
                     cuotas_val = cuotas_total.get(serie)
                     conn.execute(
-                        """INSERT OR IGNORE INTO raw_valor_cuota_line
-                           (fondo_key, nemotecnico, fecha, tipo, precio_clp, precio_uf,
+                        """INSERT OR IGNORE INTO raw_valor_cuota_contable
+                           (fondo_key, nemotecnico, fecha, precio_clp, precio_uf,
                             uf_dia, cuotas, periodo, source_file, file_hash)
-                           VALUES ('TRI', ?, ?, 'contable', ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES ('TRI', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (nemo, fecha, precio_clp, precio_uf, uf_dia, cuotas_val,
                          periodo, source_file, file_hash),
                     )
                     vc_count += conn.execute("SELECT changes()").fetchone()[0]
                     # Superseder CDG si EEFF tiene el mismo período
                     conn.execute(
-                        """UPDATE raw_valor_cuota_line
+                        """UPDATE raw_valor_cuota_contable
                            SET superseded_at = CURRENT_TIMESTAMP
-                           WHERE nemotecnico = ? AND fecha = ? AND tipo = 'contable'
+                           WHERE nemotecnico = ? AND fecha = ?
                              AND source_file = 'cdg_extract.xlsx'
                              AND superseded_at IS NULL""",
                         (nemo, fecha),
@@ -246,13 +246,13 @@ def ingest_groq_result(
                 if cuotas_n:
                     # Primero eliminar entradas incorrectas del regex antiguo para este PDF
                     conn.execute(
-                        """DELETE FROM raw_cuota_en_circulacion_line
+                        """DELETE FROM raw_cuota_en_circulacion
                            WHERE nemotecnico = ? AND fecha = ? AND file_hash = ?
                              AND source_file != 'cdg_extract.xlsx'""",
                         (nemo, fecha, file_hash),
                     )
                     conn.execute(
-                        """INSERT OR IGNORE INTO raw_cuota_en_circulacion_line
+                        """INSERT OR IGNORE INTO raw_cuota_en_circulacion
                            (fondo_key, nemotecnico, fecha, cuotas, periodo,
                             source_file, file_hash)
                            VALUES ('TRI', ?, ?, ?, ?, ?, ?)""",
@@ -265,7 +265,7 @@ def ingest_groq_result(
                 if cap_mclp and uf_dia:
                     cap_uf = (cap_mclp * 1_000_000) / uf_dia  # M$ → CLP → UF
                     conn.execute(
-                        """INSERT OR REPLACE INTO raw_capital_suscrito_line
+                        """INSERT OR REPLACE INTO raw_capital_suscrito
                            (fondo_key, nemotecnico, fecha_fin_periodo, capital_suscrito_uf,
                             periodo, source_file, file_hash)
                            VALUES ('TRI', ?, ?, ?, ?, ?, ?)""",
@@ -273,23 +273,10 @@ def ingest_groq_result(
                     )
                     cap_count += conn.execute("SELECT changes()").fetchone()[0]
 
-            # ── Aportes / disminuciones del fondo en el período ─────────────
-            aportes = periodo_data.get("aportes_mclp")
-            dism = periodo_data.get("disminuciones_mclp")
-
-            for tipo, valor_m in [("aporte", aportes), ("disminucion", dism)]:
-                if valor_m is not None and valor_m != 0:
-                    monto_clp = valor_m * 1_000_000  # M$ → CLP
-                    monto_uf = (monto_clp / uf_dia) if uf_dia else None
-                    conn.execute(
-                        """INSERT OR IGNORE INTO raw_capital_movimiento_line
-                           (fondo_key, fecha_fin_periodo, periodo, tipo,
-                            monto_mclp, monto_clp, monto_uf, source_file, file_hash)
-                           VALUES ('TRI', ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (fecha, periodo, tipo, valor_m, monto_clp, monto_uf,
-                         source_file, file_hash),
-                    )
-                    cap_count += conn.execute("SELECT changes()").fetchone()[0]
+            # NOTA: aportes/disminuciones del fondo se capturan en `raw_ar_event`
+            # desde el CDG (A&R Rentas) con granularidad por serie. Los EEFF solo
+            # reportan a nivel fondo → información menos detallada. Cross-check verificado
+            # exacto (delta 0 UF vs capital suscrito). Ya no se persisten aquí.
 
         # ── Dividendos ────────────────────────────────────────────────────────
         div_count = 0
@@ -300,11 +287,29 @@ def ingest_groq_result(
             nemo = SERIE_NEMO.get(serie)
             if not (fecha_pago and nemo and monto):
                 continue
+            # `tipo` en raw_dividendo distingue dividendo/devolución. El campo
+            # homónimo del extractor (definitivo/provisorio) es otra dimensión.
+            tipo = "dividendo"
+            uf_row = conn.execute(
+                "SELECT valor FROM fact_uf WHERE fecha = ?", (fecha_pago,)
+            ).fetchone()
+            monto_uf = (float(monto) / uf_row[0]) if uf_row and uf_row[0] else None
             conn.execute(
-                """INSERT OR IGNORE INTO fact_dividendo
-                   (nemotecnico, fecha_pago, monto)
-                   VALUES (?, ?, ?)""",
-                (nemo, fecha_pago, monto),
+                """INSERT INTO raw_dividendo
+                   (fondo_key, nemotecnico, fecha_pago, monto_uf_cuota,
+                    monto_clp_cuota, periodo, source_file, file_hash, tipo)
+                   SELECT 'TRI', ?, ?, ?, ?, ?, ?, ?, ?
+                   WHERE NOT EXISTS (
+                       SELECT 1 FROM raw_dividendo
+                       WHERE nemotecnico = ? AND fecha_pago = ? AND tipo = ?
+                         AND source_file = ? AND file_hash = ?
+                         AND superseded_at IS NULL
+                   )""",
+                (
+                    nemo, fecha_pago, monto_uf, monto, fecha_pago[:7],
+                    source_file, file_hash, tipo,
+                    nemo, fecha_pago, tipo, source_file, file_hash,
+                ),
             )
             div_count += conn.execute("SELECT changes()").fetchone()[0]
 

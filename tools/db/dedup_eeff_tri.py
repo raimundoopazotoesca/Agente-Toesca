@@ -1,5 +1,5 @@
 """
-Limpieza de duplicados en raw_valor_cuota_line y raw_cuota_en_circulacion_line.
+Limpieza de duplicados en raw_valor_cuota_contable y raw_cuota_en_circulacion.
 
 Los mismos períodos aparecen en múltiples PDFs (el actual + comparativo del siguiente).
 Se mantiene la primera fila insertada (min id) por (nemotecnico, fecha, tipo/—) y
@@ -23,16 +23,16 @@ def dedup_valor_cuota(db_path: str = DB_PATH) -> dict:
 
     # IDs a superseder: no el mínimo por grupo, y que no sea cdg_extract.xlsx
     conn.execute("""
-        UPDATE raw_valor_cuota_line
+        UPDATE raw_valor_cuota_contable
         SET superseded_at = CURRENT_TIMESTAMP
         WHERE superseded_at IS NULL
           AND source_file != 'cdg_extract.xlsx'
           AND id NOT IN (
               SELECT MIN(id)
-              FROM raw_valor_cuota_line
+              FROM raw_valor_cuota_contable
               WHERE superseded_at IS NULL
                 AND source_file != 'cdg_extract.xlsx'
-              GROUP BY nemotecnico, fecha, tipo
+              GROUP BY nemotecnico, fecha
           )
     """)
     n_vc = conn.execute("SELECT changes()").fetchone()[0]
@@ -52,13 +52,13 @@ def dedup_cuotas_circulacion(db_path: str = DB_PATH) -> dict:
     conn = get_conn_for(db_path)
 
     conn.execute("""
-        UPDATE raw_cuota_en_circulacion_line
+        UPDATE raw_cuota_en_circulacion
         SET superseded_at = CURRENT_TIMESTAMP
         WHERE superseded_at IS NULL
           AND source_file != 'cdg_extract.xlsx'
           AND id NOT IN (
               SELECT MIN(id)
-              FROM raw_cuota_en_circulacion_line
+              FROM raw_cuota_en_circulacion
               WHERE superseded_at IS NULL
                 AND source_file != 'cdg_extract.xlsx'
               GROUP BY nemotecnico, fecha

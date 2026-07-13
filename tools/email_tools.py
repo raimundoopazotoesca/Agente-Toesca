@@ -9,6 +9,7 @@ import subprocess
 import time
 import unicodedata
 from config import WORK_DIR
+from tools.path_security import UnsafePathError, resolve_within
 
 DEFAULT_CC = "Inmobiliario Toesca"
 CANTILLANA_CC = "mlagos@grupoaraucana.cl"
@@ -431,11 +432,15 @@ def download_email_attachment(entry_id: str, attachment_index: int, filename: st
         msg = namespace.GetItemFromID(entry_id)
 
         att = msg.Attachments.Item(attachment_index)
-        filepath = os.path.join(WORK_DIR, filename)
+        if int(attachment_index) < 1:
+            return "Error: attachment_index debe ser mayor o igual a 1."
+        filepath = resolve_within(WORK_DIR, filename)
         att.SaveAsFile(filepath)
 
         return f"Archivo '{filename}' descargado en: {filepath}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al descargar adjunto: {e}"
 
@@ -497,8 +502,7 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc
         mail.CC = cc
 
         if attachment_path:
-            if not os.path.isabs(attachment_path):
-                attachment_path = os.path.join(WORK_DIR, attachment_path)
+            attachment_path = resolve_within(WORK_DIR, attachment_path)
             if os.path.exists(attachment_path):
                 mail.Attachments.Add(attachment_path)
             else:
@@ -523,6 +527,8 @@ def send_email(to: str, subject: str, body: str, attachment_path: str = None, cc
             f"EntryID: {sent_summary['entry_id']}"
         )
 
+    except UnsafePathError as e:
+        return f"Error: ruta de adjunto no permitida: {e}. NO se envió el correo."
     except Exception as e:
         return f"Error al enviar correo: {e}"
 

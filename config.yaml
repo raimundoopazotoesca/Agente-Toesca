@@ -1,6 +1,6 @@
 cookie:
   expiry_days: 30
-  key: toesca_signature_key
+  key: ''  # Se inyecta desde AUTH_COOKIE_KEY; nunca guardar el secreto aquí.
   name: toesca_auth_cookie
 credentials:
   usernames:

@@ -14,7 +14,7 @@ def test_upsert_kpi(tmp_db):
         kpi="NOI",
         valor=1_234_567.0,
         unidad="CLP",
-        recipe="noi_v1",
+        formula="noi_v1",
     )
     val = repo_kpi.get(tmp_db, "activo", "PT", "2026-04", "NOI", "noi_v1")
     assert val == 1_234_567.0
@@ -24,6 +24,12 @@ def test_upsert_sobrescribe_misma_recipe(tmp_db):
     repo_kpi.upsert(tmp_db, "activo", "PT", "2026-04", "NOI", 1.0, "CLP", "noi_v1")
     repo_kpi.upsert(tmp_db, "activo", "PT", "2026-04", "NOI", 2.0, "CLP", "noi_v1")
     assert repo_kpi.get(tmp_db, "activo", "PT", "2026-04", "NOI", "noi_v1") == 2.0
+    count = tmp_db.execute(
+        """SELECT COUNT(*) FROM derived_kpi
+           WHERE entidad_tipo='activo' AND entidad_key='PT'
+             AND periodo='2026-04' AND kpi='NOI' AND variante IS NULL"""
+    ).fetchone()[0]
+    assert count == 1
 
 
 def test_get_not_found(tmp_db):

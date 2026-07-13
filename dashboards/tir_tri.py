@@ -53,15 +53,14 @@ LINE_STYLES = {
 
 
 def get_periodos(tipo: str) -> list[str]:
-    """Obtiene períodos únicos desde raw_valor_cuota_line en formato YYYY-MM."""
+    """Obtiene períodos únicos en formato YYYY-MM."""
+    tabla = "raw_valor_cuota_contable" if tipo == "contable" else "raw_valor_cuota_bursatil"
     with sqlite3.connect(DB) as con:
         rows = con.execute(
-            "SELECT DISTINCT fecha FROM raw_valor_cuota_line "
-            "WHERE nemotecnico='CFITOERI1A' AND tipo=? "
-            "ORDER BY fecha",
-            (tipo,),
+            f"SELECT DISTINCT fecha FROM {tabla} "
+            "WHERE nemotecnico='CFITOERI1A' ORDER BY fecha",
         ).fetchall()
-    return [r[0][:7] for r in rows]  # YYYY-MM-DD → YYYY-MM, dedup implícita
+    return [r[0][:7] for r in rows]
 
 
 @st.cache_data(show_spinner=False)

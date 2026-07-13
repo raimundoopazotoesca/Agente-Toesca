@@ -9,15 +9,32 @@ import os
 import sqlite3
 from datetime import datetime
 import streamlit as st
+from tools.path_security import UnsafePathError, resolve_within
 
 MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory")
 WIKI_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "wiki")
-DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca_v2.db")
+# DB de negocio (EEFF, rent roll, etc.). Las migraciones se aplican de forma
+# explícita; importar memoria nunca debe modificar datos de negocio.
+BIZ_DB_PATH = os.path.join(MEMORY_DIR, "agente_toesca_v2.db")
+# DB de estado del agente (historial_chat, contexto, kpis por usuario).
+STATE_DB_PATH = os.path.join(MEMORY_DIR, "agente_state.db")
 UBICACIONES_FILE = os.path.join(MEMORY_DIR, "ubicaciones.json")
 
-# Aplicar migraciones pendientes al cargar el módulo.
-from tools.db.connection import apply_migrations as _apply_migrations
-_apply_migrations(DB_PATH)
+# Bootstrap: crear tablas de estado si la DB no existe.
+def _ensure_state_schema():
+    conn = sqlite3.connect(STATE_DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS historial_chat (
+        id INTEGER PRIMARY KEY, username TEXT, fecha TEXT,
+        instruccion TEXT, herramientas TEXT, resumen TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS contexto (
+        username TEXT, contenido TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS kpis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, fecha_registro TEXT,
+        fondo TEXT, periodo TEXT, kpi TEXT, valor REAL, unidad TEXT, fuente TEXT)""")
+    conn.commit()
+    conn.close()
+
+_ensure_state_schema()
 
 def _get_user():
     try:
@@ -26,7 +43,7 @@ def _get_user():
         return "general"
 
 def _get_conn():
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect(STATE_DB_PATH)
 
 def load_memory(n_recientes: int = 10) -> str:
     user = _get_user()
@@ -260,7 +277,10 @@ def leer_wiki(pagina: str) -> str:
     nombre = pagina.strip().rstrip(".md")
     if not nombre.endswith(".md"):
         nombre += ".md"
-    ruta = os.path.join(WIKI_DIR, nombre)
+    try:
+        ruta = resolve_within(WIKI_DIR, nombre)
+    except UnsafePathError as e:
+        return f"Página wiki no permitida: {e}"
     if not os.path.exists(ruta):
         return f"Página wiki no encontrada: {nombre}. Páginas disponibles en wiki/: {os.listdir(WIKI_DIR)}"
     with open(ruta, encoding="utf-8") as f:

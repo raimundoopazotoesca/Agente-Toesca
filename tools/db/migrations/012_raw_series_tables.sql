@@ -27,3 +27,15 @@ CREATE TABLE IF NOT EXISTS raw_capital_suscrito_line (
     loaded_at           TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(nemotecnico, fecha_fin_periodo, file_hash)
 );
+
+-- Precios bursátiles. Históricamente esta tabla se creaba inline desde el
+-- ingestor, lo que hacía imposible levantar una DB limpia solo con migraciones.
+CREATE TABLE IF NOT EXISTS raw_precio_cuota_line (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    nemotecnico TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    precio_clp  REAL,
+    fuente      TEXT,
+    loaded_at   TEXT DEFAULT (datetime('now')),
+    UNIQUE(nemotecnico, fecha)
+);

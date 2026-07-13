@@ -1,5 +1,5 @@
 """
-Backfill de raw_valor_cuota_line (tipo=contable) y raw_cuota_en_circulacion_line
+Backfill de raw_valor_cuota_contable (tipo=contable) y raw_cuota_en_circulacion
 para el fondo TRI, combinando dos fuentes:
 
 1. PDFs disponibles en TRI_EEFF_FONDO_DIR (SharePoint local).

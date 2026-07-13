@@ -13,6 +13,7 @@ import zipfile
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from config import SHAREPOINT_DIR, WORK_DIR
+from tools.path_security import resolve_within
 from tools.sharepoint_paths import CDG_MENSUAL_DIR, CALCULO_TIR_DIR, SALDO_CAJA_DIR
 import openpyxl
 
@@ -398,9 +399,7 @@ def _apply_to_xlsx(filepath: str, modifications: dict) -> None:
 
 
 def _resolve_path(nombre_archivo: str) -> str:
-    if os.path.isabs(nombre_archivo):
-        return nombre_archivo
-    return os.path.join(WORK_DIR, nombre_archivo)
+    return resolve_within(WORK_DIR, nombre_archivo)
 
 
 # ─── Herramientas públicas ────────────────────────────────────────────────────

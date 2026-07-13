@@ -10,6 +10,22 @@
 --    no superseded. Dedup por (nemotecnico, fecha_pago, tipo) tomando el
 --    registro de mayor id (más reciente).
 
+-- La tabla también era creada inline por ingestas históricas. Se formaliza
+-- aquí antes del ALTER para que una DB nueva sea reproducible desde cero.
+CREATE TABLE IF NOT EXISTS raw_dividendo_line (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    fondo_key       TEXT NOT NULL REFERENCES dim_fondo(fondo_key),
+    nemotecnico     TEXT NOT NULL,
+    fecha_pago      TEXT NOT NULL,
+    monto_uf_cuota  REAL,
+    monto_clp_cuota REAL,
+    periodo         TEXT,
+    source_file     TEXT,
+    file_hash       TEXT,
+    loaded_at       TEXT DEFAULT (datetime('now')),
+    superseded_at   TEXT
+);
+
 ALTER TABLE raw_dividendo_line ADD COLUMN tipo TEXT NOT NULL DEFAULT 'dividendo';
 
 CREATE INDEX IF NOT EXISTS idx_dividendo_nemo_fecha_tipo

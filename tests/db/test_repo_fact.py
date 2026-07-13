@@ -38,3 +38,11 @@ def test_upsert_dividendo(tmp_db):
     rows = repo_fact.list_dividendos(tmp_db, "CFITOERI1A")
     assert len(rows) == 1
     assert rows[0]["monto"] == 42.5
+
+
+def test_upsert_dividendo_es_idempotente(tmp_db):
+    repo_fact.upsert_dividendo(tmp_db, "CFITOERI1A", "2026-05-15", 42.5)
+    repo_fact.upsert_dividendo(tmp_db, "CFITOERI1A", "2026-05-15", 50.0)
+    rows = repo_fact.list_dividendos(tmp_db, "CFITOERI1A")
+    assert len(rows) == 1
+    assert rows[0]["monto"] == 50.0

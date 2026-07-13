@@ -52,15 +52,16 @@ def test_rent_roll(tmp_db_path, monkeypatch):
 
 
 def test_cobertura(tmp_db_path, monkeypatch):
+    import json
+
     _patch_conn(monkeypatch, tmp_db_path)
     conn = get_conn_for(tmp_db_path)
     repo_fact.upsert_uf(conn, "2026-03-31", 38000.0)
     conn.close()
 
-    out = q.consultar_db_cobertura()
-    assert "Cobertura" in out
-    assert "uf: 1 filas" in out
-    assert "rent_roll: vacío" in out
+    out = json.loads(q.consultar_db_cobertura())
+    assert out["raw_uf_diaria"]["total_filas"] == 1
+    assert out["raw_rent_roll_line"]["total_filas"] == 0
 
 
 def test_er_y_flujo_vacios(tmp_db_path, monkeypatch):

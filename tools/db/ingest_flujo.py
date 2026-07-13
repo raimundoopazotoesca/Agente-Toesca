@@ -41,9 +41,7 @@ def persist_flujo_lines(
         periodo: Período en formato "YYYY-MM" (ej. "2026-03")
         data: Dict {label: monto_clp}
         tool: Nombre de la herramienta que invoca (ej. "actualizar_noi_immosa")
-        hash_extra: Sufijo para el file_hash. Necesario cuando un mismo archivo
-                    contiene varios períodos (ej. backfill INMOSA), para que
-                    (file_hash, source_row) no colisione entre períodos.
+        hash_extra: Deprecated. Se ignora — el periodo ya diferencia registros.
 
     Returns:
         Cantidad de filas insertadas. Nunca propaga errores: si la DB falla,
@@ -52,9 +50,7 @@ def persist_flujo_lines(
     if not data:
         return 0
     try:
-        fh = _file_hash(src_path)
-        if hash_extra:
-            fh = f"{fh}:{hash_extra}"
+        fh = _file_hash(src_path)  # hash puro; periodo va en su propia columna
         conn = _db_get_conn()
         try:
             run_id = repo_audit.start_ingest_run(

@@ -1,4 +1,4 @@
-"""
+r"""
 Herramientas para archivos en servidor local o unidad de red.
 Accede directamente a rutas locales o de red (\\servidor\carpeta o Z:\carpeta).
 """
@@ -6,6 +6,7 @@ import os
 import shutil
 from datetime import datetime
 from config import LOCAL_FILES_DIR, WORK_DIR
+from tools.path_security import UnsafePathError, resolve_within
 
 
 def _check_dir() -> str | None:
@@ -30,7 +31,7 @@ def list_local_excel_files(subfolder: str = "") -> str:
         return err
 
     try:
-        base = os.path.join(LOCAL_FILES_DIR, subfolder) if subfolder else LOCAL_FILES_DIR
+        base = resolve_within(LOCAL_FILES_DIR, subfolder)
 
         if not os.path.exists(base):
             return f"La subcarpeta '{subfolder}' no existe en el servidor."
@@ -73,16 +74,17 @@ def copy_from_local(filename: str, subfolder: str = "") -> str:
 
     try:
         os.makedirs(WORK_DIR, exist_ok=True)
-        base = os.path.join(LOCAL_FILES_DIR, subfolder) if subfolder else LOCAL_FILES_DIR
-        source = os.path.join(base, filename)
+        source = resolve_within(LOCAL_FILES_DIR, subfolder, filename)
 
         if not os.path.exists(source):
-            return f"Archivo '{filename}' no encontrado en el servidor ({base})."
+            return f"Archivo '{filename}' no encontrado en el servidor ({os.path.dirname(source)})."
 
-        dest = os.path.join(WORK_DIR, filename)
+        dest = resolve_within(WORK_DIR, os.path.basename(filename))
         shutil.copy2(source, dest)
         return f"'{filename}' copiado del servidor al directorio de trabajo: {dest}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al copiar del servidor: {e}"
 
@@ -94,16 +96,18 @@ def save_to_local(filename: str, dest_subfolder: str = "") -> str:
         return err
 
     try:
-        source = os.path.join(WORK_DIR, filename)
+        source = resolve_within(WORK_DIR, filename)
         if not os.path.exists(source):
             return f"'{filename}' no encontrado en el directorio de trabajo."
 
-        dest_dir = os.path.join(LOCAL_FILES_DIR, dest_subfolder) if dest_subfolder else LOCAL_FILES_DIR
+        dest_dir = resolve_within(LOCAL_FILES_DIR, dest_subfolder)
         os.makedirs(dest_dir, exist_ok=True)
 
-        dest = os.path.join(dest_dir, filename)
+        dest = resolve_within(dest_dir, os.path.basename(filename))
         shutil.copy2(source, dest)
         return f"'{filename}' guardado en el servidor: {dest}"
 
+    except UnsafePathError as e:
+        return f"Error: ruta no permitida: {e}"
     except Exception as e:
         return f"Error al guardar en servidor: {e}"
