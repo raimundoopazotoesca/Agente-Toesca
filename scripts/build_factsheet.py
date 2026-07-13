@@ -1,0 +1,1712 @@
+"""Genera factsheet.html — recreación dinámica de la página 1 del fact sheet
+para los 3 fondos (TRI, PT, Apo) con selectores de fondo y período.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections import defaultdict
+from pathlib import Path
+
+DB = Path(__file__).parent.parent / "memory" / "agente_toesca_v2.db"
+OUT = Path(__file__).parent.parent / "factsheet.html"
+
+FONDOS_CFG = {
+    "TRI": {
+        "nombre": "Toesca Rentas Inmobiliarias",
+        "sub": "Fondo de inversión en Liquidación",
+        "series": [
+            {"nemo": "CFITOERI1A", "label": "A"},
+            {"nemo": "CFITOERI1C", "label": "C"},
+            {"nemo": "CFITOERI1I", "label": "I"},
+        ],
+        "has_bursatil": True,
+        "fecha_label": "Fecha Inicio Periodo Liquidación",
+        "fecha_valor": "30 abril 2024",
+        "moneda": "CLP",
+        "duracion": "30 abril 2027 (+ 2 renovaciones automáticas de 1 año c/u)",
+        "cuotas_emitidas": "4.000.000",
+        "objetivo": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias tiene como objetivo invertir "
+            "indirectamente en propiedades destinadas a la renta comercial, principalmente en Chile. "
+            "El Fondo podrá invertir en oficinas, centros comerciales, bodegas y residencias para "
+            "adultos mayores, mediante estrategias Core y Value Added."
+        ),
+        "remuneracion_fija": [
+            ("Serie A", "0,75% + IVA sobre capital pagado"),
+            ("Serie C", "0,50% + IVA sobre capital pagado"),
+            ("Serie WM", "0,45% + IVA sobre capital pagado"),
+            ("Serie I", "0,40% + IVA sobre capital pagado"),
+        ],
+        "remuneracion_variable": [
+            ("Durante la vigencia<br/><span class='rv-sub'>exceso sobre Dividend Yield UF + 5% anual</span>", "A – C – WM", "20% + IVA"),
+            ("Durante la vigencia<br/><span class='rv-sub'>exceso sobre Dividend Yield UF + 5% anual</span>", "I", "15% + IVA"),
+            ("Al momento de liquidación<br/><span class='rv-sub'>exceso sobre TIR UF + 6%</span>", "A – C – WM", "20% + IVA"),
+            ("Al momento de liquidación<br/><span class='rv-sub'>exceso sobre TIR UF + 6%</span>", "I", "15% + IVA"),
+        ],
+        "tickers": [
+            ("Serie A", "TOERIMA CI Equity"),
+            ("Serie C", "TOERI1C CI Equity"),
+            ("Serie I", "TOERIMI CI Equity"),
+        ],
+        "comite": "Eduardo Castillo A.<br/>Roger Magrovejo<br/>Paul Mazoyer R.",
+        "contacto": "distribución@toesca.com",
+        "resumen": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias se constituyó el 11 de mayo del 2017, "
+            "con el objetivo de adquirir propiedades destinadas a la renta comercial en Chile. "
+            "A la fecha de emisión de este informe el Fondo ha realizado ocho inversiones en activos "
+            "inmobiliarios. El Fondo entró en liquidación a partir del 30 de abril del 2024."
+        ),
+        "noticias_template": (
+            "Los Estados Financieros al <span class='auto' data-slot='eeff'>30/06/2025</span> "
+            "se encuentran publicados en la CMF"
+            "<span data-wrap='cmf'> desde el <span class='ed' data-slot='cmf'>—</span></span>."
+            "<span data-wrap='div'> Además, el "
+            "<span class='auto' data-slot='div'>—</span> hubo reparto de dividendos.</span>"
+        ),
+    },
+    "PT": {
+        "nombre": "Toesca Rentas Inmobiliarias PT",
+        "sub": "Fondo de Inversión",
+        "series": [{"nemo": "CFITRIPT-E", "label": "Única"}],
+        "has_bursatil": True,
+        "fecha_label": "Fecha Inicio Operaciones",
+        "fecha_valor": "16 de noviembre de 2017",
+        "moneda": "CLP",
+        "duracion": "15 años (30 julio 2032)",
+        "cuotas_emitidas": "1.800.000",
+        "objetivo": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias PT tiene como objetivo invertir "
+            "indirectamente en la Torre A, el Local 100, ciertos locales comerciales y ciertos "
+            "estacionamientos, los cuales forman parte del conjunto armónico Parque Titanium "
+            "ubicado en Avenida Costanera Sur 2710, comuna de Las Condes."
+        ),
+        "remuneracion_fija": [
+            ("Serie Única", "0,4% + IVA sobre capital pagado"),
+        ],
+        "remuneracion_variable": [
+            ("Al vencimiento<br/><span class='rv-sub'>exceso sobre TIR UF + 6,5% anual</span>", "Única", "15% + IVA"),
+        ],
+        "tickers": [("Serie Única", "TRIPTE CI Equity")],
+        "activos": [
+            ("Torre A S.A.", "Torre A - Parque Titanium", "100%", "19.755"),
+            ("Inmobiliaria Boulevard PT SpA", "Locales Comerciales", "100%", "7.663"),
+        ],
+        "comite": "Gonzalo Urzúa G.<br/>Cristóbal Kaltwasser B.<br/>José Ignacio de Almorzara V.",
+        "contacto": "distribucion@toesca.com",
+        "resumen": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias PT se constituye el 31 de julio "
+            "año 2017 con el único propósito de invertir indirectamente en el portafolio de "
+            "activos del complejo Parque Titanium, los que incluyen la Torre A y el Local 100 "
+            "del condominio Parque Titanium, entre otros."
+        ),
+        "noticias_template": (
+            "Los Estados Financieros al <span class='auto' data-slot='eeff'>30/06/2025</span> "
+            "se encuentran publicados en la CMF"
+            "<span data-wrap='cmf'> desde el <span class='ed' data-slot='cmf'>12 de septiembre de 2025</span></span>."
+            "<span data-wrap='div'> Además, el "
+            "<span class='auto' data-slot='div'>—</span> hubo reparto de dividendos.</span>"
+        ),
+    },
+    "Apo": {
+        "nombre": "Toesca Rentas Inmobiliarias Apoquindo",
+        "sub": "Fondo de Inversión",
+        "series": [{"nemo": "Apo", "label": "Única"}],
+        "has_bursatil": False,
+        "fecha_label": "Fecha Inicio Operaciones",
+        "fecha_valor": "2 de enero de 2019",
+        "moneda": "CLP",
+        "duracion": "10 años (16 noviembre 2028)",
+        "cuotas_emitidas": "2.000.000",
+        "objetivo": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias Apoquindo tiene como objetivo "
+            "invertir indirectamente en los bienes raíces no habitacionales para renta ubicados "
+            "en Avenida Apoquindo 4501 y Avenida Apoquindo 4700, comuna de Las Condes; compuestos "
+            "ambos por oficinas, locales comerciales, estacionamientos y bodegas."
+        ),
+        "remuneracion_fija": [
+            ("Serie Única", "0,5355% + IVA sobre capital pagado"),
+        ],
+        "remuneracion_variable": [
+            ("Anual<br/><span class='rv-sub'>exceso sobre NOI 2024</span>", "Única", "23,8%"),
+        ],
+        "tickers": [("Serie Única", "No transa en bolsa")],
+        "activos": [
+            ("Inmobiliaria Apoquindo S.A.", "Edificio Apoquindo 4700", "100%", "7.151"),
+            ("Inmobiliaria Apoquindo S.A.", "Edificio Apoquindo 4501", "100%", "21.708"),
+        ],
+        "comite": "Eduardo Castillo A.<br/>Aníbal Silva S.<br/>Rodrigo Swett B.",
+        "contacto": "distribución@toesca.com",
+        "resumen": (
+            "El Fondo de Inversión Toesca Rentas Inmobiliarias Apoquindo se constituye el 16 de "
+            "noviembre del año 2018 con el único propósito de invertir indirectamente en la compra "
+            "de los edificios ubicados en Avenida Apoquindo 4501 y Avenida Apoquindo 4700, ambos "
+            "compuestos por oficinas, locales comerciales, estacionamientos y bodegas, que "
+            "comprenden un total de aproximadamente 30.000 m² arrendables."
+        ),
+        "noticias_template": (
+            "Los Estados Financieros al <span class='auto' data-slot='eeff'>30/09/2025</span> "
+            "fueron publicados en la CMF"
+            "<span data-wrap='cmf'> el <span class='ed' data-slot='cmf'>30 de noviembre de 2025</span></span>."
+            "<span data-wrap='div'> Además, el "
+            "<span class='auto' data-slot='div'>—</span> hubo reparto de dividendos.</span>"
+        ),
+    },
+}
+
+
+def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
+    cur = con.cursor()
+    series_nemos = [s["nemo"] for s in cfg["series"]]
+    placeholders = ",".join("?" * len(series_nemos))
+
+    # ---- CONTABLE ----
+    contable = defaultdict(lambda: {"series": {}})
+    for nemo, periodo, precio_clp, fecha, cuotas_rvc in cur.execute(
+        f"SELECT nemotecnico, periodo, precio_clp, fecha, cuotas FROM raw_valor_cuota_contable "
+        f"WHERE nemotecnico IN ({placeholders}) AND (superseded_at IS NULL OR superseded_at='')",
+        series_nemos,
+    ):
+        contable[periodo]["series"].setdefault(nemo, {})["valor_libro_clp"] = precio_clp
+        contable[periodo]["fecha"] = fecha
+        if cuotas_rvc is not None:
+            contable[periodo]["series"][nemo]["cuotas"] = cuotas_rvc
+
+    kpi_contable_map = {
+        "tir_contable_desde_inicio": "tir_desde_inicio",
+        "rent_ytd_contable": "rent_ytd",
+        "tir_contable_u12m": "tir_u12m",
+    }
+    for kpi_db, kpi_out in kpi_contable_map.items():
+        for entkey, periodo, valor in cur.execute(
+            f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+            f"WHERE entidad_key IN ({placeholders}) AND kpi=? AND variante IS NULL",
+            (*series_nemos, kpi_db),
+        ):
+            contable[periodo]["series"].setdefault(entkey, {})[kpi_out] = valor
+    for entkey, periodo, valor in cur.execute(
+        f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+        f"WHERE entidad_key IN ({placeholders}) AND kpi='dy' AND variante='contable'",
+        series_nemos,
+    ):
+        contable[periodo]["series"].setdefault(entkey, {})["dy"] = valor
+    # Apo usa variante 'capital' para dy_amort; TRI/PT usan 'contable'
+    for entkey, periodo, valor in cur.execute(
+        f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+        f"WHERE entidad_key IN ({placeholders}) AND kpi='dy_amort' AND variante IN ('contable','capital')",
+        series_nemos,
+    ):
+        contable[periodo]["series"].setdefault(entkey, {})["dy_amort"] = valor
+    # Cargar cuotas por serie; los períodos pueden no coincidir exactamente con los
+    # períodos contables (e.g., raw_cuota tiene 2018-04 pero contable tiene 2018-03).
+    # Se asigna cada cuota al último período contable <= cuota_periodo, de modo que
+    # cuota de abr-2018 quede en el EEFF de mar-2018.
+    cuotas_by_serie: dict[str, list[tuple[str, float]]] = {}
+    for entkey, periodo, cuotas in cur.execute(
+        f"SELECT nemotecnico, periodo, cuotas FROM raw_cuota_en_circulacion "
+        f"WHERE nemotecnico IN ({placeholders}) AND (superseded_at IS NULL OR superseded_at='') "
+        f"ORDER BY nemotecnico, periodo",
+        series_nemos,
+    ):
+        cuotas_by_serie.setdefault(entkey, []).append((periodo, cuotas))
+
+    contable_periods = sorted(contable.keys())
+    for nemo, cuota_list in cuotas_by_serie.items():
+        for cuota_periodo, cuotas in cuota_list:
+            # Último período contable <= cuota_periodo
+            candidates = [p for p in contable_periods if p <= cuota_periodo]
+            target = candidates[-1] if candidates else (contable_periods[0] if contable_periods else None)
+            if target:
+                # Sobrescribe para quedarnos con la cuota más reciente por período contable
+                contable[target]["series"].setdefault(nemo, {})["cuotas"] = cuotas
+
+    # ---- KPIs a nivel fondo ----
+    fondo_kpi = defaultdict(dict)
+    for kpi in ("ltv", "leverage_financiero", "tasa_promedio", "duration_deuda", "deuda_financiera_neta",
+                "tasa_arriendo_ajustada_contable", "cap_rate_implicito_contable", "ingresos_u12m", "noi_u12m",
+                "ingresos_mes", "noi_mes"):
+        for periodo, valor in cur.execute(
+            "SELECT periodo, valor FROM derived_kpi WHERE entidad_key=? AND kpi=? AND variante IS NULL",
+            (fondo_key, kpi),
+        ):
+            fondo_kpi[periodo][kpi] = valor
+    for periodo, variante, valor in cur.execute(
+        "SELECT periodo, variante, valor FROM derived_kpi WHERE entidad_key=? AND kpi='perfil_vencimiento'",
+        (fondo_key,),
+    ):
+        fondo_kpi[periodo].setdefault("perfil_venc", {})[variante] = valor
+
+    # ---- Balance consolidado ----
+    balance = defaultdict(dict)
+    for periodo, cuenta, monto in cur.execute(
+        "SELECT periodo, cuenta_codigo, SUM(monto_clp) FROM raw_balance_consolidado_line "
+        "WHERE fondo_key=? AND (superseded_at IS NULL OR superseded_at='') "
+        "GROUP BY periodo, cuenta_codigo",
+        (fondo_key,),
+    ):
+        balance[periodo][cuenta] = monto
+
+    # ---- BURSÁTIL ----
+    bursatil = defaultdict(lambda: {"series": {}})
+    if cfg["has_bursatil"]:
+        for nemo, fecha, precio_clp in cur.execute(
+            f"SELECT nemotecnico, fecha, precio_clp FROM raw_valor_cuota_bursatil "
+            f"WHERE nemotecnico IN ({placeholders}) AND fecha IS NOT NULL",
+            series_nemos,
+        ):
+            periodo = fecha[:7]
+            prev = bursatil[periodo]["series"].get(nemo, {})
+            if not prev or fecha > prev.get("_fecha", ""):
+                bursatil[periodo]["series"][nemo] = {"valor_bursatil_clp": precio_clp, "_fecha": fecha}
+                bursatil[periodo]["fecha"] = fecha
+
+        kpi_burs_map = {
+            "tir_bursatil_desde_inicio": "tir_desde_inicio",
+            "rent_ytd_bursatil": "rent_ytd",
+            "tir_bursatil_u12m": "tir_u12m",
+        }
+        for kpi_db, kpi_out in kpi_burs_map.items():
+            for entkey, periodo, valor in cur.execute(
+                f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+                f"WHERE entidad_key IN ({placeholders}) AND kpi=? AND variante IS NULL",
+                (*series_nemos, kpi_db),
+            ):
+                bursatil[periodo]["series"].setdefault(entkey, {})[kpi_out] = valor
+        for entkey, periodo, valor in cur.execute(
+            f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+            f"WHERE entidad_key IN ({placeholders}) AND kpi='dy' AND variante='bursatil'",
+            series_nemos,
+        ):
+            bursatil[periodo]["series"].setdefault(entkey, {})["dy"] = valor
+        for entkey, periodo, valor in cur.execute(
+            f"SELECT entidad_key, periodo, valor FROM derived_kpi "
+            f"WHERE entidad_key IN ({placeholders}) AND kpi='dy_amort' AND variante='bursatil'",
+            series_nemos,
+        ):
+            bursatil[periodo]["series"].setdefault(entkey, {})["dy_amort"] = valor
+
+        for p in bursatil.values():
+            for s in p["series"].values():
+                s.pop("_fecha", None)
+
+    # ---- Gastos del fondo (desde EEFF, por periodo) ----
+    gastos = defaultdict(dict)
+    gasto_cuentas = (
+        "ER.comision_admin",
+        "ER.honorarios_custodia",
+        "ER.otros_gastos",
+        "ER.remun_comite",
+        "ER.costos_transaccion",
+        "ER.total_gastos_operacion",
+    )
+    for periodo, cuenta, monto in cur.execute(
+        f"SELECT periodo, cuenta_codigo_canonical, SUM(monto_clp) FROM raw_eeff_line "
+        f"WHERE fondo_key=? AND cuenta_codigo_canonical IN ({','.join('?'*len(gasto_cuentas))}) "
+        f"AND (superseded_at IS NULL OR superseded_at='') "
+        f"GROUP BY periodo, cuenta_codigo_canonical",
+        (fondo_key.upper(), *gasto_cuentas),
+    ):
+        gastos[periodo][cuenta] = abs(monto) if monto is not None else None
+
+    # ---- UF de cierre por período (para toggle UF / millones de pesos) ----
+    periodos_uf = sorted(set(balance) | set(gastos) | set(fondo_kpi))
+    uf_diaria = cur.execute("SELECT fecha, valor FROM fact_uf ORDER BY fecha").fetchall()
+    uf_por_periodo: dict[str, float] = {}
+    idx = 0
+    ultimo_valor = None
+    for periodo in periodos_uf:
+        limite = periodo + "-31"
+        while idx < len(uf_diaria) and uf_diaria[idx][0] <= limite:
+            ultimo_valor = uf_diaria[idx][1]
+            idx += 1
+        if ultimo_valor is not None:
+            uf_por_periodo[periodo] = ultimo_valor
+
+    # ---- Dividendos ----
+    dividendos = []
+    for nemo, fecha_pago, monto_clp, periodo in cur.execute(
+        f"SELECT nemotecnico, fecha_pago, monto_clp_cuota, periodo FROM raw_dividendo "
+        f"WHERE nemotecnico IN ({placeholders}) AND source_file='cdg_extract.xlsx' "
+        f"AND (superseded_at IS NULL OR superseded_at='') "
+        f"ORDER BY fecha_pago",
+        series_nemos,
+    ):
+        dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
+
+    return {
+        "static": cfg,
+        "contable": dict(sorted(contable.items())),
+        "bursatil": dict(sorted(bursatil.items())),
+        "fondo_kpi": dict(sorted(fondo_kpi.items())),
+        "balance": dict(sorted(balance.items())),
+        "gastos": dict(sorted(gastos.items())),
+        "uf": uf_por_periodo,
+        "dividendos": dividendos,
+    }
+
+
+# Metadata de trazabilidad por KPI. Se sirve al frontend para el modo admin.
+# Placeholders soportados en `sql`: {serie}, {fondo}, {periodo}, {variante}.
+KPI_META = {
+    # ---- Rentabilidad (por serie) ----
+    "tir_desde_inicio": {
+        "label": "Rentabilidad desde el inicio (anualizada)",
+        "verbal": (
+            "IRR mensual sobre flujos desde inicio del fondo hasta el período. "
+            "Contable: (-) capital pagado × valor cuota contable inicial; (+) dividendos + disminuciones; "
+            "(+) al final valor cuota contable × cuotas. Bursátil: usa precios cuota bursátil. "
+            "Anualizada: (1+irr_mensual)^12 − 1."
+        ),
+        "python": (
+            "from scipy.optimize import brentq\n"
+            "def npv(r, flows): return sum(f/(1+r)**i for i,f in enumerate(flows))\n"
+            "irr_m = brentq(lambda r: npv(r, flows), -0.99, 10)\n"
+            "tir_anual = (1 + irr_m)**12 - 1"
+        ),
+        "sources": [
+            "raw_ar_event (aportes/disminuciones/canjes)",
+            "raw_dividendo",
+            "raw_valor_cuota_contable · raw_valor_cuota_bursatil",
+            "raw_cuota_en_circulacion",
+        ],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{serie}' AND kpi='tir_{variante}_desde_inicio'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_tir_desde_inicio)",
+    },
+    "rent_ytd": {
+        "label": "Rentabilidad YTD (anualizada)",
+        "verbal": (
+            "Rentabilidad acumulada desde el 31-dic del año anterior hasta el período, anualizada."
+        ),
+        "python": (
+            "rent_ytd = (1 + irr_ytd_mensual)**12 - 1\n"
+            "# irr_ytd sobre flujos desde 31-dic-(año-1) hasta período seleccionado"
+        ),
+        "sources": [
+            "raw_dividendo (YTD)",
+            "raw_valor_cuota_contable · raw_valor_cuota_bursatil",
+        ],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{serie}' AND kpi='rent_ytd_{variante}'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_rent_ytd)",
+    },
+    "tir_u12m": {
+        "label": "Rentabilidad Últimos 12 meses",
+        "verbal": (
+            "IRR mensual sobre flujos de los 12 meses previos: (-) valor cuota inicial × cuotas; "
+            "(+) dividendos del período; (+) valor cuota final × cuotas. Anualizada."
+        ),
+        "python": "irr_u12m = brentq(lambda r: npv(r, flows_12m), -0.99, 10); tir = (1+irr_u12m)**12 - 1",
+        "sources": ["raw_dividendo (12m)", "raw_valor_cuota_contable · raw_valor_cuota_bursatil"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{serie}' AND kpi='tir_{variante}_u12m'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_tir_u12m)",
+    },
+    "dy": {
+        "label": "Dividend Yield (12 meses)",
+        "verbal": (
+            "Suma de dividendos pagados en los últimos 12 meses dividida por el denominador según variante. "
+            "Contable: valor cuota contable del período. Bursátil: valor cuota bursátil. "
+            "Apoquindo usa 'capital' = capital suscrito por cuota."
+        ),
+        "python": "dy = sum(div_12m_por_cuota) / precio_referencia",
+        "sources": ["raw_dividendo (12m)", "raw_valor_cuota_contable | raw_valor_cuota_bursatil | raw_capital_suscrito"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{serie}' AND kpi='dy'\n"
+            "  AND variante='{variante}' AND periodo='{periodo}'"
+        ),
+        "script": "tools/db/backfill.py (kpi_dy)",
+    },
+    "dy_amort": {
+        "label": "Dividend Yield + Amortización de capital",
+        "verbal": (
+            "Igual que DY pero el numerador suma dividendos + amortizaciones/disminuciones de capital "
+            "por cuota en los últimos 12 meses. Se incluyen refinanciamientos (nunca excluir)."
+        ),
+        "python": "dy_amort = (sum(div_12m) + sum(amort_12m)) / precio_referencia",
+        "sources": ["raw_dividendo", "raw_amortizacion / raw_ar_event", "denominador según fondo"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{serie}' AND kpi='dy_amort'\n"
+            "  AND variante IN ('contable','capital','bursatil') AND periodo='{periodo}'"
+        ),
+        "script": "tools/db/backfill.py (kpi_dy_amort)",
+    },
+    # ---- Endeudamiento (por fondo) ----
+    "leverage_financiero": {
+        "label": "Leverage financiero",
+        "verbal": "Deuda financiera consolidada / patrimonio neto, en UF, a fecha de cierre trimestral.",
+        "python": "leverage = deuda_financiera_uf / patrimonio_neto_uf",
+        "sources": ["raw_saldo_deuda", "raw_balance_consolidado_line (ESF.patrimonio_neto)"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='leverage_financiero'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_leverage_financiero)",
+    },
+    "ltv": {
+        "label": "Loan-to-Value (LTV)",
+        "verbal": "Deuda financiera consolidada / valor de propiedades de inversión, ambos en UF.",
+        "python": "ltv = deuda_financiera_uf / propiedades_inversion_uf",
+        "sources": ["raw_saldo_deuda", "raw_balance_consolidado_line (ESF.propiedades_inversion)"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='ltv'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_ltv)",
+    },
+    "tasa_promedio": {
+        "label": "Tasa promedio ponderada de la deuda",
+        "verbal": "Promedio ponderado de tasas de créditos vigentes por saldo insoluto UF.",
+        "python": "tasa = sum(saldo_uf * tasa) / sum(saldo_uf)  # sobre créditos VIGENTES",
+        "sources": ["dim_credito (estado='VIGENTE')", "raw_saldo_deuda"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='tasa_promedio'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_tasa_promedio)",
+    },
+    "duration_deuda": {
+        "label": "Duration de deuda (años)",
+        "verbal": (
+            "Metodología Toesca: ∑ (saldo_i × años_al_vencimiento_i) / ∑ saldo_i sobre créditos vigentes."
+        ),
+        "python": "duration = sum(saldo * years_to_maturity) / sum(saldo)",
+        "sources": ["dim_credito (fechas y saldos)", "raw_saldo_deuda"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='duration_deuda'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_duration_deuda)",
+    },
+    "deuda_financiera_neta": {
+        "label": "Deuda financiera neta",
+        "verbal": "Saldo insoluto consolidado de créditos vigentes menos efectivo y equivalente, en UF.",
+        "python": "dfn = deuda_financiera_uf - efectivo_uf",
+        "sources": ["raw_saldo_deuda", "raw_balance_consolidado_line (ESF.efectivo)"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='deuda_financiera_neta'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "tools/db/backfill.py (kpi_deuda_financiera_neta)",
+    },
+    "ingresos_u12m": {
+        "label": "Ingresos U12M",
+        "verbal": "Ingresos por arriendo de los últimos 12 meses, en UF, consolidado a nivel fondo.",
+        "python": "ingresos_u12m = sum(monto_uf where seccion='INGRESOS_OPERACION', ultimos 12 meses)",
+        "sources": ["raw_er_activo_line"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='ingresos_u12m'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "noi_u12m": {
+        "label": "NOI U12M",
+        "verbal": "Net Operating Income (ingresos - gastos operacionales) de los últimos 12 meses, en UF, consolidado a nivel fondo.",
+        "python": "noi_u12m = sum(monto_uf, es_operacional=1, ultimos 12 meses)",
+        "sources": ["raw_er_activo_line"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='noi_u12m'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "ingresos_mes": {
+        "label": "Ingresos del mes",
+        "verbal": "Ingresos por arriendo del mes de cierre del período, en UF, consolidado a nivel fondo.",
+        "python": "ingresos_mes = sum(monto_uf where seccion='INGRESOS_OPERACION', periodo=mes)",
+        "sources": ["raw_er_activo_line"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='ingresos_mes'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "noi_mes": {
+        "label": "NOI del mes",
+        "verbal": "Net Operating Income (ingresos - gastos operacionales) del mes de cierre del período, en UF, consolidado a nivel fondo.",
+        "python": "noi_mes = sum(monto_uf, es_operacional=1, periodo=mes)",
+        "sources": ["raw_er_activo_line"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='noi_mes'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "tasa_arriendo_ajustada_contable": {
+        "label": "Tasa de Arriendo Ajustada Contable",
+        "verbal": "Ingresos U12M / (patrimonio contable + deuda financiera - (caja - caja mínima)), todo en UF.",
+        "python": "tasa = ingresos_u12m / (patrimonio_uf + deuda_uf - (caja_uf - caja_minima_uf))",
+        "sources": ["raw_er_activo_line", "raw_valor_cuota_contable", "raw_saldo_deuda", "raw_caja",
+                    "derived_kpi (caja_minima = % de ESF.total_activo)"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='tasa_arriendo_ajustada_contable'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "cap_rate_implicito_contable": {
+        "label": "Cap Rate Implícito Contable",
+        "verbal": "NOI U12M / (patrimonio contable + deuda financiera - (caja - caja mínima)), todo en UF.",
+        "python": "cap_rate = noi_u12m / (patrimonio_uf + deuda_uf - (caja_uf - caja_minima_uf))",
+        "sources": ["raw_er_activo_line", "raw_valor_cuota_contable", "raw_saldo_deuda", "raw_caja",
+                    "derived_kpi (caja_minima = % de ESF.total_activo)"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='cap_rate_implicito_contable'\n"
+            "  AND periodo='{periodo}' AND variante IS NULL"
+        ),
+        "script": "cálculo manual, consolidado en derived_kpi (2026-07-09)",
+    },
+    "perfil_vencimiento": {
+        "label": "Perfil de vencimiento de deuda",
+        "verbal": "Distribución % del saldo insoluto de créditos vigentes por tramo de años al vencimiento.",
+        "python": "pct[tramo] = sum(saldo where tramo) / sum(saldo)",
+        "sources": ["dim_credito", "raw_saldo_deuda"],
+        "sql": (
+            "SELECT valor FROM derived_kpi\n"
+            "WHERE entidad_key='{fondo}' AND kpi='perfil_vencimiento'\n"
+            "  AND variante='{variante}' AND periodo='{periodo}'"
+        ),
+        "script": "tools/db/backfill.py (kpi_perfil_vencimiento)",
+    },
+    # ---- Balance consolidado (raw) ----
+    "ESF.efectivo": {"label": "Efectivo y Efectivo Equivalente", "raw": True},
+    "ESF.otros_activos_corrientes": {"label": "Otros Activos Corrientes", "raw": True},
+    "ESF.propiedades_inversion": {"label": "Propiedades de Inversión", "raw": True},
+    "ESF.otros_activos_no_corrientes": {"label": "Otros Activos No Corrientes", "raw": True},
+    "ESF.total_activo": {"label": "Total Activos", "raw": True},
+    "ESF.prestamos": {"label": "Préstamos Bancarios", "raw": True},
+    "ESF.pasivos_impuestos_diferidos": {"label": "Pasivos por Impuestos Diferidos", "raw": True},
+    "ESF.otros_pasivos": {"label": "Otros Pasivos", "raw": True},
+    "ESF.patrimonio_neto": {"label": "Patrimonio Neto", "raw": True},
+    "ESF.total_pasivo_patrimonio": {"label": "Total Pasivos + Patrimonio", "raw": True},
+    # ---- Gastos (raw EEFF ER) ----
+    "ER.comision_admin": {"label": "Comisión de administración", "raw": True, "er": True},
+    "ER.honorarios_custodia": {"label": "Honorarios de custodia", "raw": True, "er": True},
+    "ER.remun_comite": {"label": "Remuneración comité", "raw": True, "er": True},
+    "ER.otros_gastos": {"label": "Otros gastos no recurrentes", "raw": True, "er": True},
+    "ER.total_gastos_operacion": {"label": "Total gastos de operación", "raw": True, "er": True},
+    "ER.recurrentes": {
+        "label": "Gastos recurrentes",
+        "raw": True, "er": True,
+        "verbal_extra": "= honorarios_custodia + remun_comite",
+    },
+}
+
+
+def _raw_meta(cuenta_codigo: str) -> dict:
+    """Trace record for raw balance/ER accounts fetched by SUM(monto_clp)."""
+    m = KPI_META.get(cuenta_codigo, {})
+    is_er = m.get("er", False)
+    tabla = "raw_eeff_line" if is_er else "raw_balance_consolidado_line"
+    col = "cuenta_codigo_canonical" if is_er else "cuenta_codigo"
+    return {
+        "label": m.get("label", cuenta_codigo),
+        "verbal": (
+            f"Suma de líneas de {tabla} para el fondo y período, con {col} = '{cuenta_codigo}'. "
+            + m.get("verbal_extra", "")
+        ).strip(),
+        "python": f"SUM(monto_clp) FROM {tabla} WHERE {col}='{cuenta_codigo}' AND fondo_key=? AND periodo=?",
+        "sources": [tabla],
+        "sql": (
+            f"SELECT SUM(monto_clp) FROM {tabla}\n"
+            f"WHERE fondo_key='{{fondo}}' AND {col}='{cuenta_codigo}'\n"
+            f"  AND periodo='{{periodo}}' AND (superseded_at IS NULL OR superseded_at='')"
+        ),
+        "script": "tools/db/ingest_eeff_pt.py · ingest_eeff_tri_series.py",
+    }
+
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Toesca · Fact Sheets dinámicos</title>
+<style>
+  :root {
+    --green: #00B27A;
+    --green-soft: #C8ECD8;
+    --green-header: #A6DEC1;
+    --text: #202020;
+    --border: #A6A6A6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: var(--text);
+    margin: 0;
+    background: #F4F4F4;
+    font-size: 12px;
+  }
+  .page {
+    max-width: 1180px;
+    margin: 12px auto;
+    background: #fff;
+    padding: 24px 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  header {
+    background: linear-gradient(180deg,#3d3d3d,#2b2b2b);
+    color: #fff;
+    padding: 22px 32px 18px;
+    margin: -24px -32px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  header h1 { margin: 0; font-size: 30px; font-weight: 300; letter-spacing: 0.5px; }
+  header h2 { margin: 4px 0 0; font-size: 12px; font-weight: 400; color: #dedede;
+              font-variant: small-caps; letter-spacing: 1px; }
+  header .logo { height: 32px; width: auto; display: block; }
+  .month-bar { background: #fff; padding: 8px 0 4px;
+               font-weight: 700; font-size: 14px; letter-spacing: 1px;
+               border-bottom: 2px solid var(--green);
+               display: flex; align-items: center; justify-content: space-between; }
+  .month-bar #btn-admin { float: none; margin: 0; }
+  .month-bar > span { text-align: right; }
+  .selectors {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    padding: 14px 18px; background: #F0F8F4;
+    border-left: 3px solid var(--green); margin: 10px 0 16px;
+  }
+  .selectors .field { display:flex; flex-direction:column; gap:6px; }
+  .selectors .field-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.8px;
+    text-transform: uppercase; color: #4a6b5c;
+  }
+  .selectors .fund-btns, .selectors .year-btns, .selectors .q-btns { display:flex; gap:4px; }
+  .selectors .fund-btn {
+    padding: 6px 16px; border: 1px solid var(--green);
+    background: #fff; cursor: pointer; font-weight: 600;
+    color: var(--green); border-radius: 3px;
+    transition: background-color 150ms ease, color 150ms ease;
+    font-size: 12px;
+  }
+  .selectors .fund-btn:hover { background: #E6F5EC; }
+  .selectors .fund-btn.active { background: var(--green); color:#fff; }
+  .selectors .year-btns {
+    max-width: 340px; overflow-x: auto; padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+  .selectors .year-btn {
+    padding: 5px 10px; border: 1px solid transparent;
+    background: transparent; cursor: pointer;
+    font-weight: 600; color: #555; border-radius: 3px;
+    font-size: 12px; font-variant-numeric: tabular-nums;
+    transition: background-color 150ms ease, color 150ms ease;
+    flex-shrink: 0;
+  }
+  .selectors .year-btn:hover { background: #E6F5EC; color: var(--green); }
+  .selectors .year-btn.active {
+    background: #fff; color: var(--text);
+    border-color: var(--green);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .selectors .q-group {
+    display: inline-flex; background: #fff;
+    border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .selectors .q-btn {
+    padding: 6px 12px; border: none; background: #fff;
+    cursor: pointer; font-weight: 600; font-size: 12px;
+    color: #555; min-width: 42px;
+    transition: background-color 150ms ease, color 150ms ease;
+    border-right: 1px solid #e5e5e5;
+  }
+  .selectors .q-btn:last-child { border-right: none; }
+  .selectors .q-btn:hover:not(:disabled) { background: #E6F5EC; color: var(--green); }
+  .selectors .q-btn.active { background: var(--green); color: #fff; }
+  .selectors .q-btn:disabled {
+    color: #c8c8c8; cursor: not-allowed; background: #fafafa;
+  }
+  .cols { display: grid; grid-template-columns: 30% 1fr; gap: 24px; }
+  .section-title {
+    background: var(--green-header); color: #000;
+    font-weight: 700; font-size: 11px;
+    padding: 4px 8px; text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 10px 0 6px;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+  table th, table td {
+    padding: 6px 8px; font-size: 11px; line-height: 1.45;
+    border-bottom: 1px solid #E6E6E6; text-align: right;
+  }
+  table th:first-child, table td:first-child { text-align: left; }
+  table th {
+    background: #F6F9F7; color: #33413b; font-weight: 700;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--green);
+  }
+  table tbody tr { transition: background-color 120ms ease; }
+  table tbody tr:nth-child(even) { background: #FAFBFA; }
+  table tbody tr:hover { background: #EAF7F0; }
+  table tbody tr:last-child td { border-bottom: 1px solid #C6C6C6; }
+  table tbody tr.row-total, table tbody tr.row-total:nth-child(even) {
+    background: var(--green-soft); font-weight: 700; color: #0d3a29;
+  }
+  table tbody tr.row-total:hover { background: #B4E5CC; }
+  table tbody tr.row-total td { border-bottom: 2px solid var(--green); }
+
+  .kv { border-collapse: collapse; }
+  .kv tr { border-bottom: 1px solid #EDEDED; transition: background-color 120ms ease; }
+  .kv tr:last-child { border-bottom: none; }
+  .kv tr:nth-child(even) { background: #FAFBFA; }
+  .kv tr:hover { background: #EAF7F0; }
+  .kv td { padding: 5px 6px; font-size: 11px; }
+  .kv td:first-child { color: #464646; font-weight: 500; }
+  .kv td:last-child {
+    text-align: right; font-weight: 700; color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+  }
+  p, ul { font-size: 11px; line-height: 1.4; margin: 4px 0; }
+  ul { padding-left: 16px; }
+  .small { font-size: 10px; color: #555; }
+  .placeholder { color: #a0a0a0; font-style: italic; }
+  .hidden { display: none !important; }
+  .admin-toggle {
+    float: right; font-size: 10px; padding: 2px 8px; margin-top: -2px;
+    border: 1px solid var(--green); background: #fff; color: var(--green);
+    border-radius: 3px; cursor: pointer; text-transform: none;
+  }
+  .admin-toggle.on { background: var(--green); color: #fff; }
+  .rv-table td:first-child { text-align: left; }
+  .rv-table td:nth-child(2) { text-align: center; color: #464646; font-weight: 500; white-space: nowrap; }
+  .rv-table td:last-child {
+    text-align: right; font-weight: 700; color: var(--green);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .rv-table .rv-sub { display: block; font-weight: 400; font-style: italic; color: #7a7a7a; font-size: 10px; margin-top: 1px; }
+  span.ed, span.auto { padding: 0 2px; }
+  input.date-input-inline {
+    font: inherit; font-size: 11px; padding: 2px 6px;
+    border: 1px solid var(--green); border-radius: 4px;
+    background: #fff; color: var(--text); cursor: pointer;
+    vertical-align: baseline; line-height: 1.4;
+  }
+  input.date-input-inline:hover { background: var(--green-soft); }
+  input.date-input-inline:focus { outline: 2px solid var(--green); outline-offset: 1px; }
+
+  /* Modo admin: celdas trazables */
+  body.admin [data-trace] {
+    cursor: help;
+    border-bottom: 1px dotted #0088cc;
+    background: rgba(0,136,204,0.04);
+  }
+  body.admin [data-trace]:hover { background: rgba(0,136,204,0.14); }
+
+  /* Modal trazabilidad */
+  .trace-modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: none; align-items: flex-start; justify-content: center;
+    z-index: 1000; padding: 40px 16px;
+  }
+  .trace-modal-bg.open { display: flex; }
+  .trace-modal {
+    background: #fff; max-width: 780px; width: 100%;
+    max-height: calc(100vh - 80px); overflow-y: auto;
+    border-radius: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    padding: 20px 24px;
+    font-size: 12px; line-height: 1.5;
+  }
+  .trace-modal h3 { margin: 0 0 4px; font-size: 16px; color: var(--text); }
+  .trace-modal .trace-sub { color: #666; font-size: 11px; margin-bottom: 12px; }
+  .trace-modal .trace-value {
+    display: inline-block; padding: 4px 10px; background: var(--green-soft);
+    border-radius: 3px; font-weight: 700; font-size: 14px;
+    font-variant-numeric: tabular-nums; margin-bottom: 12px;
+  }
+  .trace-modal h4 {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: #4a6b5c; margin: 14px 0 4px; border-bottom: 1px solid #ddd;
+    padding-bottom: 3px;
+  }
+  .trace-modal p { margin: 4px 0; }
+  .trace-modal pre {
+    background: #f6f8f7; padding: 10px 12px; border-radius: 4px;
+    font-size: 11px; overflow-x: auto; margin: 4px 0;
+    border-left: 3px solid var(--green);
+    font-family: "Consolas","Monaco",monospace;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .trace-modal ul { padding-left: 18px; margin: 4px 0; }
+  .trace-modal .trace-close {
+    float: right; border: none; background: transparent; font-size: 22px;
+    cursor: pointer; color: #888; line-height: 1; padding: 0 4px;
+  }
+  .trace-modal .trace-close:hover { color: #000; }
+  .trace-modal .trace-inputs td { padding: 3px 8px; font-size: 11px; border-bottom: 1px solid #eee; }
+  .trace-modal .trace-inputs td:first-child { color: #555; }
+  .trace-modal .trace-inputs td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1 id="hdr-nombre">—</h1>
+      <h2 id="hdr-sub">—</h2>
+    </div>
+    <img class="logo" src="data:image/png;base64,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" alt="Toesca">
+  </header>
+  <div class="month-bar">
+    <button type="button" id="btn-admin" class="admin-toggle" title="Modo admin: click en cualquier número para ver cómo se calculó, y editar fechas de Noticias">✎ Admin</button>
+    <span id="month-bar">—</span>
+  </div>
+
+  <div class="selectors">
+    <div class="field">
+      <span class="field-label">Fondo</span>
+      <div class="fund-btns" id="fund-btns"></div>
+    </div>
+    <div class="field">
+      <span class="field-label">Año</span>
+      <div class="year-btns" id="year-btns" role="tablist" aria-label="Seleccionar año"></div>
+    </div>
+    <div class="field">
+      <span class="field-label">Trimestre</span>
+      <div class="q-group" id="q-btns" role="tablist" aria-label="Seleccionar trimestre"></div>
+    </div>
+    <select id="sel-periodo" style="display:none" aria-hidden="true"></select>
+  </div>
+
+  <div class="cols">
+    <!-- Columna izquierda -->
+    <div>
+      <div class="section-title">El Fondo</div>
+      <table class="kv" id="tbl-elfondo"></table>
+
+      <div class="section-title">Valor Cuota Libro</div>
+      <table id="tbl-vcl"><thead><tr id="tbl-vcl-thead"></tr></thead><tbody></tbody></table>
+
+      <div id="wrap-vcb">
+        <div class="section-title">Valor Cuota Bursátil</div>
+        <table id="tbl-vcb"><thead><tr id="tbl-vcb-thead"></tr></thead><tbody></tbody></table>
+      </div>
+
+      <div class="section-title">Objetivo</div>
+      <p id="txt-objetivo">—</p>
+
+      <div class="section-title">Remuneración Fija Anual</div>
+      <table class="kv" id="tbl-remfija"></table>
+
+      <div class="section-title">Remuneración Variable</div>
+      <table class="rv-table" id="tbl-remvar">
+        <thead><tr><th>Condición</th><th>Serie</th><th>Tasa</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <div id="wrap-tickers">
+        <div class="section-title">Ticker Bloomberg</div>
+        <table class="kv" id="tbl-tickers"></table>
+      </div>
+
+      <div class="section-title">Comité de Vigilancia</div>
+      <p id="txt-comite">—</p>
+
+      <div class="section-title">Contacto</div>
+      <p id="txt-contacto">—</p>
+    </div>
+
+    <!-- Columna derecha -->
+    <div>
+      <div class="section-title">Resumen</div>
+      <p id="txt-resumen">—</p>
+
+      <div class="section-title">Noticias</div>
+      <p id="txt-noticias">—</p>
+
+      <div class="section-title">Balance Consolidado <span id="bal-fecha" style="font-weight:400;text-transform:none">— (en miles de pesos)</span>
+        <button type="button" id="btn-unit-balance" class="admin-toggle" title="Cambiar unidad monetaria de esta tabla">UF ⇄ MM$</button>
+      </div>
+      <table id="tbl-balance">
+        <tbody>
+          <tr><td>Efectivo y Efectivo Equivalente</td><td id="bal-efectivo">—</td>
+              <td>Préstamos Bancarios</td><td id="bal-prestamos">—</td></tr>
+          <tr><td>Otros Activos Corrientes</td><td id="bal-otros-ac">—</td>
+              <td>Pasivos por Impuestos Diferidos</td><td id="bal-imp-dif">—</td></tr>
+          <tr><td>Propiedades de Inversión</td><td id="bal-pi">—</td>
+              <td>Otros Pasivos</td><td id="bal-otros-p">—</td></tr>
+          <tr><td>Otros Activos No Corrientes</td><td id="bal-otros-anc">—</td>
+              <td>Patrimonio</td><td id="bal-patrimonio">—</td></tr>
+          <tr class="row-total">
+              <td>Total Activos</td><td id="bal-total-a">—</td>
+              <td>Total Pasivos + Patrimonio</td><td id="bal-total-pp">—</td></tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">Gastos del Fondo <span id="gastos-fecha" style="font-weight:400;text-transform:none">— (en miles de pesos)</span>
+        <button type="button" id="btn-unit-gastos" class="admin-toggle" title="Cambiar unidad monetaria de esta tabla">UF ⇄ MM$</button>
+      </div>
+      <table>
+        <tbody>
+          <tr><td>Comisión de administración</td><td id="g-admin">—</td></tr>
+          <tr><td>Gastos recurrentes</td><td id="g-recur">—</td></tr>
+          <tr><td>Otros gastos no recurrentes</td><td id="g-otros">—</td></tr>
+          <tr class="row-total"><td>Total de Gastos</td><td id="g-total">—</td></tr>
+        </tbody>
+      </table>
+
+      <div id="wrap-activos">
+        <div class="section-title">Activos del Fondo</div>
+        <table id="tbl-activos">
+          <thead><tr><th>Inversión</th><th>Activo Subyacente</th><th>Participación</th><th>GLA (m²)</th></tr></thead>
+          <tbody id="tbl-activos-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title">Rentabilidad del Fondo (en UF)</div>
+      <table id="tbl-rent"><thead id="tbl-rent-thead"></thead><tbody></tbody></table>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div class="section-title">Endeudamiento Consolidado (en UF)</div>
+          <table class="kv">
+            <tr><td>Leverage</td><td id="fld-leverage">—</td></tr>
+            <tr><td>LTV</td><td id="fld-ltv">—</td></tr>
+            <tr><td>Tasa Promedio</td><td id="fld-tasa">—</td></tr>
+            <tr><td>Duration (años)</td><td id="fld-duration">—</td></tr>
+            <tr><td>Deuda Financiera Neta <span id="fld-dfn-unit" style="font-weight:400"></span>
+              <button type="button" id="btn-unit-dfn" class="admin-toggle" style="float:none;margin-left:4px;padding:0 4px" title="Cambiar unidad monetaria de este campo">⇄</button>
+            </td><td id="fld-dfn">—</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="section-title">Perfil Vencimiento Deuda</div>
+          <table class="kv">
+            <tr><td>0-3 años</td><td id="fld-pv-03">—</td></tr>
+            <tr><td>3-7 años</td><td id="fld-pv-37">—</td></tr>
+            <tr><td>7-10 años</td><td id="fld-pv-710">—</td></tr>
+            <tr><td>&gt;10 años</td><td id="fld-pv-10">—</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-title">Otros Indicadores (en UF)</div>
+      <table id="tbl-otros"><thead id="tbl-otros-thead"></thead><tbody id="tbl-otros-tbody"></tbody></table>
+
+      <div id="wrap-repartos">
+        <div class="section-title">Repartos Últimos 12 Meses <span style="font-weight:400;text-transform:none">(Pesos por cuota)</span></div>
+        <table id="tbl-rep"><thead><tr id="tbl-rep-thead"></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <p class="small" style="text-align:center;margin-top:20px;color:#888">
+    Apoquindo 3885, Piso 22, Las Condes · Tel. +562 26462000 · www.toesca.com
+  </p>
+</div>
+
+<!-- Modal trazabilidad (modo admin) -->
+<div id="trace-modal-bg" class="trace-modal-bg" aria-hidden="true">
+  <div class="trace-modal" role="dialog" aria-modal="true" aria-labelledby="trace-title">
+    <button type="button" class="trace-close" id="trace-close" aria-label="Cerrar">×</button>
+    <h3 id="trace-title">—</h3>
+    <div class="trace-sub" id="trace-sub">—</div>
+    <div class="trace-value" id="trace-value">—</div>
+    <h4>Fórmula</h4>
+    <p id="trace-verbal">—</p>
+    <h4>Código Python</h4>
+    <pre id="trace-python">—</pre>
+    <h4>Query SQL ejecutada</h4>
+    <pre id="trace-sql">—</pre>
+    <h4>Inputs concretos</h4>
+    <table class="trace-inputs" id="trace-inputs" style="width:100%"><tbody></tbody></table>
+    <h4>Tablas fuente</h4>
+    <ul id="trace-sources"></ul>
+    <h4>Script</h4>
+    <p id="trace-script" style="color:#555;font-family:monospace;font-size:11px">—</p>
+  </div>
+</div>
+
+<script>
+const FUNDS = __DATA_JSON__;
+const KPI_META = __KPI_META_JSON__;
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+function mesEspanol(p){ if(!p) return ""; const [y,m]=p.split("-"); return MESES[parseInt(m,10)-1]+" "+y; }
+function fmtQ(p){
+  if(!p) return "";
+  const [y,m] = p.split("-");
+  const mm = parseInt(m,10);
+  const qMap = {3:"1Q",6:"2Q",9:"3Q",12:"4Q"};
+  return (qMap[mm] ? qMap[mm]+" "+y : mesEspanol(p));
+}
+function periodoToYQ(p){
+  const [y,m] = p.split("-"); const mm = parseInt(m,10);
+  const q = {3:1,6:2,9:3,12:4}[mm] || null;
+  return { year: y, q: q, month: mm };
+}
+// ---- Trazabilidad admin: marcar celdas con metadata para modal ----
+function attachTrace(el, kpi, ctx){
+  if (!el || !kpi) return;
+  el.setAttribute("data-trace", "1");
+  el.setAttribute("data-kpi", kpi);
+  if (ctx.fondo) el.setAttribute("data-fondo", ctx.fondo);
+  if (ctx.periodo) el.setAttribute("data-periodo", ctx.periodo);
+  if (ctx.serie) el.setAttribute("data-serie", ctx.serie);
+  if (ctx.variante) el.setAttribute("data-variante", ctx.variante);
+  if (ctx.raw_value != null) el.setAttribute("data-raw", ctx.raw_value);
+}
+
+function renderTraceModal(el){
+  const kpi = el.getAttribute("data-kpi");
+  const meta = KPI_META[kpi];
+  if (!meta) return;
+  const fondo = el.getAttribute("data-fondo") || "";
+  const periodo = el.getAttribute("data-periodo") || "";
+  const serie = el.getAttribute("data-serie") || fondo;
+  const variante = el.getAttribute("data-variante") || "";
+  const raw = el.getAttribute("data-raw");
+
+  document.getElementById("trace-title").textContent = meta.label || kpi;
+  const subParts = [];
+  if (fondo) subParts.push("Fondo: " + fondo);
+  if (serie && serie !== fondo) subParts.push("Serie: " + serie);
+  if (variante) subParts.push("Variante: " + variante);
+  if (periodo) subParts.push("Período: " + mesEspanol(periodo));
+  document.getElementById("trace-sub").textContent = subParts.join(" · ");
+
+  document.getElementById("trace-value").textContent = el.textContent.trim();
+  document.getElementById("trace-verbal").textContent = meta.verbal || "(sin descripción)";
+  document.getElementById("trace-python").textContent = meta.python || "—";
+  const sqlRaw = meta.sql || "—";
+  document.getElementById("trace-sql").textContent = sqlRaw
+    .replace(/\{fondo\}/g, fondo)
+    .replace(/\{serie\}/g, serie)
+    .replace(/\{periodo\}/g, periodo)
+    .replace(/\{variante\}/g, variante || "NULL");
+
+  // Inputs concretos
+  const inputsTbody = document.querySelector("#trace-inputs tbody");
+  const rows = [];
+  if (raw !== null && raw !== "") rows.push(["Valor almacenado (raw)", Number(raw).toLocaleString("es-CL",{maximumFractionDigits:6})]);
+  if (fondo) rows.push(["fondo_key", fondo]);
+  if (serie && serie !== fondo) rows.push(["entidad_key (serie)", serie]);
+  if (periodo) rows.push(["periodo", periodo]);
+  if (variante) rows.push(["variante", variante]);
+  if (meta.raw && fondo) {
+    const F = FUNDS[fondo];
+    const uf = F ? ufCierre(F, periodo) : null;
+    if (uf) rows.push(["UF de cierre usado en conversión", uf.toLocaleString("es-CL",{maximumFractionDigits:2})]);
+  }
+  inputsTbody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+  const ulSrc = document.getElementById("trace-sources");
+  ulSrc.innerHTML = (meta.sources || []).map(s => `<li>${s}</li>`).join("") || "<li>—</li>";
+  document.getElementById("trace-script").textContent = meta.script || "—";
+
+  document.getElementById("trace-modal-bg").classList.add("open");
+}
+
+function closeTraceModal(){
+  document.getElementById("trace-modal-bg").classList.remove("open");
+}
+
+function fmtCLP(v){ if(v==null||isNaN(v)) return "—"; return "$"+Math.round(v).toLocaleString("es-CL"); }
+function fmtMiles(v){ if(v==null||isNaN(v)) return "—"; return Math.round(v/1000).toLocaleString("es-CL"); }
+function fmtPct(v,d=1){ if(v==null||isNaN(v)) return "—"; return (v*100).toFixed(d).replace(".",",")+"%"; }
+function fmtNum(v,d=1){ if(v==null||isNaN(v)) return "—"; return Number(v).toFixed(d).replace(".",","); }
+function fmtEnteroMiles(v){ if(v==null||isNaN(v)) return "—"; return Math.round(v).toLocaleString("es-CL"); }
+function fmtFechaCorta(iso){ if(!iso) return ""; const p=iso.split("-"); return p[2]+"-"+p[1]+"-"+p[0]; }
+function fmtFechaLarga(iso){
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-").map(Number);
+  return d+" de "+MESES[m-1].toLowerCase()+" de "+y;
+}
+
+// ---- Toggle UF / millones de pesos, independiente por tabla ----
+// unitState: { balance: 'uf'|'clp', gastos: 'uf'|'clp', dfn: 'uf'|'clp' }
+const unitState = {
+  balance: localStorage.getItem("factsheet_unit_balance") || "uf",
+  gastos: localStorage.getItem("factsheet_unit_gastos") || "uf",
+  dfn: localStorage.getItem("factsheet_unit_dfn") || "uf",
+};
+function ufCierre(F, periodo){
+  if(!periodo || !F.uf) return null;
+  const keys = Object.keys(F.uf).sort();
+  const lower = keys.filter(k => k <= periodo);
+  const k = lower.length ? lower[lower.length-1] : (keys.length ? keys[0] : null);
+  return k!=null ? F.uf[k] : null;
+}
+function unitLabel(tabla){ return unitState[tabla]==="uf" ? "UF" : "millones de pesos"; }
+// v en CLP (Balance, Gastos)
+function fmtMontoClp(v, periodo, F, tabla){
+  if(v==null||isNaN(v)) return "—";
+  if(unitState[tabla]==="uf"){
+    const uf = ufCierre(F, periodo);
+    return uf ? Math.round(v/uf).toLocaleString("es-CL") : "—";
+  }
+  return (v/1e6).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1});
+}
+// v en UF (Deuda Financiera Neta)
+function fmtMontoUf(v, periodo, F, tabla){
+  if(v==null||isNaN(v)) return "—";
+  if(unitState[tabla]==="uf") return Math.round(v).toLocaleString("es-CL");
+  const uf = ufCierre(F, periodo);
+  return uf ? (v*uf/1e6).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1}) : "—";
+}
+function toggleUnit(tabla){
+  unitState[tabla] = unitState[tabla]==="uf" ? "clp" : "uf";
+  localStorage.setItem("factsheet_unit_"+tabla, unitState[tabla]);
+  if (typeof currentFund !== "undefined" && currentFund) render();
+}
+
+// ---- Noticias: fechas editables por admin, persistidas en localStorage ----
+const NOTICIAS_STORE_KEY = "factsheet_noticias_overrides";
+function loadNoticiasOverrides(){
+  try { return JSON.parse(localStorage.getItem(NOTICIAS_STORE_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveNoticiasOverride(fondo, slot, value){
+  const store = loadNoticiasOverrides();
+  store[fondo] = store[fondo] || {};
+  store[fondo][slot] = value;
+  localStorage.setItem(NOTICIAS_STORE_KEY, JSON.stringify(store));
+}
+function renderNoticias(fondo, S, fechaEeffRaw, fechaDivRaw, cmfDefaultISO){
+  const el = document.getElementById("txt-noticias");
+  if (!S.noticias_template){ el.innerHTML = "—"; return; }
+  el.innerHTML = S.noticias_template;
+  const overrides = loadNoticiasOverrides()[fondo] || {};
+  const AUTO = {
+    eeff: fechaEeffRaw ? fmtFechaCorta(fechaEeffRaw) : "—",
+    div: fechaDivRaw ? fmtFechaCorta(fechaDivRaw) : "—",
+  };
+  const isAdmin = document.body.classList.contains("admin");
+  // Cláusula de dividendos: oculta siempre que no haya reparto en el trimestre exhibido
+  // (es automática, no editable, así que no hay razón para forzarla en modo admin).
+  const updateWrap = (slot, textVal) => {
+    const wrap = el.querySelector('[data-wrap="'+slot+'"]');
+    if (!wrap) return;
+    const empty = !textVal || textVal.trim() === "—";
+    wrap.style.display = empty ? "none" : "";
+  };
+  el.querySelectorAll("span.ed, span.auto").forEach(span => {
+    const slot = span.dataset.slot;
+    if (slot === "eeff" || slot === "div"){
+      // Fecha de EEFF y de repartos: se derivan de la data (contable / raw_dividendo), no editable
+      span.textContent = AUTO[slot];
+      span.contentEditable = "false";
+      if (slot === "div") updateWrap("div", AUTO.div);
+      return;
+    }
+    // Fecha de publicación en la CMF: default = cierre del mes subsiguiente al trimestre;
+    // el admin la sobrescribe con un selector de fecha nativo si la real difiere.
+    const validOverride = overrides.cmf && /^\d{4}-\d{2}-\d{2}$/.test(overrides.cmf);
+    const cmfISO = validOverride ? overrides.cmf : cmfDefaultISO;
+    span.textContent = cmfISO ? fmtFechaLarga(cmfISO) : "—";
+    span.contentEditable = "false";
+
+    const input = document.createElement("input");
+    input.type = "date";
+    input.className = "date-input-inline";
+    input.value = cmfISO || "";
+    input.setAttribute("aria-label", "Fecha de publicación en la CMF");
+    input.addEventListener("change", () => {
+      saveNoticiasOverride(fondo, "cmf", input.value);
+      span.textContent = input.value ? fmtFechaLarga(input.value) : "—";
+      updateWrap("cmf", span.textContent);
+    });
+    span.insertAdjacentElement("afterend", input);
+    span.style.display = isAdmin ? "none" : "";
+    input.style.display = isAdmin ? "inline-block" : "none";
+    updateWrap("cmf", span.textContent);
+  });
+}
+
+let currentFund = "TRI";
+
+function populateSelect(sel, keys, defVal){
+  sel.innerHTML="";
+  keys.forEach(k=>{
+    const o=document.createElement("option"); o.value=k; o.textContent=mesEspanol(k); sel.appendChild(o);
+  });
+  if (keys.length) sel.value = defVal || keys[keys.length-1];
+}
+
+function buildPeriodPicker(periodos, defVal){
+  const sel = document.getElementById("sel-periodo");
+  const yearBox = document.getElementById("year-btns");
+  const qBox = document.getElementById("q-btns");
+  yearBox.innerHTML = ""; qBox.innerHTML = "";
+  // Sync hidden select (canonical value carrier)
+  sel.innerHTML = "";
+  periodos.forEach(k => {
+    const o = document.createElement("option"); o.value = k; o.textContent = fmtQ(k);
+    sel.appendChild(o);
+  });
+  if (!periodos.length) return;
+
+  const initial = defVal && periodos.includes(defVal) ? defVal : periodos[periodos.length-1];
+  sel.value = initial;
+
+  // Years (unique, ascending)
+  const years = Array.from(new Set(periodos.map(p => p.split("-")[0]))).sort();
+  // Map: year -> Set of quarters present (1..4)
+  const yqMap = {};
+  periodos.forEach(p => {
+    const { year, q } = periodoToYQ(p);
+    if (!q) return;
+    (yqMap[year] = yqMap[year] || new Set()).add(q);
+  });
+
+  function activeYear(){ return sel.value.split("-")[0]; }
+  function activeQ(){ return periodoToYQ(sel.value).q; }
+
+  function renderYearBtns(){
+    yearBox.innerHTML = "";
+    years.forEach(y => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "year-btn"; b.textContent = y;
+      b.setAttribute("role","tab");
+      if (y === activeYear()) { b.classList.add("active"); b.setAttribute("aria-selected","true"); }
+      b.addEventListener("click", () => {
+        // Pick first available quarter for that year that has data, prefer current q if available
+        const set = yqMap[y] || new Set();
+        const wantQ = activeQ();
+        let pickQ = (wantQ && set.has(wantQ)) ? wantQ : [4,3,2,1].find(q => set.has(q));
+        if (!pickQ) return;
+        const mm = {1:"03",2:"06",3:"09",4:"12"}[pickQ];
+        sel.value = y + "-" + mm;
+        renderYearBtns(); renderQBtns();
+        sel.dispatchEvent(new Event("change"));
+      });
+      yearBox.appendChild(b);
+    });
+    // Ensure the active year is scrolled into view
+    const active = yearBox.querySelector(".year-btn.active");
+    if (active) active.scrollIntoView({ block: "nearest", inline: "center" });
+  }
+
+  function renderQBtns(){
+    qBox.innerHTML = "";
+    const y = activeYear();
+    const set = yqMap[y] || new Set();
+    for (let q = 1; q <= 4; q++){
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "q-btn"; b.textContent = q + "Q";
+      b.setAttribute("role","tab");
+      const has = set.has(q);
+      if (!has) { b.disabled = true; b.title = "Sin datos"; }
+      if (q === activeQ()) { b.classList.add("active"); b.setAttribute("aria-selected","true"); }
+      b.addEventListener("click", () => {
+        if (!has) return;
+        const mm = {1:"03",2:"06",3:"09",4:"12"}[q];
+        sel.value = y + "-" + mm;
+        renderQBtns();
+        renderYearBtns();
+        sel.dispatchEvent(new Event("change"));
+      });
+      qBox.appendChild(b);
+    }
+  }
+
+  renderYearBtns();
+  renderQBtns();
+}
+function prev(map, key, n){
+  const keys = Object.keys(map).sort();
+  const idx = keys.indexOf(key);
+  if (idx<0) return [];
+  return keys.slice(Math.max(0,idx-n+1), idx+1);
+}
+// Periodos que tienen un valor_libro_clp real (no solo KPIs/cuotas asociados al periodo)
+function periodosConValorLibro(F){
+  return Object.keys(F.contable).filter(p => {
+    const series = F.contable[p].series || {};
+    return Object.values(series).some(s => s && s.valor_libro_clp != null);
+  }).sort();
+}
+// Últimos n periodos de `keys` que sean <= key (no requiere que key esté en keys)
+function lastNAtOrBefore(keys, key, n){
+  const upTo = keys.filter(k => k <= key);
+  return upTo.slice(Math.max(0, upTo.length - n));
+}
+
+function renderRemVar(rows){
+  const tbody = document.querySelector("#tbl-remvar tbody");
+  let html = "";
+  let i = 0;
+  while (i < rows.length){
+    const [cond, serie, tasa] = rows[i];
+    let span = 1;
+    while (i + span < rows.length && rows[i + span][0] === cond) span++;
+    html += `<tr><td rowspan="${span}">${cond}</td><td>${serie}</td><td>${tasa}</td></tr>`;
+    for (let j = 1; j < span; j++){
+      const [, serieJ, tasaJ] = rows[i + j];
+      html += `<tr><td>${serieJ}</td><td>${tasaJ}</td></tr>`;
+    }
+    i += span;
+  }
+  tbody.innerHTML = html;
+}
+
+function switchFund(f){
+  currentFund = f;
+  const F = FUNDS[f];
+  const S = F.static;
+
+  document.getElementById("hdr-nombre").textContent = S.nombre;
+  document.getElementById("hdr-sub").textContent = S.sub;
+
+  // Fund buttons
+  document.querySelectorAll(".fund-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.fund === f);
+  });
+
+  // Repopular selector único de período — solo períodos con info contable
+  const periodoActual = document.getElementById("sel-periodo").value;
+  const periodos = Object.keys(F.contable).sort();
+  buildPeriodPicker(periodos, periodoActual);
+
+  document.getElementById("wrap-vcb").classList.toggle("hidden", !S.has_bursatil);
+  document.getElementById("wrap-tickers").classList.toggle("hidden", !S.has_bursatil);
+  document.getElementById("wrap-repartos").classList.toggle("hidden", !S.has_bursatil);
+
+  // Static blocks
+  document.getElementById("txt-objetivo").textContent = S.objetivo;
+  renderRemVar(S.remuneracion_variable);
+  document.getElementById("txt-comite").innerHTML = S.comite;
+  document.getElementById("txt-contacto").textContent = S.contacto;
+  document.getElementById("txt-resumen").textContent = S.resumen;
+
+  const rf = document.getElementById("tbl-remfija");
+  rf.innerHTML = S.remuneracion_fija.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+  const tk = document.getElementById("tbl-tickers");
+  tk.innerHTML = S.tickers.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+  document.getElementById("wrap-activos").classList.toggle("hidden", !S.activos);
+  if (S.activos){
+    const ac = document.getElementById("tbl-activos-tbody");
+    ac.innerHTML = S.activos.map(([inv,sub,part,gla])=>
+      `<tr><td>${inv}</td><td>${sub}</td><td>${part}</td><td>${gla}</td></tr>`
+    ).join("");
+  }
+
+  // Headers de tablas dependientes de series
+  const seriesCols = S.series.map(s=>`<th>Serie ${s.label}</th>`).join("");
+  document.getElementById("tbl-vcl-thead").innerHTML = "<th>Valor Cuota</th>"+seriesCols;
+  document.getElementById("tbl-vcb-thead").innerHTML = "<th>Valor Cuota</th>"+seriesCols;
+  document.getElementById("tbl-rep-thead").innerHTML = "<th>Fecha Pago</th><th>Concepto</th>"+seriesCols;
+
+  // Otros indicadores header (el body se llena en render(), depende del período)
+  document.getElementById("tbl-otros-thead").innerHTML =
+    "<tr><th></th>"+seriesCols+"</tr>";
+
+  // Rentabilidad header
+  const rentHeadCols = S.has_bursatil
+    ? S.series.map(s=>`<th colspan="2">Serie ${s.label}</th>`).join("")
+    : S.series.map(s=>`<th>Serie ${s.label}</th>`).join("");
+  const rentSubHead = S.has_bursatil
+    ? "<tr><th></th>" + S.series.map(_=>`<th>Bursátil</th><th>Libro</th>`).join("") + "</tr>"
+    : "<tr><th></th>" + S.series.map(_=>`<th>Libro</th>`).join("") + "</tr>";
+  document.getElementById("tbl-rent-thead").innerHTML =
+    "<tr><th></th>"+rentHeadCols+"</tr>" + rentSubHead;
+
+  render();
+}
+
+function render(){
+  const F = FUNDS[currentFund];
+  const S = F.static;
+  const periodo = document.getElementById("sel-periodo").value;
+  // Contable trimestral: usar el más reciente <= período seleccionado
+  const cKeysR = Object.keys(F.contable).sort();
+  const cLower = cKeysR.filter(k => k <= periodo);
+  const pc = cLower.length ? cLower[cLower.length-1] : (cKeysR[cKeysR.length-1] || periodo);
+  // Bursátil mensual: usar el más reciente <= período seleccionado
+  const bKeysR = Object.keys(F.bursatil).sort();
+  const bLower = bKeysR.filter(k => k <= periodo);
+  const pb = bLower.length ? bLower[bLower.length-1] : (bKeysR[bKeysR.length-1] || periodo);
+  const c = F.contable[pc] || {series:{}};
+  const b = F.bursatil[pb] || {series:{}};
+
+  document.getElementById("month-bar").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
+
+  // El Fondo table
+  const fechaC = c.fecha || (pc?pc+"-30":"");
+
+  // Repartos: últimos pagos <= fecha bursátil (o contable si no hay bursátil)
+  const refPeriodo = S.has_bursatil ? pb : pc;
+  const cutoff = refPeriodo + "-31";
+  const por = {};
+  F.dividendos.forEach(d => {
+    if (d.fecha <= cutoff){
+      if (!por[d.fecha]) por[d.fecha] = {};
+      por[d.fecha][d.nemo] = d.monto_clp;
+    }
+  });
+  const fechasDiv = Object.keys(por).sort();
+
+  // Dividendo para Noticias: solo si cae dentro del trimestre contable que se está mostrando (pc)
+  const [pcY, pcM] = pc.split("-").map(Number);
+  const qStart = pcY + "-" + String(pcM - 2).padStart(2,"0") + "-01";
+  const qEnd = pc + "-31";
+  const divsTrimestre = fechasDiv.filter(f => f >= qStart && f <= qEnd);
+  const ultimoDiv = divsTrimestre.length ? divsTrimestre[divsTrimestre.length-1] : "";
+
+  // Fecha default de publicación en CMF: cierre del mes subsiguiente (mes +2) al cierre del trimestre
+  let cmfNm = pcM + 2, cmfNy = pcY;
+  if (cmfNm > 12){ cmfNm -= 12; cmfNy += 1; }
+  const cmfLastDay = new Date(cmfNy, cmfNm, 0).getDate();
+  const cmfDefaultISO = cmfNy + "-" + String(cmfNm).padStart(2,"0") + "-" + String(cmfLastDay).padStart(2,"0");
+
+  renderNoticias(currentFund, S, fechaC, ultimoDiv, cmfDefaultISO);
+  let elfondoHtml = `
+    <tr><td>${S.fecha_label}</td><td>${S.fecha_valor}</td></tr>
+    <tr><td>Moneda del Fondo</td><td>${S.moneda}</td></tr>
+    <tr><td>Duración</td><td>${S.duracion}</td></tr>
+  `;
+  S.series.forEach(s => {
+    const sd = c.series[s.nemo] || {};
+    elfondoHtml += `<tr><td>Valor Libro Cuota Serie ${s.label} <span class="small">${fechaC?fmtFechaCorta(fechaC):""}</span></td><td>${fmtCLP(sd.valor_libro_clp)}</td></tr>`;
+  });
+  let cuotasSum=0, any=false;
+  S.series.forEach(s => {
+    const v = (c.series[s.nemo]||{}).cuotas;
+    if (v!=null){ cuotasSum+=v; any=true; }
+  });
+  elfondoHtml += `<tr><td>Nº Cuotas Emitidas</td><td>${S.cuotas_emitidas}</td></tr>`;
+  elfondoHtml += `<tr><td>Nº Cuotas Suscritas y Pagadas</td><td>${any?fmtEnteroMiles(cuotasSum):"—"}</td></tr>`;
+  document.getElementById("tbl-elfondo").innerHTML = elfondoHtml;
+
+  // Valor Cuota Libro - últimas 3 fechas con valor contable real
+  const vclKeys = periodosConValorLibro(F);
+  const trims = lastNAtOrBefore(vclKeys, pc, 3);
+  const tbodyVcl = document.querySelector("#tbl-vcl tbody");
+  tbodyVcl.innerHTML = trims.map(p => {
+    const cc = F.contable[p] || {series:{}};
+    const f = cc.fecha || (p+"-30");
+    return "<tr><td>"+fmtFechaCorta(f)+"</td>" +
+      S.series.map(s => "<td>"+fmtCLP((cc.series[s.nemo]||{}).valor_libro_clp)+"</td>").join("") + "</tr>";
+  }).join("");
+
+  // Balance
+  const bal = F.balance[pc] || {};
+  document.getElementById("bal-fecha").textContent = "al " + (pc?mesEspanol(pc):"—") + " (en " + unitLabel("balance") + ")";
+  const setBal = (id,k) => {
+    const el = document.getElementById(id);
+    el.textContent = fmtMontoClp(bal[k], pc, F, "balance");
+    attachTrace(el, k, {fondo: currentFund, periodo: pc, raw_value: bal[k]});
+  };
+  setBal("bal-efectivo","ESF.efectivo");
+  setBal("bal-otros-ac","ESF.otros_activos_corrientes");
+  setBal("bal-pi","ESF.propiedades_inversion");
+  setBal("bal-otros-anc","ESF.otros_activos_no_corrientes");
+  setBal("bal-total-a","ESF.total_activo");
+  setBal("bal-prestamos","ESF.prestamos");
+  setBal("bal-imp-dif","ESF.pasivos_impuestos_diferidos");
+  setBal("bal-otros-p","ESF.otros_pasivos");
+  setBal("bal-patrimonio","ESF.patrimonio_neto");
+  setBal("bal-total-pp","ESF.total_pasivo_patrimonio");
+
+  document.getElementById("gastos-fecha").textContent = "al " + (pc?mesEspanol(pc):"—") + " (en " + unitLabel("gastos") + ")";
+
+  // Gastos del fondo desde EEFF (montos absolutos, en CLP)
+  const g = F.gastos[pc] || {};
+  const gAdmin = g["ER.comision_admin"];
+  const gCustodia = g["ER.honorarios_custodia"] || 0;
+  const gComite = g["ER.remun_comite"] || 0;
+  const gRecur = (g["ER.honorarios_custodia"]!=null||g["ER.remun_comite"]!=null) ? (gCustodia + gComite) : null;
+  const gOtros = g["ER.otros_gastos"];
+  const gTotal = g["ER.total_gastos_operacion"];
+  const setG = (id, k, v) => {
+    const el = document.getElementById(id);
+    el.textContent = fmtMontoClp(v, pc, F, "gastos");
+    attachTrace(el, k, {fondo: currentFund, periodo: pc, raw_value: v});
+  };
+  setG("g-admin", "ER.comision_admin", gAdmin);
+  setG("g-recur", "ER.recurrentes", gRecur);
+  setG("g-otros", "ER.otros_gastos", gOtros);
+  setG("g-total", "ER.total_gastos_operacion", gTotal);
+
+  // Rentabilidad
+  const filas = [
+    ["Rentabilidad desde el inicio (anualizada)", "tir_desde_inicio", 1],
+    ["Rentabilidad YTD (anualizada)", "rent_ytd", 1],
+    ["Rentabilidad Últimos 12 meses", "tir_u12m", 1],
+    ["Dividend Yield", "dy", 1],
+    ["Dividend Yield + Amortización", "dy_amort", 1],
+  ];
+  const tbodyR = document.querySelector("#tbl-rent tbody");
+  tbodyR.innerHTML = filas.map(([lab,key,d]) => {
+    let html = "<td>"+lab+"</td>";
+    S.series.forEach(s => {
+      const sc = c.series[s.nemo] || {};
+      if (S.has_bursatil){
+        const sb = b.series[s.nemo] || {};
+        html += `<td data-trace="1" data-kpi="${key}" data-variante="bursatil" data-serie="${s.nemo}" data-periodo="${pb||''}" data-raw="${sb[key]==null?'':sb[key]}">${fmtPct(sb[key],d)}</td>`;
+      }
+      html += `<td data-trace="1" data-kpi="${key}" data-variante="contable" data-serie="${s.nemo}" data-periodo="${pc||''}" data-raw="${sc[key]==null?'':sc[key]}">${fmtPct(sc[key],d)}</td>`;
+    });
+    return "<tr>"+html+"</tr>";
+  }).join("");
+
+  // Endeudamiento — buscar más cercano <= pc
+  const kpis = F.fondo_kpi;
+  const keysK = Object.keys(kpis).sort();
+  let usado = pc;
+  if (!kpis[pc]){
+    const lower = keysK.filter(k => k<=pc);
+    usado = lower.length? lower[lower.length-1] : (keysK[keysK.length-1]||null);
+  }
+  const t = kpis[usado] || {};
+  const setKpi = (id, kpi, text, raw) => {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    attachTrace(el, kpi, {fondo: currentFund, periodo: usado, raw_value: raw});
+  };
+  setKpi("fld-leverage", "leverage_financiero",
+    t.leverage_financiero!=null ? fmtNum(t.leverage_financiero,2)+" x" : "—", t.leverage_financiero);
+  setKpi("fld-ltv", "ltv", fmtPct(t.ltv,1), t.ltv);
+  setKpi("fld-tasa", "tasa_promedio", fmtPct(t.tasa_promedio,1), t.tasa_promedio);
+  setKpi("fld-duration", "duration_deuda", fmtNum(t.duration_deuda,1), t.duration_deuda);
+  setKpi("fld-dfn", "deuda_financiera_neta",
+    fmtMontoUf(t.deuda_financiera_neta, usado, F, "dfn"), t.deuda_financiera_neta);
+  document.getElementById("fld-dfn-unit").textContent = unitState.dfn==="uf" ? "(UF)" : "(MM$)";
+  const pv = t.perfil_venc || {};
+  const setPv = (id, variante, val) => {
+    const el = document.getElementById(id);
+    el.textContent = fmtPct(val,0);
+    attachTrace(el, "perfil_vencimiento", {fondo: currentFund, periodo: usado, variante, raw_value: val});
+  };
+  setPv("fld-pv-03", "0-3", pv["0-3"]);
+  setPv("fld-pv-37", "3-7", pv["3-7"]);
+  setPv("fld-pv-710", "7-10", pv["7-10"]);
+  setPv("fld-pv-10", ">10", pv[">10"]);
+
+  const mesLbl = S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc);
+
+  // Otros indicadores (nivel fondo, UF) — Tasa Arriendo / Cap Rate / Ingresos-NOI U12M
+  const nColsOi = S.series.length;
+  const otrosTd = (kpi, text, raw) =>
+    `<td colspan="${nColsOi}" data-trace="1" data-kpi="${kpi}" data-fondo="${currentFund}" data-periodo="${usado||''}" data-raw="${raw==null?'':raw}">${text}</td>`;
+  document.getElementById("tbl-otros-tbody").innerHTML = `
+    <tr><td>Tasa Arriendo</td>${otrosTd("tasa_arriendo_ajustada_contable", fmtPct(t.tasa_arriendo_ajustada_contable,2), t.tasa_arriendo_ajustada_contable)}</tr>
+    <tr><td>Cap Rate</td>${otrosTd("cap_rate_implicito_contable", fmtPct(t.cap_rate_implicito_contable,2), t.cap_rate_implicito_contable)}</tr>
+    <tr><td>Ingresos U12M</td>${otrosTd("ingresos_u12m", t.ingresos_u12m!=null?fmtEnteroMiles(t.ingresos_u12m)+" UF":"—", t.ingresos_u12m)}</tr>
+    <tr><td>Ingresos ${mesLbl}</td>${otrosTd("ingresos_mes", t.ingresos_mes!=null?fmtEnteroMiles(t.ingresos_mes)+" UF":"—", t.ingresos_mes)}</tr>
+    <tr><td>NOI U12M</td>${otrosTd("noi_u12m", t.noi_u12m!=null?fmtEnteroMiles(t.noi_u12m)+" UF":"—", t.noi_u12m)}</tr>
+    <tr><td>NOI ${mesLbl}</td>${otrosTd("noi_mes", t.noi_mes!=null?fmtEnteroMiles(t.noi_mes)+" UF":"—", t.noi_mes)}</tr>
+  `;
+
+  // Valor Cuota Bursátil
+  if (S.has_bursatil){
+    const meses = prev(F.bursatil, pb, 3);
+    const tbodyVcb = document.querySelector("#tbl-vcb tbody");
+    tbodyVcb.innerHTML = meses.map(p => {
+      const bb = F.bursatil[p] || {series:{}};
+      const f = bb.fecha || (p+"-30");
+      return "<tr><td>"+fmtFechaCorta(f)+"</td>" +
+        S.series.map(s => "<td>"+fmtCLP((bb.series[s.nemo]||{}).valor_bursatil_clp)+"</td>").join("") + "</tr>";
+    }).join("");
+  }
+
+  // Repartos: últimos 4 pagos <= fecha bursátil (o contable si no hay bursátil)
+  const fechas = fechasDiv.slice(-4);
+  const tbodyRep = document.querySelector("#tbl-rep tbody");
+  tbodyRep.innerHTML = fechas.map(f => {
+    const d = por[f];
+    return "<tr><td>"+fmtFechaCorta(f)+"</td><td>Dividendo provisorio</td>" +
+      S.series.map(s => "<td>$"+fmtNum(d[s.nemo],1)+"</td>").join("") + "</tr>";
+  }).join("");
+}
+
+// Init
+(function(){
+  const btns = document.getElementById("fund-btns");
+  Object.keys(FUNDS).forEach(f => {
+    const b = document.createElement("button");
+    b.className = "fund-btn";
+    b.dataset.fund = f;
+    b.textContent = f;
+    b.addEventListener("click", () => switchFund(f));
+    btns.appendChild(b);
+  });
+  document.getElementById("sel-periodo").addEventListener("change", render);
+  document.getElementById("btn-admin").addEventListener("click", () => {
+    const on = document.body.classList.toggle("admin");
+    document.getElementById("btn-admin").classList.toggle("on", on);
+    document.getElementById("btn-admin").textContent = on ? "✓ Admin" : "✎ Admin";
+    render();
+  });
+  // Delegación de clicks para trazabilidad (solo activo con body.admin)
+  document.body.addEventListener("click", (ev) => {
+    if (!document.body.classList.contains("admin")) return;
+    const el = ev.target.closest("[data-trace]");
+    if (!el) return;
+    ev.preventDefault();
+    renderTraceModal(el);
+  });
+  document.getElementById("trace-close").addEventListener("click", closeTraceModal);
+  document.getElementById("trace-modal-bg").addEventListener("click", (ev) => {
+    if (ev.target.id === "trace-modal-bg") closeTraceModal();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") closeTraceModal();
+  });
+  // ?admin=1 activa modo admin al cargar
+  if (new URLSearchParams(location.search).get("admin") === "1") {
+    document.getElementById("btn-admin").click();
+  }
+  document.getElementById("btn-unit-balance").addEventListener("click", () => toggleUnit("balance"));
+  document.getElementById("btn-unit-gastos").addEventListener("click", () => toggleUnit("gastos"));
+  document.getElementById("btn-unit-dfn").addEventListener("click", () => toggleUnit("dfn"));
+  switchFund("TRI");
+})();
+</script>
+</body>
+</html>
+"""
+
+
+def main():
+    con = sqlite3.connect(str(DB))
+    all_data = {k: fetch_fondo(con, k, cfg) for k, cfg in FONDOS_CFG.items()}
+    con.close()
+    # Serializar KPI_META (excluye entradas puramente raw sin fórmula extra ya cubiertas por _raw_meta)
+    meta_out = {}
+    for k, v in KPI_META.items():
+        if v.get("raw"):
+            meta_out[k] = _raw_meta(k)
+        else:
+            meta_out[k] = v
+    html = (
+        HTML_TEMPLATE
+        .replace("__DATA_JSON__", json.dumps(all_data, ensure_ascii=False))
+        .replace("__KPI_META_JSON__", json.dumps(meta_out, ensure_ascii=False))
+    )
+    OUT.write_text(html, encoding="utf-8")
+    print(f"OK -> {OUT}")
+    for k, d in all_data.items():
+        print(f"  {k}: contable={len(d['contable'])} bursatil={len(d['bursatil'])} balance={len(d['balance'])} kpi={len(d['fondo_kpi'])} divs={len(d['dividendos'])}")
+
+
+if __name__ == "__main__":
+    main()
