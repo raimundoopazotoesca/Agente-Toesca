@@ -3,6 +3,22 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+
+## [2026-07-13] ingesta | ER/NOI Fondo PT (Torre A + Boulevard) desde NOI PT.xlsx
+
+Nuevo ingestor `tools/db/ingest_er_pt.py`. Persiste 945 líneas en `raw_er_activo_line`
+para activos `Torre A` y `Boulevard` (fondo PT), períodos 2018-01 a 2026-05.
+Valores en UF, guardados en `monto_clp` por convención (igual que Apoquindo).
+NOI derivado on-demand; ene-25 = 13.478,69 UF (imagen: 13.479 ✓).
+
+Pendientes de automatización documentados en el ingestor:
+- Margen Energía Torre A y Blvd: calculado internamente en Toesca (urgencia baja)
+- Gasto Común Vacancia: fórmula pendiente de definición (urgencia media)
+- Seguros: fórmula pendiente (urgencia media)
+- Contribuciones: actualmente viene de la planilla; fórmula hardcoded documentada
+  (Torre A: (-110660042-39543299)/UF/3, Blvd: (-54388202-19886599)/3/UF)
+
+
 ## [2026-07-09] doc+fix | Metodología NOI/caja mínima/tasa arriendo/cap rate consolidada (Apo) + cierre 2026-03
 
 Nueva página [[kpis_noi_cap_rate_apo]] con toda la metodología aprendida en la sesión: fórmulas de
