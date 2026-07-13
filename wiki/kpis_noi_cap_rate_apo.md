@@ -1,8 +1,8 @@
-# NOI, Ingresos, Caja Mínima, Tasa de Arriendo y Cap Rate — Metodología canónica (Apo)
+# NOI, Ingresos, Caja Mínima, Tasa de Arriendo y Cap Rate — Metodología canónica (Apo + PT)
 
 > Validado contra cálculo manual del usuario a MAR-2026 (tasa arriendo 5,39%, cap rate 4,58%).
-> Consolidado en `derived_kpi` 2026-07-09. Por ahora **solo Fondo Apoquindo** — falta consolidar
-> datos de activos de PT y TRI para extender esta metodología a esos fondos.
+> Consolidado en `derived_kpi` 2026-07-09 (Apo, variante contable) y 2026-07-13 (PT, variante
+> bursátil — ver §8). TRI sigue pendiente (falta consolidar ingresos/NOI por activo).
 > Ver también [[kpis_rentabilidad_fondos]] (TIR/YTD/DY) y [[activos/apoquindo]].
 
 ---
@@ -158,11 +158,72 @@ case/plural-insensitive, no solo por `cuenta_codigo_canonical`.
 
 ## 6. Pendientes
 
-- Extender esta metodología (NOI, ingresos, caja mínima, tasa arriendo, cap rate) a **PT y TRI**
-  — bloqueado hasta consolidar datos de sus activos (rent roll / ER por activo).
+- Extender esta metodología a **TRI** — bloqueado hasta consolidar ingresos/NOI por activo (PT
+  ya extendido, ver §8).
 - Resolver los 9 periodos de `ESF.total_activo` de TRI (§3) para poder calcular `caja_minima` ahí.
 - Investigar la causa raíz del bug de versionado (§5.1) — podría afectar otros fondos/períodos no
   detectados aún.
+
+---
+
+## 8. Tasa de Arriendo Ajustada Bursátil y Cap Rate Implícito Bursátil (PT)
+
+Apo no transa en bolsa → solo tiene variante contable (§4). PT sí transa (serie única
+`CFITRIPT-E`) → se agrega la variante **bursátil**, reemplazando `patrimonio_libro` por
+`market_cap` bursátil. Misma estructura de denominador que la contable (§4):
+
+```
+denom_uf = market_cap_uf + deuda_financiera_neta_uf + caja_minima_uf
+         = market_cap_uf + deuda_uf − (caja_consolidada_uf − caja_minima_uf)
+
+tasa_arriendo_ajustada_bursatil = ingresos_u12m / denom_uf
+cap_rate_implicito_bursatil     = noi_u12m / denom_uf
+```
+
+**Signo de caja confirmado con el usuario 2026-07-13**: se resta `(caja_consolidada − caja_minima)`,
+no al revés — más caja consolidada disponible reduce el denominador (EV estándar); `caja_minima`
+se sigue sumando de vuelta como reserva no disponible. Igual convención que la contable (§4).
+
+Fuentes de cada término:
+- `market_cap_uf` = `raw_valor_cuota_bursatil.patrimonio_bursatil_uf` (= cuotas × precio_uf,
+  ya viene precalculado en la tabla), último valor disponible en el mes, `nemotecnico='CFITRIPT-E'`.
+- `deuda_financiera_neta_uf` = `derived_kpi` (ya existente y mensual para PT, no recalculado).
+- `caja_minima_uf` = `caja_minima_clp` (§3, extendido — ver abajo) / UF del propio trimestre en
+  que se calculó, forward-filled al mes (mismo criterio `_mensual_v1` que Apo: último valor
+  trimestral disponible ≤ mes).
+- `ingresos_u12m` / `noi_u12m` = `derived_kpi` fondo PT, ya consolidados mensualmente (Torre A +
+  Boulevard, cobertura 2018-12 a 2026-05).
+
+**Extensión de `caja_minima` PT**: solo 10/34 trimestres estaban persistidos (2017-12 a 2019-09 +
+2025-12/2026-03). Se completaron los 23 trimestres faltantes (2020-03 a 2025-09) leyendo
+`ESF.total_activo` de `raw_eeff_line`, deduplicando filas corriente/no_corriente/total. Se
+**excluyó 2019-12** (total activo salta a 2x el trimestre anterior y revierte al siguiente —
+mismo patrón de dato inconsistente que el bug de Apo 2020-12, §5.1; no se pudo determinar cuál de
+las dos posibles cifras es la correcta sin el EEFF fuente). El hueco de ese trimestre se cubre
+por el forward-fill normal (usa 2019-09 hasta que 2020-03 esté disponible).
+
+**Persistido en**: `derived_kpi` kpi=`tasa_arriendo_ajustada_bursatil`/`cap_rate_implicito_bursatil`,
+`entidad_tipo='fondo'`, `entidad_key='PT'`, `unidad='ratio'`,
+formula=`tasa_arriendo_ajustada_bursatil_mensual_v1` / `cap_rate_implicito_bursatil_mensual_v1`,
+**90 meses, 2018-12 a 2026-05** (acotado por la cobertura de `ingresos_u12m`).
+
+Script: `scripts/consolidate_kpis_bursatil_pt.py` (idempotente, re-ejecutable).
+
+**Serie histórica (dic de cada año)**:
+
+| Periodo | Tasa arriendo bursátil | Cap rate bursátil |
+|---|---|---|
+| 2018-12 | 5,97% | 5,17% |
+| 2019-12 | 5,27% | 4,54% |
+| 2020-12 | 5,18% | 4,67% |
+| 2021-12 | 5,41% | 4,36% |
+| 2022-12 | 5,17% | 4,38% |
+| 2023-12 | 5,54% | 4,67% |
+| 2024-12 | 6,77% | 5,73% |
+| 2025-12 | 7,17% | 6,04% |
+
+**Pendiente**: extender la misma variante bursátil a TRI (3 series A/C/I) cuando se consolide
+ingresos/NOI por activo de TRI.
 
 ## 7. Despliegue en Fact Sheet (`factsheet.html`)
 

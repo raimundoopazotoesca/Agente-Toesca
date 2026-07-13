@@ -3,26 +3,22 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-13] feat | Tasa arriendo ajustada bursátil y cap rate implícito bursátil — Fondo PT
 
-## [2026-07-13] feat | Fact sheet con navegadores independientes contable/bursátil vs operacional
+Nuevo script `scripts/consolidate_kpis_bursatil_pt.py`, réplica de la metodología ya validada
+para Apo (contable, [[kpis_noi_cap_rate_apo]] §4) pero con `market_cap` bursátil en vez de
+`patrimonio_libro` (Apo no transa en bolsa, PT sí). Denominador = market_cap + deuda_financiera_neta
++ caja_minima (signo confirmado con el usuario: se resta caja_consolidada − caja_minima, no al
+revés — EV estándar).
 
-Reemplazó la arquitectura de un solo período (`buildPeriodPicker`) con dos navegadores independientes en `build_factsheet.py`:
-- **EEFF & Bursátil**: trimestral (4T 2025, 1T 2026...) — controla balance, gastos, rentabilidad
-- **Operacional**: mensual (Ene 2026, Mar 2026...) — controla exclusivamente "Otros Indicadores" (tasa arriendo, cap rate, ingresos/NOI U12M/mes)
+Como parte del mismo trabajo se extendió `caja_minima` de PT: solo 10/34 trimestres estaban
+persistidos, se completaron 23 más desde `ESF.total_activo` (`raw_eeff_line`, dedup de filas
+corriente/no_corriente/total). Se excluyó 2019-12 por dato inconsistente (total activo salta 2x
+y revierte, sin poder determinar la cifra correcta sin el EEFF fuente).
 
-Nueva función `initPeriodNav(periodos, defVal, suffix, format)` reemplaza `buildPeriodPicker()`:
-- Navegadores ‹ › para ir período anterior/siguiente
-- Clic en fecha abre dropdown flotante con todos los períodos (más reciente arriba)
-- Período activo resaltado en verde, autoscroll en extremos
-
-Variables en `render()`:
-- `pc`/`pb` siguen siendo contable/bursátil trimestral
-- Nuevo `periodoOp`/`usadoOp`/`tOp` para operacional mensual
-- "Otros Indicadores" renderiza desde `tOp` (no desde `t`)
-
-CSS nuevo: `.period-nav-group`, `.period-nav-label`, `.period-nav-controls`, `.nav-arrow`, `.period-display`, `.period-dropdown`, `.period-dropdown-item`.
-
-Commit: 149e62c. Datos: 103 KPIs/fondo (83 mensuales + 26 trimestrales consolidados en sesión anterior).
+Persistido en `derived_kpi`: `tasa_arriendo_ajustada_bursatil` / `cap_rate_implicito_bursatil`,
+fondo PT, 90 meses (2018-12 a 2026-05). Detalle completo en [[kpis_noi_cap_rate_apo]] §8.
+Pendiente: misma variante para TRI cuando se consolide ingresos/NOI por activo de TRI.
 
 
 ## [2026-07-13] ingesta | ER/NOI Fondo PT (Torre A + Boulevard) desde NOI PT.xlsx
