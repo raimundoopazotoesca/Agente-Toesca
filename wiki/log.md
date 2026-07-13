@@ -3,6 +3,18 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-13] doc+regla | Supuestos prospectivos ER/NOI Fondo PT
+
+Definidos por usuario para cálculos futuros de ingresos/NOI PT, sin tocar la DB histórica:
+desde 2026-07 en adelante `tools/db/ingest_er_pt.py` aplica administración como gasto de
+0,2% de ingresos operacionales por activo; GC vacancia Boulevard/Inmob. CDC = 531 UF mensual;
+contribuciones fijas Torre A = 1.257 UF mensual y Boulevard = 621 UF mensual; seguros fijos
+Torre A = 173,464166666667 UF mensual y Boulevard = 63,46 UF mensual. Todos se guardan como
+gastos negativos.
+
+La ingesta queda protegida para no supersedear períodos históricos cuando ya existen filas PT
+activas anteriores a 2026-07. Pendiente PT: Margen Energía.
+
 ## [2026-07-13] seguridad/fix | Auditoría integral de código, esquema e interfaces
 
 Auditoría completa del estado actual. Se corrigió la cadena de migraciones para

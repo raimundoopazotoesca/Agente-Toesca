@@ -152,7 +152,9 @@ python -X utf8 scripts/ingest_from_json.py --fondo APO --json work/eeff_ingesta/
   - Fuente `NOI PT.xlsx`.
   - Activos `Torre A`, `Boulevard`.
   - Cobertura log: 2018-01..2026-05.
-  - Pendientes: Margen Energia, GC Vacancia, Seguros; contribuciones con formula hardcoded.
+  - Supuestos PT definidos por usuario 2026-07-13, aplican solo desde 2026-07 en adelante y no deben reescribir historia; todos como gastos negativos en UF:
+    administracion = 0,2% de ingresos operacionales de cada activo; GC vacancia Boulevard/Inmob CDC = 531 UF mensual; contribuciones Torre A = 1.257 UF mensual y Boulevard = 621 UF mensual; seguros Torre A = 173,464166666667 UF mensual y Boulevard = 63,46 UF mensual.
+  - Pendiente: Margen Energia.
 - Viña/Curicó: `tools/db/ingest_er.py`.
 - INMOSA: `tools/db/ingest_flujo.py`.
 

@@ -231,6 +231,20 @@ Para que los KPIs derivados funcionen, necesitamos al menos:
 | `raw_cuota_en_circulacion_line` (fondo_key='PT') | 33 | — | CDG extract |
 | `raw_valor_cuota_bursatil_line` (incluye col `patrimonio_bursatil_uf`) | 506 | — | CDG extract + LarrainVial |
 
+#### Supuestos ER/NOI PT
+
+`tools/db/ingest_er_pt.py` ingesta valores en UF dentro de `raw_er_activo_line.monto_clp`
+por convención heredada. Estos supuestos aplican desde 2026-07 en adelante; no recalcular
+ni supersedear la historia ya cargada por este cambio. Los siguientes rubros se guardan
+siempre como gastos negativos:
+
+- Administración: 0,2% de los ingresos operacionales de cada activo.
+- GC vacancia: Boulevard/Inmob. CDC = 531 UF mensual.
+- Contribuciones: Torre A = 1.257 UF mensual; Boulevard = 621 UF mensual.
+- Seguros: Torre A = 173,464166666667 UF mensual; Boulevard = 63,46 UF mensual.
+
+Pendiente: Margen Energía.
+
 ### Apoquindo 🟡 En progreso (2026-06-15)
 
 | Tabla | Filas | Rango | Estado |
