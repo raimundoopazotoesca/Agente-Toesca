@@ -1649,7 +1649,10 @@ function render(){
     b.addEventListener("click", () => switchFund(f));
     btns.appendChild(b);
   });
-  document.getElementById("sel-periodo").addEventListener("change", render);
+  ["sel-periodo-cb", "sel-periodo-op", "sel-periodo"].forEach((id) => {
+    const sel = document.getElementById(id);
+    if (sel) sel.addEventListener("change", render);
+  });
   document.getElementById("btn-admin").addEventListener("click", () => {
     const on = document.body.classList.toggle("admin");
     document.getElementById("btn-admin").classList.toggle("on", on);
