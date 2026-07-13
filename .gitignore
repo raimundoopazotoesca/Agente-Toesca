@@ -34,6 +34,12 @@ wiki/.obsidian/workspace.json
 memory/backups/*.db
 .pytest_cache/
 .uv-cache/
+.uv-python/
+.ruff_cache/
+
+# Estado local de asistentes y herramientas de desarrollo.
+.kilo/
+.superpowers/
 
 # Estado privado y artefactos locales (la DB de negocio v2 sí es canónica).
 memory/agente_state.db*

@@ -23,10 +23,15 @@
       "Bash(python -m markitdown \"work/eeff_ingesta/TRI/cdg_extract.xlsx\")",
       "Bash(python -c \"import numpy_financial; print\\('numpy_financial OK'\\)\")",
       "Bash(python -c \"from scipy.optimize import brentq; print\\('scipy OK'\\)\")",
-      "Edit(~/.claude/skills/real-estate-finance-expert/**)"
+      "Edit(~/.claude/skills/real-estate-finance-expert/**)",
+      "Bash(mkdir -p \"c:/Users/raimundo.opazo/automation_agent/docs/superpowers/specs\")",
+      "Bash(git reset *)",
+      "Bash(cp \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/69f243a9-1050-4c9f-b807-9082e93d9ca2/scratchpad/NOI_PT.xlsx\" \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/02786c58-6c23-4b0e-b32a-a02ab3700f81/scratchpad/NOI_PT.xlsx\" *)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\raimundo.opazo\\.claude\\skills"
+      "C:\\Users\\raimundo.opazo\\.claude\\skills",
+      "c:\\Users\\raimundo.opazo\\automation_agent\\docs\\superpowers\\specs",
+      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\69f243a9-1050-4c9f-b807-9082e93d9ca2\\scratchpad"
     ]
   },
   "enabledPlugins": {

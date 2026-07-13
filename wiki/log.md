@@ -15,6 +15,25 @@ gastos negativos.
 La ingesta queda protegida para no supersedear períodos históricos cuando ya existen filas PT
 activas anteriores a 2026-07. Pendiente PT: Margen Energía.
 
+## [2026-07-13] doc+validación | Cap rate/tasa arriendo bursátil PT — fórmula y cobertura cerradas
+
+Confirmado en DB `memory/agente_toesca_v2.db`: `tasa_arriendo_ajustada_bursatil` y
+`cap_rate_implicito_bursatil` para fondo PT están consolidados en `derived_kpi`, 90 meses
+sin gaps (`2018-12` a `2026-05`).
+
+Actualizada [[kpis_noi_cap_rate_apo]] §8 para dejar explícito que la caja que reduce el
+denominador es `caja_usada = caja_consolidada − caja_minima`, no la caja bruta de `raw_caja`.
+Fórmula canónica:
+
+```
+cap_rate_implicito_bursatil = noi_u12m / (deuda_uf + market_cap_uf − (caja_consolidada_uf − caja_minima_uf))
+tasa_arriendo_ajustada_bursatil = ingresos_u12m / mismo_denominador
+```
+
+Validado contra tabla manual del usuario a MAR-2026: market cap 493.955 UF, deuda 2.367.897 UF,
+caja usada 34.261 UF, renta anual 209.043 UF → tasa arriendo ajustada bursátil 7,39%; NOI DB
+176.546 UF vs usuario 176.496 UF → cap rate 6,24% (redondea 6,2%).
+
 ## [2026-07-13] seguridad/fix | Auditoría integral de código, esquema e interfaces
 
 Auditoría completa del estado actual. Se corrigió la cadena de migraciones para

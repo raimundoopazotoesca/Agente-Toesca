@@ -175,6 +175,9 @@ Apo no transa en bolsa → solo tiene variante contable (§4). PT sí transa (se
 ```
 denom_uf = market_cap_uf + deuda_financiera_neta_uf + caja_minima_uf
          = market_cap_uf + deuda_uf − (caja_consolidada_uf − caja_minima_uf)
+         = deuda_uf + market_cap_uf − caja_usada_uf
+
+caja_usada_uf = caja_consolidada_uf − caja_minima_uf
 
 tasa_arriendo_ajustada_bursatil = ingresos_u12m / denom_uf
 cap_rate_implicito_bursatil     = noi_u12m / denom_uf
@@ -184,10 +187,17 @@ cap_rate_implicito_bursatil     = noi_u12m / denom_uf
 no al revés — más caja consolidada disponible reduce el denominador (EV estándar); `caja_minima`
 se sigue sumando de vuelta como reserva no disponible. Igual convención que la contable (§4).
 
+**Distinción de caja**: `raw_caja` guarda la caja bruta/consolidada. La caja que se usa para
+reducir el denominador de tasa arriendo/cap rate es la caja disponible o excedente:
+`caja_usada = caja_consolidada − caja_minima`. En reportes/manuales del usuario puede aparecer
+directamente esa `caja_usada`; no confundirla con la caja bruta de `raw_caja`.
+
 Fuentes de cada término:
 - `market_cap_uf` = `raw_valor_cuota_bursatil.patrimonio_bursatil_uf` (= cuotas × precio_uf,
   ya viene precalculado en la tabla), último valor disponible en el mes, `nemotecnico='CFITRIPT-E'`.
-- `deuda_financiera_neta_uf` = `derived_kpi` (ya existente y mensual para PT, no recalculado).
+- `deuda_uf` = `derived_kpi` kpi=`deuda_consolidada`; en el script se usa la forma equivalente
+  `deuda_financiera_neta_uf + caja_minima_uf`, donde `deuda_financiera_neta = deuda − caja_consolidada`.
+- `caja_consolidada_uf` = `raw_caja.saldo_clp` / UF de cierre.
 - `caja_minima_uf` = `caja_minima_clp` (§3, extendido — ver abajo) / UF del propio trimestre en
   que se calculó, forward-filled al mes (mismo criterio `_mensual_v1` que Apo: último valor
   trimestral disponible ≤ mes).
@@ -205,9 +215,27 @@ por el forward-fill normal (usa 2019-09 hasta que 2020-03 esté disponible).
 **Persistido en**: `derived_kpi` kpi=`tasa_arriendo_ajustada_bursatil`/`cap_rate_implicito_bursatil`,
 `entidad_tipo='fondo'`, `entidad_key='PT'`, `unidad='ratio'`,
 formula=`tasa_arriendo_ajustada_bursatil_mensual_v1` / `cap_rate_implicito_bursatil_mensual_v1`,
-**90 meses, 2018-12 a 2026-05** (acotado por la cobertura de `ingresos_u12m`).
+**90 meses, 2018-12 a 2026-05, sin gaps mensuales** (acotado por la cobertura de `ingresos_u12m`).
 
 Script: `scripts/consolidate_kpis_bursatil_pt.py` (idempotente, re-ejecutable).
+
+**Validación MAR-2026 contra tabla manual del usuario**:
+
+| Input | DB | Tabla usuario |
+|---|---:|---:|
+| Market cap última transacción | 493.955 UF | 493.955 UF |
+| Saldo deuda bancos | 2.367.897 UF | 2.367.897 UF |
+| Caja bruta (`raw_caja`) | 47.150 UF | — |
+| Caja mínima | 12.888 UF | — |
+| Caja usada (`caja − caja_minima`) | 34.261 UF | 34.261 UF |
+| Renta anual / ingresos U12M | 209.043 UF | 209.043 UF |
+| NOI anual / NOI U12M | 176.546 UF | 176.496 UF |
+| Tasa arriendo ajustada bursátil | 7,39% | 7,39% |
+| Cap rate implícito bursátil ajustado | 6,24% | 6,2% |
+
+La diferencia de ~50 UF en NOI U12M no cambia el redondeo visible del cap rate (6,2%). La
+reconciliación confirma que la `Caja` de la tabla del usuario corresponde a `caja_usada`, no a
+la caja bruta de `raw_caja`.
 
 **Serie histórica (dic de cada año)**:
 
