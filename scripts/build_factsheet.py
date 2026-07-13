@@ -741,6 +741,50 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .selectors .q-btn:disabled {
     color: #c8c8c8; cursor: not-allowed; background: #fafafa;
   }
+  .period-nav-group {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .period-nav-group:not(:last-child) {
+    padding-right: 16px; border-right: 1px solid #ccc;
+  }
+  .period-nav-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    color: var(--green); letter-spacing: 0.5px; white-space: nowrap;
+  }
+  .period-nav-controls {
+    display: flex; gap: 4px; align-items: center;
+  }
+  .nav-arrow {
+    background: transparent; border: 1px solid var(--green);
+    color: var(--green); cursor: pointer; font-weight: 700;
+    padding: 4px 8px; border-radius: 3px; font-size: 12px;
+    min-width: 34px; min-height: 36px; display: flex; align-items: center;
+    justify-content: center; transition: background-color 150ms ease, color 150ms ease;
+  }
+  .nav-arrow:hover:not(:disabled) { background: #E6F5EC; }
+  .nav-arrow:disabled { color: #c8c8c8; cursor: not-allowed; }
+  .period-display {
+    font-weight: 600; color: var(--text); cursor: pointer;
+    padding: 4px 8px; border-radius: 3px;
+    transition: background-color 150ms ease;
+    position: relative;
+  }
+  .period-display:hover { background: #E6F5EC; }
+  .period-dropdown {
+    position: fixed; background: #fff; border: 1px solid #ccc;
+    border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 300; max-height: 250px; overflow-y: auto;
+    min-width: 150px;
+  }
+  .period-dropdown-item {
+    padding: 8px 12px; cursor: pointer; font-size: 12px;
+    border-bottom: 1px solid #f0f0f0; transition: background-color 150ms ease;
+  }
+  .period-dropdown-item:hover { background: #F0F8F4; }
+  .period-dropdown-item.active {
+    background: var(--green-soft); color: var(--green); font-weight: 600;
+  }
+  .period-dropdown-item:last-child { border-bottom: none; }
   .cols { display: grid; grid-template-columns: 30% 1fr; gap: 24px; }
   .section-title {
     background: var(--green-header); color: #000;
@@ -883,15 +927,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       <span class="field-label">Fondo</span>
       <div class="fund-btns" id="fund-btns"></div>
     </div>
-    <div class="field">
-      <span class="field-label">Año</span>
-      <div class="year-btns" id="year-btns" role="tablist" aria-label="Seleccionar año"></div>
+    <div class="period-nav-group">
+      <span class="period-nav-label">EEFF & Bursátil</span>
+      <div class="period-nav-controls">
+        <button class="nav-arrow" id="nav-prev-cb" onclick="navPeriod(-1, 'cb')">‹</button>
+        <span class="period-display" id="period-display-cb" onclick="togglePeriodDropdown('cb')"></span>
+        <button class="nav-arrow" id="nav-next-cb" onclick="navPeriod(1, 'cb')">›</button>
+      </div>
+      <div class="period-dropdown" id="period-dropdown-cb" style="display:none;"></div>
     </div>
-    <div class="field">
-      <span class="field-label">Trimestre</span>
-      <div class="q-group" id="q-btns" role="tablist" aria-label="Seleccionar trimestre"></div>
+    <div class="period-nav-group">
+      <span class="period-nav-label">Operacional</span>
+      <div class="period-nav-controls">
+        <button class="nav-arrow" id="nav-prev-op" onclick="navPeriod(-1, 'op')">‹</button>
+        <span class="period-display" id="period-display-op" onclick="togglePeriodDropdown('op')"></span>
+        <button class="nav-arrow" id="nav-next-op" onclick="navPeriod(1, 'op')">›</button>
+      </div>
+      <div class="period-dropdown" id="period-dropdown-op" style="display:none;"></div>
     </div>
-    <select id="sel-periodo" style="display:none" aria-hidden="true"></select>
+    <select id="sel-periodo-cb" style="display:none" aria-hidden="true"></select>
+    <select id="sel-periodo-op" style="display:none" aria-hidden="true"></select>
   </div>
 
   <div class="cols">
@@ -1249,85 +1304,95 @@ function populateSelect(sel, keys, defVal){
   if (keys.length) sel.value = defVal || keys[keys.length-1];
 }
 
-function buildPeriodPicker(periodos, defVal){
-  const sel = document.getElementById("sel-periodo");
-  const yearBox = document.getElementById("year-btns");
-  const qBox = document.getElementById("q-btns");
-  yearBox.innerHTML = ""; qBox.innerHTML = "";
-  // Sync hidden select (canonical value carrier)
-  sel.innerHTML = "";
-  periodos.forEach(k => {
-    const o = document.createElement("option"); o.value = k; o.textContent = fmtQ(k);
-    sel.appendChild(o);
-  });
+function initPeriodNav(periodos, defVal, suffix, format){
+  const sel = document.getElementById("sel-periodo-" + suffix);
+  const dispBtn = document.getElementById("period-display-" + suffix);
+  const dropdown = document.getElementById("period-dropdown-" + suffix);
+  const prevBtn = document.getElementById("nav-prev-" + suffix);
+  const nextBtn = document.getElementById("nav-next-" + suffix);
+
   if (!periodos.length) return;
 
-  const initial = defVal && periodos.includes(defVal) ? defVal : periodos[periodos.length-1];
+  const initial = defVal && periodos.includes(defVal) ? defVal : periodos[periodos.length - 1];
+  sel.innerHTML = "";
+  periodos.forEach(k => {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = format === "quarter" ? fmtQ(k) : fmtMonth(k);
+    sel.appendChild(o);
+  });
   sel.value = initial;
 
-  // Years (unique, ascending)
-  const years = Array.from(new Set(periodos.map(p => p.split("-")[0]))).sort();
-  // Map: year -> Set of quarters present (1..4)
-  const yqMap = {};
-  periodos.forEach(p => {
-    const { year, q } = periodoToYQ(p);
-    if (!q) return;
-    (yqMap[year] = yqMap[year] || new Set()).add(q);
+  function fmtMonth(p){
+    const [y, m] = p.split("-");
+    const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    return meses[parseInt(m) - 1] + " " + y;
+  }
+
+  function updateDisplay(){
+    const val = sel.value;
+    dispBtn.textContent = format === "quarter" ? fmtQ(val) : fmtMonth(val);
+    const idx = periodos.indexOf(val);
+    prevBtn.disabled = idx <= 0;
+    nextBtn.disabled = idx >= periodos.length - 1;
+    hidePeriodDropdown();
+  }
+
+  window["navPeriod"] = function(delta, suf){
+    const selId = "sel-periodo-" + suf;
+    const sel2 = document.getElementById(selId);
+    const idx = periodos.indexOf(sel2.value);
+    const newIdx = Math.max(0, Math.min(periodos.length - 1, idx + delta));
+    sel2.value = periodos[newIdx];
+    sel2.dispatchEvent(new Event("change"));
+  };
+
+  window["togglePeriodDropdown"] = function(suf){
+    const dd = document.getElementById("period-dropdown-" + suf);
+    if (dd.style.display === "none") showPeriodDropdown(suf);
+    else hidePeriodDropdown();
+  };
+
+  window["showPeriodDropdown"] = function(suf){
+    const dd = document.getElementById("period-dropdown-" + suf);
+    const dispBtn2 = document.getElementById("period-display-" + suf);
+    const sel3 = document.getElementById("sel-periodo-" + suf);
+    dd.innerHTML = "";
+    const sorted = [...periodos].reverse();
+    sorted.forEach(p => {
+      const item = document.createElement("div");
+      item.className = "period-dropdown-item";
+      item.textContent = format === "quarter" ? fmtQ(p) : fmtMonth(p);
+      if (p === sel3.value) item.classList.add("active");
+      item.onclick = () => {
+        sel3.value = p;
+        sel3.dispatchEvent(new Event("change"));
+      };
+      dd.appendChild(item);
+    });
+    const rect = dispBtn2.getBoundingClientRect();
+    dd.style.top = (rect.bottom + 4) + "px";
+    dd.style.left = rect.left + "px";
+    dd.style.display = "block";
+  };
+
+  window["hidePeriodDropdown"] = function(){
+    const dds = document.querySelectorAll(".period-dropdown");
+    dds.forEach(dd => dd.style.display = "none");
+  };
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".period-nav-group") && !e.target.closest(".period-dropdown")){
+      hidePeriodDropdown();
+    }
   });
 
-  function activeYear(){ return sel.value.split("-")[0]; }
-  function activeQ(){ return periodoToYQ(sel.value).q; }
+  sel.addEventListener("change", () => {
+    updateDisplay();
+    render();
+  });
 
-  function renderYearBtns(){
-    yearBox.innerHTML = "";
-    years.forEach(y => {
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "year-btn"; b.textContent = y;
-      b.setAttribute("role","tab");
-      if (y === activeYear()) { b.classList.add("active"); b.setAttribute("aria-selected","true"); }
-      b.addEventListener("click", () => {
-        // Pick first available quarter for that year that has data, prefer current q if available
-        const set = yqMap[y] || new Set();
-        const wantQ = activeQ();
-        let pickQ = (wantQ && set.has(wantQ)) ? wantQ : [4,3,2,1].find(q => set.has(q));
-        if (!pickQ) return;
-        const mm = {1:"03",2:"06",3:"09",4:"12"}[pickQ];
-        sel.value = y + "-" + mm;
-        renderYearBtns(); renderQBtns();
-        sel.dispatchEvent(new Event("change"));
-      });
-      yearBox.appendChild(b);
-    });
-    // Ensure the active year is scrolled into view
-    const active = yearBox.querySelector(".year-btn.active");
-    if (active) active.scrollIntoView({ block: "nearest", inline: "center" });
-  }
-
-  function renderQBtns(){
-    qBox.innerHTML = "";
-    const y = activeYear();
-    const set = yqMap[y] || new Set();
-    for (let q = 1; q <= 4; q++){
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "q-btn"; b.textContent = q + "Q";
-      b.setAttribute("role","tab");
-      const has = set.has(q);
-      if (!has) { b.disabled = true; b.title = "Sin datos"; }
-      if (q === activeQ()) { b.classList.add("active"); b.setAttribute("aria-selected","true"); }
-      b.addEventListener("click", () => {
-        if (!has) return;
-        const mm = {1:"03",2:"06",3:"09",4:"12"}[q];
-        sel.value = y + "-" + mm;
-        renderQBtns();
-        renderYearBtns();
-        sel.dispatchEvent(new Event("change"));
-      });
-      qBox.appendChild(b);
-    }
-  }
-
-  renderYearBtns();
-  renderQBtns();
+  updateDisplay();
 }
 function prev(map, key, n){
   const keys = Object.keys(map).sort();
@@ -1379,10 +1444,13 @@ function switchFund(f){
     b.classList.toggle("active", b.dataset.fund === f);
   });
 
-  // Repopular selector único de período — solo períodos con info contable
-  const periodoActual = document.getElementById("sel-periodo").value;
-  const periodos = Object.keys(F.contable).sort();
-  buildPeriodPicker(periodos, periodoActual);
+  // Repopular navegadores de período — contable/bursátil (trimestral) vs operacional (mensual)
+  const periodoActualCb = document.getElementById("sel-periodo-cb").value;
+  const periodoActualOp = document.getElementById("sel-periodo-op").value;
+  const periodosCb = Object.keys(F.contable).sort();
+  const periodosOp = Object.keys(F.fondo_kpi).sort();
+  initPeriodNav(periodosCb, periodoActualCb, "cb", "quarter");
+  initPeriodNav(periodosOp, periodoActualOp, "op", "month");
 
   document.getElementById("wrap-vcb").classList.toggle("hidden", !S.has_bursatil);
   document.getElementById("wrap-tickers").classList.toggle("hidden", !S.has_bursatil);
@@ -1435,17 +1503,20 @@ function switchFund(f){
 function render(){
   const F = FUNDS[currentFund];
   const S = F.static;
-  const periodo = document.getElementById("sel-periodo").value;
-  // Contable trimestral: usar el más reciente <= período seleccionado
+  // Período contable/bursátil (trimestral)
+  const periodoCb = document.getElementById("sel-periodo-cb").value;
   const cKeysR = Object.keys(F.contable).sort();
-  const cLower = cKeysR.filter(k => k <= periodo);
-  const pc = cLower.length ? cLower[cLower.length-1] : (cKeysR[cKeysR.length-1] || periodo);
-  // Bursátil mensual: usar el más reciente <= período seleccionado
+  const cLower = cKeysR.filter(k => k <= periodoCb);
+  const pc = cLower.length ? cLower[cLower.length-1] : (cKeysR[cKeysR.length-1] || periodoCb);
   const bKeysR = Object.keys(F.bursatil).sort();
-  const bLower = bKeysR.filter(k => k <= periodo);
-  const pb = bLower.length ? bLower[bLower.length-1] : (bKeysR[bKeysR.length-1] || periodo);
+  const bLower = bKeysR.filter(k => k <= periodoCb);
+  const pb = bLower.length ? bLower[bLower.length-1] : (bKeysR[bKeysR.length-1] || periodoCb);
   const c = F.contable[pc] || {series:{}};
   const b = F.bursatil[pb] || {series:{}};
+  // Período operacional (mensual)
+  const periodoOp = document.getElementById("sel-periodo-op").value;
+  const usadoOp = Object.keys(F.fondo_kpi).includes(periodoOp) ? periodoOp : Object.keys(F.fondo_kpi).sort().pop();
+  const tOp = F.fondo_kpi[usadoOp] || {};
 
   document.getElementById("month-bar").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
 
@@ -1603,17 +1674,18 @@ function render(){
 
   const mesLbl = S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc);
 
-  // Otros indicadores (nivel fondo, UF) — Tasa Arriendo / Cap Rate / Ingresos-NOI U12M
+  // Otros indicadores (nivel fondo, UF) — Tasa Arriendo / Cap Rate / Ingresos-NOI U12M (mensual, independiente)
   const nColsOi = S.series.length;
   const otrosTd = (kpi, text, raw) =>
-    `<td colspan="${nColsOi}" data-trace="1" data-kpi="${kpi}" data-fondo="${currentFund}" data-periodo="${usado||''}" data-raw="${raw==null?'':raw}">${text}</td>`;
+    `<td colspan="${nColsOi}" data-trace="1" data-kpi="${kpi}" data-fondo="${currentFund}" data-periodo="${usadoOp||''}" data-raw="${raw==null?'':raw}">${text}</td>`;
+  const mesOpLbl = mesEspanol(usadoOp);
   document.getElementById("tbl-otros-tbody").innerHTML = `
-    <tr><td>Tasa Arriendo</td>${otrosTd("tasa_arriendo_ajustada_contable", fmtPct(t.tasa_arriendo_ajustada_contable,2), t.tasa_arriendo_ajustada_contable)}</tr>
-    <tr><td>Cap Rate</td>${otrosTd("cap_rate_implicito_contable", fmtPct(t.cap_rate_implicito_contable,2), t.cap_rate_implicito_contable)}</tr>
-    <tr><td>Ingresos U12M</td>${otrosTd("ingresos_u12m", t.ingresos_u12m!=null?fmtEnteroMiles(t.ingresos_u12m)+" UF":"—", t.ingresos_u12m)}</tr>
-    <tr><td>Ingresos ${mesLbl}</td>${otrosTd("ingresos_mes", t.ingresos_mes!=null?fmtEnteroMiles(t.ingresos_mes)+" UF":"—", t.ingresos_mes)}</tr>
-    <tr><td>NOI U12M</td>${otrosTd("noi_u12m", t.noi_u12m!=null?fmtEnteroMiles(t.noi_u12m)+" UF":"—", t.noi_u12m)}</tr>
-    <tr><td>NOI ${mesLbl}</td>${otrosTd("noi_mes", t.noi_mes!=null?fmtEnteroMiles(t.noi_mes)+" UF":"—", t.noi_mes)}</tr>
+    <tr><td>Tasa Arriendo</td>${otrosTd("tasa_arriendo_ajustada_contable", fmtPct(tOp.tasa_arriendo_ajustada_contable,2), tOp.tasa_arriendo_ajustada_contable)}</tr>
+    <tr><td>Cap Rate</td>${otrosTd("cap_rate_implicito_contable", fmtPct(tOp.cap_rate_implicito_contable,2), tOp.cap_rate_implicito_contable)}</tr>
+    <tr><td>Ingresos U12M</td>${otrosTd("ingresos_u12m", tOp.ingresos_u12m!=null?fmtEnteroMiles(tOp.ingresos_u12m)+" UF":"—", tOp.ingresos_u12m)}</tr>
+    <tr><td>Ingresos ${mesOpLbl}</td>${otrosTd("ingresos_mes", tOp.ingresos_mes!=null?fmtEnteroMiles(tOp.ingresos_mes)+" UF":"—", tOp.ingresos_mes)}</tr>
+    <tr><td>NOI U12M</td>${otrosTd("noi_u12m", tOp.noi_u12m!=null?fmtEnteroMiles(tOp.noi_u12m)+" UF":"—", tOp.noi_u12m)}</tr>
+    <tr><td>NOI ${mesOpLbl}</td>${otrosTd("noi_mes", tOp.noi_mes!=null?fmtEnteroMiles(tOp.noi_mes)+" UF":"—", tOp.noi_mes)}</tr>
   `;
 
   // Valor Cuota Bursátil
