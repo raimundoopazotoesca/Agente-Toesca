@@ -326,3 +326,34 @@ primera vez (mismo `activo_key`, distinto `file_hash`). **Pendiente**: si
 `actualizar_er_curico` se sigue llamando en el flujo mensual del CDG, va a
 volver a insertar filas y re-supersede la data limpia de este parser —
 mismo pendiente que quedó abierto para Viña.
+
+## Ingesta ER Apoquindo 3001 (fondo TRI)
+
+Fuente: `RAW/NOI 3001.xlsx` (SharePoint), hoja `Hoja1`. Formato categoría×mes
+anclado en la fila con label `"Apoquindo 3001"`, header de fechas en la
+MISMA fila que la ancla (mismo patrón que Sucden). Módulo:
+`tools/db/ingest_er_apo3001.py`.
+
+`activo_key='Apo3001'` fijo (oficina, sociedad Inmobiliaria Chañarcillo
+Ltda, participación 0.685 — misma estructura que Sucden). 8 categorías
+persistidas: Taipei, Otros, Gastos Comunes, Administración, Comisión
+Corredor, Provision Incobrables, Contribuciones + Sobretasa, Seguros.
+
+**Hallazgo — la fila agregada "(+) Ingresos por Arriendos" se descarta**:
+la planilla trae esa fila como agregado visual de sus dos sub-detalles
+("Taipei" + "Otros"), pero en 2026-03 y 2026-04 el agregado difiere de la
+suma de sub-detalles en 0.5 UF (redondeo manual obsoleto en la fuente —
+"NOI Mensual" fue calculado con el valor preciso de Taipei+Otros, no con el
+agregado). El parser descarta la fila agregada y persiste Taipei/Otros por
+separado; con ese criterio la validación de integridad (suma de
+componentes == "NOI Mensual") da 0 discrepancias en los 77 periodos
+completos (2020-01 a 2026-05, 616 filas = 77 × 8 categorías).
+
+**Nota — coexiste con el feed vía RR JLL**: este activo también recibe NOI
+vía `noi_tools.actualizar_noi_apo3001` (hoja "NOI PT" del Rent Roll JLL,
+Excel del CDG). No se resolvió si esa ingesta debe deprecarse en favor de
+esta — queda igual que el pendiente abierto para Viña/Curicó vs.
+`actualizar_er_vina`/`actualizar_er_curico`.
+
+Con Apo3001 quedan consolidados en `raw_er_activo_line` los 5 activos
+pendientes del fondo TRI (INMOSA, Sucden, Viña Centro, Curicó, Apo3001).

@@ -3,6 +3,19 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] ingesta | ER Apoquindo 3001 (fondo TRI) — 2020-01 a 2026-05
+
+Último de los 5 activos pendientes del TRI consolidado en
+`raw_er_activo_line` (después de INMOSA, Sucden, Viña Centro, Curicó).
+`activo_key='Apo3001'`, 616 filas (77 periodos × 8 categorías). Hallazgo:
+la fila agregada "(+) Ingresos por Arriendos" no siempre cuadra con sus
+sub-detalles Taipei + Otros (redondeo obsoleto de 0.5 UF en 2026-03/04) —
+el parser descarta el agregado y usa Taipei/Otros directamente, dando 0
+discrepancias de integridad en los 77 periodos. Coexiste sin resolver con
+el feed legacy vía RR JLL (`actualizar_noi_apo3001`). Módulo:
+`tools/db/ingest_er_apo3001.py`. Tests: `tests/db/test_ingest_er_apo3001.py`
+(18 tests, incluye integración contra archivo real).
+
 ## [2026-07-14] fix | Amortización U12M / DY+Amort TRI — bug refinanciamiento Sucden II→III
 
 `raw_amortizacion` de `TRI_SUCDEN_BICE` modelaba el refinanciamiento Sucden II→III (dic-2025)
