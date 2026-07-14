@@ -190,3 +190,139 @@ def test_file_hash_estable(fixture_xlsx):
     h2 = mod._file_hash(fixture_xlsx)
     assert h1 == h2
     assert len(h1) == 64
+
+
+# ── Tests de persistencia ────────────────────────────────────────────────
+
+@pytest.fixture
+def db_conn(tmp_path):
+    """DB en disco (tmp) con schema mínimo necesario."""
+    db_path = os.path.join(str(tmp_path), "test.db")
+    conn = sqlite3.connect(db_path)
+    conn.executescript("""
+        CREATE TABLE ingest_run (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tool TEXT, source_file TEXT, file_hash TEXT,
+            rows_in INTEGER, rows_loaded INTEGER,
+            started_at TEXT, ended_at TEXT, status TEXT, error TEXT
+        );
+        CREATE TABLE dim_activo (
+            activo_key TEXT PRIMARY KEY, fondo_key TEXT, nombre TEXT,
+            tipo TEXT, participacion_fondo_activo REAL, categoria TEXT, sociedad TEXT
+        );
+        INSERT INTO dim_activo (activo_key, fondo_key, nombre, participacion_fondo_activo)
+             VALUES ('INMOSA','TRI','INMOSA',0.43);
+        CREATE TABLE raw_er_activo_line (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activo_key TEXT NOT NULL REFERENCES dim_activo(activo_key),
+            periodo TEXT NOT NULL,
+            cuenta_codigo TEXT, cuenta_nombre TEXT,
+            monto_clp REAL, monto_uf REAL,
+            seccion TEXT, es_operacional INTEGER,
+            source_file TEXT, source_sheet TEXT, source_row INTEGER,
+            file_hash TEXT, ingest_run_id INTEGER REFERENCES ingest_run(id),
+            loaded_at TEXT DEFAULT (datetime('now')),
+            superseded_at TEXT
+        );
+    """)
+    conn.commit()
+    yield conn
+    conn.close()
+
+
+def test_persist_inserta_24_filas(fixture_xlsx, db_conn):
+    res = mod.persist(fixture_xlsx, conn=db_conn)
+    assert res["status"] == "inserted"
+    assert res["rows"] == 24
+    n = db_conn.execute(
+        "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
+    ).fetchone()[0]
+    assert n == 24
+
+
+def test_persist_idempotente_mismo_hash(fixture_xlsx, db_conn):
+    mod.persist(fixture_xlsx, conn=db_conn)
+    res2 = mod.persist(fixture_xlsx, conn=db_conn)
+    assert res2["status"] == "skipped_idempotent"
+    n = db_conn.execute(
+        "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
+    ).fetchone()[0]
+    assert n == 24  # no duplica
+
+
+def test_persist_reingesta_supersede_previas(fixture_xlsx, tmp_path, db_conn):
+    mod.persist(fixture_xlsx, conn=db_conn)
+    fixture_xlsx_2 = _build_fixture_xlsx(str(tmp_path / "sub"))
+    wb = openpyxl.load_workbook(fixture_xlsx_2)
+    wb["Hoja1"].cell(row=5, column=1).value = "INMOSA "  # cambia contenido → cambia hash
+    wb.save(fixture_xlsx_2)
+
+    res = mod.persist(fixture_xlsx_2, conn=db_conn)
+    assert res["status"] == "superseded_and_reinserted"
+    total = db_conn.execute("SELECT COUNT(*) FROM raw_er_activo_line").fetchone()[0]
+    activas = db_conn.execute(
+        "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
+    ).fetchone()[0]
+    assert activas == 24
+    assert total - activas == 24
+
+
+def test_noi_derivado_matchea_suma_esperada(fixture_xlsx, db_conn):
+    mod.persist(fixture_xlsx, conn=db_conn)
+    for periodo, esperado in zip(_PERIODOS, _NOI_ESPERADO):
+        calc = db_conn.execute("""
+            SELECT SUM(monto_clp) FROM raw_er_activo_line
+             WHERE activo_key='INMOSA' AND periodo=?
+               AND es_operacional=1 AND superseded_at IS NULL
+        """, (periodo,)).fetchone()[0]
+        assert abs(calc - esperado) < 0.01, f"{periodo}: {calc} != {esperado}"
+
+
+def test_persist_falla_no_escribe_nada_si_integridad_no_cuadra(tmp_path, db_conn):
+    """Si la validación de integridad falla, no debe quedar ninguna fila
+    persistida (falla atómica antes de tocar la DB)."""
+    path = _build_fixture_xlsx(str(tmp_path), corrupt_noi=True)
+    with pytest.raises(ValueError, match=r"(?i)noi"):
+        mod.persist(path, conn=db_conn)
+    n = db_conn.execute("SELECT COUNT(*) FROM raw_er_activo_line").fetchone()[0]
+    assert n == 0
+
+
+# ── Test de integración de solo-lectura contra el archivo real ──────────
+# Se salta automáticamente si el archivo no está disponible en este entorno
+# (por ejemplo, en CI sin acceso a SharePoint local).
+
+_REAL_XLSX = (
+    r"C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos"
+    r"\RAW\NOI INMOSA.xlsx"
+)
+
+
+def _real_file_accessible() -> bool:
+    """Verifica que el archivo real existe y es accesible (no locked)."""
+    if not os.path.exists(_REAL_XLSX):
+        return False
+    try:
+        with open(_REAL_XLSX, "rb"):
+            pass
+        return True
+    except (PermissionError, OSError):
+        return False
+
+
+@pytest.mark.skipif(not _real_file_accessible(), reason="archivo real no disponible o locked en este entorno")
+def test_parse_archivo_real_no_lanza_y_cuadra_integridad(tmp_path):
+    """Copia el archivo real a tmp_path (evita locks de OneDrive) y confirma
+    que parse_planilla no lanza ValueError — es decir, la validación de
+    integridad (SUM(componentes)==NOI Mensual) cuadra en las 99 columnas
+    reales, no solo en el fixture sintético."""
+    import shutil
+    local_copy = os.path.join(str(tmp_path), "real.xlsx")
+    shutil.copy(_REAL_XLSX, local_copy)
+
+    rows = mod.parse_planilla(local_copy)
+    assert len(rows) > 0
+    periodos = {r["periodo"] for r in rows}
+    assert "2018-01" in periodos
+    assert "2026-03" in periodos
+    assert len(periodos) == 99
