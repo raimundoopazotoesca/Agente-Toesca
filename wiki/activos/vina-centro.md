@@ -4,8 +4,8 @@ nombre: "Viña Centro"
 fondo: "TRI"
 administrador: "Tres Asociados"
 filas_noi: "196–214"
-fuentes: 0
-actualizado: 2026-05-01
+fuentes: 1
+actualizado: 2026-07-14
 ---
 
 # Viña Centro
@@ -16,7 +16,18 @@ actualizado: 2026-05-01
 - **Administrador**: Tres Asociados
 - **Filas NOI-RCSD**: 196–214
 
-## Fuente de datos
+## Fuente canónica en la DB (desde 2026-07-14)
+
+`raw_er_activo_line`, `activo_key='Viña Centro'`, vía `tools/db/ingest_er_vina.py`.
+Fuente: `RAW/NOI VIÑA.xlsx` (SharePoint), no el CDG. Detalle completo del
+diseño, la definición de NOI y los overrides de datos faltantes en
+`wiki/db.md` → sección "Ingesta ER Viña Centro".
+
+**Nota**: existía una ingesta previa vía `actualizar_er_vina` (dual-write
+desde el ER embebido en el CDG, ver abajo) que quedó `superseded`. Pendiente
+decidir si ese flujo se desactiva para que no vuelva a pisar la data.
+
+## Fuente de datos (CDG mensual, uso: Excel entregable, no DB)
 
 **Archivo**: `MM-AAAA INFORME EEFF VIÑA CENTRO SPA*.xlsx`
 **Hoja**: "ESTADO DE RESULTADO AAAA"

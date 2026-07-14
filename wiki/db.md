@@ -226,3 +226,66 @@ El estado actual de la DB (416 filas + 8 corregidas) se corrigió una vez con
 `tools/db/correct_er_sucden_sobretasa_2026.py` (script de corrección puntual,
 ya ejecutado — se mantiene solo como registro de auditoría, no hace falta
 volver a correrlo).
+
+## Ingesta ER Viña Centro (activo, fondo TRI)
+
+Fuente: `RAW/NOI VIÑA.xlsx` (SharePoint), hoja `Hoja1`, bloque de input manual
+(fila 124 en adelante: "Ingreso de Explotacion"). Módulo:
+`tools/db/ingest_er_vina.py`. `activo_key='Viña Centro'`.
+
+**Diferencia clave vs. INMOSA/Sucden/PT/Apoquindo**: esos activos traen la
+planilla ya agregada por categoría y en UF. Viña Centro trae ~70 cuentas
+contables individuales en **pesos crudos**, y la lista de cuentas no es
+estable en el tiempo (se agregan cuentas nuevas, ej. "CUOTA INCORPORACIÓN
+FONDO PROMOCIÓN" desde 2026-01). Por eso el `cuenta_codigo` se extrae por
+regex del código contable en columna C (`^\d(?:-\d{1,3}){3}`) en vez de un
+diccionario fijo de categorías.
+
+**Conversión CLP→UF**: se hace en el parser mismo (a diferencia de los demás,
+que reciben la fuente ya en UF), usando `fact_uf` de la DB (UF de fin de mes,
+decisión del usuario 2026-07-14) — **no** la UF que trae la propia planilla.
+
+**Definición de NOI (confirmada por el usuario 2026-07-14)**: `SUM(monto_uf)
+WHERE es_operacional=1`, es decir Ingreso Explotación + Gastos de
+Administración y Ventas, **sin** Ingreso Fuera de Explotación. La planilla
+fuente NO calcula esto bien en ninguna de sus 2 filas de NOI propias:
+- Fila 87 "Total Operacional" = Total Gastos Admin y Ventas + Total Ingresos,
+  y Total Ingresos = Resultado Operación + Fuera de Explotación → queda
+  contaminada con ingresos no operacionales.
+- Fila 119 "Noi" (Sección 2 de la planilla) tiene referencias UF incorrectas
+  entre sep-2023 y ene-2025 (bug confirmado por el usuario), resta gastos de
+  más.
+
+Por eso el parser recalcula el NOI desde las cuentas crudas, sin reusar
+ninguna fórmula de la planilla. Validación de integridad por periodo: suma de
+cuentas Ingreso Explotación == "Total Resultado Operación" (fila 142), y suma
+de cuentas Gastos Admin y Ventas == "Total Gastos de administración y ventas"
+(fila 205) — ambas con tolerancia de 2000 CLP (residuo de redondeo
+irrelevante frente a subtotales de decenas de millones).
+
+**Overrides de datos faltantes en la fuente** (confirmados por el usuario
+2026-07-14, constante `_OVERRIDES_MONTO_CLP` en el módulo): la fuente trae,
+para ciertas cuentas y periodos puntuales, la fila de categoría (header) con
+el total correcto pero la cuenta hija en blanco:
+- `3-1-10-120` (SEGURIDAD PARKING): en blanco jul-nov 2025.
+- `3-1-40-102` (CONTRIBUCIONES): en blanco abr-may 2026.
+
+Cualquier re-ingesta futura de `NOI VIÑA.xlsx` aplica estos overrides
+automáticamente. Si aparecen gaps nuevos del mismo tipo (header con total
+correcto, cuenta hija en blanco), la validación de integridad los detecta y
+el ingest falla — hay que pedirle al usuario el desglose real y agregarlo a
+`_OVERRIDES_MONTO_CLP`.
+
+Rango histórico ingestado: 2023-08 a 2026-05 (34 meses, 1768 filas).
+
+**Nota — reemplaza la ingesta anterior de `actualizar_er_vina`**: existía una
+ingesta previa a `raw_er_activo_line` vía `noi_tools.actualizar_er_vina`
+(dual-write desde el ER Viña embebido en el CDG mensual, un mes a la vez, 4
+meses cargados: dic-2025 a mar-2026, ~71-72 filas c/u). El `persist()` de
+`ingest_er_vina` marcó esas filas como `superseded` al correr por primera vez
+(mismo `activo_key`, distinto `file_hash`), porque la nueva fuente es más
+completa y con metodología de NOI correcta. **Pendiente**: si
+`actualizar_er_vina` se sigue llamando en el flujo mensual del CDG, va a
+volver a insertar filas para `activo_key='Viña Centro'` y re-supersede la
+data limpia de este parser — hay que decidir si se desactiva ese dual-write
+o se reconcilian ambas fuentes antes de que eso pase.

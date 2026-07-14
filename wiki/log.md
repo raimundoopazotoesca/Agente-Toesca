@@ -3,6 +3,32 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] feat | ER Viña Centro consolidado en raw_er_activo_line (parser cuenta-a-cuenta)
+
+Parser nuevo `tools/db/ingest_er_vina.py`, 1768 filas, 34 meses (2023-08 a
+2026-05). A diferencia de INMOSA/Sucden/PT/Apoquindo (fuente ya agregada en
+UF), Viña Centro trae ~70 cuentas contables en pesos crudos con lista de
+cuentas inestable en el tiempo — el `cuenta_codigo` se extrae por regex en
+vez de un diccionario fijo, y la conversión CLP→UF se hace en el parser
+usando `fact_uf` (UF fin de mes, decisión del usuario).
+
+NOI definido como Ingreso Explotación + Gastos Admin y Ventas, SIN Ingreso
+Fuera de Explotación — la planilla fuente no calcula esto bien en ninguna de
+sus 2 filas propias de NOI (fila 87 se contamina con ingresos no
+operacionales; fila 119 tiene un bug de referencias UF sep-2023/ene-2025
+confirmado por el usuario). Se recalcula desde las cuentas crudas.
+
+Se detectaron y corrigieron (con datos que el usuario proveyó) 2 gaps reales
+de la fuente: cuenta `3-1-10-120` (SEGURIDAD PARKING) en blanco jul-nov 2025,
+y `3-1-40-102` (CONTRIBUCIONES) en blanco abr-may 2026 — la fila de categoría
+(header) traía el total correcto pero la cuenta hija estaba vacía. Overrides
+permanentes en `_OVERRIDES_MONTO_CLP`, se aplican automáticamente en
+re-ingestas futuras.
+
+La ingesta marcó como `superseded` la data previa de `actualizar_er_vina`
+(dual-write desde el CDG, 4 meses fragmentados dic-2025/mar-2026) — pendiente
+decidir si ese dual-write se desactiva. Detalle completo en `wiki/db.md`.
+
 ## [2026-07-14] corrección | Sobretasa Sucden fija 140 UF desde 2026-01
 
 Usuario confirmó que la Sobretasa del ER Sucden pasa a ser un monto fijo de
