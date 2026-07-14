@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] fix | Amortización U12M / DY+Amort TRI — bug refinanciamiento Sucden II→III
+
+`raw_amortizacion` de `TRI_SUCDEN_BICE` modelaba el refinanciamiento Sucden II→III (dic-2025)
+como si Sucden II se hubiera pagado en su totalidad (balloon ficticio ~UF 161.395) en vez de
+solo transferir el saldo insoluto a Sucden III (pago real ~UF 272). El tramo ene-nov 2025
+(Sucden II) también tenía un cronograma sintético (fórmula 3% anual) en vez de los valores
+reales. Corregido con la planilla "Succden refinanciamiento DB.xlsx" (SharePoint/RAW) aportada
+por el usuario, con `capital_uf`/`intereses_uf`/`saldo_uf` reales mes a mes para Sucden I/II/III.
+
+Se propagó el delta a `CONSOLIDADO_TRI` (agregado de deuda del fondo) y a `raw_saldo_deuda`, y
+se recalculó el cache `derived_kpi` (kpi=`dy_amort`, variantes bursátil y contable, series
+CFITOERI1A/C/I) para todo periodo cuya ventana U12M incluye dic-2025 (dic-2025 a nov-2026).
+
+El target de validación previo (bursátil MAR-26 A=34.644%/C=35.316%/I=20.184%, ver
+`skills/real-estate-finance-expert/scripts/dividend_yield.py`) quedó obsoleto — el CDG oficial
+usado para validar heredaba el mismo error de origen. Nuevo valor correcto MAR-26 bursátil:
+A=21.05%/C=21.65%/I=12.42% — confirmado por el usuario como correcto. Ver
+`[[feedback_dy_amort_congelada]]` en memoria del agente.
+
 ## [2026-07-14] feat | ER Viña Centro consolidado en raw_er_activo_line (parser cuenta-a-cuenta)
 
 Parser nuevo `tools/db/ingest_er_vina.py`, 1768 filas, 34 meses (2023-08 a
