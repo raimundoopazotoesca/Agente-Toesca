@@ -3,6 +3,16 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] corrección | Sobretasa Sucden fija 140 UF desde 2026-01
+
+Usuario confirmó que la Sobretasa del ER Sucden pasa a ser un monto fijo de
+-140 UF desde enero 2026 en adelante, reemplazando el valor recalculado que
+trae la planilla fuente (que ya no aplica). Corregidas 8 filas (2026-01 a
+2026-08) vía `tools/db/correct_er_sucden_sobretasa_2026.py` — supersede +
+reinserción con `ingest_run` propio, idempotente. Pendiente: re-aplicar tras
+cada futura re-ingesta de `NOI Sucden.xlsx` hasta que la fuente refleje el
+monto fijo directamente.
+
 ## [2026-07-14] ingesta | ER Sucden (fondo TRI) — 2018-01 a 2026-08
 
 Segundo activo pendiente del fondo TRI consolidado (INMOSA, **Sucden**, Viña
