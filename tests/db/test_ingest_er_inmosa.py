@@ -298,27 +298,45 @@ _REAL_XLSX = (
 )
 
 
-def _real_file_accessible() -> bool:
-    """Verifica que el archivo real existe y es accesible (no locked)."""
+def _copy_real_file(dst: str) -> bool:
+    """Copia el archivo real a `dst`. Devuelve True si la copia funcionó.
+
+    En este entorno, el archivo vive en una carpeta sincronizada por OneDrive
+    y puede quedar bloqueado para `open()`/`shutil.copy` de Python (WinError
+    32/PermissionError) incluso cuando el comando `cp` de shell sí puede
+    leerlo (distinto modo de apertura a nivel Win32). Por eso se usa
+    `subprocess` con `cp` en vez de `shutil.copy` — verificado necesario en
+    este entorno real, no una preferencia arbitraria.
+    """
+    import subprocess
     if not os.path.exists(_REAL_XLSX):
         return False
     try:
-        with open(_REAL_XLSX, "rb"):
-            pass
-        return True
-    except (PermissionError, OSError):
+        subprocess.run(["cp", _REAL_XLSX, dst], check=True, capture_output=True)
+        return os.path.exists(dst) and os.path.getsize(dst) > 0
+    except (subprocess.CalledProcessError, OSError, FileNotFoundError):
         return False
 
 
-@pytest.mark.skipif(not _real_file_accessible(), reason="archivo real no disponible o locked en este entorno")
+def _real_file_accessible(tmp_path_str: str) -> bool:
+    probe = os.path.join(tmp_path_str, "_probe.xlsx")
+    ok = _copy_real_file(probe)
+    if ok and os.path.exists(probe):
+        os.remove(probe)
+    return ok
+
+
+@pytest.mark.skipif(
+    not _real_file_accessible(str(__import__("tempfile").mkdtemp())),
+    reason="archivo real no disponible o locked en este entorno",
+)
 def test_parse_archivo_real_no_lanza_y_cuadra_integridad(tmp_path):
     """Copia el archivo real a tmp_path (evita locks de OneDrive) y confirma
     que parse_planilla no lanza ValueError — es decir, la validación de
     integridad (SUM(componentes)==NOI Mensual) cuadra en las 99 columnas
     reales, no solo en el fixture sintético."""
-    import shutil
     local_copy = os.path.join(str(tmp_path), "real.xlsx")
-    shutil.copy(_REAL_XLSX, local_copy)
+    assert _copy_real_file(local_copy), "no se pudo copiar el archivo real pese a pasar el skipif"
 
     rows = mod.parse_planilla(local_copy)
     assert len(rows) > 0
