@@ -13,11 +13,17 @@ from tools.db.connection import get_conn_for
 from tools import noi_query
 
 
+# entidad_key agregado por fondo en derived_kpi (no coincide con
+# dim_activo.activo_key — nivel="fondo" de noi_query no resuelve estos
+# fondos, por eso se consulta directo por el entidad_key agregado).
+_ENTIDAD_POR_FONDO = {"PT": "PT", "Apo": "Apoquindo"}
+
+
 def capture(db_path: str) -> dict:
     conn = get_conn_for(db_path)
     out = {}
-    for fondo in ("PT", "Apo"):
-        serie = noi_query.serie_mensual(conn, nivel="fondo", clave=fondo, ponderado=True)
+    for fondo, entidad_key in _ENTIDAD_POR_FONDO.items():
+        serie = noi_query.serie_mensual(conn, nivel="activo", clave=entidad_key, ponderado=True)
         out[fondo] = {p: round(v, 6) for p, v in serie.items()}
     return out
 
