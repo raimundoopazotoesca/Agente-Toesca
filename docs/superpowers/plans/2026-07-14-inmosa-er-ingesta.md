@@ -14,7 +14,7 @@
 - Montos ya vienen en UF con signo aplicado en la fuente — se guardan literal en `monto_clp` (misma convención que PT/Apo, sin re-firmar).
 - Todas las categorías tienen `es_operacional=1` — NOI se deriva como `SUM(monto_clp)`, nunca se persiste.
 - La fila "Ingresos por Arriendos" está duplicada en la fuente (subtotal visual) — solo la primera ocurrencia se persiste.
-- Validación de integridad **obligatoria y bloqueante**: si `SUM(7 categorías) != NOI Mensual` (tolerancia `abs(delta) < 0.01`) para cualquier periodo, el ingest completo falla (todo o nada) — no se persiste ningún periodo de esa corrida.
+- Validación de integridad **obligatoria y bloqueante**: si `SUM(8 categorías) != NOI Mensual` (tolerancia `abs(delta) < 0.01`) para cualquier periodo, el ingest completo falla (todo o nada) — no se persiste ningún periodo de esa corrida.
 - Idempotencia por `file_hash` (sha256), igual patrón que `ingest_er_apoquindo.py`: mismo hash → skip; hash distinto con filas activas previas del mismo `activo_key` → supersede + reinsert.
 - Categoría con nombre no reconocido (typo/variante nueva no mapeada) → fallar explícitamente, nunca ignorar en silencio.
 - `periodo` en formato `'YYYY-MM'` (truncar fecha de fin de mes).
@@ -148,9 +148,9 @@ Agregar al final de `tests/db/test_ingest_er_inmosa.py`:
 # ── Tests de parsing ─────────────────────────────────────────────────────
 
 def test_parse_devuelve_21_filas(fixture_xlsx):
-    # 7 categorías (sin la duplicada) × 3 meses = 21
+    # 8 categorías (sin la duplicada) × 3 meses = 24
     rows = mod.parse_planilla(fixture_xlsx)
-    assert len(rows) == 21
+    assert len(rows) == 24
 
 
 def test_parse_activo_key_fijo_inmosa(fixture_xlsx):
@@ -602,14 +602,14 @@ def db_conn(tmp_path):
     conn.close()
 
 
-def test_persist_inserta_21_filas(fixture_xlsx, db_conn):
+def test_persist_inserta_24_filas(fixture_xlsx, db_conn):
     res = mod.persist(fixture_xlsx, conn=db_conn)
     assert res["status"] == "inserted"
-    assert res["rows"] == 21
+    assert res["rows"] == 24
     n = db_conn.execute(
         "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
     ).fetchone()[0]
-    assert n == 21
+    assert n == 24
 
 
 def test_persist_idempotente_mismo_hash(fixture_xlsx, db_conn):
@@ -619,7 +619,7 @@ def test_persist_idempotente_mismo_hash(fixture_xlsx, db_conn):
     n = db_conn.execute(
         "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
     ).fetchone()[0]
-    assert n == 21  # no duplica
+    assert n == 24  # no duplica
 
 
 def test_persist_reingesta_supersede_previas(fixture_xlsx, tmp_path, db_conn):
@@ -635,8 +635,8 @@ def test_persist_reingesta_supersede_previas(fixture_xlsx, tmp_path, db_conn):
     activas = db_conn.execute(
         "SELECT COUNT(*) FROM raw_er_activo_line WHERE superseded_at IS NULL"
     ).fetchone()[0]
-    assert activas == 21
-    assert total - activas == 21
+    assert activas == 24
+    assert total - activas == 24
 
 
 def test_noi_derivado_matchea_suma_esperada(fixture_xlsx, db_conn):
@@ -721,7 +721,7 @@ git commit -m "test(db): persistencia idempotente ER INMOSA + integracion contra
 python -m tools.db.ingest_er_inmosa "C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\RAW\NOI INMOSA.xlsx" --dry-run
 ```
 
-Expected: imprime `Parsed 693 filas de ...` (99 periodos × 7 categorías) sin traceback, con el rango `periodos: 2018-01..2026-03 (99 meses)` y una muestra de NOI por periodo. Si lanza `ValueError` de integridad o categoría no reconocida, **detenerse** — no continuar a Step 2 hasta resolverlo (puede indicar que el archivo cambió desde la inspección inicial de este plan).
+Expected: imprime `Parsed 792 filas de ...` (99 periodos × 8 categorías) sin traceback, con el rango `periodos: 2018-01..2026-03 (99 meses)` y una muestra de NOI por periodo. Si lanza `ValueError` de integridad o categoría no reconocida, **detenerse** — no continuar a Step 2 hasta resolverlo (puede indicar que el archivo cambió desde la inspección inicial de este plan).
 
 - [ ] **Step 2: Ingestar a la DB real**
 
@@ -733,7 +733,7 @@ print(res)
 "
 ```
 
-Expected: `{'status': 'inserted', 'rows': 693, 'file_hash': '...', 'ingest_run_id': N}`.
+Expected: `{'status': 'inserted', 'rows': 792, 'file_hash': '...', 'ingest_run_id': N}`.
 
 - [ ] **Step 3: Sanity queries manuales**
 
@@ -749,7 +749,7 @@ print('NOI 2026-03:', c.execute(\"SELECT SUM(monto_clp) FROM raw_er_activo_line 
 "
 ```
 
-Expected: `total filas activas INMOSA` = 693; `periodos min/max` = `('2018-01', '2026-03')`; NOI 2018-01 ≈ 6229.27 (mismo valor validado en la inspección manual del spec); NOI 2026-03 ≈ 6081 (visto en la inspección de columnas finales durante el brainstorming).
+Expected: `total filas activas INMOSA` = 792; `periodos min/max` = `('2018-01', '2026-03')`; NOI 2018-01 ≈ 6229.27 (mismo valor validado en la inspección manual del spec); NOI 2026-03 ≈ 6081 (visto en la inspección de columnas finales durante el brainstorming).
 
 - [ ] **Step 4: Correr suite completa de tests para confirmar no-regresión**
 
@@ -760,7 +760,7 @@ Expected: todos los tests pasan (incluyendo el nuevo `test_parse_archivo_real_no
 
 ```bash
 git add memory/agente_toesca_v2.db
-git commit -m "data(er-inmosa): ingesta ER INMOSA 2018-01 a 2026-03 (99 meses, 693 filas)"
+git commit -m "data(er-inmosa): ingesta ER INMOSA 2018-01 a 2026-03 (99 meses, 792 filas)"
 ```
 
 ---
@@ -788,7 +788,7 @@ anclado en la fila con label `"INMOSA"`. Módulo: `tools/db/ingest_er_inmosa.py`
 
 `activo_key='INMOSA'` fijo (sin desglose por residencia individual — INMOSA
 engloba 6 residencias de adulto mayor como una sola entidad para efectos de
-ER/NOI). Validación de integridad obligatoria: suma de las 7 categorías debe
+ER/NOI). Validación de integridad obligatoria: suma de las 8 categorías debe
 cuadrar exacto contra la fila "NOI Mensual" de la fuente antes de persistir
 (si no cuadra, el ingest falla completo, no persiste nada).
 
@@ -804,7 +804,7 @@ Agregar al final:
 
 Primer activo pendiente del fondo TRI consolidado (de los 5: INMOSA, Sucden,
 Viña Centro, Curicó, Apo3001), siguiendo la arquitectura de `raw_er_activo_line`
-ya usada para PT/Apo. `activo_key='INMOSA'` fijo, 693 filas (99 periodos × 7
+ya usada para PT/Apo. `activo_key='INMOSA'` fijo, 792 filas (99 periodos × 8
 categorías), validación de integridad contra "NOI Mensual" de la fuente
 verificada en 0 discrepancias sobre el histórico completo.
 ```

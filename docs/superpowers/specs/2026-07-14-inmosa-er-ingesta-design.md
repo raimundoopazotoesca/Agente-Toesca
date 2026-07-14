@@ -28,7 +28,7 @@ Estructura confirmada por inspección directa del archivo (`openpyxl`, `data_onl
 
 No hay celdas merged. El formato es estable en las 99 columnas de datos (no cambia de layout).
 
-**Validación de integridad ejecutada sobre el archivo real completo**: sumando filas 6, 8, 9, 10, 11, 12, 13, 14 (excluyendo la fila 7 duplicada) por columna, contra la fila 15 (NOI Mensual), para los 99 periodos (2018-01 a 2026-03) → **0 discrepancias** (tolerancia 0.01). Confirma que el modelo "suma de 7 categorías = NOI" es válido en todo el histórico real, no solo en el ejemplo de la foto.
+**Validación de integridad ejecutada sobre el archivo real completo**: sumando filas 6, 8, 9, 10, 11, 12, 13, 14 (excluyendo la fila 7 duplicada) por columna, contra la fila 15 (NOI Mensual), para los 99 periodos (2018-01 a 2026-03) → **0 discrepancias** (tolerancia 0.01). Confirma que el modelo "suma de 8 categorías = NOI" es válido en todo el histórico real, no solo en el ejemplo de la foto.
 
 **Hallazgo relevante**: la fila "(+) Contribuciones" **no siempre es positiva** — en varios periodos toma valores negativos (ej. -1.381, -538, -174 UF). Esto no rompe el modelo: la clasificación `seccion` (`INGRESOS_OPERACION`/`GASTOS_OPERACION`) es solo informativa y no afecta el cálculo de NOI (que es una suma simple de `monto_clp` sin importar la sección) — se mantiene la etiqueta `INGRESOS_OPERACION` para Contribuciones porque así viene clasificada en la fuente (prefijo `(+)`), igual que ocurre con "Ingresos por Contribuciones" en PT (recuperación de gasto, puede ir negativo en ajustes).
 
@@ -70,7 +70,7 @@ Todas las categorías tienen `es_operacional=1` (todas entran al cálculo de NOI
 6. Celdas vacías (`None`) se tratan como `0.0`.
 7. `periodo` = truncar la fecha de fin de mes a `'YYYY-MM'`.
 
-**Validación de integridad (obligatoria, no opcional):** para cada periodo, sumar los montos de las 7 categorías ingresadas (excluyendo la fila duplicada de Ingresos) y comparar contra el valor de la fila "NOI Mensual" de la misma columna. Si no cuadra exacto (tolerancia `abs(delta) < 0.01`, calibrada contra la validación real de 99 periodos que dio 0 discrepancias), el ingest debe fallar con un error explícito indicando el periodo y el delta — no se persiste ningún periodo de esa corrida (falla atómica, todo o nada). Esto sigue la regla ya establecida en memoria (`feedback_gastos_check_suma`): siempre verificar que la suma de componentes cuadre con el total reportado por la fuente.
+**Validación de integridad (obligatoria, no opcional):** para cada periodo, sumar los montos de las 8 categorías ingresadas (excluyendo la fila duplicada de Ingresos) y comparar contra el valor de la fila "NOI Mensual" de la misma columna. Si no cuadra exacto (tolerancia `abs(delta) < 0.01`, calibrada contra la validación real de 99 periodos que dio 0 discrepancias), el ingest debe fallar con un error explícito indicando el periodo y el delta — no se persiste ningún periodo de esa corrida (falla atómica, todo o nada). Esto sigue la regla ya establecida en memoria (`feedback_gastos_check_suma`): siempre verificar que la suma de componentes cuadre con el total reportado por la fuente.
 
 **Idempotencia:** por `file_hash` (sha256 del archivo), igual que PT/Apo — reingestas del mismo archivo no duplican filas (versiona con `superseded_at` si el archivo cambia).
 
@@ -79,7 +79,7 @@ Todas las categorías tienen `es_operacional=1` (todas entran al cálculo de NOI
 ### Test
 
 `tests/db/test_ingest_er_inmosa.py` — fixture xlsx construida programáticamente (vía `openpyxl`, no el archivo real) replicando la estructura exacta confirmada arriba (ancla "INMOSA" en fila 5, 9 filas de categorías incluyendo la duplicada, fila de header 2 arriba de la ancla, fila NOI Mensual al final), con al menos 3 meses de datos usando los valores reales de enero-marzo 2018 (6440.0915337339 / 6434.459445817043 / 6437.583242252402 para Ingresos; -175 fijo para Administración; -35.82156799923614 / -19.76057110904785 / -69.61203164324844 para Provisión Reparaciones; resto en 0/None), verificando:
-- Se persisten 7 categorías × 3 meses = 21 filas en `raw_er_activo_line` (no 8×3=24 — la fila duplicada se descarta).
+- Se persisten 8 categorías × 3 meses = 24 filas en `raw_er_activo_line` (99 columnas de datos reales dan 8×99=792).
 - NOI derivado (`SUM(monto_clp) WHERE es_operacional=1`) = 6229.2699657346675 / 6239.698874707995 / 6192.971210609153 para cada mes respectivamente (valores reales del archivo, no redondeados).
 - Idempotencia: reingestar el mismo archivo no crea filas duplicadas (mismo `file_hash`).
 - Un test con label de categoría no reconocido (typo/variante nueva) hace fallar el ingest explícitamente, no lo ignora silenciosamente.
