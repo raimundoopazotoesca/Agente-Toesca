@@ -3,6 +3,12 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] db | Migración 049: dim_sociedad + fondo padre + vista look-through
+
+Aditivo puro para consolidación TRI. Nueva tabla `dim_sociedad` con 7 holdings; nuevas columnas `dim_activo.sociedad_key`/`participacion_en_sociedad`, `dim_fondo.fondo_padre`/`participacion_en_padre`; vista `v_activo_fondo_efectivo`. La columna vieja `dim_activo.participacion_fondo_activo` queda deprecada pero intacta — `noi_query.py` sigue funcionando sin cambios (verificado con snapshot pre/post).
+
+Habilita ingestas próximas de INMOSA, Sucden, Viña, Curicó, Apo3001 y consolidación TRI que incluye subfondos PT/Apo.
+
 ## [2026-07-13] doc+regla | Supuestos prospectivos ER/NOI Fondo PT
 
 Definidos por usuario para cálculos futuros de ingresos/NOI PT, sin tocar la DB histórica:

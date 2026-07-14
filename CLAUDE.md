@@ -45,12 +45,12 @@ Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
 - `memory/agente_toesca.db` está vacía — ignorar.
 - Módulo de acceso a la DB de negocio: `tools.db.connection.get_conn()`.
 - Estructura:
-  - `dim_*` (fondo, activo, serie, cuenta_eeff, credito) — catálogos maestros
+  - `dim_*` (fondo, activo, serie, cuenta_eeff, credito, sociedad) — catálogos maestros
   - `raw_*_line` — una fila por línea de documento fuente: `raw_eeff_line`, `raw_er_activo_line`, `raw_flujo_line`, `raw_rent_roll_line`
   - `raw_*` (sin `_line`) — snapshots/observaciones/eventos: `raw_caja`, `raw_capital_suscrito`, `raw_cuota_en_circulacion`, `raw_saldo_deuda`, `raw_valor_cuota_bursatil`, `raw_valor_cuota_contable`, `raw_ar_event` (aportes/dism/canjes), `raw_dividendo`, `raw_amortizacion`, `raw_pagare_intercompania`
   - `fact_adquisicion`, `fact_tasacion` — hechos derivados
   - `derived_kpi` — cache de KPIs (`entidad_tipo`+`kpi`+`variante`+`formula`)
-  - Vistas: `v_serie_patrimonio`, `v_capital_suscrito_serie`, `v_flujos_tir_serie`, `raw_valor_cuota_line` (unión bursátil+contable), `fact_precio_cuota`, `fact_dividendo`, `fact_uf`, y vistas de compat con nombres viejos (`raw_dividendo_line`, etc.) para consumidores externos.
+  - Vistas: `v_serie_patrimonio`, `v_capital_suscrito_serie`, `v_flujos_tir_serie`, `v_activo_fondo_efectivo`, `raw_valor_cuota_line` (unión bursátil+contable), `fact_precio_cuota`, `fact_dividendo`, `fact_uf`, y vistas de compat con nombres viejos (`raw_dividendo_line`, etc.) para consumidores externos.
   - Trazabilidad: `ingest_run`, `schema_version`
 - **Plan de cuentas**: `dim_cuenta_eeff` (`cuenta_codigo`, `source_sheet`, `grupo`, `descripcion`, `es_subtotal`). No tiene columna `signo` — el signo contable ya viene aplicado en `raw_eeff_line.monto_clp`.
 - **Formato `periodo`**: siempre `YYYY-MM` (string). Todas las tablas normalizadas 2026-07-01. Las ingestas deben truncar `YYYY-MM-DD → YYYY-MM` al persistir.

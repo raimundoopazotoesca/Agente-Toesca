@@ -164,4 +164,16 @@ Detectado al calcular `caja_minima` (= % de activos totales) por fondo/periodo. 
 los periodos donde `ESF.total_activo` existe limpio (67 filas iniciales + Apo 2020-12 corregido).
 Los 9 periodos de TRI y Apo 2026-03 quedan sin `caja_minima` hasta resolver el parseo.
 
+## Jerarquía de participaciones (post migración 049)
+
+Las participaciones del organigrama TRI viven en 3 lugares:
+
+- **`dim_sociedad(sociedad_key, nombre, fondo_key, participacion_fondo_en_sociedad)`** — holding/vehicle intermedia. Ej: Chañarcillo→TRI (100%), Curicó SpA→TRI (80%), Senior Assist→TRI (43%).
+- **`dim_activo.sociedad_key`, `dim_activo.participacion_en_sociedad`** — participación del activo dentro de su sociedad. Ej: Apo3001 dentro de Chañarcillo = 68.5%.
+- **`dim_fondo.fondo_padre`, `dim_fondo.participacion_en_padre`** — un subfondo dentro de un fondo padre. Ej: PT→TRI 33.3%, Apo→TRI 30%.
+
+Vista canónica de look-through: **`v_activo_fondo_efectivo(activo_key, fondo_key, participacion_efectiva, via)`**. `via='directa'` = activo→fondo dueño de su sociedad. `via='lookthrough'` = activo→fondo abuelo vía fondo padre. Usar esta vista para toda consolidación por fondo.
+
+⚠️ La columna vieja `dim_activo.participacion_fondo_activo` está **deprecada** (semántica mezclada) pero se conserva porque `tools/noi_query.py` aún la lee. Migrar a la vista en Fase 3.
+
 Spec completo: `docs/superpowers/specs/2026-05-25-db-migration-design.md`.
