@@ -124,6 +124,56 @@ def test_parse_valores_reales_ingresos(fixture_xlsx):
         assert abs(ing_by_periodo[periodo] - esperado) < 1e-6
 
 
+def test_parse_sobretasa_override_fija_desde_202601(tmp_path):
+    """Regla de negocio permanente: Sobretasa = -140 UF desde 2026-01,
+    independiente del valor que traiga la fuente, aplicado post-validación."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Hoja1"
+
+    fechas = [
+        __import__("datetime").datetime(2025, 12, 31),
+        __import__("datetime").datetime(2026, 1, 31),
+        __import__("datetime").datetime(2026, 2, 28),
+    ]
+    ing = [2049.0875, 2049.0875, 2049.0875]
+    contrib = [-214.54, -214.54, -214.54]
+    sobretasa_fuente = [-126.79, -126.86, -126.59]  # valores obsoletos de la fuente
+    seguros = [0, 0, 0]
+
+    ws.cell(row=3, column=1).value = "Sucden"
+    for j, f in enumerate(fechas, start=2):
+        ws.cell(row=3, column=j).value = f
+    ws.cell(row=4, column=1).value = "(+) Ingresos por Arriendos"
+    for j, v in enumerate(ing, start=2):
+        ws.cell(row=4, column=j).value = v
+    ws.cell(row=5, column=1).value = "(-) Contribuciones"
+    for j, v in enumerate(contrib, start=2):
+        ws.cell(row=5, column=j).value = v
+    ws.cell(row=6, column=1).value = "(-) Sobretasa"
+    for j, v in enumerate(sobretasa_fuente, start=2):
+        ws.cell(row=6, column=j).value = v
+    ws.cell(row=7, column=1).value = "(-) Seguros"
+    for j, v in enumerate(seguros, start=2):
+        ws.cell(row=7, column=j).value = v
+    # NOI Mensual calculado con los valores DE LA FUENTE (integridad debe
+    # validar contra estos, no contra el override -140).
+    ws.cell(row=8, column=1).value = "NOI Mensual"
+    for j, (i_, c_, s_, sg_) in enumerate(zip(ing, contrib, sobretasa_fuente, seguros), start=2):
+        ws.cell(row=8, column=j).value = i_ + c_ + s_ + sg_
+
+    path = os.path.join(str(tmp_path), "sucden_override.xlsx")
+    wb.save(path)
+
+    rows = mod.parse_planilla(path)  # no debe lanzar: integridad cuadra contra la fuente
+    sobretasa_por_periodo = {
+        r["periodo"]: r["monto_clp"] for r in rows if r["cuenta_codigo"] == "SUCDEN_SOBRETASA"
+    }
+    assert sobretasa_por_periodo["2025-12"] == -126.79  # anterior al corte: valor de la fuente
+    assert sobretasa_por_periodo["2026-01"] == -140.0   # override aplicado
+    assert sobretasa_por_periodo["2026-02"] == -140.0   # override aplicado
+
+
 def test_parse_categoria_desconocida_falla(tmp_path):
     path = _build_fixture_xlsx(str(tmp_path), unknown_label=True)
     with pytest.raises(ValueError, match=r"(?i)categor[ií]a"):

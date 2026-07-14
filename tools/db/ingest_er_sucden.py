@@ -13,6 +13,13 @@ Estructura confirmada (2026-07-14) sobre RAW/NOI Sucden.xlsx, hoja 'Hoja1':
 fila ancla 'Sucden' con el header de fechas en la MISMA fila (a diferencia
 de INMOSA, donde el header está 2 filas arriba de la ancla), 4 filas de
 categoría debajo, fila 'NOI Mensual' de control.
+
+Regla de negocio permanente (confirmada por el usuario 2026-07-14): la
+Sobretasa es fija en -140 UF desde el periodo 2026-01 en adelante,
+independiente de lo que traiga la planilla fuente (que sigue trayendo un
+valor recalculado obsoleto). El override se aplica DESPUÉS de la validación
+de integridad NOI, así la validación sigue verificando los valores
+originales de la fuente; solo el monto persistido de Sobretasa cambia.
 """
 from __future__ import annotations
 
@@ -35,6 +42,10 @@ _CATEGORIAS: dict[str, dict] = {
 _ANCLA = "sucden"
 _LABEL_NOI = "noi mensual"
 _ACTIVO_KEY = "Sucden"
+
+# Override de regla de negocio: Sobretasa fija desde este periodo (inclusive).
+_SOBRETASA_FIJA_DESDE = "2026-01"
+_SOBRETASA_FIJA_VALOR = -140.0
 
 
 def _norm(s) -> str:
@@ -152,6 +163,13 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
                 f"Validación de integridad falló en {xlsx_path}, periodo {periodo}: "
                 f"suma de componentes={suma!r} != NOI Mensual={noi_esperado!r} (delta={delta!r})"
             )
+
+    # 4) Override de regla de negocio: Sobretasa fija desde _SOBRETASA_FIJA_DESDE.
+    #    Aplicado después de validar contra la fuente, para no romper la
+    #    validación de integridad con el valor de la fuente aún vigente.
+    for r in out:
+        if r["cuenta_codigo"] == "SUCDEN_SOBRETASA" and r["periodo"] >= _SOBRETASA_FIJA_DESDE:
+            r["monto_clp"] = _SOBRETASA_FIJA_VALOR
 
     return out
 

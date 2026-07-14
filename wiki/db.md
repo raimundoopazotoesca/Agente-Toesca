@@ -212,14 +212,17 @@ fijo/UF-indexado con reajustes escalonados (valores planos por años, confirmado
 no es arrastre erróneo de fórmula). Mismo bloqueo de OneDrive que INMOSA:
 copiar a ruta local antes de leer con `openpyxl`.
 
-**Corrección manual — Sobretasa fija 140 UF desde 2026-01**: el usuario
-confirmó que a partir de enero 2026 la Sobretasa es un monto fijo de -140 UF
-(no viene del archivo fuente, que trae un valor recalculado obsoleto). Aplicado
-con `tools/db/correct_er_sucden_sobretasa_2026.py`: supersede las filas
-`SUCDEN_SOBRETASA` con periodo >= 2026-01 e inserta las corregidas bajo
-`ingest_run.tool='correction_er_sucden_sobretasa'` (file_hash sintético
-`correction:sucden_sobretasa_2026`, idempotente). **Importante**: si se
-re-ingesta `NOI Sucden.xlsx` en el futuro con `ingest_er_sucden.persist()`,
-esta corrección queda superseded por las filas del archivo — hay que
-re-aplicar el override tras cada re-ingesta hasta que la fuente misma
-refleje el monto fijo.
+**Regla de negocio permanente — Sobretasa fija -140 UF desde 2026-01**: el
+usuario confirmó que a partir de enero 2026 la Sobretasa es un monto fijo,
+independiente de lo que traiga la fuente (que sigue trayendo un valor
+recalculado obsoleto). La regla está baked-in en `ingest_er_sucden.
+parse_planilla` (constantes `_SOBRETASA_FIJA_DESDE`/`_SOBRETASA_FIJA_VALOR`):
+la validación de integridad NOI corre contra los valores originales de la
+fuente, y el override se aplica DESPUÉS, solo al monto persistido. Esto
+significa que cualquier re-ingesta futura de `NOI Sucden.xlsx` aplica el
+fijo automáticamente — no requiere reprocesar el override a mano.
+
+El estado actual de la DB (416 filas + 8 corregidas) se corrigió una vez con
+`tools/db/correct_er_sucden_sobretasa_2026.py` (script de corrección puntual,
+ya ejecutado — se mantiene solo como registro de auditoría, no hace falta
+volver a correrlo).
