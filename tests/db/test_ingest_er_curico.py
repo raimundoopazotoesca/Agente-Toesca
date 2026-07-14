@@ -307,3 +307,36 @@ def test_persist_supersede_en_reingesta_con_cambios(tmp_path, conn):
         "SELECT COUNT(*) FROM raw_er_activo_line WHERE activo_key='Mall Curicó' AND superseded_at IS NULL"
     ).fetchone()[0]
     assert activos == 10
+
+
+# ── Test de integración de solo-lectura contra el archivo real ──────────
+# Se salta automáticamente si el archivo no está disponible en este entorno.
+
+_REAL_XLSX = (
+    r"C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos"
+    r"\RAW\NOI Curico.xlsx"
+)
+
+
+@pytest.mark.skipif(not os.path.exists(_REAL_XLSX), reason="archivo real no disponible en este entorno")
+def test_parse_archivo_real_no_lanza_y_cuadra_integridad(tmp_path):
+    """Copia el archivo real a tmp_path (evita locks de OneDrive) y confirma
+    que parse_planilla no lanza ValueError sobre el histórico completo
+    (34 periodos, 44 cuentas, validación estricta de Ingreso Explotación y
+    blanda de Gastos Admin y Ventas)."""
+    import shutil
+    local_copy = os.path.join(str(tmp_path), "real.xlsx")
+    try:
+        shutil.copy(_REAL_XLSX, local_copy)
+    except (PermissionError, OSError) as e:
+        pytest.skip(f"archivo real bloqueado o inaccesible en este entorno: {e}")
+
+    rows = mod.parse_planilla(local_copy)
+    assert len(rows) == 1496
+    periodos = {r["periodo"] for r in rows}
+    assert periodos == {f"2023-{m:02d}" for m in range(8, 13)} | \
+                        {f"2024-{m:02d}" for m in range(1, 13)} | \
+                        {f"2025-{m:02d}" for m in range(1, 13)} | \
+                        {f"2026-{m:02d}" for m in range(1, 6)}
+    codigos = {r["cuenta_codigo"] for r in rows}
+    assert {"3-1-10-115", "3-1-10-116", "3-1-10-117"} <= codigos
