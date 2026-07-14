@@ -193,3 +193,21 @@ Rango histórico ingestado: 2018-01 a 2026-03 (99 meses, 792 filas = 99 × 8
 categorías). El archivo vive en OneDrive, se debe copiar a una ruta local
 antes de leerlo con `openpyxl` (bloqueo de permisos si se lee directo desde
 la carpeta sincronizada).
+
+## Ingesta ER Sucden (fondo TRI)
+
+Fuente: `RAW/NOI Sucden.xlsx` (SharePoint), hoja `Hoja1`. Formato categoría×mes
+anclado en la fila con label `"Sucden"` — a diferencia de INMOSA, el header de
+fechas está en la MISMA fila que la ancla (no 2 filas arriba). Módulo:
+`tools/db/ingest_er_sucden.py`.
+
+`activo_key='Sucden'` fijo (Bodegas Maipú, industrial, sociedad Inmobiliaria
+Chañarcillo Ltda, participación 1.0). 4 categorías: Ingresos por Arriendos,
+Contribuciones, Sobretasa, Seguros. Misma validación de integridad que INMOSA
+(suma de componentes == "NOI Mensual", falla atómica si no cuadra).
+
+Rango histórico ingestado: 2018-01 a 2026-08 (104 meses, 416 filas = 104 × 4
+categorías) — incluye meses futuros al mes en curso porque el arriendo es
+fijo/UF-indexado con reajustes escalonados (valores planos por años, confirmado
+no es arrastre erróneo de fórmula). Mismo bloqueo de OneDrive que INMOSA:
+copiar a ruta local antes de leer con `openpyxl`.

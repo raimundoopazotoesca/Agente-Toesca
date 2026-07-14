@@ -3,6 +3,19 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] ingesta | ER Sucden (fondo TRI) — 2018-01 a 2026-08
+
+Segundo activo pendiente del fondo TRI consolidado (INMOSA, **Sucden**, Viña
+Centro, Curicó, Apo3001), mismo patrón `raw_er_activo_line` que INMOSA.
+`activo_key='Sucden'` fijo, 416 filas (104 periodos × 4 categorías:
+Ingresos por Arriendos, Contribuciones, Sobretasa, Seguros), validación de
+integridad contra "NOI Mensual" en 0 discrepancias. Diferencia estructural
+vs INMOSA: header de fechas en la misma fila que la ancla (no 2 filas
+arriba). Se ingestó todo el rango del archivo incluyendo meses futuros
+(2026-04 a 2026-08) por decisión explícita del usuario — el arriendo es
+fijo/UF-indexado, los valores planos no son error de arrastre. Módulo
+`tools/db/ingest_er_sucden.py`, 18 tests en `tests/db/test_ingest_er_sucden.py`.
+
 ## [2026-07-14] ingesta | ER INMOSA (fondo TRI) — 2018-01 a 2026-03
 
 Primer activo pendiente del fondo TRI consolidado (de los 5: INMOSA, Sucden,
