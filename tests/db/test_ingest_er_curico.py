@@ -326,10 +326,7 @@ def test_parse_archivo_real_no_lanza_y_cuadra_integridad(tmp_path):
     blanda de Gastos Admin y Ventas)."""
     import shutil
     local_copy = os.path.join(str(tmp_path), "real.xlsx")
-    try:
-        shutil.copy(_REAL_XLSX, local_copy)
-    except (PermissionError, OSError) as e:
-        pytest.skip(f"archivo real bloqueado o inaccesible en este entorno: {e}")
+    shutil.copy(_REAL_XLSX, local_copy)
 
     rows = mod.parse_planilla(local_copy)
     assert len(rows) == 1496
