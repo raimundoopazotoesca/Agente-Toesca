@@ -28,7 +28,7 @@ import openpyxl
 # mojibake real observada en RAW/NOI INMOSA.xlsx (U+FFFD por tildes perdidas).
 _CATEGORIAS: dict[str, dict] = {
     "ingresos por arriendos":        {"codigo": "INMOSA_ING_ARR",     "seccion": "INGRESOS_OPERACION"},
-    "contribuciones":                {"codigo": "INMOSA_CONTRIB",     "seccion": "INGRESOS_OPERACION"},
+    "contribuciones":                {"codigo": "INMOSA_CONTRIB",     "seccion": "GASTOS_OPERACION"},
     "administraci�n":           {"codigo": "INMOSA_ADM",         "seccion": "GASTOS_OPERACION"},
     "administracion":                {"codigo": "INMOSA_ADM",         "seccion": "GASTOS_OPERACION"},
     "administración":                {"codigo": "INMOSA_ADM",         "seccion": "GASTOS_OPERACION"},
