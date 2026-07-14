@@ -4,16 +4,37 @@ metodología usada para NOI (ver consolidate_noi_tri.py):
 
 1. ingresos_mensual por activo (100%) = SUM(monto_uf) de raw_er_activo_line
    WHERE seccion='INGRESOS_OPERACION' (ingreso operacional, excluye
-   'INGRESO_FUERA_EXPLOTACION'). Se usa monto_uf si existe (fuentes en CLP,
-   ej. Viña/Curicó); si no, monto_clp (fuentes que ya vienen en UF, ej.
-   INMOSA/Apo3001/Sucden/Torre A/Boulevard — ver comentarios en los
-   ingest_er_*.py).
+   'INGRESO_FUERA_EXPLOTACION'), EXCLUYENDO cuentas de traspaso/recupero
+   (gastos comunes, servicios básicos, fondo de promoción, cuotas — ver
+   _CUENTAS_PASSTHROUGH) que no son ingreso de arriendo puro. Solo Viña
+   Centro y Mall Curicó tienen este desglose; el resto de los activos ya
+   reporta un ingreso neto sin esas partidas. Se usa monto_uf si existe
+   (fuentes en CLP, ej. Viña/Curicó); si no, monto_clp (fuentes que ya
+   vienen en UF, ej. INMOSA/Apo3001/Sucden/Torre A/Boulevard — ver
+   comentarios en los ingest_er_*.py).
 2. ingresos_mes(TRI) = suma ponderada por participación efectiva de TRI en
    cada activo (misma tabla de participaciones que NOI, incluyendo la
    excepción Apo3001=1.0).
 3. ingresos_u12m(TRI) solo para periodos con 12 meses trailing completos.
+
+Validado (parcialmente, queda residuo ~2.000 UF sin explicar en marzo 2026)
+contra RAW/NOI tri.xlsx (SharePoint) — solo como referencia de validación,
+nunca como fuente de cálculo (ver [[feedback_no_usar_cdg]]).
 """
 from tools.db.connection import get_conn
+
+# Cuentas de traspaso/recupero (no son ingreso de arriendo puro) en Viña
+# Centro y Mall Curicó — el resto de los activos no tiene este desglose.
+_CUENTAS_PASSTHROUGH = {
+    "INGRESO POR GASTOS COMUNES",
+    "INGRESO POR SERVICIOS BASICOS ELECTRICIDAD",
+    "INGRESO POR SERVICIOS BASICOS AGUA",
+    "INGRESO POR FONDO PROMOCIÓN",
+    "INGRESO POR FONDO DE PROMOCIÓN",
+    "CUOTA ARQUITECTURA",
+    "CUOTA INCORPORACIÓN FONDO PROMOCIÓN",
+    "INGRESOS DIRECTOS LOCATARIOS",
+}
 
 # activo_key en derived_kpi (ingresos_mensual, agregado) -> lista de
 # activo_key en raw_er_activo_line que lo componen.
@@ -61,11 +82,13 @@ def _participaciones_tri(conn) -> dict[str, float]:
 def _ingresos_activo_raw(conn, activo_keys_raw: list[str]) -> dict[str, float]:
     acc: dict[str, float] = {}
     placeholders = ",".join("?" for _ in activo_keys_raw)
+    excl_placeholders = ",".join("?" for _ in _CUENTAS_PASSTHROUGH)
     cur = conn.execute(
         f"SELECT periodo, SUM(COALESCE(monto_uf, monto_clp)) AS ingreso FROM raw_er_activo_line "
         f"WHERE seccion='INGRESOS_OPERACION' AND superseded_at IS NULL AND activo_key IN ({placeholders}) "
+        f"AND UPPER(cuenta_nombre) NOT IN ({excl_placeholders}) "
         f"GROUP BY periodo",
-        activo_keys_raw,
+        activo_keys_raw + list(_CUENTAS_PASSTHROUGH),
     )
     for r in cur.fetchall():
         acc[r["periodo"]] = acc.get(r["periodo"], 0.0) + r["ingreso"]
