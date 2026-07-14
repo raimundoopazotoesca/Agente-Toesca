@@ -129,31 +129,38 @@ def parse_planilla(xlsx_path: str, conn: "sqlite3.Connection | None" = None) -> 
         all_rows = list(ws.iter_rows(values_only=False))
         wb.close()
 
-        # 1) Fila de fechas: primera fila con >=10 celdas tipo fecha.
+        # 1) Fila de fechas: la fila con MÁS celdas tipo fecha de toda la
+        #    hoja (sin umbral fijo — futuras entregas pueden traer menos
+        #    meses que el histórico completo, el usuario confirmó 2026-07-14
+        #    que el formato de filas 126+ se mantiene pero no necesariamente
+        #    el resto del archivo).
         header_row_idx = None
         period_by_col: dict[int, str] = {}
+        best_count = 0
         for i, row in enumerate(all_rows):
             candidatos = {}
             for cell in row:
                 v = cell.value
                 if hasattr(v, "year") and hasattr(v, "month"):
                     candidatos[cell.column] = f"{v.year:04d}-{v.month:02d}"
-            if len(candidatos) >= 10:
+            if len(candidatos) > best_count:
+                best_count = len(candidatos)
                 header_row_idx = i
                 period_by_col = candidatos
-                break
-        if header_row_idx is None:
+        if header_row_idx is None or best_count == 0:
             raise ValueError(f"No se encontró fila de fechas en {xlsx_path}")
 
         # 2) Ancla del bloque de input manual: "Ingreso de Explotacion" en
-        #    columna C, buscado desde la fila 100 en adelante (la primera
-        #    ocurrencia, más arriba, es solo un label de la Sección 1).
+        #    columna C. Se toma la ÚLTIMA ocurrencia en la hoja: si el
+        #    archivo trae también la Sección 1 (mirror en UF, más arriba),
+        #    esa aparece primero; el bloque de input real es el que está más
+        #    abajo. Si el archivo viene recortado (solo el bloque de input),
+        #    hay una sola ocurrencia y esa se usa igual.
         ancla_idx = None
-        for i in range(100, len(all_rows)):
+        for i in range(len(all_rows)):
             val = _norm(all_rows[i][2].value if len(all_rows[i]) > 2 else None)
             if _SECTION_HEADERS[0][0].match(val):
                 ancla_idx = i
-                break
         if ancla_idx is None:
             raise ValueError(
                 f"No se encontró la fila ancla 'Ingreso de Explotacion' (input manual) en {xlsx_path}"

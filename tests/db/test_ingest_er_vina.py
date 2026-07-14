@@ -234,6 +234,55 @@ def test_parse_falla_si_total_gastos_no_cuadra(tmp_path, conn):
         mod.parse_planilla(path, conn=conn)
 
 
+def test_parse_archivo_recortado_sin_seccion_1_ni_muchos_meses(tmp_path, conn):
+    """El usuario avisó (2026-07-14) que las próximas entregas no van a ser
+    necesariamente el mismo archivo histórico completo, solo van a mantener
+    el formato de las filas de input (126+). Este fixture simula eso: sin
+    Sección 1 (mirror en UF) arriba, y con un solo mes de datos (sin
+    columnas dummy) — el parser debe seguir encontrando la fila de fechas
+    (la de más celdas fecha, sin umbral fijo) y el ancla del bloque input
+    (única ocurrencia, sin necesidad de estar después de la fila 100)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Hoja1"
+    col = 4
+    ws.cell(row=2, column=col).value = datetime.datetime(2025, 1, 31)
+
+    r = 5  # ancla mucho más arriba que en el archivo histórico (fila 124)
+    ws.cell(row=r, column=3).value = "Ingreso de Explotacion"
+    r += 1
+    ws.cell(row=r, column=3).value = "4-1-01-100  ARRIENDO TIENDAS ANCLAS"
+    ws.cell(row=r, column=col).value = _ING_1[_DATA_COL_1]
+    r += 1
+    ws.cell(row=r, column=3).value = "4-1-01-101  ARRIENDO TIENDAS MENORES"
+    ws.cell(row=r, column=col).value = _ING_2[_DATA_COL_1]
+    r += 1
+    ws.cell(row=r, column=3).value = "Total Resultado Operación"
+    ws.cell(row=r, column=col).value = _ING_1[_DATA_COL_1] + _ING_2[_DATA_COL_1]
+    r += 1
+    ws.cell(row=r, column=3).value = "Ingreso Fuera De Explotacion"
+    r += 1
+    ws.cell(row=r, column=3).value = "GASTOS DE ADMINISTRACIÓN Y VENTAS"
+    r += 1
+    ws.cell(row=r, column=3).value = "3-1-10-102  FEE ADMINISTRATIVO (REMUNERACIONES)"
+    ws.cell(row=r, column=col).value = _GASTO_1[_DATA_COL_1]
+    r += 1
+    ws.cell(row=r, column=3).value = "Total Gastos de administración y ventas"
+    ws.cell(row=r, column=col).value = _GASTO_1[_DATA_COL_1]
+    r += 1
+    ws.cell(row=r, column=3).value = "Total Operacional"
+
+    path = os.path.join(str(tmp_path), "recortado.xlsx")
+    wb.save(path)
+
+    rows = mod.parse_planilla(path, conn=conn)
+    assert {r["periodo"] for r in rows} == {"2025-01"}
+    assert {r["cuenta_codigo"] for r in rows} == {"4-1-01-100", "4-1-01-101", "3-1-10-102"}
+    noi = sum(r["monto_uf"] for r in rows if r["es_operacional"] == 1)
+    esperado = (_ING_1[_DATA_COL_1] + _ING_2[_DATA_COL_1] + _GASTO_1[_DATA_COL_1]) / _UF["2025-01-31"]
+    assert abs(noi - esperado) < 1e-6
+
+
 # ── Tests de override de datos faltantes ────────────────────────────────
 
 def test_override_seguridad_parking_aplica_valor_fijo(tmp_path, conn):
