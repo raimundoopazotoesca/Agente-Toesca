@@ -49,6 +49,7 @@ Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
   - `raw_*_line` — una fila por línea de documento fuente: `raw_eeff_line`, `raw_er_activo_line`, `raw_flujo_line`, `raw_rent_roll_line`
   - `raw_*` (sin `_line`) — snapshots/observaciones/eventos: `raw_caja`, `raw_capital_suscrito`, `raw_cuota_en_circulacion`, `raw_saldo_deuda`, `raw_valor_cuota_bursatil`, `raw_valor_cuota_contable`, `raw_ar_event` (aportes/dism/canjes), `raw_dividendo`, `raw_amortizacion`, `raw_pagare_intercompania`
   - `fact_adquisicion`, `fact_tasacion` — hechos derivados
+  - `dim_sociedad` — holdings/sociedades intermedias entre fondo y activo (Chañarcillo, Senior Assist, Curicó SpA, etc.) con % del fondo en la sociedad
   - `derived_kpi` — cache de KPIs (`entidad_tipo`+`kpi`+`variante`+`formula`)
   - Vistas: `v_serie_patrimonio`, `v_capital_suscrito_serie`, `v_flujos_tir_serie`, `v_activo_fondo_efectivo`, `raw_valor_cuota_line` (unión bursátil+contable), `fact_precio_cuota`, `fact_dividendo`, `fact_uf`, y vistas de compat con nombres viejos (`raw_dividendo_line`, etc.) para consumidores externos.
   - Trazabilidad: `ingest_run`, `schema_version`
