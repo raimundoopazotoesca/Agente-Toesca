@@ -56,3 +56,6 @@ scripts/flujos_tri_*.txt
 
 # Dashboard generado (regenerable con: python -m tools.db.dashboard)
 dashboard.html
+
+# Artefactos temporales de scripts (snapshots, JSON de trabajo, etc.)
+scratchpad/
