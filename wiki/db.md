@@ -289,3 +289,40 @@ completa y con metodología de NOI correcta. **Pendiente**: si
 volver a insertar filas para `activo_key='Viña Centro'` y re-supersede la
 data limpia de este parser — hay que decidir si se desactiva ese dual-write
 o se reconcilian ambas fuentes antes de que eso pase.
+
+## Ingesta ER Mall Curicó (activo, fondo TRI)
+
+Fuente: `RAW/NOI Curico.xlsx` (SharePoint), hoja `Hoja1`. Módulo:
+`tools/db/ingest_er_curico.py`. `activo_key='Mall Curicó'`.
+
+Mismo enfoque que Viña Centro (código de cuenta por regex, NOI recalculado
+desde cuentas crudas), con dos diferencias: no hay header de texto para
+arrancar la sección de Ingreso Explotación (arranca por defecto justo
+después de la fila de fechas), y el recorrido corta en la **primera**
+ocurrencia de "Total Operacional" (la Sección 1 de datos reales está arriba
+del archivo, el espejo en UF está abajo — orden inverso a Viña).
+
+**Cuentas huérfanas**: 3 cuentas (`3-1-10-115` Mantención Cobro Directo,
+`3-1-10-116` Mantención Activo, `3-1-10-117` Servicios Administrativos
+Activo) están físicamente en el bloque de Gastos de Administración y
+Ventas, pero las fórmulas `SUM()` de sus subcategorías (MANTENCIÓN,
+SERVICIOS) no las incluyen — quedan fuera del NOI oficial de fila 133 de la
+fuente. Impacto real hasta 5.7% del gasto en algunos meses. **Confirmado
+por el usuario 2026-07-14**: el NOI en la DB las incluye (recalculado desde
+las cuentas crudas, no reusa la fórmula de la fuente) — validación de
+integridad de Gastos Admin y Ventas es blanda por este motivo (no puede
+exigir igualdad exacta contra el subtotal de la fuente).
+
+Sección "Resultado No Operacional" (financiero: leasing, intereses,
+variación UF) no se ingesta — no la usa el NOI de referencia.
+
+Rango histórico ingestado: 2023-08 a 2026-05 (34 meses, 1496 filas).
+
+**Nota — reemplaza la ingesta anterior de `actualizar_er_curico`**: existía
+una ingesta previa a `raw_er_activo_line` vía `noi_tools.actualizar_er_curico`
+(dual-write desde el ER Curicó embebido en el CDG mensual). El `persist()`
+de `ingest_er_curico` marcó esas filas como `superseded` al correr por
+primera vez (mismo `activo_key`, distinto `file_hash`). **Pendiente**: si
+`actualizar_er_curico` se sigue llamando en el flujo mensual del CDG, va a
+volver a insertar filas y re-supersede la data limpia de este parser —
+mismo pendiente que quedó abierto para Viña.

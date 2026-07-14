@@ -606,3 +606,14 @@ Instrucciones completas en `wiki/procesos/balance-consolidado-rentas-nuevo.md`.
 - `log.md` iniciado
 - Páginas semilla creadas en todas las categorías
 - Fuentes ingresadas: 0 — wiki lista para primer ingest real
+
+## [2026-07-14] ingesta | ER Mall Curicó (fondo TRI) — 2023-08 a 2026-05
+
+Segundo activo de Tres Asociados consolidado en `raw_er_activo_line`
+(después de Viña Centro), mismo enfoque de código de cuenta por regex y NOI
+recalculado desde cuentas crudas. `activo_key='Mall Curicó'`, 1496 filas
+(34 periodos × 44 cuentas). Diferencia clave encontrada: 3 cuentas
+huérfanas en Gastos de Administración y Ventas que la fuente excluye de sus
+propios subtotales de categoría (hasta 5.7% del gasto en algunos meses) —
+confirmado con el usuario que el NOI en la DB las incluye, con validación
+de integridad blanda para ese bloque.

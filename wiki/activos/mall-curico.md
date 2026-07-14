@@ -16,6 +16,16 @@ actualizado: 2026-05-01
 - **Administrador**: Tres Asociados
 - **Filas NOI-RCSD**: 258–278
 
+## Fuente canónica en la DB (desde 2026-07-14)
+
+`raw_er_activo_line`, `activo_key='Mall Curicó'`, vía `tools/db/ingest_er_curico.py`.
+Fuente: `RAW/NOI Curico.xlsx` (SharePoint), no el CDG. Detalle completo del
+diseño, la definición de NOI (incluye 3 cuentas huérfanas de la fuente) y la
+validación de integridad en `wiki/db.md` → sección "Ingesta ER Mall Curicó".
+
+**Nota**: existía una ingesta previa vía `actualizar_er_curico` (dual-write
+desde el ER embebido en el CDG) que quedó `superseded`.
+
 ## Fuente de datos
 
 **Archivo**: `MM-AAAA INFORME EEFF POWER CENTER CURICO SPA.xlsx`
