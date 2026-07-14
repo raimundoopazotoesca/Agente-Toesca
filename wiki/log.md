@@ -3,6 +3,15 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-14] ingesta | ER INMOSA (fondo TRI) — 2018-01 a 2026-03
+
+Primer activo pendiente del fondo TRI consolidado (de los 5: INMOSA, Sucden,
+Viña Centro, Curicó, Apo3001), siguiendo la arquitectura de `raw_er_activo_line`
+ya usada para PT/Apo. `activo_key='INMOSA'` fijo, 792 filas (99 periodos × 8
+categorías), validación de integridad contra "NOI Mensual" de la fuente
+verificada en 0 discrepancias sobre el histórico completo. Módulo
+`tools/db/ingest_er_inmosa.py`, 19 tests en `tests/db/test_ingest_er_inmosa.py`.
+
 ## [2026-07-14] db | Migración 049: dim_sociedad + fondo padre + vista look-through
 
 Aditivo puro para consolidación TRI. Nueva tabla `dim_sociedad` con 7 holdings; nuevas columnas `dim_activo.sociedad_key`/`participacion_en_sociedad`, `dim_fondo.fondo_padre`/`participacion_en_padre`; vista `v_activo_fondo_efectivo`. La columna vieja `dim_activo.participacion_fondo_activo` queda deprecada pero intacta — `noi_query.py` sigue funcionando sin cambios (verificado con snapshot pre/post).

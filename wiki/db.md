@@ -177,3 +177,19 @@ Vista canónica de look-through: **`v_activo_fondo_efectivo(activo_key, fondo_ke
 ⚠️ La columna vieja `dim_activo.participacion_fondo_activo` está **deprecada** (semántica mezclada) pero se conserva porque `tools/noi_query.py` aún la lee. Migrar a la vista en Fase 3.
 
 Spec completo: `docs/superpowers/specs/2026-05-25-db-migration-design.md`.
+
+## Ingesta ER INMOSA (fondo TRI)
+
+Fuente: `RAW/NOI INMOSA.xlsx` (SharePoint), hoja `Hoja1`. Formato categoría×mes
+anclado en la fila con label `"INMOSA"`. Módulo: `tools/db/ingest_er_inmosa.py`.
+
+`activo_key='INMOSA'` fijo (sin desglose por residencia individual — INMOSA
+engloba 6 residencias de adulto mayor como una sola entidad para efectos de
+ER/NOI). Validación de integridad obligatoria: suma de las 8 categorías debe
+cuadrar exacto contra la fila "NOI Mensual" de la fuente antes de persistir
+(si no cuadra, el ingest falla completo, no persiste nada).
+
+Rango histórico ingestado: 2018-01 a 2026-03 (99 meses, 792 filas = 99 × 8
+categorías). El archivo vive en OneDrive, se debe copiar a una ruta local
+antes de leerlo con `openpyxl` (bloqueo de permisos si se lee directo desde
+la carpeta sincronizada).
