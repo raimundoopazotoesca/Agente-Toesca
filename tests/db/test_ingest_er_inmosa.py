@@ -89,7 +89,7 @@ def fixture_xlsx(tmp_path):
 
 # ── Tests de parsing ─────────────────────────────────────────────────────
 
-def test_parse_devuelve_21_filas(fixture_xlsx):
+def test_parse_devuelve_24_filas(fixture_xlsx):
     # 8 categorías (sin la duplicada) × 3 meses = 24
     # (fixture has 9 category rows: Ingresos duplicated in rows 6-7, then
     # Contribuciones, Administración, Provision Reparaciones, Aseo, Otros Gastos,
