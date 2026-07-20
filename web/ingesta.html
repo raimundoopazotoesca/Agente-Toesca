@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ingesta EEFF · Toesca</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --green: #00B27A; --green-soft: #C8ECD8; --green-header: #A6DEC1;
+    --text: #202020; --border: #A6A6A6; --muted: #6b6b6b;
+    --warn: #B8860B; --err: #C0392B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", Arial, sans-serif;
+    background: #F4F4F4; color: var(--text); line-height: 1.5; font-size: 13px;
+  }
+  header {
+    background: linear-gradient(180deg,#3d3d3d,#2b2b2b); color: #fff;
+    padding: 22px 32px 18px;
+  }
+  header h1 { margin: 0; font-size: 26px; font-weight: 300; letter-spacing: 0.5px; }
+  header .subtitle {
+    margin: 4px 0 0; font-size: 12px; font-weight: 400; color: #dedede;
+    font-variant: small-caps; letter-spacing: 1px;
+  }
+  main { max-width: 880px; margin: 12px auto 40px; padding: 0 24px; }
+  .step {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    padding: 20px 24px; margin-bottom: 18px;
+  }
+  .step-title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: #2b2b2b; margin-bottom: 12px; }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--green); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
+  }
+  select, textarea, button {
+    font-family: inherit; font-size: 13px; border-radius: 3px; border: 1px solid var(--border);
+    background: #fff; color: var(--text); padding: 7px 12px;
+  }
+  select { width: 260px; }
+  textarea {
+    width: 100%; min-height: 220px; resize: vertical;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #FAFAFA;
+  }
+  button {
+    background: #fff; color: var(--green); border: 1px solid var(--green); cursor: pointer;
+    font-weight: 700; padding: 8px 18px; text-transform: none;
+  }
+  button:hover:not(:disabled) { background: var(--green-soft); }
+  button:disabled { border-color: var(--border); color: #a0a0a0; cursor: not-allowed; background: #f4f4f4; }
+  button.primary, #btn-confirm { background: var(--green); color: #fff; }
+  button.primary:hover:not(:disabled), #btn-confirm:hover:not(:disabled) { background: #009c69; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  ol.instructions { color: #444; font-size: 13px; padding-left: 20px; margin: 8px 0 0; }
+  ol.instructions li { margin-bottom: 4px; }
+  .muted { color: var(--muted); font-size: 12.5px; }
+  .hidden { display: none !important; }
+  .copied-flash { color: var(--green); font-size: 13px; margin-left: 4px; font-weight: 600; }
+
+  .preview { margin-top: 18px; }
+  .preview h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #33413b;
+    font-weight: 700; margin: 18px 0 8px; border-bottom: 2px solid var(--green); padding-bottom: 4px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  th { color: #fff; background: var(--green-header); font-weight: 700; font-size: 11px; color: #0d3a29; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 2px solid var(--green); }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px;
+    border-radius: 999px; border: 1px solid var(--border); background: #FAFAFA; font-weight: 600;
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.ok { background: var(--green); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
+
+  .msg-list { margin: 10px 0 0; padding-left: 18px; font-size: 13px; }
+  .msg-list.err li { color: var(--err); }
+  .msg-list.warn li { color: var(--warn); }
+
+  .summary-line { font-size: 12.5px; color: var(--muted); }
+  .delta-up { color: var(--green); } .delta-down { color: var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ingesta de EEFF</h1>
+  <div class="subtitle">Toesca · Fact Sheets dinámicos</div>
+</header>
+
+<main>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Elige el fondo y copia el prompt</div>
+    <div class="row">
+      <select id="fondo-select">
+        <option value="TRI">TRI (Toesca Rentas Inmobiliarias)</option>
+        <option value="PT">PT (Parque Titanium)</option>
+        <option value="APO">Apo (Fondo Apoquindo)</option>
+      </select>
+      <button id="btn-copy-prompt">Copiar prompt</button>
+      <span id="copied-flash" class="copied-flash hidden">✓ copiado</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">2</span> Ejecuta el prompt en ChatGPT</div>
+    <ol class="instructions">
+      <li>Abre ChatGPT (chatgpt.com) en una pestaña nueva.</li>
+      <li>Pega el prompt copiado en el paso 1.</li>
+      <li>Adjunta el PDF del EEFF del fondo y periodo que quieras ingestar (un solo PDF por vez).</li>
+      <li>Envía el mensaje y espera la respuesta.</li>
+      <li>Copia la respuesta completa de ChatGPT (debe ser solo el bloque JSON).</li>
+    </ol>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">3</span> Pega la respuesta y valida</div>
+    <textarea id="respuesta-input" placeholder="Pega aquí el JSON que devolvió ChatGPT..."></textarea>
+    <div class="row">
+      <button id="btn-validate">Validar y previsualizar</button>
+      <span id="validate-status" class="muted"></span>
+    </div>
+
+    <div id="preview" class="preview hidden">
+      <div class="badges" id="badges"></div>
+      <ul id="errors" class="msg-list err"></ul>
+      <ul id="warnings" class="msg-list warn"></ul>
+
+      <div id="section-cabecera" class="hidden">
+        <h3>Resumen</h3>
+        <div class="summary-line" id="cabecera-text"></div>
+      </div>
+
+      <div id="section-vc" class="hidden">
+        <h3>Valor cuota</h3>
+        <table><thead><tr><th>Serie</th><th class="num">Fecha</th><th class="num">Valor libro (CLP)</th><th class="num">Δ vs. periodo anterior</th></tr></thead>
+        <tbody id="vc-body"></tbody></table>
+      </div>
+
+      <div id="section-div" class="hidden">
+        <h3>Dividendos</h3>
+        <table><thead><tr><th>Serie</th><th class="num">Fecha pago</th><th class="num">CLP/cuota</th><th class="num">UF/cuota</th></tr></thead>
+        <tbody id="div-body"></tbody></table>
+      </div>
+
+      <div id="section-gastos" class="hidden">
+        <h3>Gastos de operación (ER)</h3>
+        <div id="gastos-container"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-confirm" disabled>Confirmar e ingestar</button>
+      <span id="ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const promptCache = {};
+let lastValidatedText = null;
+let lastValidatedFondo = null;
+let lastValidationOk = false;
+
+const fondoSelect = document.getElementById('fondo-select');
+const btnCopy = document.getElementById('btn-copy-prompt');
+const copiedFlash = document.getElementById('copied-flash');
+const respuestaInput = document.getElementById('respuesta-input');
+const btnValidate = document.getElementById('btn-validate');
+const validateStatus = document.getElementById('validate-status');
+const btnConfirm = document.getElementById('btn-confirm');
+const ingestStatus = document.getElementById('ingest-status');
+
+async function fetchPrompt(fondo) {
+  if (promptCache[fondo]) return promptCache[fondo];
+  const res = await fetch(`/api/prompt/${fondo}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'error');
+  promptCache[fondo] = json.prompt_text;
+  return json.prompt_text;
+}
+
+fondoSelect.addEventListener('change', () => {
+  fetchPrompt(fondoSelect.value).catch(() => {});
+  resetPreview();
+});
+
+btnCopy.addEventListener('click', async () => {
+  btnCopy.disabled = true;
+  try {
+    const text = await fetchPrompt(fondoSelect.value);
+    await navigator.clipboard.writeText(text);
+    copiedFlash.classList.remove('hidden');
+    setTimeout(() => copiedFlash.classList.add('hidden'), 1500);
+  } catch (e) {
+    alert('Error cargando el prompt: ' + e.message);
+  } finally {
+    btnCopy.disabled = false;
+  }
+});
+
+function resetPreview() {
+  document.getElementById('preview').classList.add('hidden');
+  btnConfirm.disabled = true;
+  lastValidationOk = false;
+  ingestStatus.textContent = '';
+}
+
+function fmt(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-CL', {maximumFractionDigits: 2});
+}
+
+function renderPreview(data) {
+  document.getElementById('preview').classList.remove('hidden');
+
+  const badges = document.getElementById('badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('errors');
+  const warnUl = document.getElementById('warnings');
+  errUl.innerHTML = '';
+  warnUl.innerHTML = '';
+
+  function addBadge(label, status) {
+    const el = document.createElement('span');
+    el.className = 'badge';
+    el.innerHTML = `<span class="dot ${status}"></span>${label}`;
+    badges.appendChild(el);
+  }
+
+  addBadge(data.ok ? 'Validación OK' : 'Validación con errores', data.ok ? 'ok' : 'err');
+
+  (data.errors || []).forEach(e => {
+    const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li);
+  });
+  (data.warnings || []).forEach(w => {
+    const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li);
+  });
+
+  if (!data.ok) {
+    document.getElementById('section-cabecera').classList.add('hidden');
+    document.getElementById('section-vc').classList.add('hidden');
+    document.getElementById('section-div').classList.add('hidden');
+    document.getElementById('section-gastos').classList.add('hidden');
+    btnConfirm.disabled = true;
+    lastValidationOk = false;
+    return;
+  }
+
+  // Cabecera
+  document.getElementById('section-cabecera').classList.remove('hidden');
+  document.getElementById('cabecera-text').textContent =
+    `Fondo ${data.fondo} · periodos: ${data.periodos.join(', ')} · ${data.n_lineas} líneas · ` +
+    `cuentas mapeadas ${data.cuentas_mapeadas.mapeadas}/${data.cuentas_mapeadas.total}`;
+
+  // Valor cuota
+  const vcBody = document.getElementById('vc-body');
+  vcBody.innerHTML = '';
+  if (data.valor_cuota && data.valor_cuota.length) {
+    document.getElementById('section-vc').classList.remove('hidden');
+    data.valor_cuota.forEach(vc => {
+      const tr = document.createElement('tr');
+      let deltaHtml = '—';
+      if (vc.delta_pct !== null && vc.delta_pct !== undefined) {
+        const cls = vc.delta_pct >= 0 ? 'delta-up' : 'delta-down';
+        deltaHtml = `<span class="${cls}">${vc.delta_pct > 0 ? '+' : ''}${vc.delta_pct}%</span>`;
+      }
+      tr.innerHTML = `<td>${vc.nemotecnico}</td><td class="num">${vc.fecha}</td>` +
+        `<td class="num">${fmt(vc.precio_clp)}</td><td class="num">${deltaHtml}</td>`;
+      vcBody.appendChild(tr);
+    });
+  } else {
+    document.getElementById('section-vc').classList.add('hidden');
+  }
+
+  // Dividendos
+  const divBody = document.getElementById('div-body');
+  divBody.innerHTML = '';
+  if (data.dividendos && data.dividendos.length) {
+    document.getElementById('section-div').classList.remove('hidden');
+    data.dividendos.forEach(d => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${d.nemotecnico}</td><td class="num">${d.fecha_pago}</td>` +
+        `<td class="num">${fmt(d.monto_clp_cuota)}</td><td class="num">${fmt(d.monto_uf_cuota)}</td>`;
+      divBody.appendChild(tr);
+    });
+  } else {
+    document.getElementById('section-div').classList.add('hidden');
+  }
+
+  // Gastos por periodo
+  const gastosContainer = document.getElementById('gastos-container');
+  gastosContainer.innerHTML = '';
+  const gastosPeriodos = Object.keys(data.gastos_por_periodo || {});
+  if (gastosPeriodos.length) {
+    document.getElementById('section-gastos').classList.remove('hidden');
+    gastosPeriodos.forEach(periodo => {
+      const chk = data.gastos_por_periodo[periodo];
+      const wrap = document.createElement('div');
+      wrap.style.marginBottom = '14px';
+      const table = document.createElement('table');
+      let rows = chk.filas.map(f => `<tr><td>${f.cuenta_codigo}</td><td class="num">${fmt(f.monto_clp)}</td></tr>`).join('');
+      const statusColor = chk.cuadra ? 'var(--green)' : 'var(--err)';
+      table.innerHTML = `
+        <thead><tr><th colspan="2">${periodo} — ${chk.cuadra ? '✔ cuadra' : '✘ no cuadra'}</th></tr></thead>
+        <tbody>${rows}
+          <tr style="border-top:1px solid var(--border); font-weight:600;">
+            <td>Total gastos operación</td><td class="num">${fmt(chk.total_reportado)}</td>
+          </tr>
+          <tr><td>Suma de componentes</td><td class="num" style="color:${statusColor}">${fmt(chk.suma_componentes)}</td></tr>
+        </tbody>`;
+      wrap.appendChild(table);
+      gastosContainer.appendChild(wrap);
+    });
+  } else {
+    document.getElementById('section-gastos').classList.add('hidden');
+  }
+
+  lastValidationOk = data.ok;
+  btnConfirm.disabled = !data.ok;
+}
+
+btnValidate.addEventListener('click', async () => {
+  const texto = respuestaInput.value;
+  const fondo = fondoSelect.value;
+  validateStatus.textContent = 'Validando…';
+  btnConfirm.disabled = true;
+  try {
+    const res = await fetch('/api/validate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fondo, texto}),
+    });
+    const data = await res.json();
+    lastValidatedText = texto;
+    lastValidatedFondo = fondo;
+    renderPreview(data);
+    validateStatus.textContent = '';
+  } catch (e) {
+    validateStatus.textContent = 'Error: ' + e.message;
+  }
+});
+
+btnConfirm.addEventListener('click', async () => {
+  if (!lastValidationOk || lastValidatedText !== respuestaInput.value || lastValidatedFondo !== fondoSelect.value) {
+    ingestStatus.textContent = 'El texto cambió desde la última validación — vuelve a validar.';
+    return;
+  }
+  btnConfirm.disabled = true;
+  ingestStatus.textContent = 'Ingestando…';
+  try {
+    const res = await fetch('/api/ingest', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({fondo: lastValidatedFondo, texto: lastValidatedText}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+    if (data.status === 'skipped_duplicate') {
+      ingestStatus.textContent = 'Este texto ya había sido ingestado antes — no se creó nada nuevo.';
+    } else {
+      ingestStatus.textContent =
+        `Listo: ${data.rows_eeff} líneas EEFF, ${data.rows_valor_cuota} valor cuota, ` +
+        `${data.rows_dividendos} dividendos insertados (run #${data.run_id}).`;
+    }
+  } catch (e) {
+    ingestStatus.textContent = 'Error al ingestar: ' + e.message;
+    btnConfirm.disabled = false;
+  }
+});
+
+respuestaInput.addEventListener('input', resetPreview);
+
+fetchPrompt(fondoSelect.value).catch(() => {});
+</script>
+</body>
+</html>
