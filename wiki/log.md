@@ -3,6 +3,17 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-20] factsheet | Estructura página 2 (Resumen Performance + gráficos) para PT
+
+Agregada la página 2 al fact sheet HTML dinámico (`scripts/build_factsheet.py` →
+`factsheet.html`), replicando el layout del fact sheet PDF de PT octubre 2025: tabla de
+performance por activo (columnas agrupadas Torre A / Inmob. Boulevard) + 6 gráficos (rubro
+arrendatario, tipo de activo, evolución NOI/RCSD, evolución ingresos/NOI/vacancia, perfil
+vencimiento contratos, recaudación consolidada). Todo en placeholder — sin datos aún. Layout
+implementado vía `cfg["page2"]` por fondo (solo PT por ahora); **no generalizar a TRI/Apo**,
+cada uno tiene su propio fact sheet de referencia con estructura distinta. Ver
+[[procesos/fact-sheets]].
+
 ## [2026-07-20] kpi | Tasa arriendo/cap rate bursátil por serie TRI (A/C/I) + fact sheet
 
 Nuevo indicador `tasa_arriendo_ajustada_bursatil`/`cap_rate_implicito_bursatil` a nivel
