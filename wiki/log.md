@@ -3,6 +3,23 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-20] kpi | Tasa arriendo/cap rate bursátil por serie TRI (A/C/I) + fact sheet
+
+Nuevo indicador `tasa_arriendo_ajustada_bursatil`/`cap_rate_implicito_bursatil` a nivel
+`entidad_tipo='serie'` (`CFITOERI1A/C/I`) para el fondo TRI, que sí transa 3 series distintas
+(a diferencia de PT/Apo, ya cubiertos §8/§4 de [[kpis_noi_cap_rate_apo]]). Primer intento usó
+`patrimonio_bursatil_uf` propio de cada serie como market cap → resultados ~2-6x más chicos que
+el cálculo manual del usuario. Bug real: el market cap por serie debe ser **cuotas totales del
+fondo (suma de las 3 series) × precio bursátil de esa serie**, no cuotas propias × precio propio
+(eso da el market cap del fondo completo, no el "valor implícito por serie"). Validado exacto
+contra tabla del usuario a 31-03-2026 (Serie A 10,668%, C 10,682%, I 8,940%). Detalle completo,
+fórmula y validación en [[kpis_noi_cap_rate_apo]] §9. Script:
+`scripts/consolidate_kpis_bursatil_tri.py`, 21 meses (2024-07 a 2026-03, acotado por
+`ingresos_u12m`/`noi_u12m` de TRI). Reflejado en el fact sheet dinámico
+(`scripts/build_factsheet.py`): tabla "Otros Indicadores" ahora muestra Tasa Arriendo/Cap Rate
+Bursátil con una columna por serie cuando hay dato per-serie (TRI), en vez de la fila única
+colapsada que usan Apo (contable) y PT (fondo único).
+
 ## [2026-07-14] ingesta | ER Apoquindo 3001 (fondo TRI) — 2020-01 a 2026-05
 
 Último de los 5 activos pendientes del TRI consolidado en

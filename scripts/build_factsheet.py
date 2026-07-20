@@ -270,6 +270,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             "tir_bursatil_desde_inicio": "tir_desde_inicio",
             "rent_ytd_bursatil": "rent_ytd",
             "tir_bursatil_u12m": "tir_u12m",
+            "tasa_arriendo_ajustada_bursatil": "tasa_arriendo_ajustada_bursatil",
+            "cap_rate_implicito_bursatil": "cap_rate_implicito_bursatil",
         }
         for kpi_db, kpi_out in kpi_burs_map.items():
             for entkey, periodo, valor in cur.execute(
@@ -593,10 +595,10 @@ KPI_META = {
                     "derived_kpi (caja_minima = % de ESF.total_activo)"],
         "sql": (
             "SELECT valor FROM derived_kpi\n"
-            "WHERE entidad_key='{fondo}' AND kpi='tasa_arriendo_ajustada_bursatil'\n"
+            "WHERE entidad_key='{serie}' AND kpi='tasa_arriendo_ajustada_bursatil'\n"
             "  AND periodo='{periodo}' AND variante IS NULL"
         ),
-        "script": "scripts/consolidate_kpis_bursatil_pt.py",
+        "script": "scripts/consolidate_kpis_bursatil_pt.py (Apo/PT) · scripts/consolidate_kpis_bursatil_tri.py (TRI, por serie: market_cap = cuotas totales del fondo x precio de esa serie)",
     },
     "cap_rate_implicito_bursatil": {
         "label": "Cap Rate Implícito Bursátil",
@@ -606,10 +608,10 @@ KPI_META = {
                     "derived_kpi (caja_minima = % de ESF.total_activo)"],
         "sql": (
             "SELECT valor FROM derived_kpi\n"
-            "WHERE entidad_key='{fondo}' AND kpi='cap_rate_implicito_bursatil'\n"
+            "WHERE entidad_key='{serie}' AND kpi='cap_rate_implicito_bursatil'\n"
             "  AND periodo='{periodo}' AND variante IS NULL"
         ),
-        "script": "scripts/consolidate_kpis_bursatil_pt.py",
+        "script": "scripts/consolidate_kpis_bursatil_pt.py (Apo/PT) · scripts/consolidate_kpis_bursatil_tri.py (TRI, por serie: market_cap = cuotas totales del fondo x precio de esa serie)",
     },
     "perfil_vencimiento": {
         "label": "Perfil de vencimiento de deuda",
@@ -1709,6 +1711,20 @@ function render(){
   const nColsOi = S.series.length;
   const otrosTd = (kpi, text, raw) =>
     `<td colspan="${nColsOi}" data-trace="1" data-kpi="${kpi}" data-fondo="${currentFund}" data-periodo="${usadoOp||''}" data-raw="${raw==null?'':raw}">${text}</td>`;
+  // Tasa Arriendo / Cap Rate bursátil: si hay dato por serie (TRI), se muestra una
+  // columna por serie (cada una valoriza el fondo completo al precio de su propia
+  // serie); si no (Apo/PT, KPI a nivel fondo), se mantiene la fila única colapsada.
+  const bKeysOp = Object.keys(F.bursatil).sort();
+  const bOpLower = bKeysOp.filter(k => k <= usadoOp);
+  const pbOp = bOpLower.length ? bOpLower[bOpLower.length-1] : null;
+  const bOp = (pbOp && F.bursatil[pbOp]) || {series:{}};
+  const perSerieTasa = S.series.map(s => (bOp.series[s.nemo]||{}).tasa_arriendo_ajustada_bursatil);
+  const perSerieCap = S.series.map(s => (bOp.series[s.nemo]||{}).cap_rate_implicito_bursatil);
+  const hasPerSerie = perSerieTasa.some(v => v != null);
+  const serieTd = (kpi, values) => S.series.map((s,i) =>
+    `<td data-trace="1" data-kpi="${kpi}" data-fondo="${currentFund}" data-serie="${s.nemo}" data-periodo="${pbOp||''}" data-raw="${values[i]==null?'':values[i]}">${fmtPct(values[i],2)}</td>`
+  ).join("");
+
   const tasaKpi = tOp.tasa_arriendo_ajustada_bursatil != null
     ? "tasa_arriendo_ajustada_bursatil"
     : "tasa_arriendo_ajustada_contable";
@@ -1718,9 +1734,15 @@ function render(){
   const tasaValue = tOp[tasaKpi];
   const capRateValue = tOp[capRateKpi];
   const mesOpLbl = mesEspanol(usadoOp);
+  const tasaRow = hasPerSerie
+    ? `<tr><td>Tasa Arriendo Bursátil</td>${serieTd("tasa_arriendo_ajustada_bursatil", perSerieTasa)}</tr>`
+    : `<tr><td>Tasa Arriendo</td>${otrosTd(tasaKpi, fmtPct(tasaValue,2), tasaValue)}</tr>`;
+  const capRow = hasPerSerie
+    ? `<tr><td>Cap Rate Implícito Bursátil</td>${serieTd("cap_rate_implicito_bursatil", perSerieCap)}</tr>`
+    : `<tr><td>Cap Rate</td>${otrosTd(capRateKpi, fmtPct(capRateValue,2), capRateValue)}</tr>`;
   document.getElementById("tbl-otros-tbody").innerHTML = `
-    <tr><td>Tasa Arriendo</td>${otrosTd(tasaKpi, fmtPct(tasaValue,2), tasaValue)}</tr>
-    <tr><td>Cap Rate</td>${otrosTd(capRateKpi, fmtPct(capRateValue,2), capRateValue)}</tr>
+    ${tasaRow}
+    ${capRow}
     <tr><td>Ingresos U12M</td>${otrosTd("ingresos_u12m", tOp.ingresos_u12m!=null?fmtEnteroMiles(tOp.ingresos_u12m)+" UF":"—", tOp.ingresos_u12m)}</tr>
     <tr><td>Ingresos ${mesOpLbl}</td>${otrosTd("ingresos_mes", tOp.ingresos_mes!=null?fmtEnteroMiles(tOp.ingresos_mes)+" UF":"—", tOp.ingresos_mes)}</tr>
     <tr><td>NOI U12M</td>${otrosTd("noi_u12m", tOp.noi_u12m!=null?fmtEnteroMiles(tOp.noi_u12m)+" UF":"—", tOp.noi_u12m)}</tr>

@@ -1,8 +1,8 @@
 # NOI, Ingresos, Caja Mínima, Tasa de Arriendo y Cap Rate — Metodología canónica (Apo + PT)
 
 > Validado contra cálculo manual del usuario a MAR-2026 (tasa arriendo 5,39%, cap rate 4,58%).
-> Consolidado en `derived_kpi` 2026-07-09 (Apo, variante contable) y 2026-07-13 (PT, variante
-> bursátil — ver §8). TRI sigue pendiente (falta consolidar ingresos/NOI por activo).
+> Consolidado en `derived_kpi` 2026-07-09 (Apo, variante contable), 2026-07-13 (PT, variante
+> bursátil — ver §8) y 2026-07-20 (TRI, por serie A/C/I — ver §9).
 > Ver también [[kpis_rentabilidad_fondos]] (TIR/YTD/DY) y [[activos/apoquindo]].
 
 ---
@@ -250,8 +250,66 @@ la caja bruta de `raw_caja`.
 | 2024-12 | 6,77% | 5,73% |
 | 2025-12 | 7,17% | 6,04% |
 
-**Pendiente**: extender la misma variante bursátil a TRI (3 series A/C/I) cuando se consolide
-ingresos/NOI por activo de TRI.
+## 9. Tasa de Arriendo Ajustada Bursátil y Cap Rate Implícito Bursátil — por serie (TRI)
+
+TRI tiene 3 series bursátiles (`CFITOERI1A`/`C`/`I`), cada una con su propio precio de mercado,
+pero NOI/ingresos/deuda/caja son a nivel **fondo** (un solo pool de activos). El indicador se
+calcula **una vez por serie**, para poder comparar "qué tasa implica el mercado si valorizas todo
+el fondo al precio de esa serie":
+
+```
+market_cap_uf(serie)   = cuotas_totales_fondo(mes) x precio_uf_bursatil(serie, mes)
+denom_uf(serie)        = market_cap_uf(serie) + deuda_financiera_neta_uf(TRI) + caja_minima_uf(TRI)
+tasa_arriendo_ajustada_bursatil(serie) = ingresos_u12m(TRI) / denom_uf(serie)
+cap_rate_implicito_bursatil(serie)     = noi_u12m(TRI) / denom_uf(serie)
+```
+
+**⚠️ Trampa validada 2026-07-20**: `market_cap_uf` NO es el patrimonio bursátil propio de la
+serie (`cuotas_de_la_serie × precio_de_la_serie`, que es lo que trae precalculado
+`raw_valor_cuota_bursatil.patrimonio_bursatil_uf`). Es **cuotas TOTALES del fondo (suma de las 3
+series) × precio de esa serie** — "cuánto valdría el fondo completo si todas las cuotas se
+transaran al precio de esta serie". La suma de los 3 `patrimonio_bursatil_uf` por serie sí da el
+market cap total del fondo, pero usar ese valor por serie individualmente da un resultado
+equivocado (se detectó porque el denominador quedaba ~5x más chico de lo esperado en Serie A).
+
+`deuda_financiera_neta_uf` y `caja_minima_uf` son los mismos valores de fondo TRI usados en NOI/
+ingresos (no varían por serie).
+
+Fuentes de cada término:
+- `precio_uf` / `cuotas` (por serie, por mes) = `raw_valor_cuota_bursatil`, último dato
+  `<= fin de mes`, `nemotecnico IN ('CFITOERI1A','CFITOERI1C','CFITOERI1I')`.
+- `cuotas_totales_fondo(mes)` = suma de `cuotas` de las 3 series en ese mismo corte de mes.
+- `deuda_financiera_neta` / `caja_minima` / `ingresos_u12m` / `noi_u12m` = `derived_kpi`
+  `entidad_tipo='fondo'`, `entidad_key='TRI'` (ya consolidados, ver ingesta de ingresos/NOI TRI
+  2026-07-20).
+
+**Persistido en**: `derived_kpi` kpi=`tasa_arriendo_ajustada_bursatil`/`cap_rate_implicito_bursatil`,
+`entidad_tipo='serie'`, `entidad_key='CFITOERI1A'/'CFITOERI1C'/'CFITOERI1I'`, `unidad='ratio'`,
+formula=`tasa_arriendo_ajustada_bursatil_mensual_v1` / `cap_rate_implicito_bursatil_mensual_v1`.
+Cobertura: **21 meses, 2024-07 a 2026-03** (acotada por `ingresos_u12m`/`noi_u12m` de TRI, que
+recién se consolidaron el 2026-07-20 — no hay U12M completo antes de esa ventana).
+
+Script: `scripts/consolidate_kpis_bursatil_tri.py` (idempotente, re-ejecutable; borra e inserta
+por `entidad_key`+`kpi` en cada corrida vía `repo_kpi.upsert`).
+
+**Validación MAR-2026 contra tabla manual del usuario** (Fondo/Serie A/Serie C/Serie I):
+
+| Input | Fondo | Serie A | Serie C | Serie I |
+|---|---:|---:|---:|---:|
+| Market cap última transacción (UF) | 1.535.014 | 1.191.737 | 1.185.438 | 2.086.089 |
+| Saldo deuda bancos (UF) | 3.525.733 | — | — | — |
+| Deuda financiera neta ajustada (UF) | 3.436.219 | — | — | — |
+| Renta U12M / ingresos U12M (UF) | 493.690 | — | — | — |
+| NOI U12M (UF) | 317.939 | — | — | — |
+| Tasa arriendo bursátil ajustada | 9,9% | **10,668%** | **10,682%** | **8,940%** |
+
+Los 3 valores por serie (DB) calzan exacto con la tabla del usuario tras corregir el market cap.
+La columna "Fondo" del usuario (1.535.014) coincide con la suma de los `patrimonio_bursatil_uf`
+propios de las 3 series — confirma que el error era solo en el desglose por serie, no en los
+inputs de fondo (ingresos/NOI/deuda/caja).
+
+**Pendiente**: extender la cobertura hacia atrás cuando se consoliden más períodos de
+`ingresos_u12m`/`noi_u12m` de TRI (actualmente limitado a 2024-07 en adelante).
 
 ## 7. Despliegue en Fact Sheet (`factsheet.html`)
 
