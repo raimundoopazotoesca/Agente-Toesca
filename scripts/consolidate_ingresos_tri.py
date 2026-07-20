@@ -2,39 +2,30 @@
 Consolida ingresos mensual e ingresos U12M del fondo TRI, con la misma
 metodología usada para NOI (ver consolidate_noi_tri.py):
 
-1. ingresos_mensual por activo (100%) = SUM(monto_uf) de raw_er_activo_line
-   WHERE seccion='INGRESOS_OPERACION' (ingreso operacional, excluye
-   'INGRESO_FUERA_EXPLOTACION'), EXCLUYENDO cuentas de traspaso/recupero
-   (gastos comunes, servicios básicos, fondo de promoción, cuotas — ver
-   _CUENTAS_PASSTHROUGH) que no son ingreso de arriendo puro. Solo Viña
-   Centro y Mall Curicó tienen este desglose; el resto de los activos ya
-   reporta un ingreso neto sin esas partidas. Se usa monto_uf si existe
-   (fuentes en CLP, ej. Viña/Curicó); si no, monto_clp (fuentes que ya
-   vienen en UF, ej. INMOSA/Apo3001/Sucden/Torre A/Boulevard — ver
-   comentarios en los ingest_er_*.py).
+1. ingresos_mensual por activo (100%, persistido en derived_kpi) = SUM(monto_uf)
+   de raw_er_activo_line WHERE seccion='INGRESOS_OPERACION' (ingreso
+   operacional, excluye 'INGRESO_FUERA_EXPLOTACION'), EN BRUTO — todas las
+   cuentas de ingreso, sin excluir traspaso/recupero ni parking. Revisado
+   activo por activo y a nivel fondo TRI el 2026-07-20 contra las planillas
+   fuente de cada activo: el usuario confirmó que el ingreso bruto (sin
+   ninguna exclusión) es el criterio correcto tanto por activo como para el
+   agregado TRI — se descartó la exclusión de pass-through introducida el
+   2026-07-14 (que solo se había validado contra un archivo de referencia
+   estático, RAW/NOI tri.xlsx, nunca contra el cálculo en vivo del usuario).
 2. ingresos_mes(TRI) = suma ponderada por participación efectiva de TRI en
    cada activo (misma tabla de participaciones que NOI, incluyendo la
-   excepción Apo3001=1.0).
+   excepción Apo3001=1.0), usando el mismo ingreso bruto de (1).
 3. ingresos_u12m(TRI) solo para periodos con 12 meses trailing completos.
 
-Validado (parcialmente, queda residuo ~2.000 UF sin explicar en marzo 2026)
-contra RAW/NOI tri.xlsx (SharePoint) — solo como referencia de validación,
-nunca como fuente de cálculo (ver [[feedback_no_usar_cdg]]).
+Strip Machalí fue vendido sept-2025 (dim_activo.vigente_hasta='2025-08',
+migración 050): igual que en NOI, se detectó un hueco sistemático en
+ingresos_mes(TRI) de abr-2025 a ago-2025 al validar contra el cálculo del
+usuario. La consolidación ya no exige periodos_comunes estrictos entre
+todos los componentes: respeta vigente_hasta por activo (ver
+_vigencia_tri), así un activo divestido deja de exigirse (y de sumar)
+desde el mes siguiente a su venta, sin bloquear el resto de la serie.
 """
 from tools.db.connection import get_conn
-
-# Cuentas de traspaso/recupero (no son ingreso de arriendo puro) en Viña
-# Centro y Mall Curicó — el resto de los activos no tiene este desglose.
-_CUENTAS_PASSTHROUGH = {
-    "INGRESO POR GASTOS COMUNES",
-    "INGRESO POR SERVICIOS BASICOS ELECTRICIDAD",
-    "INGRESO POR SERVICIOS BASICOS AGUA",
-    "INGRESO POR FONDO PROMOCIÓN",
-    "INGRESO POR FONDO DE PROMOCIÓN",
-    "CUOTA ARQUITECTURA",
-    "CUOTA INCORPORACIÓN FONDO PROMOCIÓN",
-    "INGRESOS DIRECTOS LOCATARIOS",
-}
 
 # activo_key en derived_kpi (ingresos_mensual, agregado) -> lista de
 # activo_key en raw_er_activo_line que lo componen.
@@ -46,6 +37,7 @@ _COMPONENTES_RAW = {
     "PT": ["Torre A", "Boulevard"],
     "Sucden": ["Sucden"],
     "Viña Centro": ["Viña Centro"],
+    "Strip Machalí": ["Strip Machalí"],
 }
 # activo_key (ingresos_mensual) -> activo_key en v_activo_fondo_efectivo
 _COMPONENTES_PART = {
@@ -56,6 +48,7 @@ _COMPONENTES_PART = {
     "PT": "Torre A",
     "Sucden": "Sucden",
     "Viña Centro": "Viña Centro",
+    "Strip Machalí": "Strip Machalí",
 }
 _INGRESOS_MENSUAL_FORMULA = "raw_er_ingresos_v1"
 _INGRESOS_MES_FORMULA = (
@@ -79,33 +72,48 @@ def _participaciones_tri(conn) -> dict[str, float]:
     return part
 
 
+def _vigencia_tri(conn) -> dict[str, str | None]:
+    """activo_key (dim_activo) -> vigente_hasta (YYYY-MM) o None si sigue vigente."""
+    cur = conn.execute("SELECT activo_key, vigente_hasta FROM dim_activo WHERE fondo_key='TRI'")
+    return {r["activo_key"]: r["vigente_hasta"] for r in cur.fetchall()}
+
+
 def _ingresos_activo_raw(conn, activo_keys_raw: list[str]) -> dict[str, float]:
     acc: dict[str, float] = {}
     placeholders = ",".join("?" for _ in activo_keys_raw)
-    excl_placeholders = ",".join("?" for _ in _CUENTAS_PASSTHROUGH)
     cur = conn.execute(
         f"SELECT periodo, SUM(COALESCE(monto_uf, monto_clp)) AS ingreso FROM raw_er_activo_line "
         f"WHERE seccion='INGRESOS_OPERACION' AND superseded_at IS NULL AND activo_key IN ({placeholders}) "
-        f"AND UPPER(cuenta_nombre) NOT IN ({excl_placeholders}) "
         f"GROUP BY periodo",
-        activo_keys_raw + list(_CUENTAS_PASSTHROUGH),
+        activo_keys_raw,
     )
     for r in cur.fetchall():
         acc[r["periodo"]] = acc.get(r["periodo"], 0.0) + r["ingreso"]
     return dict(sorted(acc.items()))
 
 
-def _ingresos_mes_tri(series: dict[str, dict[str, float]], participaciones: dict[str, float]) -> dict[str, float]:
-    """Suma ponderada, solo para periodos en que TODOS los componentes tienen
-    dato (evita sumas parciales engañosas cuando algún activo aún no reporta
-    ese mes — ver Sucden/INMOSA con cortes distintos a Apo3001/PT/etc.)."""
-    periodos_comunes = set.intersection(*(set(s) for s in series.values()))
+def _ingresos_mes_tri(
+    series: dict[str, dict[str, float]],
+    participaciones: dict[str, float],
+    vigencia: dict[str, str | None],
+) -> dict[str, float]:
+    """Suma ponderada, exigiendo dato solo de los componentes VIGENTES en cada
+    periodo (evita sumas parciales engañosas cuando algún activo aún no
+    reporta ese mes, sin bloquear la serie cuando un activo fue divestido —
+    ver docstring del módulo sobre Strip Machalí)."""
+    todos_los_periodos = set.union(*(set(s) for s in series.values()))
     acc: dict[str, float] = {}
-    for periodo in periodos_comunes:
+    for periodo in todos_los_periodos:
+        vigentes = [
+            key for key in series
+            if vigencia.get(key) is None or periodo <= vigencia[key]
+        ]
+        if not all(periodo in series[key] for key in vigentes):
+            continue
         total = 0.0
-        for key, comp in series.items():
+        for key in vigentes:
             part = participaciones[_COMPONENTES_PART[key]]
-            total += comp[periodo] * part
+            total += series[key][periodo] * part
         acc[periodo] = total
     return dict(sorted(acc.items()))
 
@@ -137,6 +145,7 @@ def _u12m(serie_mes: dict[str, float]) -> dict[str, float]:
 def main():
     with get_conn() as conn:
         participaciones = _participaciones_tri(conn)
+        vigencia = _vigencia_tri(conn)
 
         series = {}
         for key, raw_keys in _COMPONENTES_RAW.items():
@@ -145,7 +154,7 @@ def main():
             v = series[key]
             print(f"  {key} (part. {part}): {len(v)} periodos ({min(v) if v else '-'} a {max(v) if v else '-'})")
 
-        # Persistir ingresos_mensual por activo (100%), reemplazando el
+        # Persistir ingresos_mensual por activo (100%, BRUTO), reemplazando el
         # recipe anterior si existía.
         for key, serie in series.items():
             conn.execute(
@@ -160,7 +169,7 @@ def main():
                     (key, periodo, valor, _INGRESOS_MENSUAL_FORMULA),
                 )
 
-        ingresos_mes = _ingresos_mes_tri(series, participaciones)
+        ingresos_mes = _ingresos_mes_tri(series, participaciones, vigencia)
         ingresos_u12m = _u12m(ingresos_mes)
 
         conn.execute(

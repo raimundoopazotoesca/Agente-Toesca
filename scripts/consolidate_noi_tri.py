@@ -15,7 +15,18 @@ ingresos (ver consolidate_ingresos_tri.py) — fuente única: raw_er_activo_line
 Propiedades bajo TRI y su participación efectiva:
   Apo3001 1.0 (excepción, ver [[feedback_participacion_sociedad_vs_activo]]),
   Apoquindo(=Apo4501/4700) 0.3, INMOSA 0.43, Mall Curicó 0.8,
-  PT(=Torre A/Boulevard) 0.333, Sucden 1.0, Viña Centro 1.0.
+  PT(=Torre A/Boulevard) 1/3 exacto, Sucden 1.0, Viña Centro 1.0,
+  Strip Machalí 1.0 (divestido sept-2025, ver vigencia abajo).
+
+Strip Machalí fue vendido sept-2025 (dim_activo.vigente_hasta='2025-08',
+migración 050): se detectó un hueco sistemático en noi_mes/ingresos_mes(TRI)
+de abr-2025 a ago-2025 al validar contra el cálculo del usuario — Machalí
+seguía aportando NOI/ingresos esos meses y no estaba en la consolidación.
+Por eso periodos_comunes ya NO exige que todos los componentes tengan dato
+en todo el rango: se calcula respetando vigente_hasta por activo (ver
+_vigencia_tri/_periodos_vigentes) — un activo divestido deja de exigirse
+(y de sumar) desde el mes siguiente a su vigente_hasta, sin bloquear el
+resto de la serie.
 """
 from tools.db.connection import get_conn
 
@@ -29,6 +40,7 @@ _COMPONENTES_RAW = {
     "PT": ["Torre A", "Boulevard"],
     "Sucden": ["Sucden"],
     "Viña Centro": ["Viña Centro"],
+    "Strip Machalí": ["Strip Machalí"],
 }
 # activo_key (noi_mensual) -> activo_key en v_activo_fondo_efectivo
 _COMPONENTES_PART = {
@@ -39,6 +51,7 @@ _COMPONENTES_PART = {
     "PT": "Torre A",
     "Sucden": "Sucden",
     "Viña Centro": "Viña Centro",
+    "Strip Machalí": "Strip Machalí",
 }
 _NOI_MENSUAL_FORMULA = "raw_er_noi_v1"
 _NOI_MES_FORMULA = (
@@ -62,6 +75,12 @@ def _participaciones_tri(conn) -> dict[str, float]:
     return part
 
 
+def _vigencia_tri(conn) -> dict[str, str | None]:
+    """activo_key (dim_activo) -> vigente_hasta (YYYY-MM) o None si sigue vigente."""
+    cur = conn.execute("SELECT activo_key, vigente_hasta FROM dim_activo WHERE fondo_key='TRI'")
+    return {r["activo_key"]: r["vigente_hasta"] for r in cur.fetchall()}
+
+
 def _noi_activo_raw(conn, activo_keys_raw: list[str]) -> dict[str, float]:
     acc: dict[str, float] = {}
     placeholders = ",".join("?" for _ in activo_keys_raw)
@@ -76,17 +95,28 @@ def _noi_activo_raw(conn, activo_keys_raw: list[str]) -> dict[str, float]:
     return dict(sorted(acc.items()))
 
 
-def _noi_mes_tri(series: dict[str, dict[str, float]], participaciones: dict[str, float]) -> dict[str, float]:
-    """Suma ponderada, solo para periodos en que TODOS los componentes tienen
-    dato (evita sumas parciales engañosas si los cortes de cada activo se
-    desalinean)."""
-    periodos_comunes = set.intersection(*(set(s) for s in series.values()))
+def _noi_mes_tri(
+    series: dict[str, dict[str, float]],
+    participaciones: dict[str, float],
+    vigencia: dict[str, str | None],
+) -> dict[str, float]:
+    """Suma ponderada, exigiendo dato solo de los componentes VIGENTES en cada
+    periodo (evita sumas parciales engañosas si los cortes de cada activo se
+    desalinean, sin bloquear la serie cuando un activo fue divestido —
+    ver docstring del módulo sobre Strip Machalí)."""
+    todos_los_periodos = set.union(*(set(s) for s in series.values()))
     acc: dict[str, float] = {}
-    for periodo in periodos_comunes:
+    for periodo in todos_los_periodos:
+        vigentes = [
+            key for key in series
+            if vigencia.get(key) is None or periodo <= vigencia[key]
+        ]
+        if not all(periodo in series[key] for key in vigentes):
+            continue
         total = 0.0
-        for key, comp in series.items():
+        for key in vigentes:
             part = participaciones[_COMPONENTES_PART[key]]
-            total += comp[periodo] * part
+            total += series[key][periodo] * part
         acc[periodo] = total
     return dict(sorted(acc.items()))
 
@@ -118,6 +148,7 @@ def _u12m(serie_mes: dict[str, float]) -> dict[str, float]:
 def main():
     with get_conn() as conn:
         participaciones = _participaciones_tri(conn)
+        vigencia = _vigencia_tri(conn)
 
         series = {}
         for key, raw_keys in _COMPONENTES_RAW.items():
@@ -140,7 +171,7 @@ def main():
                     (key, periodo, valor, _NOI_MENSUAL_FORMULA),
                 )
 
-        noi_mes = _noi_mes_tri(series, participaciones)
+        noi_mes = _noi_mes_tri(series, participaciones, vigencia)
         noi_u12m = _u12m(noi_mes)
 
         conn.execute(
