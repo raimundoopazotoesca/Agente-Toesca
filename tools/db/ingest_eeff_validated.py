@@ -202,6 +202,20 @@ def validate(
         result.add_error("Falta la fecha de publicación del EEFF.")
         return result
 
+    # Validar que sea trimestral (03, 06, 09, 12)
+    try:
+        _, mes = periodo_declarado.split("-")
+        mes_int = int(mes)
+        if mes_int not in (3, 6, 9, 12):
+            result.add_error(
+                f"Período {periodo_declarado!r}: EEFF solo pueden ser trimestrales (03, 06, 09, 12). "
+                f"Mes {mes} no es un trimestre válido."
+            )
+            return result
+    except (ValueError, IndexError):
+        result.add_error(f"Período {periodo_declarado!r} no tiene el formato esperado (YYYY-MM).")
+        return result
+
     try:
         data = _parse_json(raw_text)
     except ValueError as exc:

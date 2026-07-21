@@ -63,6 +63,7 @@
   button:disabled { border-color: var(--border); color: #a0a0a0; cursor: not-allowed; background: #f4f4f4; }
   button.primary, #btn-confirm, #btn-rr-confirm { background: var(--green); color: #fff; }
   button.primary:hover:not(:disabled), #btn-confirm:hover:not(:disabled), #btn-rr-confirm:hover:not(:disabled) { background: #009c69; }
+  #btn-confirm:disabled, #btn-rr-confirm:disabled { border-color: var(--border); color: #a0a0a0; cursor: not-allowed; background: #f4f4f4; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   ol.instructions { color: #444; font-size: 13px; padding-left: 20px; margin: 8px 0 0; }
   ol.instructions li { margin-bottom: 4px; }
@@ -156,8 +157,10 @@
       <span id="copied-flash" class="copied-flash hidden">✓ copiado</span>
     </div>
     <div class="row">
-      <label class="muted" for="eeff-periodo">Período del EEFF:</label>
-      <input type="month" id="eeff-periodo">
+      <label class="muted" for="eeff-periodo">Período del EEFF (trimestral):</label>
+      <select id="eeff-periodo">
+        <option value="">Elige trimestre...</option>
+      </select>
       <label class="muted" for="eeff-fecha-publicacion">Fecha de publicación:</label>
       <input type="date" id="eeff-fecha-publicacion">
     </div>
@@ -222,10 +225,16 @@
 <div id="tab-rentroll" class="tab-panel">
 
   <div class="step">
-    <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+    <div class="step-title"><span class="step-num">1</span> Período, proveedor y archivo</div>
     <div class="row">
       <label class="muted" for="rr-periodo">Período del Rent Roll:</label>
       <input type="month" id="rr-periodo">
+      <label class="muted" for="rr-proveedor">Proveedor:</label>
+      <select id="rr-proveedor">
+        <option value="jll">JLL (PT, Apo, Apo3001)</option>
+        <option value="tresa_vina">Tres Asociados — Viña Centro</option>
+        <option value="tresa_curico">Tres Asociados — Mall Curicó</option>
+      </select>
     </div>
     <div class="row">
       <div id="rr-dropzone" class="dropzone" style="flex:1">
@@ -244,14 +253,14 @@
     <ul id="rr-errors" class="msg-list err"></ul>
     <ul id="rr-warnings" class="msg-list warn"></ul>
 
-    <div id="rr-section-email" class="hidden">
-      <h3>Detalle para el proveedor</h3>
-      <p class="muted" id="rr-email-para"></p>
+    <div id="rr-section-errdetalle" class="hidden">
+      <h3>Detalle de errores</h3>
+      <p class="muted">Copia este detalle y pégalo en el correo al proveedor.</p>
       <div class="row">
-        <button id="btn-rr-copy-email">Copiar correo</button>
+        <button id="btn-rr-copy-errdetalle">Copiar detalle</button>
         <span id="rr-copy-flash" class="copied-flash hidden">✓ copiado</span>
       </div>
-      <textarea id="rr-email-body" readonly style="margin-top:10px;min-height:280px"></textarea>
+      <textarea id="rr-errdetalle-body" readonly style="margin-top:10px;min-height:280px"></textarea>
     </div>
 
     <div id="rr-section-totales" class="hidden">
@@ -521,10 +530,37 @@ btnConfirm.addEventListener('click', async () => {
 respuestaInput.addEventListener('input', resetPreview);
 eeffPeriodo.addEventListener('change', resetPreview);
 eeffFechaPublicacion.addEventListener('change', resetPreview);
+
+// Poblar select de trimestres (03, 06, 09, 12)
+function populateEeffTrimestres() {
+  const trimestres = [3, 6, 9, 12];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  // Determinar trimestre actual
+  const currentTrimestre = currentMonth <= 3 ? 3 : currentMonth <= 6 ? 6 : currentMonth <= 9 ? 9 : 12;
+  const selectedTrimestre = currentTrimestre;
+  const selectedYear = currentMonth > selectedTrimestre ? currentYear : currentYear - 1;
+
+  for (let y = currentYear - 2; y <= currentYear + 2; y++) {
+    for (const m of trimestres) {
+      const opt = document.createElement('option');
+      opt.value = `${y}-${String(m).padStart(2, '0')}`;
+      opt.textContent = `${y}-${String(m).padStart(2, '0')}`;
+      eeffPeriodo.appendChild(opt);
+      if (y === selectedYear && m === selectedTrimestre) {
+        opt.selected = true;
+      }
+    }
+  }
+}
+
+populateEeffTrimestres();
 fetchPrompt(fondoSelect.value).catch(() => {});
 
 // ── TAB RENT ROLL ────────────────────────────────────────────────────────
 const rrPeriodo = document.getElementById('rr-periodo');
+const rrProveedor = document.getElementById('rr-proveedor');
 const rrDropzone = document.getElementById('rr-dropzone');
 const rrFileInput = document.getElementById('rr-file');
 const btnRrValidate = document.getElementById('btn-rr-validate');
@@ -532,12 +568,23 @@ const rrValidateStatus = document.getElementById('rr-validate-status');
 const rrPreview = document.getElementById('rr-preview');
 const btnRrConfirm = document.getElementById('btn-rr-confirm');
 const rrIngestStatus = document.getElementById('rr-ingest-status');
-const btnRrCopyEmail = document.getElementById('btn-rr-copy-email');
+const btnRrCopyErrdetalle = document.getElementById('btn-rr-copy-errdetalle');
 const rrCopyFlash = document.getElementById('rr-copy-flash');
 
-btnRrCopyEmail.addEventListener('click', async () => {
+const _DROPZONE_TEXT = {
+  jll: 'Arrastra aquí el archivo {AAMM} Rent Roll y NOI.xlsx (JLL) o haz click para elegirlo',
+  tresa_vina: 'Arrastra aquí el archivo Excel Tres A Viña {Mes} {Año}.xlsx o haz click para elegirlo',
+  tresa_curico: 'Arrastra aquí el archivo Excel Tres A Curicó {Mes} {Año}.xlsx o haz click para elegirlo',
+};
+rrProveedor.addEventListener('change', () => {
+  rrDropzone.textContent = _DROPZONE_TEXT[rrProveedor.value] || _DROPZONE_TEXT.jll;
+  rrDropzone.appendChild(rrFileInput);
+  setRrFile(null);
+});
+
+btnRrCopyErrdetalle.addEventListener('click', async () => {
   try {
-    await navigator.clipboard.writeText(document.getElementById('rr-email-body').value);
+    await navigator.clipboard.writeText(document.getElementById('rr-errdetalle-body').value);
     rrCopyFlash.classList.remove('hidden');
     setTimeout(() => rrCopyFlash.classList.add('hidden'), 1500);
   } catch (e) {
@@ -560,9 +607,10 @@ function setRrFile(file) {
     rrDropzone.textContent = `Archivo seleccionado: ${file.name}`;
     rrDropzone.classList.add('has-file');
   } else {
-    rrDropzone.textContent = 'Arrastra aquí el archivo {AAMM} Rent Roll y NOI.xlsx (JLL) o haz click para elegirlo';
+    rrDropzone.textContent = _DROPZONE_TEXT[rrProveedor.value] || _DROPZONE_TEXT.jll;
     rrDropzone.classList.remove('has-file');
   }
+  rrDropzone.appendChild(rrFileInput);
   resetRrPreview();
 }
 
@@ -577,6 +625,7 @@ rrDropzone.addEventListener('drop', e => {
   if (f) setRrFile(f);
 });
 rrPeriodo.addEventListener('change', resetRrPreview);
+rrProveedor.addEventListener('change', resetRrPreview);
 
 function resetRrPreview() {
   rrPreview.classList.add('hidden');
@@ -626,25 +675,23 @@ function renderRrPreview(data) {
   const secTotales = document.getElementById('rr-section-totales');
   const secDiff = document.getElementById('rr-section-diff');
   const secRaros = document.getElementById('rr-section-raros');
-  const secEmail = document.getElementById('rr-section-email');
+  const secErrdetalle = document.getElementById('rr-section-errdetalle');
 
   if (!data.ok) {
     secTotales.classList.add('hidden');
     secDiff.classList.add('hidden');
     secRaros.classList.add('hidden');
-    if (data.email_proveedor) {
-      secEmail.classList.remove('hidden');
-      document.getElementById('rr-email-para').textContent = 'Para: ' + data.email_proveedor.para;
-      document.getElementById('rr-email-body').value =
-        'Asunto: ' + data.email_proveedor.asunto + '\n\n' + data.email_proveedor.cuerpo;
+    if (data.errores_formateados) {
+      secErrdetalle.classList.remove('hidden');
+      document.getElementById('rr-errdetalle-body').value = data.errores_formateados;
     } else {
-      secEmail.classList.add('hidden');
+      secErrdetalle.classList.add('hidden');
     }
     rrLastValidationOk = false;
     updateRrConfirmState();
     return;
   }
-  secEmail.classList.add('hidden');
+  secErrdetalle.classList.add('hidden');
 
   // Resumen por activo
   const totalesContainer = document.getElementById('rr-totales-container');
