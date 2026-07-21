@@ -19,7 +19,7 @@ BALANCES_CONSOLIDADOS_DIR = os.path.join(CONTROL_GESTION_DIR, "Balances Consolid
 SALDO_CAJA_DIR = os.path.join(CONTROL_GESTION_DIR, "Saldo Caja")
 CALCULO_TIR_DIR = os.path.join(CONTROL_GESTION_DIR, "Cálculo TIR")
 
-RENT_ROLLS_DIR = sp_path("Rent Rolls")
+RENT_ROLLS_DIR = os.path.join(CONTROL_GESTION_DIR, "Rent Rolls")
 RR_JLL_DIR = os.path.join(RENT_ROLLS_DIR, "JLL")
 
 FONDOS_DIR = sp_path("Fondos")

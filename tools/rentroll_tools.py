@@ -821,6 +821,57 @@ def _tabla_val3(errores):
     return "\n".join(lines)
 
 
+def build_email_jll(jll_errores: dict, aamm: str, mes_nombre: str, año: int) -> tuple[str, str]:
+    """Arma (asunto, cuerpo) del correo a Nicole (JLL) a partir del dict de
+    errores de _validar_archivo. Reusado tanto por enviar_emails_rent_roll
+    (envío directo) como por la pantalla de ingesta (copiar/pegar manual)."""
+    asunto = f"Revisión Rent Roll y NOI — {aamm} ({mes_nombre} {año})"
+    cuerpo_parts = [f"Nicole,\n\nRevisando la planilla {aamm} me encontré con unas cosas que te quería consultar:\n"]
+
+    if "val1_vacantes" in jll_errores:
+        cuerpo_parts.append("1. Inconsistencia en columna Vacante:")
+        for e in jll_errores["val1_vacantes"]:
+            v = e["valores"]
+            cuerpo_parts.append(
+                f"   Fila {e['fila']}: Tipo Activo 1={v['Tipo Activo 1']} | "
+                f"Tipo Activo 3={v['Tipo Activo 3']} | "
+                f"Arrendatario={v['Arrendatario']} | "
+                f"Tipo Arrendatario={v['Tipo Arrendatario']}\n"
+                f"   Si el espacio está vacante, debería marcarse como 'Vacante' en todas esas columnas. ¿Podrías revisar?"
+            )
+        cuerpo_parts.append("")
+
+    if "val2_absorcion" in jll_errores:
+        cuerpo_parts.append("2. Movimientos sin registro en Absorción:")
+        for e in jll_errores["val2_absorcion"]:
+            cuerpo_parts.append(
+                f"   Local {e['local']} ({e['activo']}): "
+                f"pasó de [{e['anterior']}] a [{e['actual']}] "
+                f"pero no aparece el '{e['movimiento_esperado']}' en la hoja Absorción."
+            )
+        cuerpo_parts.append("")
+
+    if "val3_escalonada" in jll_errores:
+        n = len(jll_errores["val3_escalonada"])
+        cuerpo_parts.append(f"3. Renta escalonada ({n} caso(s)):")
+        cuerpo_parts.append("   Los siguientes arrendatarios tienen escalones que ya deberían estar vigentes, pero la Renta Fija registrada no coincide:\n")
+        cuerpo_parts.append(_tabla_val3(jll_errores["val3_escalonada"]))
+        cuerpo_parts.append("\n   ¿Podrías revisar si hay una actualización pendiente?")
+        cuerpo_parts.append("")
+
+    if "val4_terminos" in jll_errores:
+        cuerpo_parts.append("4. Contratos con fecha de término vencida:")
+        for e in jll_errores["val4_terminos"]:
+            cuerpo_parts.append(
+                f"   Fila {e['fila']} [{e['arrendatario']}]: venció el {e['fecha_termino']}."
+            )
+        cuerpo_parts.append("\n   ¿Estos contratos están renovados y pendiente de actualizar la fecha, o ya terminaron?")
+        cuerpo_parts.append("")
+
+    cuerpo_parts.append("Gracias,\nRaimundo")
+    return asunto, "\n".join(cuerpo_parts)
+
+
 def enviar_emails_rent_roll() -> str:
     """
     Envía los correos a Nicole (JLL) y Sebastián (Tres A) con los errores
@@ -842,52 +893,7 @@ def enviar_emails_rent_roll() -> str:
     jll_errores = jll.get("errores", {})
     if jll_errores and "lectura" not in jll_errores:
         aamm = f"{str(año)[2:]}{mes:02d}"
-        asunto = f"Revisión Rent Roll y NOI — {aamm} ({mes_nombre} {año})"
-
-        cuerpo_parts = [f"Nicole,\n\nRevisando la planilla {aamm} me encontré con unas cosas que te quería consultar:\n"]
-
-        if "val1_vacantes" in jll_errores:
-            cuerpo_parts.append("1. Inconsistencia en columna Vacante:")
-            for e in jll_errores["val1_vacantes"]:
-                v = e["valores"]
-                cuerpo_parts.append(
-                    f"   Fila {e['fila']}: Tipo Activo 1={v['Tipo Activo 1']} | "
-                    f"Tipo Activo 3={v['Tipo Activo 3']} | "
-                    f"Arrendatario={v['Arrendatario']} | "
-                    f"Tipo Arrendatario={v['Tipo Arrendatario']}\n"
-                    f"   Si el espacio está vacante, debería marcarse como 'Vacante' en todas esas columnas. ¿Podrías revisar?"
-                )
-            cuerpo_parts.append("")
-
-        if "val2_absorcion" in jll_errores:
-            cuerpo_parts.append("2. Movimientos sin registro en Absorción:")
-            for e in jll_errores["val2_absorcion"]:
-                cuerpo_parts.append(
-                    f"   Local {e['local']} ({e['activo']}): "
-                    f"pasó de [{e['anterior']}] a [{e['actual']}] "
-                    f"pero no aparece el '{e['movimiento_esperado']}' en la hoja Absorción."
-                )
-            cuerpo_parts.append("")
-
-        if "val3_escalonada" in jll_errores:
-            n = len(jll_errores["val3_escalonada"])
-            cuerpo_parts.append(f"3. Renta escalonada ({n} caso(s)):")
-            cuerpo_parts.append("   Los siguientes arrendatarios tienen escalones que ya deberían estar vigentes, pero la Renta Fija registrada no coincide:\n")
-            cuerpo_parts.append(_tabla_val3(jll_errores["val3_escalonada"]))
-            cuerpo_parts.append("\n   ¿Podrías revisar si hay una actualización pendiente?")
-            cuerpo_parts.append("")
-
-        if "val4_terminos" in jll_errores:
-            cuerpo_parts.append("4. Contratos con fecha de término vencida:")
-            for e in jll_errores["val4_terminos"]:
-                cuerpo_parts.append(
-                    f"   Fila {e['fila']} [{e['arrendatario']}]: venció el {e['fecha_termino']}."
-                )
-            cuerpo_parts.append("\n   ¿Estos contratos están renovados y pendiente de actualizar la fecha, o ya terminaron?")
-            cuerpo_parts.append("")
-
-        cuerpo_parts.append("Gracias,\nRaimundo")
-        cuerpo = "\n".join(cuerpo_parts)
+        asunto, cuerpo = build_email_jll(jll_errores, aamm, mes_nombre, año)
 
         resultado = send_email(NICOLE_EMAIL, asunto, cuerpo)
         enviados.append(f"Nicole ({NICOLE_EMAIL}): {resultado}")

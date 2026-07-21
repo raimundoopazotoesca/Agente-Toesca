@@ -182,12 +182,24 @@ class ValidationResult:
         return {"ok": self.ok, "errors": self.errors, "warnings": self.warnings, **self.data}
 
 
-def validate(raw_text: str, fondo_expected: str) -> ValidationResult:
+def validate(
+    raw_text: str,
+    fondo_expected: str,
+    periodo_declarado: str | None = None,
+    fecha_publicacion: str | None = None,
+) -> ValidationResult:
     """Dry-run completo: parsea, valida, arma preview. No toca la DB (salvo lecturas)."""
     result = ValidationResult()
 
     if fondo_expected not in FONDOS_VALIDOS:
         result.add_error(f"Fondo {fondo_expected!r} inválido")
+        return result
+
+    if not periodo_declarado:
+        result.add_error("Falta declarar el período (YYYY-MM) del EEFF que estás ingestando.")
+        return result
+    if not fecha_publicacion:
+        result.add_error("Falta la fecha de publicación del EEFF.")
         return result
 
     try:
@@ -209,6 +221,13 @@ def validate(raw_text: str, fondo_expected: str) -> ValidationResult:
 
     if duplicates_removed:
         result.warnings.append(f"{duplicates_removed} línea(s) duplicada(s) fueron ignoradas.")
+
+    if periodo_declarado not in periodos:
+        result.add_error(
+            f"Declaraste el período {periodo_declarado!r} pero el JSON reporta "
+            f"periodos_reportados={periodos} (no incluye {periodo_declarado!r}). "
+            f"¿Es el EEFF correcto?"
+        )
 
     en_miles = bool(data.get("en_miles_pesos", False))
     gastos_check = _check_gastos_sum(lineas, en_miles)
@@ -284,6 +303,8 @@ def validate(raw_text: str, fondo_expected: str) -> ValidationResult:
 
     result.data = {
         "fondo": fondo_expected,
+        "periodo_declarado": periodo_declarado,
+        "fecha_publicacion": fecha_publicacion,
         "periodos": periodos,
         "n_lineas": len(lineas),
         "gastos_por_periodo": gastos_check,
@@ -297,9 +318,14 @@ def validate(raw_text: str, fondo_expected: str) -> ValidationResult:
     return result
 
 
-def commit(raw_text: str, fondo_expected: str) -> dict:
+def commit(
+    raw_text: str,
+    fondo_expected: str,
+    periodo_declarado: str | None = None,
+    fecha_publicacion: str | None = None,
+) -> dict:
     """Re-valida (defensa en profundidad) y persiste. Lanza ValueError si no pasa validación."""
-    result = validate(raw_text, fondo_expected)
+    result = validate(raw_text, fondo_expected, periodo_declarado, fecha_publicacion)
     if not result.ok:
         raise ValueError("No se puede ingestar: " + "; ".join(result.errors))
 
@@ -326,8 +352,10 @@ def commit(raw_text: str, fondo_expected: str) -> dict:
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cur = con.execute(
-            "INSERT INTO ingest_run (tool, source_file, file_hash, started_at, status) VALUES (?,?,?,?,?)",
-            ("ingest_eeff_validated", source_file, fhash, now, "running"),
+            """INSERT INTO ingest_run
+               (tool, source_file, file_hash, started_at, status, periodo_declarado, fecha_publicacion)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("ingest_eeff_validated", source_file, fhash, now, "running", periodo_declarado, fecha_publicacion),
         )
         run_id = cur.lastrowid
 

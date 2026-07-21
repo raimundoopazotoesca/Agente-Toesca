@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from tools.db import ingest_eeff_validated as core  # noqa: E402
+from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 
 app = Flask(__name__, static_folder=None)
 
@@ -58,9 +59,11 @@ def api_validate():
     body = request.get_json(force=True, silent=True) or {}
     fondo = str(body.get("fondo", "")).upper()
     texto = body.get("texto", "")
+    periodo_declarado = body.get("periodo_declarado", "")
+    fecha_publicacion = body.get("fecha_publicacion", "")
     if not texto.strip():
         return jsonify({"ok": False, "errors": ["Pega la respuesta de ChatGPT antes de validar."], "warnings": []})
-    result = core.validate(texto, fondo)
+    result = core.validate(texto, fondo, periodo_declarado, fecha_publicacion)
     return jsonify(result.to_dict())
 
 
@@ -69,8 +72,39 @@ def api_ingest():
     body = request.get_json(force=True, silent=True) or {}
     fondo = str(body.get("fondo", "")).upper()
     texto = body.get("texto", "")
+    periodo_declarado = body.get("periodo_declarado", "")
+    fecha_publicacion = body.get("fecha_publicacion", "")
     try:
-        summary = core.commit(texto, fondo)
+        summary = core.commit(texto, fondo, periodo_declarado, fecha_publicacion)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **summary})
+
+
+@app.post("/api/rentroll/validate")
+def api_rentroll_validate():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube el archivo .xlsx del Rent Roll."], "warnings": []})
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
+    file_bytes = file.read()
+    result = rr_core.validate(file_bytes, file.filename, periodo)
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/rentroll/commit")
+def api_rentroll_commit():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube el archivo .xlsx del Rent Roll."}), 400
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
+    file_bytes = file.read()
+    try:
+        summary = rr_core.commit(file_bytes, file.filename, periodo)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     return jsonify({"ok": True, **summary})

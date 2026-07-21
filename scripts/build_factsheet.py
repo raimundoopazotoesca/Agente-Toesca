@@ -5,11 +5,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-DB = Path(__file__).parent.parent / "memory" / "agente_toesca_v2.db"
-OUT = Path(__file__).parent.parent / "factsheet.html"
+ROOT = Path(__file__).parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+DB = ROOT / "memory" / "agente_toesca_v2.db"
+OUT = ROOT / "factsheet.html"
 
 FONDOS_CFG = {
     "TRI": {
@@ -367,7 +372,32 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "gastos": dict(sorted(gastos.items())),
         "uf": uf_por_periodo,
         "dividendos": dividendos,
+        "perf_data": _fetch_perf_data(fondo_key),
     }
+
+
+def _fetch_perf_data(fondo_key: str) -> dict:
+    """Tabla "Resumen Performance Activos" de la página 2 (rent roll), por
+    período. Solo implementada para PT hoy — ver tools/db/rent_roll_stats.py.
+    """
+    if fondo_key != "PT":
+        return {}
+    from tools.db.rent_roll_stats import get_perf_table, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles("PT"):
+        tabla = get_perf_table("PT", periodo)
+        if tabla is None:
+            continue
+        celdas = {}
+        for key, val in tabla.items():
+            if isinstance(key, tuple):
+                grupo, tipo = key
+                celdas[f"{grupo}|||{tipo}"] = val
+        celdas["_absorcion_3m"] = tabla["_absorcion_3m"]
+        celdas["_absorcion_12m"] = tabla["_absorcion_12m"]
+        out[periodo] = celdas
+    return out
 
 
 # Metadata de trazabilidad por KPI. Se sirve al frontend para el modo admin.
@@ -1681,20 +1711,64 @@ function switchFund(f){
   render();
 }
 
-// Página 2 — encabezado de "Resumen Performance Activos del Fondo" según S.page2.perf_groups,
-// con filas de S.page2.perf_rows. Solo las columnas cambian por fondo; los valores quedan
-// en placeholder ("—") hasta que se consolide su fuente (rent roll) por activo/tipo/UF.
-function renderPerfActivosHeader(p2){
+// Página 2 — "Resumen Performance Activos del Fondo" según S.page2.perf_groups
+// / perf_rows. perfData (si no es null) viene de F.perf_data[periodo] —
+// tools/db/rent_roll_stats.py vía scripts/build_factsheet.py::_fetch_perf_data,
+// una fila {grupo}|||{col} -> {m2_utiles, m2_vacantes, pct_vacancia_m2,
+// renta_mensual_uf} más "__grand_total__|||Total" para la columna Total final.
+// Renta vacante/gracia/descuento y absorción por columna no están en el
+// schema hoy (raw_rent_roll_line no captura esos campos del RR) — quedan en
+// placeholder; solo la absorción a nivel fondo (_absorcion_3m/12m) se llena
+// en la columna Total final.
+const PERF_ROW_METRIC = {
+  "m² útiles": "m2_utiles", "m² vacantes": "m2_vacantes",
+  "% vacancia (m²)": "pct_vacancia_m2", "Renta mensual (UF)": "renta_mensual_uf",
+};
+const PERF_ROW_ABSORCION = {
+  "Absorción bruta m² 3M": ["_absorcion_3m", "bruta_m2"], "Absorción bruta UF 3M": ["_absorcion_3m", "bruta_uf"],
+  "Absorción neta m² 3M": ["_absorcion_3m", "neta_m2"], "Absorción neta UF 3M": ["_absorcion_3m", "neta_uf"],
+  "Absorción bruta m² 12M": ["_absorcion_12m", "bruta_m2"], "Absorción bruta UF 12M": ["_absorcion_12m", "bruta_uf"],
+  "Absorción neta m² 12M": ["_absorcion_12m", "neta_m2"], "Absorción neta UF 12M": ["_absorcion_12m", "neta_uf"],
+};
+
+function fmtPerfCell(v, esPct){
+  if (v === null || v === undefined) return "—";
+  const s = Number(v).toLocaleString('es-CL', {maximumFractionDigits: 1});
+  return esPct ? s + "%" : s;
+}
+
+function renderPerfActivosHeader(p2, perfData){
   const groups = p2.perf_groups;
   const totalCols = groups.reduce((n,g) => n + g.cols.length, 0);
   document.getElementById("tbl-perf-activos-thead1").innerHTML =
     "<th></th>" + groups.map(g => `<th colspan="${g.cols.length}">${g.label}</th>`).join("") + "<th>Total</th>";
   document.getElementById("tbl-perf-activos-thead2").innerHTML =
     "<th></th>" + groups.map(g => g.cols.map(c => `<th>${c}</th>`).join("")).join("") + "<th></th>";
+
   const tbody = document.getElementById("tbl-perf-activos-tbody");
-  tbody.innerHTML = p2.perf_rows.map(r =>
-    `<tr><td>${r}</td>${"<td class=\"placeholder\">—</td>".repeat(totalCols + 1)}</tr>`
-  ).join("");
+  tbody.innerHTML = p2.perf_rows.map(row => {
+    const metric = PERF_ROW_METRIC[row];
+    const esPct = row === "% vacancia (m²)";
+    let cells = "";
+    if (metric && perfData) {
+      groups.forEach(g => {
+        g.cols.forEach(col => {
+          const d = perfData[`${g.label}|||${col}`];
+          cells += `<td>${fmtPerfCell(d ? d[metric] : null, esPct)}</td>`;
+        });
+      });
+      const gt = perfData["__grand_total__|||Total"];
+      cells += `<td>${fmtPerfCell(gt ? gt[metric] : null, esPct)}</td>`;
+    } else if (PERF_ROW_ABSORCION[row] && perfData) {
+      const [bucket, key] = PERF_ROW_ABSORCION[row];
+      cells = "<td class=\"placeholder\">—</td>".repeat(totalCols);
+      const d = perfData[bucket];
+      cells += `<td>${fmtPerfCell(d ? d[key] : null, false)}</td>`;
+    } else {
+      cells = "<td class=\"placeholder\">—</td>".repeat(totalCols + 1);
+    }
+    return `<tr><td>${row}</td>${cells}</tr>`;
+  }).join("");
 }
 
 function render(){
@@ -1936,7 +2010,13 @@ function render(){
 
   // Página 2
   document.getElementById("month-bar2").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
-  if (S.page2) document.getElementById("perf-fecha").textContent = "(al " + mesEspanol(usadoOp) + ")";
+  if (S.page2) {
+    document.getElementById("perf-fecha").textContent = "(al " + mesEspanol(usadoOp) + ")";
+    const perfKeys = Object.keys(F.perf_data || {}).sort();
+    const perfLower = perfKeys.filter(k => k <= usadoOp);
+    const perfPeriodo = perfLower.length ? perfLower[perfLower.length - 1] : null;
+    renderPerfActivosHeader(S.page2, perfPeriodo ? F.perf_data[perfPeriodo] : null);
+  }
 }
 
 // Init

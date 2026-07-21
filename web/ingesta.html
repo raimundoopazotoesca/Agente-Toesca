@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Ingesta EEFF · Toesca</title>
+<title>Ingesta · Toesca</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -17,14 +17,24 @@
   }
   header {
     background: linear-gradient(180deg,#3d3d3d,#2b2b2b); color: #fff;
-    padding: 22px 32px 18px;
+    padding: 22px 32px 0;
   }
   header h1 { margin: 0; font-size: 26px; font-weight: 300; letter-spacing: 0.5px; }
   header .subtitle {
-    margin: 4px 0 0; font-size: 12px; font-weight: 400; color: #dedede;
+    margin: 4px 0 16px; font-size: 12px; font-weight: 400; color: #dedede;
     font-variant: small-caps; letter-spacing: 1px;
   }
+  .tabs { display: flex; gap: 4px; }
+  .tab-btn {
+    background: transparent; border: none; border-bottom: 3px solid transparent;
+    color: #cfcfcf; font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; cursor: pointer; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn.active { color: #fff; border-bottom-color: var(--green); }
   main { max-width: 880px; margin: 12px auto 40px; padding: 0 24px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
   .step {
     background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -35,11 +45,12 @@
     width: 24px; height: 24px; border-radius: 50%; background: var(--green); color: #fff;
     display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
   }
-  select, textarea, button {
+  select, textarea, button, input[type=month], input[type=file] {
     font-family: inherit; font-size: 13px; border-radius: 3px; border: 1px solid var(--border);
     background: #fff; color: var(--text); padding: 7px 12px;
   }
   select { width: 260px; }
+  input[type=month] { width: 160px; }
   textarea {
     width: 100%; min-height: 220px; resize: vertical;
     font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #FAFAFA;
@@ -50,14 +61,21 @@
   }
   button:hover:not(:disabled) { background: var(--green-soft); }
   button:disabled { border-color: var(--border); color: #a0a0a0; cursor: not-allowed; background: #f4f4f4; }
-  button.primary, #btn-confirm { background: var(--green); color: #fff; }
-  button.primary:hover:not(:disabled), #btn-confirm:hover:not(:disabled) { background: #009c69; }
+  button.primary, #btn-confirm, #btn-rr-confirm { background: var(--green); color: #fff; }
+  button.primary:hover:not(:disabled), #btn-confirm:hover:not(:disabled), #btn-rr-confirm:hover:not(:disabled) { background: #009c69; }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
   ol.instructions { color: #444; font-size: 13px; padding-left: 20px; margin: 8px 0 0; }
   ol.instructions li { margin-bottom: 4px; }
   .muted { color: var(--muted); font-size: 12.5px; }
   .hidden { display: none !important; }
   .copied-flash { color: var(--green); font-size: 13px; margin-left: 4px; font-weight: 600; }
+
+  .dropzone {
+    border: 2px dashed var(--border); border-radius: 4px; padding: 24px; text-align: center;
+    color: var(--muted); background: #FAFAFA; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag { border-color: var(--green); background: var(--green-soft); color: #0d3a29; }
+  .dropzone.has-file { border-style: solid; border-color: var(--green); color: #0d3a29; }
 
   .preview { margin-top: 18px; }
   .preview h3 {
@@ -84,15 +102,47 @@
 
   .summary-line { font-size: 12.5px; color: var(--muted); }
   .delta-up { color: var(--green); } .delta-down { color: var(--err); }
+
+  .activo-block { margin-bottom: 16px; }
+  .activo-block h4 {
+    font-size: 12.5px; font-weight: 700; margin: 0 0 6px; color: #2b2b2b;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .evento-list { list-style: none; margin: 4px 0 10px; padding: 0; font-size: 12.5px; }
+  .evento-list li {
+    padding: 4px 8px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .evento-tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .evento-tag.alta { background: var(--green-soft); color: #0d3a29; }
+  .evento-tag.baja { background: #fbe3e0; color: var(--err); }
+  .evento-tag.renovacion { background: #eef2fb; color: #2b4a9c; }
+  .evento-tag.movimiento { background: #fff4d9; color: var(--warn); }
+  .evento-tag.cambio_renta { background: #f0e9fb; color: #6c3fb0; }
+
+  .raro-item {
+    display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; margin-bottom: 6px;
+    background: #FFF9EC; border: 1px solid #f0d9a0; border-radius: 3px; font-size: 12.5px;
+  }
+  .raro-item input[type=checkbox] { margin-top: 2px; flex-shrink: 0; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Ingesta de EEFF</h1>
+  <h1>Ingesta</h1>
   <div class="subtitle">Toesca · Fact Sheets dinámicos</div>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="eeff">EEFF</button>
+    <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
+  </div>
 </header>
 
 <main>
+
+<!-- ══════════════════════════ TAB EEFF ══════════════════════════ -->
+<div id="tab-eeff" class="tab-panel active">
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Elige el fondo y copia el prompt</div>
@@ -104,6 +154,12 @@
       </select>
       <button id="btn-copy-prompt">Copiar prompt</button>
       <span id="copied-flash" class="copied-flash hidden">✓ copiado</span>
+    </div>
+    <div class="row">
+      <label class="muted" for="eeff-periodo">Período del EEFF:</label>
+      <input type="month" id="eeff-periodo">
+      <label class="muted" for="eeff-fecha-publicacion">Fecha de publicación:</label>
+      <input type="date" id="eeff-fecha-publicacion">
     </div>
   </div>
 
@@ -160,17 +216,101 @@
     </div>
   </div>
 
+</div>
+
+<!-- ══════════════════════════ TAB RENT ROLL ══════════════════════════ -->
+<div id="tab-rentroll" class="tab-panel">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+    <div class="row">
+      <label class="muted" for="rr-periodo">Período del Rent Roll:</label>
+      <input type="month" id="rr-periodo">
+    </div>
+    <div class="row">
+      <div id="rr-dropzone" class="dropzone" style="flex:1">
+        Arrastra aquí el archivo <code>{AAMM} Rent Roll y NOI.xlsx</code> (JLL) o haz click para elegirlo
+        <input type="file" id="rr-file" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <button id="btn-rr-validate">Validar</button>
+      <span id="rr-validate-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="rr-preview" class="step preview hidden">
+    <div class="badges" id="rr-badges"></div>
+    <ul id="rr-errors" class="msg-list err"></ul>
+    <ul id="rr-warnings" class="msg-list warn"></ul>
+
+    <div id="rr-section-email" class="hidden">
+      <h3>Detalle para el proveedor</h3>
+      <p class="muted" id="rr-email-para"></p>
+      <div class="row">
+        <button id="btn-rr-copy-email">Copiar correo</button>
+        <span id="rr-copy-flash" class="copied-flash hidden">✓ copiado</span>
+      </div>
+      <textarea id="rr-email-body" readonly style="margin-top:10px;min-height:280px"></textarea>
+    </div>
+
+    <div id="rr-section-totales" class="hidden">
+      <h3>Resumen por activo</h3>
+      <div id="rr-totales-container"></div>
+    </div>
+
+    <div id="rr-section-diff" class="hidden">
+      <h3>Diff de absorción vs. mes anterior</h3>
+      <div id="rr-diff-container"></div>
+    </div>
+
+    <div id="rr-section-raros" class="hidden">
+      <h3>Casos raros — confirmar antes de ingestar</h3>
+      <div id="rr-raros-container"></div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-rr-confirm" disabled>Confirmar e ingestar</button>
+      <span id="rr-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+</div>
+
 </main>
 
 <script>
+// ── Tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+if (location.hash === '#rentroll') {
+  document.querySelector('[data-tab="rentroll"]').click();
+}
+
+function fmt(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString('es-CL', {maximumFractionDigits: 2});
+}
+
+// ── TAB EEFF ─────────────────────────────────────────────────────────────
 const promptCache = {};
 let lastValidatedText = null;
 let lastValidatedFondo = null;
+let lastValidatedPeriodo = null;
+let lastValidatedFechaPublicacion = null;
 let lastValidationOk = false;
 
 const fondoSelect = document.getElementById('fondo-select');
 const btnCopy = document.getElementById('btn-copy-prompt');
 const copiedFlash = document.getElementById('copied-flash');
+const eeffPeriodo = document.getElementById('eeff-periodo');
+const eeffFechaPublicacion = document.getElementById('eeff-fecha-publicacion');
 const respuestaInput = document.getElementById('respuesta-input');
 const btnValidate = document.getElementById('btn-validate');
 const validateStatus = document.getElementById('validate-status');
@@ -210,11 +350,6 @@ function resetPreview() {
   btnConfirm.disabled = true;
   lastValidationOk = false;
   ingestStatus.textContent = '';
-}
-
-function fmt(n) {
-  if (n === null || n === undefined) return '—';
-  return Number(n).toLocaleString('es-CL', {maximumFractionDigits: 2});
 }
 
 function renderPreview(data) {
@@ -329,16 +464,22 @@ function renderPreview(data) {
 btnValidate.addEventListener('click', async () => {
   const texto = respuestaInput.value;
   const fondo = fondoSelect.value;
+  const periodo_declarado = eeffPeriodo.value;
+  const fecha_publicacion = eeffFechaPublicacion.value;
+  if (!periodo_declarado) { validateStatus.textContent = 'Declara el período del EEFF.'; return; }
+  if (!fecha_publicacion) { validateStatus.textContent = 'Declara la fecha de publicación del EEFF.'; return; }
   validateStatus.textContent = 'Validando…';
   btnConfirm.disabled = true;
   try {
     const res = await fetch('/api/validate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({fondo, texto}),
+      body: JSON.stringify({fondo, texto, periodo_declarado, fecha_publicacion}),
     });
     const data = await res.json();
     lastValidatedText = texto;
     lastValidatedFondo = fondo;
+    lastValidatedPeriodo = periodo_declarado;
+    lastValidatedFechaPublicacion = fecha_publicacion;
     renderPreview(data);
     validateStatus.textContent = '';
   } catch (e) {
@@ -347,8 +488,9 @@ btnValidate.addEventListener('click', async () => {
 });
 
 btnConfirm.addEventListener('click', async () => {
-  if (!lastValidationOk || lastValidatedText !== respuestaInput.value || lastValidatedFondo !== fondoSelect.value) {
-    ingestStatus.textContent = 'El texto cambió desde la última validación — vuelve a validar.';
+  if (!lastValidationOk || lastValidatedText !== respuestaInput.value || lastValidatedFondo !== fondoSelect.value ||
+      lastValidatedPeriodo !== eeffPeriodo.value || lastValidatedFechaPublicacion !== eeffFechaPublicacion.value) {
+    ingestStatus.textContent = 'Los datos cambiaron desde la última validación — vuelve a validar.';
     return;
   }
   btnConfirm.disabled = true;
@@ -356,7 +498,10 @@ btnConfirm.addEventListener('click', async () => {
   try {
     const res = await fetch('/api/ingest', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({fondo: lastValidatedFondo, texto: lastValidatedText}),
+      body: JSON.stringify({
+        fondo: lastValidatedFondo, texto: lastValidatedText,
+        periodo_declarado: lastValidatedPeriodo, fecha_publicacion: lastValidatedFechaPublicacion,
+      }),
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
@@ -374,8 +519,267 @@ btnConfirm.addEventListener('click', async () => {
 });
 
 respuestaInput.addEventListener('input', resetPreview);
-
+eeffPeriodo.addEventListener('change', resetPreview);
+eeffFechaPublicacion.addEventListener('change', resetPreview);
 fetchPrompt(fondoSelect.value).catch(() => {});
+
+// ── TAB RENT ROLL ────────────────────────────────────────────────────────
+const rrPeriodo = document.getElementById('rr-periodo');
+const rrDropzone = document.getElementById('rr-dropzone');
+const rrFileInput = document.getElementById('rr-file');
+const btnRrValidate = document.getElementById('btn-rr-validate');
+const rrValidateStatus = document.getElementById('rr-validate-status');
+const rrPreview = document.getElementById('rr-preview');
+const btnRrConfirm = document.getElementById('btn-rr-confirm');
+const rrIngestStatus = document.getElementById('rr-ingest-status');
+const btnRrCopyEmail = document.getElementById('btn-rr-copy-email');
+const rrCopyFlash = document.getElementById('rr-copy-flash');
+
+btnRrCopyEmail.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(document.getElementById('rr-email-body').value);
+    rrCopyFlash.classList.remove('hidden');
+    setTimeout(() => rrCopyFlash.classList.add('hidden'), 1500);
+  } catch (e) {
+    alert('No se pudo copiar: ' + e.message);
+  }
+});
+
+let rrSelectedFile = null;
+let rrLastValidationOk = false;
+let rrLastValidatedFile = null;
+let rrLastValidatedPeriodo = null;
+let rrCasosRarosPendientes = 0;
+
+const now = new Date();
+rrPeriodo.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+function setRrFile(file) {
+  rrSelectedFile = file;
+  if (file) {
+    rrDropzone.textContent = `Archivo seleccionado: ${file.name}`;
+    rrDropzone.classList.add('has-file');
+  } else {
+    rrDropzone.textContent = 'Arrastra aquí el archivo {AAMM} Rent Roll y NOI.xlsx (JLL) o haz click para elegirlo';
+    rrDropzone.classList.remove('has-file');
+  }
+  resetRrPreview();
+}
+
+rrDropzone.addEventListener('click', () => rrFileInput.click());
+rrFileInput.addEventListener('change', () => setRrFile(rrFileInput.files[0] || null));
+rrDropzone.addEventListener('dragover', e => { e.preventDefault(); rrDropzone.classList.add('drag'); });
+rrDropzone.addEventListener('dragleave', () => rrDropzone.classList.remove('drag'));
+rrDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  rrDropzone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setRrFile(f);
+});
+rrPeriodo.addEventListener('change', resetRrPreview);
+
+function resetRrPreview() {
+  rrPreview.classList.add('hidden');
+  btnRrConfirm.disabled = true;
+  rrLastValidationOk = false;
+  rrIngestStatus.textContent = '';
+}
+
+function evTag(evento) {
+  const labels = {alta: 'Alta', baja: 'Baja', renovacion: 'Renovación', movimiento: 'Movimiento', cambio_renta: 'Δ Renta'};
+  return `<span class="evento-tag ${evento}">${labels[evento] || evento}</span>`;
+}
+
+function renderEventoLine(e, evento) {
+  let detail = `${e.activo2} — ${e.unidad}`;
+  if (evento === 'movimiento') detail += ` (${e.arrendatario_antes} → ${e.arrendatario_ahora})`;
+  if (evento === 'renovacion') detail += ` (venc. ${e.vencimiento_antes} → ${e.vencimiento_ahora})`;
+  if (evento === 'cambio_renta') detail += ` (${fmt(e.renta_antes)} → ${fmt(e.renta_ahora)} UF/m²)`;
+  return `<li>${evTag(evento)}<span style="flex:1">${detail}</span></li>`;
+}
+
+function updateRrConfirmState() {
+  btnRrConfirm.disabled = !rrLastValidationOk || rrCasosRarosPendientes > 0;
+}
+
+function renderRrPreview(data) {
+  rrPreview.classList.remove('hidden');
+
+  const badges = document.getElementById('rr-badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('rr-errors');
+  const warnUl = document.getElementById('rr-warnings');
+  errUl.innerHTML = '';
+  warnUl.innerHTML = '';
+
+  function addBadge(label, status) {
+    const el = document.createElement('span');
+    el.className = 'badge';
+    el.innerHTML = `<span class="dot ${status}"></span>${label}`;
+    badges.appendChild(el);
+  }
+  addBadge(data.ok ? 'Validación OK' : 'Validación con errores', data.ok ? 'ok' : 'err');
+
+  (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+  (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+  const secTotales = document.getElementById('rr-section-totales');
+  const secDiff = document.getElementById('rr-section-diff');
+  const secRaros = document.getElementById('rr-section-raros');
+  const secEmail = document.getElementById('rr-section-email');
+
+  if (!data.ok) {
+    secTotales.classList.add('hidden');
+    secDiff.classList.add('hidden');
+    secRaros.classList.add('hidden');
+    if (data.email_proveedor) {
+      secEmail.classList.remove('hidden');
+      document.getElementById('rr-email-para').textContent = 'Para: ' + data.email_proveedor.para;
+      document.getElementById('rr-email-body').value =
+        'Asunto: ' + data.email_proveedor.asunto + '\n\n' + data.email_proveedor.cuerpo;
+    } else {
+      secEmail.classList.add('hidden');
+    }
+    rrLastValidationOk = false;
+    updateRrConfirmState();
+    return;
+  }
+  secEmail.classList.add('hidden');
+
+  // Resumen por activo
+  const totalesContainer = document.getElementById('rr-totales-container');
+  totalesContainer.innerHTML = '';
+  secTotales.classList.remove('hidden');
+  (data.activos || []).forEach(activo => {
+    const d = data.diffs[activo];
+    const t = d.totales.periodo_actual;
+    const tPrev = d.totales.periodo_anterior;
+    const wrap = document.createElement('div');
+    wrap.className = 'activo-block';
+    wrap.innerHTML = `
+      <h4>${activo}</h4>
+      <table><thead><tr>
+        <th></th><th class="num">m² total</th><th class="num">m² vacante</th><th class="num">% vacancia</th>
+        <th class="num">Renta UF total</th><th class="num">Renta UF vacante</th>
+      </tr></thead><tbody>
+        <tr><td>${d.periodo_anterior}</td><td class="num">${fmt(tPrev.m2_total)}</td><td class="num">${fmt(tPrev.m2_vacante)}</td>
+            <td class="num">${tPrev.pct_vacancia !== null ? tPrev.pct_vacancia + '%' : '—'}</td>
+            <td class="num">${fmt(tPrev.renta_uf_total)}</td><td class="num">${fmt(tPrev.renta_uf_vacante)}</td></tr>
+        <tr><td>${d.periodo} (nuevo)</td><td class="num">${fmt(t.m2_total)}</td><td class="num">${fmt(t.m2_vacante)}</td>
+            <td class="num">${t.pct_vacancia !== null ? t.pct_vacancia + '%' : '—'}</td>
+            <td class="num">${fmt(t.renta_uf_total)}</td><td class="num">${fmt(t.renta_uf_vacante)}</td></tr>
+      </tbody></table>
+      <div class="summary-line" style="margin-top:4px">
+        Absorción bruta: ${fmt(d.absorcion.bruta_m2)} m² / ${fmt(d.absorcion.bruta_uf)} UF ·
+        Absorción neta: ${fmt(d.absorcion.neta_m2)} m² / ${fmt(d.absorcion.neta_uf)} UF
+      </div>`;
+    totalesContainer.appendChild(wrap);
+  });
+
+  // Diff de eventos
+  const diffContainer = document.getElementById('rr-diff-container');
+  diffContainer.innerHTML = '';
+  secDiff.classList.remove('hidden');
+  (data.activos || []).forEach(activo => {
+    const d = data.diffs[activo];
+    const ev = d.eventos;
+    const totalEventos = Object.values(ev).reduce((n, arr) => n + arr.length, 0);
+    if (!totalEventos) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'activo-block';
+    let html = `<h4>${activo}</h4><ul class="evento-list">`;
+    ['alta', 'baja', 'renovacion', 'movimiento', 'cambio_renta'].forEach(tipo => {
+      (ev[tipo] || []).forEach(e => { html += renderEventoLine(e, tipo); });
+    });
+    html += '</ul>';
+    wrap.innerHTML = html;
+    diffContainer.appendChild(wrap);
+  });
+  if (!diffContainer.innerHTML) {
+    diffContainer.innerHTML = '<p class="muted">Sin cambios detectados vs. el período anterior.</p>';
+  }
+
+  // Casos raros
+  const rarosContainer = document.getElementById('rr-raros-container');
+  rarosContainer.innerHTML = '';
+  let totalRaros = 0;
+  (data.activos || []).forEach(activo => {
+    const d = data.diffs[activo];
+    (d.casos_raros || []).forEach((c, idx) => {
+      totalRaros++;
+      const id = `raro-${activo}-${idx}`;
+      const div = document.createElement('div');
+      div.className = 'raro-item';
+      div.innerHTML = `
+        <input type="checkbox" id="${id}" data-raro="1">
+        <label for="${id}"><strong>${activo}</strong> — ${c.detalle}</label>`;
+      rarosContainer.appendChild(div);
+    });
+  });
+  secRaros.classList.toggle('hidden', totalRaros === 0);
+  rrCasosRarosPendientes = totalRaros;
+
+  rarosContainer.querySelectorAll('input[data-raro]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      rrCasosRarosPendientes = Array.from(rarosContainer.querySelectorAll('input[data-raro]'))
+        .filter(el => !el.checked).length;
+      updateRrConfirmState();
+    });
+  });
+
+  rrLastValidationOk = data.ok;
+  updateRrConfirmState();
+}
+
+btnRrValidate.addEventListener('click', async () => {
+  if (!rrSelectedFile) { rrValidateStatus.textContent = 'Selecciona un archivo primero.'; return; }
+  if (!rrPeriodo.value) { rrValidateStatus.textContent = 'Selecciona el período.'; return; }
+  rrValidateStatus.textContent = 'Validando…';
+  btnRrConfirm.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('file', rrSelectedFile);
+    fd.append('periodo', rrPeriodo.value);
+    const res = await fetch('/api/rentroll/validate', { method: 'POST', body: fd });
+    const data = await res.json();
+    rrLastValidatedFile = rrSelectedFile;
+    rrLastValidatedPeriodo = rrPeriodo.value;
+    renderRrPreview(data);
+    rrValidateStatus.textContent = '';
+  } catch (e) {
+    rrValidateStatus.textContent = 'Error: ' + e.message;
+  }
+});
+
+btnRrConfirm.addEventListener('click', async () => {
+  if (!rrLastValidationOk || rrLastValidatedFile !== rrSelectedFile || rrLastValidatedPeriodo !== rrPeriodo.value) {
+    rrIngestStatus.textContent = 'El archivo o período cambió desde la última validación — vuelve a validar.';
+    return;
+  }
+  if (rrCasosRarosPendientes > 0) {
+    rrIngestStatus.textContent = 'Confirma todos los casos raros antes de ingestar.';
+    return;
+  }
+  btnRrConfirm.disabled = true;
+  rrIngestStatus.textContent = 'Ingestando…';
+  try {
+    const fd = new FormData();
+    fd.append('file', rrLastValidatedFile);
+    fd.append('periodo', rrLastValidatedPeriodo);
+    const res = await fetch('/api/rentroll/commit', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+    if (data.status === 'skipped_duplicate') {
+      rrIngestStatus.textContent = 'Este archivo ya había sido ingestado antes — no se creó nada nuevo.';
+    } else {
+      rrIngestStatus.textContent =
+        `Listo: ${data.rows_inserted} filas insertadas para ${data.activos.join(', ')} (run #${data.run_id}).`;
+    }
+  } catch (e) {
+    rrIngestStatus.textContent = 'Error al ingestar: ' + e.message;
+    btnRrConfirm.disabled = false;
+  }
+});
 </script>
 </body>
 </html>
