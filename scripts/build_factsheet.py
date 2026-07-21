@@ -256,80 +256,50 @@ FONDOS_CFG = {
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
         },
         # Página 3 — "Detalle de Activos" (fact sheet Apo octubre 2025).
-        # Snapshot ESTÁTICO con los valores reales del PDF de referencia (31-10-2025) — no
-        # viene de la DB todavía. Se muestra tal cual en todos los períodos hasta que se
-        # modele una fuente real (raw_rent_roll_line para vacancia/status, fact_tasacion para
-        # tasaciones) y quede dinámico por período como el resto de la página 1/2.
+        # Solo ESTRUCTURA (secciones, orden, filas/columnas de cada tabla, edificios) — sin
+        # datos reales todavía. A la espera de confirmar el orden exacto contra el PDF de
+        # referencia (que quedó fuera de contexto) antes de rellenar valores.
         "page3": {
             "titulo": "Apoquindo 4501 / Apoquindo 4700",
-            "fecha_ref": "31-10-2025",
+            "edificios": ["Apoquindo 4501", "Apoquindo 4700"],
             "aspectos": [
-                ("Dirección", "Apoquindo 4501 / Apoquindo 4700"),
-                ("Superficie Arrendable", "29.654 m²"),
-                ("Principal Arrendatario", "Coordinador Eléctrico Nacional"),
-                ("Financiamiento", "LTV de 76,6%"),
-                ("Administración", "Jones Lang LaSalle (JLL)"),
-                ("Vacancia (m²)", "5,1%"),
+                ("Dirección", None),
+                ("Superficie Arrendable", None),
+                ("Principal Arrendatario", None),
+                ("Financiamiento", None),
+                ("Administración", None),
+                ("Vacancia (m²)", None),
             ],
             # foto por edificio: null hasta que se agregue el archivo (data URI o /static/...)
             "fotos": {"Apoquindo 4501": None, "Apoquindo 4700": None},
-            "donut_gla": [("Apoquindo 4501", 75), ("Apoquindo 4700", 25)],
-            "donut_ingresos": [("Apoquindo 4501", 75), ("Apoquindo 4700", 25)],
-            "status_oficinas": [("Apoquindo 4501", 100.0), ("Apoquindo 4700", 85.6)],
-            "status_locales": [("Apoquindo 4501", 90.3), ("Apoquindo 4700", 100.0)],
+            "donut_gla": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
+            "donut_ingresos": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
+            "status_oficinas": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
+            "status_locales": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
             "aspectos_mes": [
-                ("Colocaciones", "Durante oct-25 hubo 2 nuevos cierres de contratos de oficina "
-                 "por un total de 729 m², en el edificio Apoquindo 4501."),
-                ("Resultados", "El NOI de los U12M de oct-25 fue un 14% mayor en UF que el 2024."),
-                ("Recaudación", "La recaudación se ha mantenido estable, con una morosidad del "
-                 "mes de octubre del 8,0% (sept-25: 7,0%)."),
-                ("Vencimientos 2025", "Durante 2025, en el edificio Apoquindo 4501 vencen "
-                 "contratos por 2.409 m², lo que representa un 11% de la superficie total. A la "
-                 "fecha, un 80% de estos espacios se renovaron y el 20% restante confirmó su "
-                 "salida. En el edificio Apoquindo 4700, los vencimientos corresponden a 1.289 "
-                 "m², equivalentes al 9% de la superficie total. De ese total, un 41% ya ha "
-                 "renovado y un 59% ha confirmado su salida."),
+                ("Colocaciones", None),
+                ("Resultados", None),
+                ("Recaudación", None),
+                ("Vencimientos", None),
             ],
-            "vacancia_periodo": ("sept-25", "oct-25"),
+            "vacancia_periodo": ("Mes anterior", "Mes actual"),
             "vacancia_edificios": [
-                {"nombre": "Apoquindo 4501", "rows": [
-                    ("Locales", "16,5%", "9,7%", "6,7%"),
-                    ("Oficinas", "0,0%", "0,0%", "0,0%"),
-                    ("Edificio", "2,7%", "1,6%", "1,1%"),
-                ]},
-                {"nombre": "Apoquindo 4700", "rows": [
-                    ("Oficinas", "0,0%", "0,0%", "0,0%"),
-                    ("Edificio", "5,0%", "14,4%", "-9,4%"),
-                    ("Locales", "4,0%", "11,5%", "-7,5%"),
-                ]},
+                {"nombre": "Apoquindo 4501", "rows": ["Locales", "Oficinas", "Edificio"]},
+                {"nombre": "Apoquindo 4700", "rows": ["Oficinas", "Edificio", "Locales"]},
             ],
-            "vacancia_fondo": ("4,1%", "5,1%", "-1,0%"),
             "resumen_anual_edificios": [
                 {"nombre": "Apoquindo 4501", "rows": [
-                    ("Vencimientos", "2.409", "11%"), ("(+) Renovados", "1.926", "9%"),
-                    ("(-) No Renovaciones", "-483", "-2%"), ("(-) Salidas", "-894", "-4%"),
-                    ("(+) Nuevos contratos", "3.951", "18%"), ("Neto", "3.058", "14%"),
+                    "Vencimientos", "(+) Renovados", "(-) No Renovaciones",
+                    "(-) Salidas", "(+) Nuevos contratos", "Neto",
                 ]},
                 {"nombre": "Apoquindo 4700", "rows": [
-                    ("Vencimientos", "1.289", "18%"), ("(+) Renovados", "528", "7%"),
-                    ("(-) No Renovaciones", "-761", "-11%"), ("(-) Salidas", "-761", "-11%"),
-                    ("(+) Nuevos contratos", "220", "3%"), ("Neto", "-541", "-8%"),
+                    "Vencimientos", "(+) Renovados", "(-) No Renovaciones",
+                    "(-) Salidas", "(+) Nuevos contratos", "Neto",
                 ]},
             ],
-            "tasaciones_rows": [
-                {"nombre": "Apoquindo 4501", "valor": "2.622.679", "fecha": "4Q24", "deuda": "", "ltv": ""},
-                {"nombre": "Apoquindo 4700", "valor": "817.778", "fecha": "4Q24", "deuda": "", "ltv": ""},
-            ],
-            "tasaciones_total": {
-                "nombre": "Fondo Rentas Apoquindo", "valor": "3.440.457", "fecha": "",
-                "deuda": "2.635.368", "ltv": "76,6%",
-            },
-            "tasaciones_comparacion": [
-                {"nombre": "Apoquindo 4501", "t_prev": "2.462.229", "t_actual": "2.622.679", "var": "6,52%"},
-                {"nombre": "Apoquindo 4700", "t_prev": "741.364", "t_actual": "817.778", "var": "10,31%"},
-                {"nombre": "Fondo Rentas Apoquindo", "t_prev": "3.203.593", "t_actual": "3.440.457", "var": "7,39%"},
-            ],
-            "tasaciones_periodo": ("Tasación 2023", "Tasación 2024"),
+            "tasaciones_edificios": ["Apoquindo 4501", "Apoquindo 4700"],
+            "tasaciones_total_nombre": "Fondo Rentas Apoquindo",
+            "tasaciones_periodo": ("Tasación año anterior", "Tasación año actual"),
         },
         # Página 4 — "Notas y Análisis de Mercado" (basado en fact sheet Apo octubre 2025).
         # Notas (i)-(x): boilerplate metodológico, prácticamente igual entre fondos —
@@ -1523,9 +1493,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <div id="page3-body">
     <div class="section-title" id="page3-titulo">—</div>
-    <p class="small" style="color:#999;margin-top:-4px">
-      Snapshot de referencia al <span id="page3-fecha-ref">—</span> — pendiente de wire a la DB
-      por período (queda igual en todos los meses hasta entonces).
+    <p class="small placeholder" style="margin-top:-4px">
+      Estructura construida — pendiente de datos (raw_rent_roll_line, fact_tasacion).
     </p>
 
     <div class="cols">
@@ -2039,9 +2008,8 @@ function switchFund(f){
   if (hasPage3) {
     const p3 = S.page3;
     document.getElementById("page3-titulo").textContent = p3.titulo;
-    document.getElementById("page3-fecha-ref").textContent = p3.fecha_ref;
     document.getElementById("tbl-aspectos").innerHTML =
-      p3.aspectos.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+      p3.aspectos.map(([k]) => `<tr><td>${k}</td><td class="placeholder">—</td></tr>`).join("");
 
     document.getElementById("grid-fotos").innerHTML =
       p3.edificios.map(n => {
@@ -2052,24 +2020,28 @@ function switchFund(f){
         return `<div><div class="foto-box">${body}</div><div class="foto-caption">${n}</div></div>`;
       }).join("");
 
-    renderDonut("donut-gla", p3.donut_gla);
-    renderDonut("donut-ingresos", p3.donut_ingresos);
+    const donutPending = (containerId) => {
+      document.getElementById(containerId).innerHTML =
+        `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
+    };
+    donutPending("donut-gla");
+    donutPending("donut-ingresos");
 
-    const occBox = (nombre, pct) => `
+    const occBox = (nombre) => `
       <div class="chart-box">
         <div class="chart-title">${nombre}</div>
         <div class="occ-box">
-          <div class="occ-bar"><div class="occ-bar-fill" style="width:${pct}%"></div></div>
-          <div class="occ-label">Ocupación: ${fmtPerfCell(pct, true)}</div>
+          <div class="occ-bar"><div class="occ-bar-fill" style="width:0%"></div></div>
+          <div class="occ-label placeholder">Ocupación: —</div>
         </div>
       </div>`;
     document.getElementById("grid-status-oficinas").innerHTML =
-      p3.status_oficinas.map(([n,pct]) => occBox(n, pct)).join("");
+      p3.status_oficinas.map(([n]) => occBox(n)).join("");
     document.getElementById("grid-status-locales").innerHTML =
-      p3.status_locales.map(([n,pct]) => occBox(n, pct)).join("");
+      p3.status_locales.map(([n]) => occBox(n)).join("");
 
     document.getElementById("txt-aspectos-mes").innerHTML =
-      p3.aspectos_mes.map(([k,v]) => `<p><b>${k}:</b> ${v}</p>`).join("");
+      p3.aspectos_mes.map(([k]) => `<p><b>${k}:</b> <span class="placeholder">Pendiente.</span></p>`).join("");
 
     const [pAnt, pAct] = p3.vacancia_periodo;
     document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
@@ -2078,31 +2050,31 @@ function switchFund(f){
         <div class="subtable-title">${ed.nombre}</div>
         <table>
           <thead><tr><th></th><th>${pAnt}</th><th>${pAct}</th><th>Variación</th></tr></thead>
-          <tbody>${ed.rows.map(([r,a,b,v]) => `<tr><td>${r}</td><td>${a}</td><td>${b}</td><td>${v}</td></tr>`).join("")}</tbody>
+          <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
         </table>
       </div>`;
     document.getElementById("grid-vacancia").innerHTML = p3.vacancia_edificios.map(vacanciaBox).join("");
-    document.getElementById("txt-vacancia-fondo").textContent =
-      `${p3.vacancia_fondo[0]} → ${p3.vacancia_fondo[1]} (${p3.vacancia_fondo[2]})`;
+    document.getElementById("txt-vacancia-fondo").textContent = "—";
 
     const resumenBox = (ed) => `
       <div class="subtable-box">
         <div class="subtable-title">${ed.nombre}</div>
         <table>
           <thead><tr><th></th><th>m²</th><th>% del total</th></tr></thead>
-          <tbody>${ed.rows.map(([r,m2,pct]) => `<tr><td>${r}</td><td>${m2}</td><td>${pct}</td></tr>`).join("")}</tbody>
+          <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
         </table>
       </div>`;
     document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
 
     document.getElementById("tbl-tasaciones-tbody").innerHTML =
-      p3.tasaciones_rows.map(r => `<tr><td>${r.nombre}</td><td>${r.valor}</td><td>${r.fecha}</td><td>${r.deuda}</td><td>${r.ltv}</td></tr>`).join("")
-      + `<tr class="row-total"><td>${p3.tasaciones_total.nombre}</td><td>${p3.tasaciones_total.valor}</td><td>${p3.tasaciones_total.fecha}</td><td>${p3.tasaciones_total.deuda}</td><td>${p3.tasaciones_total.ltv}</td></tr>`;
+      p3.tasaciones_edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
+      + `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
 
     document.getElementById("th-tasacion-prev").textContent = p3.tasaciones_periodo[0];
     document.getElementById("th-tasacion-actual").textContent = p3.tasaciones_periodo[1];
     document.getElementById("tbl-tasaciones-comp-tbody").innerHTML =
-      p3.tasaciones_comparacion.map(r => `<tr><td>${r.nombre}</td><td>${r.t_prev}</td><td>${r.t_actual}</td><td>${r.var}</td></tr>`).join("");
+      [...p3.tasaciones_edificios, p3.tasaciones_total_nombre]
+        .map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
   }
 
   // Página 4 — notas metodológicas + análisis de mercado

@@ -3,6 +3,19 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Página 3 Apo — vuelta a estructura sin datos
+
+El commit anterior (e2768a1) hardcodeó valores reales del snapshot Apo octubre 2025. El
+usuario pidió que quedara igual al PDF en orden pero con las tablas construidas **sin
+información** por ahora — y el PDF de referencia ya no estaba disponible en el contexto de la
+sesión para verificar el orden pixel a pixel. Se revirtieron los valores de `cfg["page3"]` a
+solo estructura (labels de filas/columnas, nombres de edificio) mientras se mantiene todo el
+layout/CSS/JS ya construido (`renderDonut` vía conic-gradient, barras de ocupación
+`.occ-bar`/`.occ-bar-fill`, tablas `.subtable-box` por edificio) — queda listo para poblarse
+en cuanto se confirme el orden exacto y haya fuente de datos. Pendiente: (a) re-verificar el
+orden de secciones contra el PDF, (b) fotos de los edificios (las va a proveer el usuario).
+Ver [[procesos/fact-sheets]].
+
 ## [2026-07-21] factsheet | Página 3 Apo — gráficos y valores reales (snapshot oct-2025)
 
 Usuario pidió que quedara "igual al PDF, mismos gráficos y misma organización" — la versión

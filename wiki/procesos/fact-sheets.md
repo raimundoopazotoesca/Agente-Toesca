@@ -90,36 +90,36 @@ hasta ahora para estas dos páginas — PT/TRI no tienen su página 3/4 traída 
 patrón que la página 2: `cfg["page3"]`/`cfg["page4"]` por fondo en `FONDOS_CFG`, con aviso
 "pendiente" (`#page3-pending`/`#page4-pending`) cuando el fondo no los define.
 
-**Página 3** (`cfg["page3"]`) — reescrita 2026-07-21 con los **valores reales** del fact sheet
-Apo octubre 2025 (snapshot estático a `fecha_ref`, no dinámico por período todavía) y gráficos
-reales en vez de placeholders, para que se vea igual al PDF de referencia:
+**Página 3** (`cfg["page3"]`) — estado 2026-07-21: **solo estructura, sin datos**. Se probó una
+versión con valores reales hardcodeados (snapshot Apo octubre 2025) pero el usuario pidió
+volver a dejar las tablas construidas sin info hasta confirmar el orden exacto contra el PDF
+(quedó fuera de contexto en la sesión de chat y no se pudo re-verificar pixel a pixel).
+Secciones (orden actual, mejor esfuerzo — pendiente de validar contra el PDF real):
 
-1. Dos columnas (`.cols`, igual que la página 1): "Aspectos Relevantes" (tabla `kv`, ahora con
-   los 6 campos completos de la referencia: dirección, superficie, principal arrendatario,
-   financiamiento/LTV, administración, vacancia) + grid de fotos por edificio (`grid-fotos`,
-   `p3.fotos[edificio]` — `None` hasta que se agregue la imagen, se ve un placeholder 📷) a la
-   izquierda; donuts reales "GLA (m²)" e "Ingresos (UF/mes)" (`renderDonut()`, CSS
-   `conic-gradient`, sin librería externa) a la derecha, con los % de `donut_gla`/`donut_ingresos`.
+1. Dos columnas (`.cols`, igual que la página 1): "Aspectos Relevantes" (tabla `kv` con las 6
+   filas de la referencia, valores en placeholder) + grid de fotos por edificio (`grid-fotos`,
+   `p3.fotos[edificio]` — `None` hasta que se agregue la imagen, el usuario las va a proveer) a
+   la izquierda; donuts "GLA (m²)" e "Ingresos (UF/mes)" a la derecha, en placeholder
+   (`renderDonut()` vía CSS `conic-gradient` queda implementado y listo para usar en cuanto
+   haya %, ver commit e2768a1).
 2. "Status Actual Oficinas/Locales por Activo": barra de ocupación proporcional
-   (`.occ-bar`/`.occ-bar-fill`, ancho = % ocupación) + label "Ocupación: X%" por edificio, desde
-   `status_oficinas`/`status_locales`. **Simplificación deliberada**: la referencia usa un
-   treemap con las unidades individuales (oficina por oficina); no tenemos esos m² por unidad
-   modelados en la DB, así que se reemplazó por una barra que representa el mismo % de
-   ocupación agregado — mismo dato, geometría distinta.
-3. "Aspectos del Mes": caja gris (`.aspectos-mes-box`) con el texto real de la referencia
-   (Colocaciones/Resultados/Recaudación/Vencimientos 2025), desde `aspectos_mes`.
+   (`.occ-bar`/`.occ-bar-fill`) por edificio, en placeholder (0% relleno, label "—").
+   **Simplificación deliberada frente al PDF**: la referencia usa un treemap con las unidades
+   individuales del arrendatario; no hay m² por unidad modelados en la DB, así que se usa una
+   barra de ocupación agregada en su lugar — mismo dato cuando esté disponible, geometría
+   distinta.
+3. "Aspectos del Mes": caja gris (`.aspectos-mes-box`) con los 4 sub-bloques
+   (Colocaciones/Resultados/Recaudación/Vencimientos), texto en placeholder.
 4. "Gestión de Vacancia" y "Resumen Anual — Vencimientos y Renovaciones": una tabla
-   (`.subtable-box`) por edificio lado a lado, con los valores reales de `vacancia_edificios`
-   (sept-25→oct-25→variación) / `resumen_anual_edificios` (m²/% del total), más la fila "Fondo"
-   consolidada (`vacancia_fondo`).
-5. "Tasaciones": tabla principal (valor/fecha/deuda/LTV por edificio + fila total) y tabla de
-   comparación interanual (tasación año anterior vs actual + var %), ambas con los valores
-   reales de `tasaciones_rows`/`tasaciones_total`/`tasaciones_comparacion`.
+   (`.subtable-box`) por edificio lado a lado, filas reales de la referencia
+   (`vacancia_edificios[].rows`, `resumen_anual_edificios[].rows`) con celdas en placeholder "—".
+5. "Tasaciones": tabla principal (fila por edificio + total) y tabla de comparación interanual,
+   ambas con celdas en placeholder.
 
-Es un **snapshot fijo**, no wired a la DB: se ve igual en cualquier período seleccionado hasta
-que se modele una fuente real (`raw_rent_roll_line` para vacancia/status, `fact_tasacion` para
-tasaciones) y quede dinámico como el resto de la página 1/2 — un aviso bajo el título lo deja
-explícito ("Snapshot de referencia al 31-10-2025 — pendiente de wire a la DB por período").
+Todo el layout/CSS/JS (`renderDonut`, barras de ocupación, `.subtable-box`) queda implementado
+y listo — falta (a) confirmar el orden de secciones contra el PDF real, (b) las fotos de los
+edificios, (c) modelar la fuente de datos (`raw_rent_roll_line` para vacancia/status,
+`fact_tasacion` para tasaciones) para dejarlo dinámico por período como el resto de la página.
 
 **Página 4** (`cfg["page4"]`):
 - `notas`: lista de 10 strings (i)-(x), generada por `_notas_template(has_bursatil)` — texto
