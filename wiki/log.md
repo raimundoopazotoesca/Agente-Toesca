@@ -3,6 +3,20 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Página 3 Apo — distribución corregida para calzar con el PDF
+
+Primera versión de la página 3 colapsaba demasiado la estructura del fact sheet de
+referencia (una sola sección "Status Actual", vacancia/resumen/tasaciones como texto
+"Pendiente" plano). El usuario pidió copiar la distribución original. Reescrita para
+reflejar el orden real de secciones: Aspectos Relevantes + donuts GLA/Ingresos en 2
+columnas arriba, Status Actual Oficinas y Status Actual Locales en grids separados (uno
+por edificio), caja gris "Aspectos del Mes" con sus 4 sub-bloques, Gestión de Vacancia y
+Resumen Anual con una tabla por edificio lado a lado (mismas filas que la referencia:
+Locales/Oficinas/Edificio para vacancia; Vencimientos/Renovados/No Renovaciones/Salidas/
+Nuevos/Neto para resumen anual), y tabla de Tasaciones con fila por edificio + total.
+Sigue sin datos reales (todo en placeholder "—") — el cambio fue solo de layout/distribución,
+no de fuente de datos. Ver [[procesos/fact-sheets]].
+
 ## [2026-07-21] factsheet | Páginas 3 (Detalle de Activos) y 4 (Notas + Mercado) para Apo
 
 Agregadas `cfg["page3"]`/`cfg["page4"]` de Apo en `FONDOS_CFG` (`scripts/build_factsheet.py`),

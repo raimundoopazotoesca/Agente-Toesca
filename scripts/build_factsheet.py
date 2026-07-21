@@ -256,10 +256,12 @@ FONDOS_CFG = {
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
         },
         # Página 3 — "Detalle de Activos" (basado en fact sheet Apo octubre 2025).
-        # Campos verdaderamente estáticos (dirección, superficie, administración) van
-        # directo en texto; lo que cambia mes a mes (principal arrendatario, LTV,
-        # vacancia, aspectos del mes, tablas de vacancia/resumen/tasaciones) queda en
-        # placeholder hasta definir su fuente en la DB.
+        # Distribución copiada de la referencia: Aspectos Relevantes + donuts GLA/Ingresos
+        # arriba en 2 columnas, Status Actual Oficinas/Locales por edificio, Aspectos del Mes,
+        # Gestión de Vacancia y Resumen Anual con una tabla por edificio lado a lado, Tasaciones.
+        # Campos verdaderamente estáticos (dirección, superficie, administración) van directo
+        # en texto; lo que cambia mes a mes (principal arrendatario, LTV, vacancia, aspectos
+        # del mes, valores de las tablas) queda en placeholder hasta definir su fuente en la DB.
         "page3": {
             "titulo": "Apoquindo 4501 / Apoquindo 4700",
             "aspectos": [
@@ -268,6 +270,11 @@ FONDOS_CFG = {
                 ("Administración", "Jones Lang LaSalle (JLL)"),
             ],
             "edificios": ["Apoquindo 4501", "Apoquindo 4700"],
+            "vacancia_rows": ["Locales", "Oficinas", "Edificio"],
+            "resumen_anual_rows": [
+                "Vencimientos", "(+) Renovados", "(-) No Renovaciones",
+                "(-) Salidas", "(+) Nuevos contratos", "Neto",
+            ],
         },
         # Página 4 — "Notas y Análisis de Mercado" (basado en fact sheet Apo octubre 2025).
         # Notas (i)-(x): boilerplate metodológico, prácticamente igual entre fondos —
@@ -1126,6 +1133,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     background: repeating-linear-gradient(45deg, #fafafa, #fafafa 10px, #f2f2f2 10px, #f2f2f2 20px);
   }
   #tbl-perf-activos td.placeholder, #tbl-perf-activos th { text-align: right; }
+
+  /* Página 3: aspectos del mes (caja gris) + tablas por edificio lado a lado */
+  .aspectos-mes-box {
+    background: #F4F4F4; border-radius: 6px; padding: 12px 16px; margin: 4px 0 16px;
+  }
+  .aspectos-mes-box p { margin: 4px 0; font-size: 11px; }
+  .subtable-box { border: 1px solid #EDEDED; border-radius: 6px; padding: 10px 12px; }
+  .subtable-box .subtable-title { font-weight: 700; font-size: 11px; margin-bottom: 6px; color: #33413b; }
+  .subtable-box table { width: 100%; }
+  .subtable-box td, .subtable-box th { padding: 3px 4px; font-size: 11px; text-align: right; }
+  .subtable-box td:first-child, .subtable-box th:first-child { text-align: left; }
+  #tbl-tasaciones td, #tbl-tasaciones th { text-align: right; padding: 4px 8px; font-size: 11px; }
+  #tbl-tasaciones td:first-child, #tbl-tasaciones th:first-child { text-align: left; }
   #tbl-perf-activos td:first-child, #tbl-perf-activos th:first-child { text-align: left; }
   #sidebar {
     position: fixed; left: 0; top: 0;
@@ -1444,23 +1464,35 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="section-title">Status Actual por Activo</div>
-    <div class="charts-grid-2" id="grid-status-activos"></div>
+    <div class="section-title">Status Actual Oficinas por Activo</div>
+    <div class="charts-grid-2" id="grid-status-oficinas"></div>
+
+    <div class="section-title">Status Actual Locales por Activo</div>
+    <div class="charts-grid-2" id="grid-status-locales"></div>
 
     <div class="section-title">Aspectos del Mes</div>
-    <p class="small placeholder" id="txt-aspectos-mes">
-      Pendiente: texto mensual (colocaciones, resultados, recaudación, vencimientos) — no
-      modelado aún en la DB, se transcribe manualmente del informe de administración.
-    </p>
+    <div class="aspectos-mes-box" id="txt-aspectos-mes">
+      <p><b>Colocaciones:</b> <span class="placeholder">Pendiente — texto mensual, no modelado aún en la DB.</span></p>
+      <p><b>Resultados:</b> <span class="placeholder">Pendiente.</span></p>
+      <p><b>Recaudación:</b> <span class="placeholder">Pendiente.</span></p>
+      <p><b>Vencimientos:</b> <span class="placeholder">Pendiente.</span></p>
+    </div>
 
     <div class="section-title">Gestión de Vacancia</div>
-    <p class="small placeholder">Pendiente: comparación de vacancia mes anterior vs mes actual por edificio (raw_rent_roll_line).</p>
+    <div class="charts-grid-2" id="grid-vacancia"></div>
+    <p class="small">Fondo: <span class="placeholder" id="txt-vacancia-fondo">Pendiente — vacancia consolidada mes anterior / actual / variación (raw_rent_roll_line).</span></p>
 
     <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
-    <p class="small placeholder">Pendiente: vencimientos/renovados/no renovaciones/salidas/nuevos contratos por edificio.</p>
+    <div class="charts-grid-2" id="grid-resumen-anual"></div>
 
     <div class="section-title">Tasaciones</div>
-    <p class="small placeholder">Pendiente: valor tasación, fecha, deuda y LTV por activo (fact_tasacion).</p>
+    <div style="overflow-x:auto">
+      <table id="tbl-tasaciones">
+        <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+        <tbody id="tbl-tasaciones-tbody"></tbody>
+      </table>
+    </div>
+    <p class="small placeholder">Pendiente: valores de tasación, deuda y LTV por activo (fact_tasacion).</p>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -1919,15 +1951,44 @@ function switchFund(f){
   document.getElementById("page3-pending").classList.toggle("hidden", hasPage3);
   document.getElementById("page3-body").classList.toggle("hidden", !hasPage3);
   if (hasPage3) {
-    document.getElementById("page3-titulo").textContent = S.page3.titulo;
+    const p3 = S.page3;
+    document.getElementById("page3-titulo").textContent = p3.titulo;
     document.getElementById("tbl-aspectos").innerHTML =
-      S.page3.aspectos.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
-    document.getElementById("grid-status-activos").innerHTML =
-      S.page3.edificios.map(nombre => `
-        <div class="chart-box">
-          <div class="chart-title">${nombre}</div>
-          <div class="chart-placeholder" data-chart="status-activo">Pendiente de datos</div>
-        </div>`).join("");
+      p3.aspectos.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+    const statusBox = (nombre, tipo) => `
+      <div class="chart-box">
+        <div class="chart-title">${nombre}</div>
+        <div class="chart-placeholder" data-chart="status-${tipo}">Pendiente de datos</div>
+      </div>`;
+    document.getElementById("grid-status-oficinas").innerHTML =
+      p3.edificios.map(n => statusBox(n, "oficinas")).join("");
+    document.getElementById("grid-status-locales").innerHTML =
+      p3.edificios.map(n => statusBox(n, "locales")).join("");
+
+    const vacanciaBox = (nombre) => `
+      <div class="subtable-box">
+        <div class="subtable-title">${nombre}</div>
+        <table>
+          <thead><tr><th></th><th>Mes anterior</th><th>Mes actual</th><th>Variación</th></tr></thead>
+          <tbody>${p3.vacancia_rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+    document.getElementById("grid-vacancia").innerHTML = p3.edificios.map(vacanciaBox).join("");
+
+    const resumenBox = (nombre) => `
+      <div class="subtable-box">
+        <div class="subtable-title">${nombre}</div>
+        <table>
+          <thead><tr><th></th><th>m²</th><th>% del total</th></tr></thead>
+          <tbody>${p3.resumen_anual_rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+    document.getElementById("grid-resumen-anual").innerHTML = p3.edificios.map(resumenBox).join("");
+
+    document.getElementById("tbl-tasaciones-tbody").innerHTML =
+      p3.edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
+      + `<tr class="row-total"><td>Total Fondo</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
   }
 
   // Página 4 — notas metodológicas + análisis de mercado

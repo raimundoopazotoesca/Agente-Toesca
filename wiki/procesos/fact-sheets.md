@@ -90,16 +90,27 @@ hasta ahora para estas dos páginas — PT/TRI no tienen su página 3/4 traída 
 patrón que la página 2: `cfg["page3"]`/`cfg["page4"]` por fondo en `FONDOS_CFG`, con aviso
 "pendiente" (`#page3-pending`/`#page4-pending`) cuando el fondo no los define.
 
-**Página 3** (`cfg["page3"]`):
-- `titulo`, `aspectos` (lista de pares label/valor — solo campos verdaderamente estáticos:
-  dirección, superficie arrendable, administración) → tabla `kv` genérica.
-- `edificios` (lista de nombres) → un `chart-box` placeholder por edificio en
-  "Status Actual por Activo" (ocupación oficinas/locales de la referencia PT/Apo, aún sin
-  fuente de datos).
-- Todo lo demás de la referencia Apo (aspectos del mes, gestión de vacancia, resumen anual de
-  vencimientos/renovaciones, tasaciones) queda como texto "Pendiente" fijo en el HTML — no
-  tiene aún modelo de datos ni config por fondo; se agregará cuando haya una fuente clara
-  (`raw_rent_roll_line` para vacancia, `fact_tasacion` para tasaciones).
+**Página 3** (`cfg["page3"]`) — distribución copiada del orden de secciones del PDF de
+referencia (arriba → abajo):
+1. Dos columnas (`.cols`, igual que la página 1): "Aspectos Relevantes" (tabla `kv` desde
+   `aspectos`, solo campos estáticos: dirección, superficie arrendable, administración) a la
+   izquierda; donuts placeholder "GLA (m²)" e "Ingresos (UF/mes)" a la derecha.
+2. "Status Actual Oficinas por Activo" y "Status Actual Locales por Activo": un `chart-box`
+   placeholder por edificio en `edificios`, en grids separados (la referencia las muestra en
+   dos filas, no mezcladas).
+3. "Aspectos del Mes": caja gris (`.aspectos-mes-box`) con los 4 sub-bloques de la referencia
+   (Colocaciones/Resultados/Recaudación/Vencimientos), cada uno en placeholder.
+4. "Gestión de Vacancia" y "Resumen Anual — Vencimientos y Renovaciones": una tabla
+   (`.subtable-box`) por edificio, lado a lado (`charts-grid-2`), con las filas de la
+   referencia (`vacancia_rows`, `resumen_anual_rows`) — todas en placeholder "—".
+5. "Tasaciones": una tabla con una fila por edificio + fila "Total Fondo", columnas Valor
+   Tasación/Fecha Tasación/Deuda/LTV — en placeholder.
+
+Todo el contenido dinámico queda en "—"/placeholder: no hay modelo de datos aún para vacancia
+por edificio, resumen anual de vencimientos ni tasaciones (fuentes previstas:
+`raw_rent_roll_line` para vacancia, `fact_tasacion` para tasaciones). Solo se copió la
+**distribución** (secciones, agrupación por edificio, filas/columnas) — los valores llegan
+cuando se pueble la DB.
 
 **Página 4** (`cfg["page4"]`):
 - `notas`: lista de 10 strings (i)-(x), generada por `_notas_template(has_bursatil)` — texto
