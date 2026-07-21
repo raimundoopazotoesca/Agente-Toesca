@@ -157,6 +157,29 @@ FONDOS_CFG = {
             ("Inmobiliaria Apoquindo S.A.", "Edificio Apoquindo 4700", "100%", "7.151"),
             ("Inmobiliaria Apoquindo S.A.", "Edificio Apoquindo 4501", "100%", "21.708"),
         ],
+        # Página 2 — layout específico de Apo (basado en fact sheet Apo octubre 2025).
+        # Grupos por edificio en vez de por sociedad (ambos activos están bajo la
+        # misma Inmobiliaria Apoquindo S.A.). perf_data aún no implementado para
+        # Apo en _fetch_perf_data (solo PT) — la tabla se muestra con placeholders
+        # hasta wire a raw_rent_roll_line.
+        "page2": {
+            "perf_groups": [
+                {"label": "Apoquindo 4501", "cols": ["Oficinas", "Locales Comerciales", "Total", "Bodegas", "Estacionamientos"]},
+                {"label": "Apoquindo 4700", "cols": ["Oficinas", "Locales Comerciales", "Total", "Bodegas", "Estacionamientos"]},
+            ],
+            "perf_rows": [
+                "m² útiles", "m² vacantes", "% vacancia (m²)",
+                "Renta mensual (UF)", "Renta vacante (UF)", "Renta en gracia (UF)", "Renta en descuento (UF)", "% vacancia (UF)",
+                "Absorción bruta m² 3M", "Absorción bruta UF 3M", "Absorción neta m² 3M", "Absorción neta UF 3M",
+                "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
+            ],
+            "rubro_arrendatario": [
+                "Otro", "Servicios", "Inmobiliaria", "Salud", "Minería", "Financiera",
+                "Tecnología", "Gimnasio", "Logística", "Consultoría", "Empresa Pública",
+                "Instituto profesional", "Infraestructura",
+            ],
+            "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
+        },
         "comite": "Eduardo Castillo A.<br/>Aníbal Silva S.<br/>Rodrigo Swett B.",
         "contacto": "distribución@toesca.com",
         "resumen": (
@@ -379,6 +402,9 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
 def _fetch_perf_data(fondo_key: str) -> dict:
     """Tabla "Resumen Performance Activos" de la página 2 (rent roll), por
     período. Solo implementada para PT hoy — ver tools/db/rent_roll_stats.py.
+    Apo ya tiene su layout de page2 definido en FONDOS_CFG pero sin fuente de
+    datos wired aún (raw_rent_roll_line de Apo); la tabla queda en placeholder
+    hasta implementar el agrupamiento por edificio (Apoquindo 4501/4700).
     """
     if fondo_key != "PT":
         return {}
@@ -2011,10 +2037,10 @@ function render(){
   // Página 2
   document.getElementById("month-bar2").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
   if (S.page2) {
-    document.getElementById("perf-fecha").textContent = "(al " + mesEspanol(usadoOp) + ")";
-    const perfKeys = Object.keys(F.perf_data || {}).sort();
-    const perfLower = perfKeys.filter(k => k <= usadoOp);
-    const perfPeriodo = perfLower.length ? perfLower[perfLower.length - 1] : null;
+    const perfPeriodo = (F.perf_data || {})[usadoOp] ? usadoOp : null;
+    document.getElementById("perf-fecha").textContent = perfPeriodo
+      ? "(al " + mesEspanol(perfPeriodo) + ")"
+      : "(sin rent roll para " + mesEspanol(usadoOp) + ")";
     renderPerfActivosHeader(S.page2, perfPeriodo ? F.perf_data[perfPeriodo] : null);
   }
 }

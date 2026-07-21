@@ -3,6 +3,18 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Estructura página 2 para Apo (agrupada por edificio)
+
+Agregado `cfg["page2"]` de Apo en `FONDOS_CFG` (`scripts/build_factsheet.py`), basado en el
+fact sheet Apo octubre 2025: tabla de performance agrupada por edificio (Apoquindo 4501 /
+Apoquindo 4700, no por sociedad ya que ambos activos están bajo la misma Inmobiliaria
+Apoquindo S.A.) con las mismas subcolumnas que PT (Oficinas/Locales/Total/Bodegas/Estac.);
+6 gráficos con categorías propias de Apo (13 rubros de arrendatario, 4 tipos de activo). El
+renderizado (`renderPerfActivosHeader`) ya era genérico — agregar el fondo fue solo config,
+sin tocar HTML/JS. Todo en placeholder salvo headers: `_fetch_perf_data` sigue solo
+implementado para PT, Apo queda pendiente de wire a `raw_rent_roll_line` agrupado por
+edificio. Ver [[procesos/fact-sheets]].
+
 ## [2026-07-20] factsheet | Estructura página 2 (Resumen Performance + gráficos) para PT
 
 Agregada la página 2 al fact sheet HTML dinámico (`scripts/build_factsheet.py` →
