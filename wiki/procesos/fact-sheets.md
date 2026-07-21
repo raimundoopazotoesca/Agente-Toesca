@@ -90,27 +90,36 @@ hasta ahora para estas dos páginas — PT/TRI no tienen su página 3/4 traída 
 patrón que la página 2: `cfg["page3"]`/`cfg["page4"]` por fondo en `FONDOS_CFG`, con aviso
 "pendiente" (`#page3-pending`/`#page4-pending`) cuando el fondo no los define.
 
-**Página 3** (`cfg["page3"]`) — distribución copiada del orden de secciones del PDF de
-referencia (arriba → abajo):
-1. Dos columnas (`.cols`, igual que la página 1): "Aspectos Relevantes" (tabla `kv` desde
-   `aspectos`, solo campos estáticos: dirección, superficie arrendable, administración) a la
-   izquierda; donuts placeholder "GLA (m²)" e "Ingresos (UF/mes)" a la derecha.
-2. "Status Actual Oficinas por Activo" y "Status Actual Locales por Activo": un `chart-box`
-   placeholder por edificio en `edificios`, en grids separados (la referencia las muestra en
-   dos filas, no mezcladas).
-3. "Aspectos del Mes": caja gris (`.aspectos-mes-box`) con los 4 sub-bloques de la referencia
-   (Colocaciones/Resultados/Recaudación/Vencimientos), cada uno en placeholder.
-4. "Gestión de Vacancia" y "Resumen Anual — Vencimientos y Renovaciones": una tabla
-   (`.subtable-box`) por edificio, lado a lado (`charts-grid-2`), con las filas de la
-   referencia (`vacancia_rows`, `resumen_anual_rows`) — todas en placeholder "—".
-5. "Tasaciones": una tabla con una fila por edificio + fila "Total Fondo", columnas Valor
-   Tasación/Fecha Tasación/Deuda/LTV — en placeholder.
+**Página 3** (`cfg["page3"]`) — reescrita 2026-07-21 con los **valores reales** del fact sheet
+Apo octubre 2025 (snapshot estático a `fecha_ref`, no dinámico por período todavía) y gráficos
+reales en vez de placeholders, para que se vea igual al PDF de referencia:
 
-Todo el contenido dinámico queda en "—"/placeholder: no hay modelo de datos aún para vacancia
-por edificio, resumen anual de vencimientos ni tasaciones (fuentes previstas:
-`raw_rent_roll_line` para vacancia, `fact_tasacion` para tasaciones). Solo se copió la
-**distribución** (secciones, agrupación por edificio, filas/columnas) — los valores llegan
-cuando se pueble la DB.
+1. Dos columnas (`.cols`, igual que la página 1): "Aspectos Relevantes" (tabla `kv`, ahora con
+   los 6 campos completos de la referencia: dirección, superficie, principal arrendatario,
+   financiamiento/LTV, administración, vacancia) + grid de fotos por edificio (`grid-fotos`,
+   `p3.fotos[edificio]` — `None` hasta que se agregue la imagen, se ve un placeholder 📷) a la
+   izquierda; donuts reales "GLA (m²)" e "Ingresos (UF/mes)" (`renderDonut()`, CSS
+   `conic-gradient`, sin librería externa) a la derecha, con los % de `donut_gla`/`donut_ingresos`.
+2. "Status Actual Oficinas/Locales por Activo": barra de ocupación proporcional
+   (`.occ-bar`/`.occ-bar-fill`, ancho = % ocupación) + label "Ocupación: X%" por edificio, desde
+   `status_oficinas`/`status_locales`. **Simplificación deliberada**: la referencia usa un
+   treemap con las unidades individuales (oficina por oficina); no tenemos esos m² por unidad
+   modelados en la DB, así que se reemplazó por una barra que representa el mismo % de
+   ocupación agregado — mismo dato, geometría distinta.
+3. "Aspectos del Mes": caja gris (`.aspectos-mes-box`) con el texto real de la referencia
+   (Colocaciones/Resultados/Recaudación/Vencimientos 2025), desde `aspectos_mes`.
+4. "Gestión de Vacancia" y "Resumen Anual — Vencimientos y Renovaciones": una tabla
+   (`.subtable-box`) por edificio lado a lado, con los valores reales de `vacancia_edificios`
+   (sept-25→oct-25→variación) / `resumen_anual_edificios` (m²/% del total), más la fila "Fondo"
+   consolidada (`vacancia_fondo`).
+5. "Tasaciones": tabla principal (valor/fecha/deuda/LTV por edificio + fila total) y tabla de
+   comparación interanual (tasación año anterior vs actual + var %), ambas con los valores
+   reales de `tasaciones_rows`/`tasaciones_total`/`tasaciones_comparacion`.
+
+Es un **snapshot fijo**, no wired a la DB: se ve igual en cualquier período seleccionado hasta
+que se modele una fuente real (`raw_rent_roll_line` para vacancia/status, `fact_tasacion` para
+tasaciones) y quede dinámico como el resto de la página 1/2 — un aviso bajo el título lo deja
+explícito ("Snapshot de referencia al 31-10-2025 — pendiente de wire a la DB por período").
 
 **Página 4** (`cfg["page4"]`):
 - `notas`: lista de 10 strings (i)-(x), generada por `_notas_template(has_bursatil)` — texto

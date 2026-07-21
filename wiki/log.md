@@ -3,6 +3,21 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Página 3 Apo — gráficos y valores reales (snapshot oct-2025)
+
+Usuario pidió que quedara "igual al PDF, mismos gráficos y misma organización" — la versión
+anterior tenía la distribución correcta pero todo en placeholder "—"/gris. Reescrita con:
+donuts reales GLA(m²)/Ingresos(UF/mes) vía CSS `conic-gradient` (función `renderDonut()`,
+sin librería externa) con los % reales de la referencia (75/25); barras de ocupación
+proporcional para Status Actual Oficinas/Locales por edificio (reemplazo deliberado del
+treemap original — no tenemos m² por unidad de arrendatario modelados en la DB, así que se
+usa el mismo % de ocupación agregado con una geometría más simple); Aspectos Relevantes con
+los 6 campos completos; grid de fotos por edificio (`p3.fotos[edificio]`, en `None` — el
+usuario las va a proveer en una próxima iteración); Aspectos del Mes, Gestión de Vacancia,
+Resumen Anual y Tasaciones con los **valores reales** del fact sheet Apo octubre 2025
+(snapshot fijo, no wired a la DB — un aviso bajo el título lo deja explícito). Ver
+[[procesos/fact-sheets]].
+
 ## [2026-07-21] factsheet | Página 3 Apo — distribución corregida para calzar con el PDF
 
 Primera versión de la página 3 colapsaba demasiado la estructura del fact sheet de

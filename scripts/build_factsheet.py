@@ -255,26 +255,81 @@ FONDOS_CFG = {
             ],
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
         },
-        # Página 3 — "Detalle de Activos" (basado en fact sheet Apo octubre 2025).
-        # Distribución copiada de la referencia: Aspectos Relevantes + donuts GLA/Ingresos
-        # arriba en 2 columnas, Status Actual Oficinas/Locales por edificio, Aspectos del Mes,
-        # Gestión de Vacancia y Resumen Anual con una tabla por edificio lado a lado, Tasaciones.
-        # Campos verdaderamente estáticos (dirección, superficie, administración) van directo
-        # en texto; lo que cambia mes a mes (principal arrendatario, LTV, vacancia, aspectos
-        # del mes, valores de las tablas) queda en placeholder hasta definir su fuente en la DB.
+        # Página 3 — "Detalle de Activos" (fact sheet Apo octubre 2025).
+        # Snapshot ESTÁTICO con los valores reales del PDF de referencia (31-10-2025) — no
+        # viene de la DB todavía. Se muestra tal cual en todos los períodos hasta que se
+        # modele una fuente real (raw_rent_roll_line para vacancia/status, fact_tasacion para
+        # tasaciones) y quede dinámico por período como el resto de la página 1/2.
         "page3": {
             "titulo": "Apoquindo 4501 / Apoquindo 4700",
+            "fecha_ref": "31-10-2025",
             "aspectos": [
                 ("Dirección", "Apoquindo 4501 / Apoquindo 4700"),
                 ("Superficie Arrendable", "29.654 m²"),
+                ("Principal Arrendatario", "Coordinador Eléctrico Nacional"),
+                ("Financiamiento", "LTV de 76,6%"),
                 ("Administración", "Jones Lang LaSalle (JLL)"),
+                ("Vacancia (m²)", "5,1%"),
             ],
-            "edificios": ["Apoquindo 4501", "Apoquindo 4700"],
-            "vacancia_rows": ["Locales", "Oficinas", "Edificio"],
-            "resumen_anual_rows": [
-                "Vencimientos", "(+) Renovados", "(-) No Renovaciones",
-                "(-) Salidas", "(+) Nuevos contratos", "Neto",
+            # foto por edificio: null hasta que se agregue el archivo (data URI o /static/...)
+            "fotos": {"Apoquindo 4501": None, "Apoquindo 4700": None},
+            "donut_gla": [("Apoquindo 4501", 75), ("Apoquindo 4700", 25)],
+            "donut_ingresos": [("Apoquindo 4501", 75), ("Apoquindo 4700", 25)],
+            "status_oficinas": [("Apoquindo 4501", 100.0), ("Apoquindo 4700", 85.6)],
+            "status_locales": [("Apoquindo 4501", 90.3), ("Apoquindo 4700", 100.0)],
+            "aspectos_mes": [
+                ("Colocaciones", "Durante oct-25 hubo 2 nuevos cierres de contratos de oficina "
+                 "por un total de 729 m², en el edificio Apoquindo 4501."),
+                ("Resultados", "El NOI de los U12M de oct-25 fue un 14% mayor en UF que el 2024."),
+                ("Recaudación", "La recaudación se ha mantenido estable, con una morosidad del "
+                 "mes de octubre del 8,0% (sept-25: 7,0%)."),
+                ("Vencimientos 2025", "Durante 2025, en el edificio Apoquindo 4501 vencen "
+                 "contratos por 2.409 m², lo que representa un 11% de la superficie total. A la "
+                 "fecha, un 80% de estos espacios se renovaron y el 20% restante confirmó su "
+                 "salida. En el edificio Apoquindo 4700, los vencimientos corresponden a 1.289 "
+                 "m², equivalentes al 9% de la superficie total. De ese total, un 41% ya ha "
+                 "renovado y un 59% ha confirmado su salida."),
             ],
+            "vacancia_periodo": ("sept-25", "oct-25"),
+            "vacancia_edificios": [
+                {"nombre": "Apoquindo 4501", "rows": [
+                    ("Locales", "16,5%", "9,7%", "6,7%"),
+                    ("Oficinas", "0,0%", "0,0%", "0,0%"),
+                    ("Edificio", "2,7%", "1,6%", "1,1%"),
+                ]},
+                {"nombre": "Apoquindo 4700", "rows": [
+                    ("Oficinas", "0,0%", "0,0%", "0,0%"),
+                    ("Edificio", "5,0%", "14,4%", "-9,4%"),
+                    ("Locales", "4,0%", "11,5%", "-7,5%"),
+                ]},
+            ],
+            "vacancia_fondo": ("4,1%", "5,1%", "-1,0%"),
+            "resumen_anual_edificios": [
+                {"nombre": "Apoquindo 4501", "rows": [
+                    ("Vencimientos", "2.409", "11%"), ("(+) Renovados", "1.926", "9%"),
+                    ("(-) No Renovaciones", "-483", "-2%"), ("(-) Salidas", "-894", "-4%"),
+                    ("(+) Nuevos contratos", "3.951", "18%"), ("Neto", "3.058", "14%"),
+                ]},
+                {"nombre": "Apoquindo 4700", "rows": [
+                    ("Vencimientos", "1.289", "18%"), ("(+) Renovados", "528", "7%"),
+                    ("(-) No Renovaciones", "-761", "-11%"), ("(-) Salidas", "-761", "-11%"),
+                    ("(+) Nuevos contratos", "220", "3%"), ("Neto", "-541", "-8%"),
+                ]},
+            ],
+            "tasaciones_rows": [
+                {"nombre": "Apoquindo 4501", "valor": "2.622.679", "fecha": "4Q24", "deuda": "", "ltv": ""},
+                {"nombre": "Apoquindo 4700", "valor": "817.778", "fecha": "4Q24", "deuda": "", "ltv": ""},
+            ],
+            "tasaciones_total": {
+                "nombre": "Fondo Rentas Apoquindo", "valor": "3.440.457", "fecha": "",
+                "deuda": "2.635.368", "ltv": "76,6%",
+            },
+            "tasaciones_comparacion": [
+                {"nombre": "Apoquindo 4501", "t_prev": "2.462.229", "t_actual": "2.622.679", "var": "6,52%"},
+                {"nombre": "Apoquindo 4700", "t_prev": "741.364", "t_actual": "817.778", "var": "10,31%"},
+                {"nombre": "Fondo Rentas Apoquindo", "t_prev": "3.203.593", "t_actual": "3.440.457", "var": "7,39%"},
+            ],
+            "tasaciones_periodo": ("Tasación 2023", "Tasación 2024"),
         },
         # Página 4 — "Notas y Análisis de Mercado" (basado en fact sheet Apo octubre 2025).
         # Notas (i)-(x): boilerplate metodológico, prácticamente igual entre fondos —
@@ -1144,8 +1199,32 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .subtable-box table { width: 100%; }
   .subtable-box td, .subtable-box th { padding: 3px 4px; font-size: 11px; text-align: right; }
   .subtable-box td:first-child, .subtable-box th:first-child { text-align: left; }
-  #tbl-tasaciones td, #tbl-tasaciones th { text-align: right; padding: 4px 8px; font-size: 11px; }
-  #tbl-tasaciones td:first-child, #tbl-tasaciones th:first-child { text-align: left; }
+  #tbl-tasaciones td, #tbl-tasaciones th,
+  #tbl-tasaciones-comp td, #tbl-tasaciones-comp th { text-align: right; padding: 4px 8px; font-size: 11px; }
+  #tbl-tasaciones td:first-child, #tbl-tasaciones th:first-child,
+  #tbl-tasaciones-comp td:first-child, #tbl-tasaciones-comp th:first-child { text-align: left; }
+
+  /* Donut chart (conic-gradient) con leyenda */
+  .donut-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .donut { width: 84px; height: 84px; border-radius: 50%; position: relative; flex: none; }
+  .donut::after { content: ""; position: absolute; inset: 17px; background: #fff; border-radius: 50%; }
+  .donut-legend { font-size: 10px; }
+  .donut-legend .row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+  .donut-legend .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+
+  /* Barra de ocupación (reemplaza el treemap de la referencia — mismo dato, layout simplificado) */
+  .occ-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 8px 6px; }
+  .occ-bar { background: #EDEDED; border-radius: 4px; height: 14px; overflow: hidden; }
+  .occ-bar-fill { background: var(--green); height: 100%; }
+  .occ-label { font-size: 11px; text-align: center; font-weight: 600; color: #33413b; }
+
+  /* Fotos de activos (página 3) */
+  .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .foto-box { aspect-ratio: 4/3; border-radius: 6px; overflow: hidden; background: #F4F4F4;
+    display: flex; align-items: center; justify-content: center; }
+  .foto-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .foto-box .foto-placeholder { font-size: 10px; color: #999; text-align: center; padding: 8px; }
+  .foto-caption { font-size: 10px; text-align: center; color: #666; margin-top: 3px; }
   #tbl-perf-activos td:first-child, #tbl-perf-activos th:first-child { text-align: left; }
   #sidebar {
     position: fixed; left: 0; top: 0;
@@ -1444,21 +1523,26 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <div id="page3-body">
     <div class="section-title" id="page3-titulo">—</div>
+    <p class="small" style="color:#999;margin-top:-4px">
+      Snapshot de referencia al <span id="page3-fecha-ref">—</span> — pendiente de wire a la DB
+      por período (queda igual en todos los meses hasta entonces).
+    </p>
 
     <div class="cols">
       <div>
         <div class="section-title">Aspectos Relevantes</div>
         <table class="kv" id="tbl-aspectos"></table>
+        <div class="fotos-grid" id="grid-fotos"></div>
       </div>
       <div>
         <div class="charts-grid-2">
           <div class="chart-box">
             <div class="chart-title">GLA (m²)</div>
-            <div class="chart-placeholder" data-chart="gla-activo">Pendiente de datos</div>
+            <div class="donut-wrap" id="donut-gla"></div>
           </div>
           <div class="chart-box">
             <div class="chart-title">Ingresos (UF/mes)</div>
-            <div class="chart-placeholder" data-chart="ingresos-activo">Pendiente de datos</div>
+            <div class="donut-wrap" id="donut-ingresos"></div>
           </div>
         </div>
       </div>
@@ -1471,16 +1555,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div class="charts-grid-2" id="grid-status-locales"></div>
 
     <div class="section-title">Aspectos del Mes</div>
-    <div class="aspectos-mes-box" id="txt-aspectos-mes">
-      <p><b>Colocaciones:</b> <span class="placeholder">Pendiente — texto mensual, no modelado aún en la DB.</span></p>
-      <p><b>Resultados:</b> <span class="placeholder">Pendiente.</span></p>
-      <p><b>Recaudación:</b> <span class="placeholder">Pendiente.</span></p>
-      <p><b>Vencimientos:</b> <span class="placeholder">Pendiente.</span></p>
-    </div>
+    <div class="aspectos-mes-box" id="txt-aspectos-mes"></div>
 
-    <div class="section-title">Gestión de Vacancia</div>
+    <div class="section-title">Gestión de Vacancia
+      <span class="small" id="vacancia-periodo-label" style="font-weight:400;text-transform:none"></span>
+    </div>
     <div class="charts-grid-2" id="grid-vacancia"></div>
-    <p class="small">Fondo: <span class="placeholder" id="txt-vacancia-fondo">Pendiente — vacancia consolidada mes anterior / actual / variación (raw_rent_roll_line).</span></p>
+    <p class="small">Fondo: <b id="txt-vacancia-fondo">—</b></p>
 
     <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
     <div class="charts-grid-2" id="grid-resumen-anual"></div>
@@ -1492,7 +1573,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <tbody id="tbl-tasaciones-tbody"></tbody>
       </table>
     </div>
-    <p class="small placeholder">Pendiente: valores de tasación, deuda y LTV por activo (fact_tasacion).</p>
+    <div style="overflow-x:auto;margin-top:8px">
+      <table id="tbl-tasaciones-comp">
+        <thead><tr><th></th><th id="th-tasacion-prev"></th><th id="th-tasacion-actual"></th><th>Var % UF</th></tr></thead>
+        <tbody id="tbl-tasaciones-comp-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -1953,42 +2039,70 @@ function switchFund(f){
   if (hasPage3) {
     const p3 = S.page3;
     document.getElementById("page3-titulo").textContent = p3.titulo;
+    document.getElementById("page3-fecha-ref").textContent = p3.fecha_ref;
     document.getElementById("tbl-aspectos").innerHTML =
       p3.aspectos.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
 
-    const statusBox = (nombre, tipo) => `
+    document.getElementById("grid-fotos").innerHTML =
+      p3.edificios.map(n => {
+        const src = p3.fotos[n];
+        const body = src
+          ? `<img src="${src}" alt="${n}">`
+          : `<div class="foto-placeholder">📷<br>${n}<br>(sin foto)</div>`;
+        return `<div><div class="foto-box">${body}</div><div class="foto-caption">${n}</div></div>`;
+      }).join("");
+
+    renderDonut("donut-gla", p3.donut_gla);
+    renderDonut("donut-ingresos", p3.donut_ingresos);
+
+    const occBox = (nombre, pct) => `
       <div class="chart-box">
         <div class="chart-title">${nombre}</div>
-        <div class="chart-placeholder" data-chart="status-${tipo}">Pendiente de datos</div>
+        <div class="occ-box">
+          <div class="occ-bar"><div class="occ-bar-fill" style="width:${pct}%"></div></div>
+          <div class="occ-label">Ocupación: ${fmtPerfCell(pct, true)}</div>
+        </div>
       </div>`;
     document.getElementById("grid-status-oficinas").innerHTML =
-      p3.edificios.map(n => statusBox(n, "oficinas")).join("");
+      p3.status_oficinas.map(([n,pct]) => occBox(n, pct)).join("");
     document.getElementById("grid-status-locales").innerHTML =
-      p3.edificios.map(n => statusBox(n, "locales")).join("");
+      p3.status_locales.map(([n,pct]) => occBox(n, pct)).join("");
 
-    const vacanciaBox = (nombre) => `
+    document.getElementById("txt-aspectos-mes").innerHTML =
+      p3.aspectos_mes.map(([k,v]) => `<p><b>${k}:</b> ${v}</p>`).join("");
+
+    const [pAnt, pAct] = p3.vacancia_periodo;
+    document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
+    const vacanciaBox = (ed) => `
       <div class="subtable-box">
-        <div class="subtable-title">${nombre}</div>
+        <div class="subtable-title">${ed.nombre}</div>
         <table>
-          <thead><tr><th></th><th>Mes anterior</th><th>Mes actual</th><th>Variación</th></tr></thead>
-          <tbody>${p3.vacancia_rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+          <thead><tr><th></th><th>${pAnt}</th><th>${pAct}</th><th>Variación</th></tr></thead>
+          <tbody>${ed.rows.map(([r,a,b,v]) => `<tr><td>${r}</td><td>${a}</td><td>${b}</td><td>${v}</td></tr>`).join("")}</tbody>
         </table>
       </div>`;
-    document.getElementById("grid-vacancia").innerHTML = p3.edificios.map(vacanciaBox).join("");
+    document.getElementById("grid-vacancia").innerHTML = p3.vacancia_edificios.map(vacanciaBox).join("");
+    document.getElementById("txt-vacancia-fondo").textContent =
+      `${p3.vacancia_fondo[0]} → ${p3.vacancia_fondo[1]} (${p3.vacancia_fondo[2]})`;
 
-    const resumenBox = (nombre) => `
+    const resumenBox = (ed) => `
       <div class="subtable-box">
-        <div class="subtable-title">${nombre}</div>
+        <div class="subtable-title">${ed.nombre}</div>
         <table>
           <thead><tr><th></th><th>m²</th><th>% del total</th></tr></thead>
-          <tbody>${p3.resumen_anual_rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+          <tbody>${ed.rows.map(([r,m2,pct]) => `<tr><td>${r}</td><td>${m2}</td><td>${pct}</td></tr>`).join("")}</tbody>
         </table>
       </div>`;
-    document.getElementById("grid-resumen-anual").innerHTML = p3.edificios.map(resumenBox).join("");
+    document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
 
     document.getElementById("tbl-tasaciones-tbody").innerHTML =
-      p3.edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
-      + `<tr class="row-total"><td>Total Fondo</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+      p3.tasaciones_rows.map(r => `<tr><td>${r.nombre}</td><td>${r.valor}</td><td>${r.fecha}</td><td>${r.deuda}</td><td>${r.ltv}</td></tr>`).join("")
+      + `<tr class="row-total"><td>${p3.tasaciones_total.nombre}</td><td>${p3.tasaciones_total.valor}</td><td>${p3.tasaciones_total.fecha}</td><td>${p3.tasaciones_total.deuda}</td><td>${p3.tasaciones_total.ltv}</td></tr>`;
+
+    document.getElementById("th-tasacion-prev").textContent = p3.tasaciones_periodo[0];
+    document.getElementById("th-tasacion-actual").textContent = p3.tasaciones_periodo[1];
+    document.getElementById("tbl-tasaciones-comp-tbody").innerHTML =
+      p3.tasaciones_comparacion.map(r => `<tr><td>${r.nombre}</td><td>${r.t_prev}</td><td>${r.t_actual}</td><td>${r.var}</td></tr>`).join("");
   }
 
   // Página 4 — notas metodológicas + análisis de mercado
@@ -2049,6 +2163,21 @@ function fmtPerfCell(v, esPct){
   if (v === null || v === undefined) return "—";
   const s = Number(v).toLocaleString('es-CL', {maximumFractionDigits: 1});
   return esPct ? s + "%" : s;
+}
+
+// Donut chart (conic-gradient) — data: [[label, pct], ...], pct suma 100.
+const DONUT_COLORS = ["#00B27A", "#C8ECD8", "#7FCDA0", "#E0E0E0"];
+function renderDonut(containerId, data){
+  let acc = 0;
+  const stops = data.map(([, pct], i) => {
+    const start = acc; acc += pct;
+    return `${DONUT_COLORS[i % DONUT_COLORS.length]} ${start}% ${acc}%`;
+  }).join(", ");
+  const legend = data.map(([label, pct], i) =>
+    `<div class="row"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label} ${pct}%</div>`
+  ).join("");
+  document.getElementById(containerId).innerHTML =
+    `<div class="donut" style="background:conic-gradient(${stops})"></div><div class="donut-legend">${legend}</div>`;
 }
 
 function renderPerfActivosHeader(p2, perfData){
