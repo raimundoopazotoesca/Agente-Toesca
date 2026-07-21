@@ -164,6 +164,7 @@
       <label class="muted" for="eeff-fecha-publicacion">Fecha de publicación:</label>
       <input type="date" id="eeff-fecha-publicacion">
     </div>
+    <div class="row" id="eeff-periodo-status-row" style="margin-top:6px"></div>
   </div>
 
   <div class="step">
@@ -236,6 +237,7 @@
         <option value="tresa_curico">Tres Asociados — Mall Curicó</option>
       </select>
     </div>
+    <div class="row" id="rr-periodo-status-row" style="margin-top:6px"></div>
     <div class="row">
       <div id="rr-dropzone" class="dropzone" style="flex:1">
         Arrastra aquí el archivo <code>{AAMM} Rent Roll y NOI.xlsx</code> (JLL) o haz click para elegirlo
@@ -335,10 +337,31 @@ async function fetchPrompt(fondo) {
   return json.prompt_text;
 }
 
+const eeffPeriodoStatusRow = document.getElementById('eeff-periodo-status-row');
+
+async function checkEeffPeriodoStatus() {
+  const fondo = fondoSelect.value;
+  const periodo = eeffPeriodo.value;
+  eeffPeriodoStatusRow.innerHTML = '';
+  if (!fondo || !periodo) return;
+  try {
+    const res = await fetch(`/api/eeff/periodo_check?fondo=${fondo}&periodo=${periodo}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot err"></span><strong style="color:var(--err)">${fondo} ${periodo} ya está ingestado (${data.n_filas} filas)</strong> — no se puede reingestar.`;
+      eeffPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) { /* silencioso: no bloquea el flujo si falla el chequeo */ }
+}
+
 fondoSelect.addEventListener('change', () => {
   fetchPrompt(fondoSelect.value).catch(() => {});
   resetPreview();
+  checkEeffPeriodoStatus();
 });
+eeffPeriodo.addEventListener('change', checkEeffPeriodoStatus);
 
 btnCopy.addEventListener('click', async () => {
   btnCopy.disabled = true;
@@ -557,6 +580,7 @@ function populateEeffTrimestres() {
 
 populateEeffTrimestres();
 fetchPrompt(fondoSelect.value).catch(() => {});
+checkEeffPeriodoStatus();
 
 // ── TAB RENT ROLL ────────────────────────────────────────────────────────
 const rrPeriodo = document.getElementById('rr-periodo');
@@ -576,11 +600,33 @@ const _DROPZONE_TEXT = {
   tresa_vina: 'Arrastra aquí el archivo Excel Tres A Viña {Mes} {Año}.xlsx o haz click para elegirlo',
   tresa_curico: 'Arrastra aquí el archivo Excel Tres A Curicó {Mes} {Año}.xlsx o haz click para elegirlo',
 };
+const rrPeriodoStatusRow = document.getElementById('rr-periodo-status-row');
+
+async function checkRrPeriodoStatus() {
+  const proveedor = rrProveedor.value;
+  const periodo = rrPeriodo.value;
+  rrPeriodoStatusRow.innerHTML = '';
+  if (!proveedor || !periodo) return;
+  try {
+    const res = await fetch(`/api/rentroll/periodo_check?proveedor=${proveedor}&periodo=${periodo}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const activos = Object.entries(data.ocupados || {}).map(([a, n]) => `${a} (${n} filas)`).join(', ');
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot err"></span><strong style="color:var(--err)">Rent Roll ${periodo} ya está ingestado: ${activos}</strong> — no se puede reingestar.`;
+      rrPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) { /* silencioso: no bloquea el flujo si falla el chequeo */ }
+}
+
 rrProveedor.addEventListener('change', () => {
   rrDropzone.textContent = _DROPZONE_TEXT[rrProveedor.value] || _DROPZONE_TEXT.jll;
   rrDropzone.appendChild(rrFileInput);
   setRrFile(null);
+  checkRrPeriodoStatus();
 });
+rrPeriodo.addEventListener('change', checkRrPeriodoStatus);
 
 btnRrCopyErrdetalle.addEventListener('click', async () => {
   try {
@@ -600,6 +646,7 @@ let rrCasosRarosPendientes = 0;
 
 const now = new Date();
 rrPeriodo.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+checkRrPeriodoStatus();
 
 function setRrFile(file) {
   rrSelectedFile = file;

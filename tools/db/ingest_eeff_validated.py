@@ -290,29 +290,16 @@ def validate(
     if not result.ok:
         return result
 
-    periodos_existentes = _periodos_existentes(fondo_expected, periodos)
-    if periodos_existentes:
-        detalle = ", ".join(f"{p} ({n} filas)" for p, n in periodos_existentes.items())
-        result.warnings.append(
-            f"Ya existen filas en la DB para: {detalle}. Si confirmas, se agregan "
-            f"como una nueva versión (no se sobrescriben las existentes)."
-        )
-
     vc_con_delta = _valor_cuota_deltas(fondo_expected, vc_norm)
 
     fhash = hashlib.sha256(raw_text.strip().encode("utf-8")).hexdigest()
-    existing_hash = 0
-    con = get_conn_for(str(DB_PATH))
-    try:
-        existing_hash = con.execute(
-            "SELECT COUNT(*) FROM raw_eeff_line WHERE file_hash=?", (fhash,)
-        ).fetchone()[0]
-    finally:
-        con.close()
-    if existing_hash:
-        result.warnings.append(
-            "Este mismo texto ya fue ingestado antes (idéntico al carácter) — "
-            "confirmar no creará filas duplicadas."
+
+    periodos_existentes = _periodos_existentes(fondo_expected, periodos)
+    if periodos_existentes:
+        detalle = ", ".join(f"{p} ({n} filas)" for p, n in periodos_existentes.items())
+        result.add_error(
+            f"Ya existen datos ingestados en la DB para: {detalle}. "
+            "No se puede reingestar un período ya cargado (evita duplicar EEFF)."
         )
 
     result.data = {

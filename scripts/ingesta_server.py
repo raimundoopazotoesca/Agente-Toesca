@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
+from tools.db.connection import get_conn_for  # noqa: E402
 
 app = Flask(__name__, static_folder=None)
 
@@ -28,6 +29,12 @@ PROMPTS_DIR = ROOT / "prompts"
 WEB_DIR = ROOT / "web"
 
 FONDO_FILE = {"TRI": "eeff_tri.md", "PT": "eeff_pt.md", "APO": "eeff_apo.md"}
+
+PROVEEDOR_ACTIVOS = {
+    "jll": ["PT", "Apoquindo", "Apo3001"],
+    "tresa_vina": ["Viña Centro"],
+    "tresa_curico": ["Mall Curicó"],
+}
 
 
 def _extract_fenced_block(markdown_text: str) -> str:
@@ -52,6 +59,41 @@ def get_prompt(fondo: str):
         return jsonify({"error": f"No existe {path.name}"}), 404
     markdown_text = path.read_text(encoding="utf-8")
     return jsonify({"prompt_text": _extract_fenced_block(markdown_text)})
+
+
+@app.get("/api/eeff/periodo_check")
+def api_eeff_periodo_check():
+    fondo = request.args.get("fondo", "").upper()
+    periodo = request.args.get("periodo", "")
+    if not fondo or not periodo:
+        return jsonify({"ya_ingestado": False})
+    existentes = core._periodos_existentes(fondo, [periodo])
+    n = existentes.get(periodo, 0)
+    return jsonify({"ya_ingestado": bool(n), "n_filas": n})
+
+
+@app.get("/api/rentroll/periodo_check")
+def api_rentroll_periodo_check():
+    proveedor = request.args.get("proveedor", "")
+    periodo = request.args.get("periodo", "")
+    if not proveedor or not periodo or proveedor not in PROVEEDOR_ACTIVOS:
+        return jsonify({"ya_ingestado": False})
+    activos = PROVEEDOR_ACTIVOS[proveedor]
+    DB_PATH = ROOT / "memory" / "agente_toesca_v2.db"
+    con = get_conn_for(str(DB_PATH))
+    try:
+        ocupados = {}
+        for activo in activos:
+            n = con.execute(
+                "SELECT COUNT(*) FROM raw_rent_roll_line "
+                "WHERE activo_key=? AND periodo=? AND superseded_at IS NULL",
+                (activo, periodo),
+            ).fetchone()[0]
+            if n:
+                ocupados[activo] = n
+        return jsonify({"ya_ingestado": bool(ocupados), "ocupados": ocupados})
+    finally:
+        con.close()
 
 
 @app.post("/api/validate")
@@ -112,4 +154,4 @@ def api_rentroll_commit():
 
 if __name__ == "__main__":
     print("Ingesta EEFF: http://localhost:8765/ingesta")
-    app.run(host="127.0.0.1", port=8765, debug=False)
+    app.run(host="127.0.0.1", port=8765, debug=True, use_reloader=True)

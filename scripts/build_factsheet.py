@@ -306,6 +306,27 @@ FONDOS_CFG = {
         # solo cambia si el fondo tiene serie bursátil (S.has_bursatil).
         "page4": {
             "notas": _notas_template(has_bursatil=False),
+            "submercado": "Las Condes",
+            "mercado_rows": [
+                {"comuna": "Las Condes (CBD)", "clase": "Total"},
+                {"comuna": "Providencia", "clase": "Total"},
+                {"comuna": "Santiago Centro", "clase": "Total"},
+                {"comuna": "Vitacura", "clase": "Total"},
+                {"comuna": "Ciudad empresarial", "clase": "Total"},
+                {"comuna": "Estoril", "clase": "Total"},
+                {"comuna": "Santiago", "clase": "Total", "total": True},
+                {"comuna": "Las Condes (CBD)", "clase": "A"},
+                {"comuna": "Providencia", "clase": "A"},
+                {"comuna": "Santiago Centro", "clase": "A"},
+                {"comuna": "Santiago", "clase": "A", "total": True},
+                {"comuna": "Las Condes (CBD)", "clase": "B"},
+                {"comuna": "Providencia", "clase": "B"},
+                {"comuna": "Santiago Centro", "clase": "B"},
+                {"comuna": "Vitacura", "clase": "B"},
+                {"comuna": "Ciudad empresarial", "clase": "B"},
+                {"comuna": "Estoril", "clase": "B"},
+                {"comuna": "Santiago", "clase": "B", "total": True},
+            ],
         },
         "comite": "Eduardo Castillo A.<br/>Aníbal Silva S.<br/>Rodrigo Swett B.",
         "contacto": "distribución@toesca.com",
@@ -1020,6 +1041,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   }
   .period-dropdown-item:last-child { border-bottom: none; }
   .cols { display: grid; grid-template-columns: 30% 1fr; gap: 24px; }
+  .cols-page3 { grid-template-columns: 1fr 34%; }
+  .cols-page3-lower { grid-template-columns: 1fr 34%; align-items: start; }
   .section-title {
     background: var(--green-header); color: #000;
     font-weight: 700; font-size: 11px;
@@ -1497,12 +1520,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       Estructura construida — pendiente de datos (raw_rent_roll_line, fact_tasacion).
     </p>
 
-    <div class="cols">
-      <div>
-        <div class="section-title">Aspectos Relevantes</div>
-        <table class="kv" id="tbl-aspectos"></table>
-        <div class="fotos-grid" id="grid-fotos"></div>
-      </div>
+    <div class="cols cols-page3">
       <div>
         <div class="charts-grid-2">
           <div class="chart-box">
@@ -1514,39 +1532,48 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             <div class="donut-wrap" id="donut-ingresos"></div>
           </div>
         </div>
+        <div class="section-title">Aspectos del Mes</div>
+        <div class="aspectos-mes-box" id="txt-aspectos-mes"></div>
+      </div>
+      <div>
+        <div class="section-title">Aspectos Relevantes</div>
+        <table class="kv" id="tbl-aspectos"></table>
+        <div class="fotos-grid" id="grid-fotos"></div>
       </div>
     </div>
 
-    <div class="section-title">Status Actual Oficinas por Activo</div>
-    <div class="charts-grid-2" id="grid-status-oficinas"></div>
+    <div class="cols cols-page3-lower">
+      <div>
+        <div class="section-title">Gestión de Vacancia
+          <span class="small" id="vacancia-periodo-label" style="font-weight:400;text-transform:none"></span>
+        </div>
+        <div class="charts-grid-2" id="grid-vacancia"></div>
+        <p class="small">Fondo: <b id="txt-vacancia-fondo">—</b></p>
 
-    <div class="section-title">Status Actual Locales por Activo</div>
-    <div class="charts-grid-2" id="grid-status-locales"></div>
+        <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
+        <div class="charts-grid-2" id="grid-resumen-anual"></div>
 
-    <div class="section-title">Aspectos del Mes</div>
-    <div class="aspectos-mes-box" id="txt-aspectos-mes"></div>
+        <div class="section-title">Tasaciones</div>
+        <div style="overflow-x:auto">
+          <table id="tbl-tasaciones">
+            <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+            <tbody id="tbl-tasaciones-tbody"></tbody>
+          </table>
+        </div>
+        <div style="overflow-x:auto;margin-top:8px">
+          <table id="tbl-tasaciones-comp">
+            <thead><tr><th></th><th id="th-tasacion-prev"></th><th id="th-tasacion-actual"></th><th>Var % UF</th></tr></thead>
+            <tbody id="tbl-tasaciones-comp-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="section-title">Status Actual Oficinas por Activo</div>
+        <div class="charts-grid-2" id="grid-status-oficinas"></div>
 
-    <div class="section-title">Gestión de Vacancia
-      <span class="small" id="vacancia-periodo-label" style="font-weight:400;text-transform:none"></span>
-    </div>
-    <div class="charts-grid-2" id="grid-vacancia"></div>
-    <p class="small">Fondo: <b id="txt-vacancia-fondo">—</b></p>
-
-    <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
-    <div class="charts-grid-2" id="grid-resumen-anual"></div>
-
-    <div class="section-title">Tasaciones</div>
-    <div style="overflow-x:auto">
-      <table id="tbl-tasaciones">
-        <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
-        <tbody id="tbl-tasaciones-tbody"></tbody>
-      </table>
-    </div>
-    <div style="overflow-x:auto;margin-top:8px">
-      <table id="tbl-tasaciones-comp">
-        <thead><tr><th></th><th id="th-tasacion-prev"></th><th id="th-tasacion-actual"></th><th>Var % UF</th></tr></thead>
-        <tbody id="tbl-tasaciones-comp-tbody"></tbody>
-      </table>
+        <div class="section-title">Status Actual Locales por Activo</div>
+        <div class="charts-grid-2" id="grid-status-locales"></div>
+      </div>
     </div>
   </div>
 
@@ -1579,11 +1606,19 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div class="section-title">Notas</div>
     <ol id="lst-notas" style="font-size:10px;color:#333;padding-left:16px;line-height:1.5"></ol>
 
-    <div class="section-title">Análisis de Mercado de Oficinas</div>
-    <p class="small placeholder">
-      Pendiente: tabla de mercado por submercado (informe JLL) — actualización manual mensual,
-      no proviene de la DB.
-    </p>
+    <div class="section-title" id="mercado-titulo">Análisis de Mercado de Oficinas — Submercado —</div>
+    <p class="small placeholder" id="txt-mercado-p1">Pendiente: párrafo de vacancia (informe JLL) — actualización manual, no proviene de la DB.</p>
+    <p class="small placeholder" id="txt-mercado-p2">Pendiente: párrafo de canon de arriendo (informe JLL) — actualización manual, no proviene de la DB.</p>
+    <div style="overflow-x:auto">
+      <table id="tbl-mercado">
+        <thead><tr>
+          <th>Comuna</th><th>Clase</th><th>Inventario (m²)</th>
+          <th>Absorción neta U12M (m²)</th><th>Vacancia (%)</th>
+          <th>Renta (UF/m²)</th><th>Construcción (m²)</th>
+        </tr></thead>
+        <tbody id="tbl-mercado-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -2086,6 +2121,15 @@ function switchFund(f){
   if (hasPage4) {
     document.getElementById("lst-notas").innerHTML =
       S.page4.notas.map(n => `<li>${n}</li>`).join("");
+
+    document.getElementById("mercado-titulo").textContent =
+      `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
+    document.getElementById("tbl-mercado-tbody").innerHTML =
+      S.page4.mercado_rows.map(r => `<tr${r.total ? ' class="row-total"' : ''}>
+        <td>${r.comuna}</td><td>${r.clase}</td>
+        <td class="placeholder">—</td><td class="placeholder">—</td>
+        <td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td>
+      </tr>`).join("");
   }
 
   // Headers de tablas dependientes de series

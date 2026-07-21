@@ -30,8 +30,7 @@ from tools.rentroll_tools import (  # noqa: E402
     _RR_ACTIVO_KEY,
     _rr_num,
     _rr_date_str,
-    build_email_jll,
-    MESES_ES,
+    _tabla_val3,
 )
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import repo_audit, repo_rent_roll  # noqa: E402
@@ -213,10 +212,28 @@ def diff_absorcion(activo_key: str, periodo: str, source_data: dict) -> dict:
     snap_prev = _snapshot_from_db(activo_key, periodo_prev)
     snap_nuevo = _snapshot_from_source(activo_key, source_data)
 
-    todas_keys = set(snap_prev.keys()) | set(snap_nuevo.keys())
     eventos = {"alta": [], "baja": [], "renovacion": [], "movimiento": [], "cambio_renta": []}
     casos_raros = []
 
+    if not snap_prev:
+        # Primera ingesta del activo: no hay nada contra qué comparar, así que
+        # no existe absorción real todavía (todo "alta" sería ruido, no un
+        # movimiento del mes).
+        return {
+            "activo_key": activo_key,
+            "periodo": periodo,
+            "periodo_anterior": periodo_prev,
+            "tiene_snapshot_anterior": False,
+            "eventos": eventos,
+            "casos_raros": casos_raros,
+            "totales": {
+                "periodo_anterior": _totales_activo(snap_prev),
+                "periodo_actual": _totales_activo(snap_nuevo),
+            },
+            "absorcion": {"bruta_m2": 0.0, "bruta_uf": 0.0, "neta_m2": 0.0, "neta_uf": 0.0},
+        }
+
+    todas_keys = set(snap_prev.keys()) | set(snap_nuevo.keys())
     for key in sorted(todas_keys):
         antes = snap_prev.get(key)
         ahora = snap_nuevo.get(key)
@@ -356,6 +373,48 @@ def _flatten_validator_errors(errores: dict) -> list[str]:
     return out
 
 
+def _format_errores_detalle(errores: dict) -> str:
+    """Formatea los errores de _validar_archivo como texto plano detallado,
+    listo para que el usuario copie y pegue en un correo al proveedor."""
+    parts = []
+    if "val1_vacantes" in errores:
+        parts.append("Inconsistencia en columna Vacante:")
+        for e in errores["val1_vacantes"]:
+            v = e["valores"]
+            parts.append(
+                f"  Fila {e['fila']}: Tipo Activo 1={v['Tipo Activo 1']} | "
+                f"Tipo Activo 3={v['Tipo Activo 3']} | "
+                f"Arrendatario={v['Arrendatario']} | "
+                f"Tipo Arrendatario={v['Tipo Arrendatario']}"
+            )
+            parts.append(
+                "  → Si el espacio está vacante, debería marcarse como 'Vacante' en todas esas columnas."
+            )
+        parts.append("")
+    if "val2_absorcion" in errores:
+        parts.append("Movimientos sin registro en Absorción:")
+        for e in errores["val2_absorcion"]:
+            parts.append(
+                f"  Local {e['local']} ({e['activo']}): "
+                f"pasó de [{e['anterior']}] a [{e['actual']}] "
+                f"pero no aparece el '{e['movimiento_esperado']}' en la hoja Absorción."
+            )
+        parts.append("")
+    if "val3_escalonada" in errores:
+        n = len(errores["val3_escalonada"])
+        parts.append(f"Renta escalonada ({n} caso(s)):")
+        parts.append("  Arrendatarios con escalones que ya deberían estar vigentes, pero la Renta Fija registrada no coincide:")
+        parts.append(_tabla_val3(errores["val3_escalonada"]))
+        parts.append("")
+    if "val4_terminos" in errores:
+        parts.append("Contratos con fecha de término vencida:")
+        for e in errores["val4_terminos"]:
+            parts.append(f"  Fila {e['fila']} [{e['arrendatario']}]: venció el {e['fecha_termino']}.")
+        parts.append("  → ¿Estos contratos están renovados y pendiente de actualizar, o ya terminaron?")
+        parts.append("")
+    return "\n".join(parts).strip()
+
+
 def _file_hash(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
 
@@ -392,10 +451,7 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
         if not result.ok:
             result.data = {"periodo": periodo, "filename": val.get("archivo"), "errores_detalle": errores}
             if "lectura" not in errores:
-                y, m = (int(x) for x in periodo.split("-"))
-                aamm = f"{str(y)[2:]}{m:02d}"
-                asunto, cuerpo = build_email_jll(errores, aamm, MESES_ES[m], y)
-                result.data["email_proveedor"] = {"para": "Nicole (JLL)", "asunto": asunto, "cuerpo": cuerpo}
+                result.data["errores_formateados"] = _format_errores_detalle(errores)
             return result
 
         source_data = _read_source_data(tmp_path)
@@ -430,13 +486,24 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
         fh = _file_hash(file_bytes)
         conn = get_conn_for(str(DB_PATH))
         try:
-            existing = conn.execute(
-                "SELECT COUNT(*) FROM raw_rent_roll_line WHERE file_hash=?", (fh,)
-            ).fetchone()[0]
+            periodos_ocupados = {}
+            for activo in activos_presentes:
+                rows = conn.execute(
+                    "SELECT COUNT(*) FROM raw_rent_roll_line "
+                    "WHERE activo_key=? AND periodo=? AND superseded_at IS NULL",
+                    (activo, periodo),
+                ).fetchone()[0]
+                if rows:
+                    periodos_ocupados[activo] = rows
         finally:
             conn.close()
-        if existing:
-            result.warnings.append("Este mismo archivo ya fue ingestado antes (idéntico byte a byte).")
+
+        if periodos_ocupados:
+            detalle = ", ".join(f"{a} ({n} filas)" for a, n in periodos_ocupados.items())
+            result.add_error(
+                f"Ya existe un Rent Roll ingestado para {periodo} en: {detalle}. "
+                "No se puede reingestar un período ya cargado (evita duplicar vacancia/absorción)."
+            )
 
         result.data = {
             "periodo": periodo,
@@ -445,7 +512,7 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
             "diffs": diffs,
             "n_filas_fuente": len(source_data),
             "file_hash": fh,
-            "ya_ingestado": bool(existing),
+            "ya_ingestado": bool(periodos_ocupados),
         }
         return result
     finally:
