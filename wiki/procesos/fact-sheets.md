@@ -83,6 +83,34 @@ Estructura de TRI (basada en fact sheet TRI enero 2026, agregado 2026-07-21):
   los de PT/Apo vía su participación). Ir poblando la DB activará estos valores sin tocar el
   layout, igual que con Apo.
 
+## Página 3 (Detalle de Activos) y Página 4 (Notas + Análisis de Mercado)
+
+Agregadas 2026-07-21, basadas en el fact sheet Apo octubre 2025 (única referencia disponible
+hasta ahora para estas dos páginas — PT/TRI no tienen su página 3/4 traída todavía). Mismo
+patrón que la página 2: `cfg["page3"]`/`cfg["page4"]` por fondo en `FONDOS_CFG`, con aviso
+"pendiente" (`#page3-pending`/`#page4-pending`) cuando el fondo no los define.
+
+**Página 3** (`cfg["page3"]`):
+- `titulo`, `aspectos` (lista de pares label/valor — solo campos verdaderamente estáticos:
+  dirección, superficie arrendable, administración) → tabla `kv` genérica.
+- `edificios` (lista de nombres) → un `chart-box` placeholder por edificio en
+  "Status Actual por Activo" (ocupación oficinas/locales de la referencia PT/Apo, aún sin
+  fuente de datos).
+- Todo lo demás de la referencia Apo (aspectos del mes, gestión de vacancia, resumen anual de
+  vencimientos/renovaciones, tasaciones) queda como texto "Pendiente" fijo en el HTML — no
+  tiene aún modelo de datos ni config por fondo; se agregará cuando haya una fuente clara
+  (`raw_rent_roll_line` para vacancia, `fact_tasacion` para tasaciones).
+
+**Página 4** (`cfg["page4"]`):
+- `notas`: lista de 10 strings (i)-(x), generada por `_notas_template(has_bursatil)` — texto
+  metodológico prácticamente idéntico entre fondos (solo cambia según si el fondo tiene o no
+  valor bursátil); sin fechas hardcodeadas a propósito, ya que las fechas concretas de cada
+  indicador se muestran en la página 1/2.
+- Tabla de "Análisis de Mercado de Oficinas" (submercado JLL) queda fuera del layout genérico:
+  no es un dato del fondo sino del mercado completo (mismo informe JLL para PT y Apo, que
+  comparten submercado Las Condes/oficinas), viene de un reporte externo trimestral no
+  modelado en la DB — placeholder fijo hasta decidir dónde vive esa data.
+
 ## Vínculos
 
 - [[fondos/ar-pt]] · [[fondos/ar-apoquindo]] · [[fondos/ar-rentas]]

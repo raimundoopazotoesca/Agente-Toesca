@@ -3,6 +3,26 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Páginas 3 (Detalle de Activos) y 4 (Notas + Mercado) para Apo
+
+Agregadas `cfg["page3"]`/`cfg["page4"]` de Apo en `FONDOS_CFG` (`scripts/build_factsheet.py`),
+basadas en el fact sheet Apo octubre 2025 — única referencia disponible para estas páginas
+(PT/TRI quedan con aviso "pendiente", como pasó con page2 hasta traer su propio fact sheet).
+Mismo patrón config-driven que la página 2: HTML/JS genérico, solo cambia cfg por fondo.
+
+Página 3: tabla "Aspectos Relevantes" (kv, solo campos estáticos: dirección, superficie,
+administración) + grid de `chart-box` placeholder por edificio ("Status Actual por Activo").
+Aspectos del mes, gestión de vacancia, resumen anual de vencimientos y tasaciones quedan como
+placeholder fijo en el HTML (sin config por fondo todavía) — no tienen fuente de datos clara
+aún (vacancia → `raw_rent_roll_line`, tasaciones → `fact_tasacion`).
+
+Página 4: notas (i)-(x) generadas por `_notas_template(has_bursatil)`, texto metodológico
+boilerplate sin fechas hardcodeadas (bifurca solo si el fondo tiene valor bursátil). La tabla
+de análisis de mercado de oficinas (submercado JLL) se dejó fuera del layout genérico a
+propósito: es un dato de mercado completo (mismo informe para PT/Apo, que comparten
+submercado), no un dato del fondo — placeholder fijo hasta decidir dónde vive esa data.
+Ver [[procesos/fact-sheets]].
+
 ## [2026-07-21] factsheet | Estructura página 2 para TRI (consolidado fondo paraguas)
 
 Agregado `cfg["page2"]` de TRI en `FONDOS_CFG` (`scripts/build_factsheet.py`), basado en el
