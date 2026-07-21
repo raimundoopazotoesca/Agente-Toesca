@@ -3,6 +3,19 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-21] factsheet | Estructura página 2 para TRI (consolidado fondo paraguas)
+
+Agregado `cfg["page2"]` de TRI en `FONDOS_CFG` (`scripts/build_factsheet.py`), basado en el
+fact sheet TRI enero 2026: tabla "Resumen Performance Activos" con columnas planas (una por
+activo/subfondo, sin subcolumnas) — Paseo Viña Centro, Paseo Curicó, Centros Comerciales
+(subtotal), Residencias Adulto Mayor, Bodegas Sucden, Apoquindo 3001, Fondo Apoquindo (4501+
+4700 consolidado), Fondo Rentas PT (Torre A+Boulevard consolidado) + Total; mismas filas de
+m²/renta/absorción que PT/Apo. 6 gráficos con categorías propias (13 rubros de arrendatario,
+4 tipos de activo). El renderizado ya era genérico — agregar TRI fue solo config, sin tocar
+HTML/JS. Todo en placeholder: `_fetch_perf_data` sigue solo implementado para PT; TRI requiere
+consolidar `raw_rent_roll_line` a nivel fondo paraguas (activos directos + los de PT/Apo según
+participación) antes de poder rellenar valores. Ver [[procesos/fact-sheets]].
+
 ## [2026-07-21] factsheet | Estructura página 2 para Apo (agrupada por edificio)
 
 Agregado `cfg["page2"]` de Apo en `FONDOS_CFG` (`scripts/build_factsheet.py`), basado en el

@@ -69,6 +69,37 @@ FONDOS_CFG = {
             "<span data-wrap='div'> Además, el "
             "<span class='auto' data-slot='div'>—</span> hubo reparto de dividendos.</span>"
         ),
+        # Página 2 — TRI consolida a nivel de fondo (no por sociedad/edificio como PT/Apo):
+        # cada activo/sub-consolidado es una columna simple (sin sub-columnas por tipo de
+        # espacio). "Centros Comerciales" es subtotal Viña+Curicó; "Fondo Apoquindo" y
+        # "Fondo Rentas PT" consolidan los edificios de esos subfondos. La columna Total
+        # final la agrega el renderer genérico (perf_groups + Total implícito).
+        # perf_data aún no implementado para TRI en _fetch_perf_data — placeholders hasta
+        # wire de raw_rent_roll_line consolidado a nivel fondo paraguas.
+        "page2": {
+            "perf_groups": [
+                {"label": "Paseo Viña Centro", "cols": [""]},
+                {"label": "Paseo Curicó", "cols": [""]},
+                {"label": "Centros Comerciales", "cols": [""]},
+                {"label": "Residencias Adulto Mayor", "cols": [""]},
+                {"label": "Bodegas Sucden", "cols": [""]},
+                {"label": "Apoquindo 3001", "cols": [""]},
+                {"label": "Fondo Apoquindo", "cols": [""]},
+                {"label": "Fondo Rentas PT", "cols": [""]},
+            ],
+            "perf_rows": [
+                "m² útiles", "m² vacantes", "% vacancia (m²)",
+                "Renta mensual (UF)", "Renta vacante (UF)", "Renta en gracia (UF)", "Renta en descuento (UF)", "% vacancia (UF)",
+                "Absorción bruta m² 3M", "Absorción bruta UF 3M", "Absorción neta m² 3M", "Absorción neta UF 3M",
+                "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
+            ],
+            "rubro_arrendatario": [
+                "Otro", "Mejoramiento del hogar", "Banco", "Supermercado", "Retail",
+                "Residencia Adulto Mayor", "Agroindustrial", "Salud", "Gastronomía",
+                "Servicios", "Financiera", "Deporte", "Inmobiliaria",
+            ],
+            "tipo_activo": ["Oficinas", "Comercial", "Industrial", "Residencias"],
+        },
     },
     "PT": {
         "nombre": "Toesca Rentas Inmobiliarias PT",
@@ -402,9 +433,10 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
 def _fetch_perf_data(fondo_key: str) -> dict:
     """Tabla "Resumen Performance Activos" de la página 2 (rent roll), por
     período. Solo implementada para PT hoy — ver tools/db/rent_roll_stats.py.
-    Apo ya tiene su layout de page2 definido en FONDOS_CFG pero sin fuente de
-    datos wired aún (raw_rent_roll_line de Apo); la tabla queda en placeholder
-    hasta implementar el agrupamiento por edificio (Apoquindo 4501/4700).
+    Apo y TRI ya tienen su layout de page2 definido en FONDOS_CFG pero sin
+    fuente de datos wired aún (Apo: agrupar raw_rent_roll_line por edificio
+    Apoquindo 4501/4700; TRI: consolidar a nivel fondo paraguas por
+    activo/subfondo). Ambos quedan en placeholder hasta esa implementación.
     """
     if fondo_key != "PT":
         return {}

@@ -36,8 +36,8 @@ navegación de período y modo admin con trazabilidad por celda).
 
 **Página 2 (Resumen Performance Activos + gráficos)**: el layout de la página 2 **no se
 comparte entre fondos** — cada uno tiene su propio fact sheet de referencia con secciones y
-columnas distintas. Se implementa vía `cfg["page2"]` en `FONDOS_CFG` (definido para PT y Apo;
-TRI aún pendiente); si un fondo no tiene `page2`, el HTML muestra un aviso "pendiente" en vez
+columnas distintas. Se implementa vía `cfg["page2"]` en `FONDOS_CFG` (definido para TRI, PT y
+Apo); si un fondo no tiene `page2`, el HTML muestra un aviso "pendiente" en vez
 de la tabla. El renderizado (`renderPerfActivosHeader` en el JS embebido) es genérico: arma
 columnas/filas a partir de `page2.perf_groups`/`perf_rows` — agregar un fondo nuevo es solo
 config, no requiere tocar el HTML/JS.
@@ -65,8 +65,23 @@ Estructura de Apo (basada en fact sheet Apo octubre 2025, agregado 2026-07-21):
   `raw_rent_roll_line` de Apo. Ir poblando la DB progresivamente activará estos valores sin
   tocar el layout.
 
-TRI: pendiente traer su propio fact sheet de referencia (layout distinto) antes de definir
-su `page2`.
+Estructura de TRI (basada en fact sheet TRI enero 2026, agregado 2026-07-21):
+- Tabla "Resumen Performance Activos del Fondo" consolida a nivel de **fondo paraguas**, no por
+  sociedad/edificio: columnas planas (una por activo/subfondo, sin subcolumnas por tipo de
+  espacio) — Paseo Viña Centro, Paseo Curicó, Centros Comerciales (subtotal Viña+Curicó),
+  Residencias Adulto Mayor, Bodegas Sucden, Apoquindo 3001, Fondo Apoquindo (consolida
+  Apoquindo 4501+4700), Fondo Rentas PT (consolida Torre A+Boulevard), + columna Total que
+  agrega el renderer genérico. Mismas filas de m²/renta/absorción que PT/Apo.
+- Mismos 6 `chart-box` que PT/Apo con categorías propias: rubro arrendatario (13 rubros: Otro,
+  Mejoramiento del hogar, Banco, Supermercado, Retail, Residencia Adulto Mayor, Agroindustrial,
+  Salud, Gastronomía, Servicios, Financiera, Deporte, Inmobiliaria) y tipo de activo
+  (Oficinas/Comercial/Industrial/Residencias, alineado con las tablas anuales de Ingresos/NOI
+  por tipo de activo del fact sheet de referencia — esas tablas anuales en sí no tienen slot
+  propio en el layout genérico hoy, quedan fuera de esta primera pasada).
+- `_fetch_perf_data` no implementa TRI todavía — tabla en placeholder ("—") hasta consolidar
+  `raw_rent_roll_line` a nivel fondo paraguas (requiere sumar los activos directos del fondo +
+  los de PT/Apo vía su participación). Ir poblando la DB activará estos valores sin tocar el
+  layout, igual que con Apo.
 
 ## Vínculos
 
