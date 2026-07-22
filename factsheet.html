@@ -1647,13 +1647,12 @@ function render(){
   document.getElementById("month-bar3").textContent = mesRef;
   document.getElementById("month-bar4").textContent = mesRef;
 
-  // Página 3 Apo: donut de ingresos UF/mes por edificio (mismo período operacional que usadoOp)
+  // Página 3 Apo: donut de ingresos UF/mes por edificio, solo si hay dato real
+  // para el período operacional exacto (usadoOp) — nunca mostrar el del mes
+  // anterior/siguiente, para no dejar "pegado" un gráfico de otro período.
   if (S.page3) {
     const ingresosPorPeriodo = F.ingresos_edificios || {};
-    const ingresosKeys = Object.keys(ingresosPorPeriodo).sort();
-    const ingresosLower = usadoOp ? ingresosKeys.filter(k => k <= usadoOp) : [];
-    const ingresosPeriodo = ingresosLower.length ? ingresosLower[ingresosLower.length - 1] : ingresosKeys[ingresosKeys.length - 1];
-    const ingresosData = ingresosPeriodo ? ingresosPorPeriodo[ingresosPeriodo] : null;
+    const ingresosData = usadoOp ? ingresosPorPeriodo[usadoOp] : null;
     const edificiosConDato = ingresosData ? S.page3.edificios.filter(n => ingresosData[n] != null) : [];
     if (edificiosConDato.length === S.page3.edificios.length) {
       const total = edificiosConDato.reduce((s, n) => s + ingresosData[n], 0);
