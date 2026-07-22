@@ -204,6 +204,53 @@ FONDOS_CFG = {
             "rubro_arrendatario": ["Banco", "Deporte", "Padel", "Seguros", "Construcción", "Otro"],
             "tipo_activo": ["Oficina", "Locales Comerciales", "Estacionamiento", "Bodega"],
         },
+        # Página 3 — "Torre A S.A. / Inmobiliaria Boulevard PT SpA" (fact sheet PT
+        # julio 2025, PDF de referencia). A diferencia de Apo, PT NO desglosa por
+        # edificio en esta página: los donuts GLA/Ingresos son por ARRENDATARIO, y
+        # hay un gráfico de "Resultados Parking" que Apo no tiene. Por eso usa
+        # "arrendatarios" (modo tenant) en vez de "edificios" (modo Apo) — ver
+        # renderPage3() en el JS, que ramifica el layout según cuál de las dos
+        # claves esté presente. Ninguna fuente en DB para rent roll por arrendatario
+        # ni para parking todavía → placeholders; solo tasaciones tiene datos reales
+        # en fact_tasacion (activo_key Torre A / Boulevard) pendiente de wire.
+        "page3": {
+            "titulo": "Torre A S.A. / Inmobiliaria Boulevard PT SpA",
+            "arrendatarios": [
+                "Scotiabank Azul", "Saba", "Grupo Sublime", "Smartfit", "Padel",
+                "Habana Box", "Deka Inmobiliaria Chile One SpA", "Releve", "Otros",
+            ],
+            "aspectos": [
+                ("Dirección", "Av. Costanera Sur 2710, Las Condes"),
+                ("Superficie Arrendable", None),
+                ("Principal Arrendatario", "Banco Scotiabank"),
+                ("Financiamiento", "Crédito Sindicado"),
+                ("Administración", "Jones Lang Lasalle (JLL)"),
+                ("Vacancia (m²)", None),
+            ],
+            "fotos_list": [
+                {"caption": "Parque Titanium", "src": _data_uri("pt_torre_a_complejo.png")},
+                {"caption": "Torre A - Parque Titanium", "src": _data_uri("pt_torre_a.png")},
+                {"caption": "Inmobiliaria Boulevard - Parque Titanium", "src": _data_uri("pt_boulevard.png")},
+            ],
+            "aspectos_mes": [
+                ("Vacancia del Fondo", None),
+                ("Parking", None),
+                ("Desempeño del Pádel", None),
+                ("Resultados", None),
+                ("Otros Locales", None),
+            ],
+            "parking": True,
+            "tasaciones_edificios": ["Torre A", "Inmobiliaria Boulevard"],
+            "tasaciones_total_nombre": "Fondo Rentas PT",
+            "tasaciones_periodo": ("Tasación año anterior", "Tasación año actual"),
+        },
+        # Página 4 — "Plano Local 100" + Notas metodológicas. A diferencia de Apo,
+        # PT no tiene análisis de mercado de oficinas en esta página del PDF de
+        # referencia: es plano de planta (Piso -1 / Piso -2) + boilerplate de notas.
+        "page4": {
+            "notas": _notas_template(has_bursatil=True),
+            "plano": {"titulo": "Plano Local 100", "pisos": ["Piso -1", "Piso -2"]},
+        },
         "comite": "Gonzalo Urzúa G.<br/>Cristóbal Kaltwasser B.<br/>José Ignacio de Almorzara V.",
         "contacto": "distribucion@toesca.com",
         "resumen": (
@@ -277,6 +324,7 @@ FONDOS_CFG = {
         "page3": {
             "titulo": "Apoquindo 4501 / Apoquindo 4700",
             "edificios": ["Apoquindo 4501", "Apoquindo 4700"],
+            "ingresos_activo_map": {"Apoquindo 4501": "Apo4501", "Apoquindo 4700": "Apo4700"},
             "aspectos": [
                 ("Dirección", None),
                 ("Superficie Arrendable", None),
@@ -588,7 +636,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
 
     mercado_por_periodo: dict[str, list[dict]] = {}
-    if fondo_key == "Apo" and cfg.get("page4"):
+    if (cfg.get("page4") or {}).get("submercado"):
         periodos_disponibles = [
             r[0] for r in cur.execute(
                 "SELECT DISTINCT periodo FROM raw_mercado_oficinas "
@@ -598,16 +646,21 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         for periodo in periodos_disponibles:
             mercado_por_periodo[periodo] = _fetch_mercado_rows(str(DB), periodo)
 
-    # ---- Página 3 Apo: ingresos UF/mes por edificio, para el donut ----
+    # ---- Página 3: ingresos UF/mes por edificio, para el donut ----
+    # Cada fondo define su propio mapeo edificio (label mostrado) -> activo_key
+    # (raw_er_activo_line) en page3.ingresos_activo_map; si no lo define, el
+    # donut queda en placeholder ("Pendiente de datos").
     ingresos_edificios_por_periodo: dict[str, dict[str, float]] = {}
-    if fondo_key == "Apo" and cfg.get("page3"):
-        edificio_activo_key = {"Apoquindo 4501": "Apo4501", "Apoquindo 4700": "Apo4700"}
-        activo_key_a_edificio = {v: k for k, v in edificio_activo_key.items()}
+    ingresos_activo_map = (cfg.get("page3") or {}).get("ingresos_activo_map")
+    if ingresos_activo_map:
+        activo_key_a_edificio = {v: k for k, v in ingresos_activo_map.items()}
+        activo_keys = tuple(ingresos_activo_map.values())
+        placeholders_activo = ",".join("?" * len(activo_keys))
         for activo_key, periodo, monto in cur.execute(
-            "SELECT activo_key, periodo, SUM(COALESCE(monto_uf, monto_clp)) FROM raw_er_activo_line "
-            "WHERE seccion='INGRESOS_OPERACION' AND superseded_at IS NULL "
-            "AND activo_key IN (?,?) GROUP BY activo_key, periodo",
-            tuple(edificio_activo_key.values()),
+            f"SELECT activo_key, periodo, SUM(COALESCE(monto_uf, monto_clp)) FROM raw_er_activo_line "
+            f"WHERE seccion='INGRESOS_OPERACION' AND superseded_at IS NULL "
+            f"AND activo_key IN ({placeholders_activo}) GROUP BY activo_key, periodo",
+            activo_keys,
         ).fetchall():
             edificio = activo_key_a_edificio[activo_key]
             ingresos_edificios_por_periodo.setdefault(periodo, {})[edificio] = monto
@@ -1124,6 +1177,8 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .cols { display: grid; grid-template-columns: 30% 1fr; gap: 24px; }
   .cols-page3 { grid-template-columns: 1fr 34%; }
   .cols-page3-lower { grid-template-columns: 1fr 34%; align-items: start; }
+  .cols-page3-top { grid-template-columns: 1fr 1fr 1fr; align-items: start; }
+  .cols-page3-mid { grid-template-columns: 2fr 1fr; align-items: stretch; }
   .section-title {
     background: var(--green-header); color: #000;
     font-weight: 700; font-size: 11px;
@@ -1296,13 +1351,28 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .occ-bar-fill { background: var(--green); height: 100%; }
   .occ-label { font-size: 11px; text-align: center; font-weight: 600; color: #33413b; }
 
-  /* Fotos de activos (página 3) */
+  /* Fotos de activos (página 3) — Apo (edificio): grilla original, sin cambios. */
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .foto-box { aspect-ratio: 403/669; border-radius: 6px; overflow: hidden; background: #F4F4F4;
-    display: flex; align-items: center; justify-content: center; }
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
   .foto-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .foto-box .foto-placeholder { font-size: 10px; color: #999; text-align: center; padding: 8px; }
   .foto-caption { font-size: 10px; text-align: center; color: #666; margin-top: 3px; }
+
+  /* PT (tenant): proporciones fijas por foto (no estirar a la altura de la
+     columna hermana — eso las deformaba). Foto grande ~ratio nativo del
+     complejo (890/690); las dos de abajo comparten el mismo ratio entre sí
+     (grilla de fact sheet de referencia: ambas quedan del mismo tamaño) sin
+     captions. Aislado con este selector para no afectar la grilla de Apo. */
+  #page3-layout-tenant .fotos-grid { grid-template-rows: auto auto; height: auto; align-self: start; margin-top: 0; }
+  #page3-layout-tenant .fotos-grid > div { display: flex; flex-direction: column; }
+  #page3-layout-tenant .fotos-grid > div.foto-big { grid-column: 1 / -1; grid-row: 1; }
+  #page3-layout-tenant .foto-box { aspect-ratio: unset; flex: unset; min-height: 0; width: 100%; }
+  #page3-layout-tenant .fotos-grid > div.foto-big .foto-box { aspect-ratio: 890 / 690; }
+  #page3-layout-tenant .fotos-grid > div:nth-child(2) .foto-box,
+  #page3-layout-tenant .fotos-grid > div:nth-child(3) .foto-box { aspect-ratio: 0.7; }
+  #page3-layout-tenant .foto-caption { display: none; }
   #tbl-perf-activos td:first-child, #tbl-perf-activos th:first-child { text-align: left; }
   #sidebar {
     position: fixed; left: 0; top: 0;
@@ -1601,63 +1671,112 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
 
   <div id="page3-body">
     <div class="section-title" id="page3-titulo">—</div>
-    <p class="small placeholder" style="margin-top:-4px">
-      Estructura construida — pendiente de datos (raw_rent_roll_line, fact_tasacion).
-    </p>
 
-    <div class="cols cols-page3">
-      <div>
-        <div class="charts-grid-2">
-          <div class="chart-box">
-            <div class="chart-title">GLA (m²)</div>
-            <div class="donut-wrap" id="donut-gla"></div>
+    <!-- Layout "edificio" (Apo): tal como estaba antes de las iteraciones de
+         layout hechas para PT. NO tocar esta sección al ajustar PT — ids
+         propios (donut-gla, tbl-aspectos, grid-fotos, tbl-tasaciones, etc.),
+         completamente independientes del layout "tenant" de abajo. -->
+    <div id="page3-layout-edificio" class="hidden">
+      <div class="cols cols-page3">
+        <div>
+          <div class="charts-grid-2">
+            <div class="chart-box">
+              <div class="chart-title">GLA (m²)</div>
+              <div class="donut-wrap" id="donut-gla"></div>
+            </div>
+            <div class="chart-box">
+              <div class="chart-title">Ingresos (UF/mes)</div>
+              <div class="donut-wrap" id="donut-ingresos"></div>
+            </div>
           </div>
-          <div class="chart-box">
-            <div class="chart-title">Ingresos (UF/mes)</div>
-            <div class="donut-wrap" id="donut-ingresos"></div>
+          <div class="section-title">Aspectos del Mes</div>
+          <div class="aspectos-mes-box" id="txt-aspectos-mes"></div>
+        </div>
+        <div>
+          <div class="section-title">Aspectos Relevantes</div>
+          <table class="kv" id="tbl-aspectos"></table>
+          <div class="fotos-grid" id="grid-fotos"></div>
+        </div>
+      </div>
+
+      <div class="cols cols-page3-lower">
+        <div>
+          <div class="section-title">Gestión de Vacancia
+            <span class="small" id="vacancia-periodo-label" style="font-weight:400;text-transform:none"></span>
+          </div>
+          <div class="charts-grid-2" id="grid-vacancia"></div>
+          <p class="small">Fondo: <b id="txt-vacancia-fondo">—</b></p>
+
+          <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
+          <div class="charts-grid-2" id="grid-resumen-anual"></div>
+
+          <div class="section-title">Tasaciones</div>
+          <div style="overflow-x:auto">
+            <table id="tbl-tasaciones">
+              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+              <tbody id="tbl-tasaciones-tbody"></tbody>
+            </table>
+          </div>
+          <div style="overflow-x:auto;margin-top:8px">
+            <table id="tbl-tasaciones-comp">
+              <thead><tr><th></th><th id="th-tasacion-prev"></th><th id="th-tasacion-actual"></th><th>Var % UF</th></tr></thead>
+              <tbody id="tbl-tasaciones-comp-tbody"></tbody>
+            </table>
           </div>
         </div>
-        <div class="section-title">Aspectos del Mes</div>
-        <div class="aspectos-mes-box" id="txt-aspectos-mes"></div>
-      </div>
-      <div>
-        <div class="section-title">Aspectos Relevantes</div>
-        <table class="kv" id="tbl-aspectos"></table>
-        <div class="fotos-grid" id="grid-fotos"></div>
+        <div>
+          <div class="section-title">Status Actual Oficinas por Activo</div>
+          <div class="charts-grid-2" id="grid-status-oficinas"></div>
+
+          <div class="section-title">Status Actual Locales por Activo</div>
+          <div class="charts-grid-2" id="grid-status-locales"></div>
+        </div>
       </div>
     </div>
 
-    <div class="cols cols-page3-lower">
-      <div>
-        <div class="section-title">Gestión de Vacancia
-          <span class="small" id="vacancia-periodo-label" style="font-weight:400;text-transform:none"></span>
+    <!-- Layout "tenant" (PT): GLA/Ingresos/Aspectos Relevantes en 3 columnas,
+         Aspectos del Mes ancho completo, Tasaciones+Parking a la izquierda /
+         Fotos a la derecha. ids propios sufijo "-t", independientes del
+         layout "edificio" de arriba. -->
+    <div id="page3-layout-tenant" class="hidden">
+      <div class="cols cols-page3-top">
+        <div class="chart-box">
+          <div class="chart-title">GLA (m²)</div>
+          <div class="donut-wrap" id="donut-gla-t"></div>
         </div>
-        <div class="charts-grid-2" id="grid-vacancia"></div>
-        <p class="small">Fondo: <b id="txt-vacancia-fondo">—</b></p>
-
-        <div class="section-title">Resumen Anual — Vencimientos y Renovaciones</div>
-        <div class="charts-grid-2" id="grid-resumen-anual"></div>
-
-        <div class="section-title">Tasaciones</div>
-        <div style="overflow-x:auto">
-          <table id="tbl-tasaciones">
-            <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
-            <tbody id="tbl-tasaciones-tbody"></tbody>
-          </table>
+        <div class="chart-box">
+          <div class="chart-title">Ingresos (UF/mes)</div>
+          <div class="donut-wrap" id="donut-ingresos-t"></div>
         </div>
-        <div style="overflow-x:auto;margin-top:8px">
-          <table id="tbl-tasaciones-comp">
-            <thead><tr><th></th><th id="th-tasacion-prev"></th><th id="th-tasacion-actual"></th><th>Var % UF</th></tr></thead>
-            <tbody id="tbl-tasaciones-comp-tbody"></tbody>
-          </table>
+        <div>
+          <div class="section-title">Aspectos Relevantes</div>
+          <table class="kv" id="tbl-aspectos-t"></table>
         </div>
       </div>
-      <div>
-        <div class="section-title">Status Actual Oficinas por Activo</div>
-        <div class="charts-grid-2" id="grid-status-oficinas"></div>
 
-        <div class="section-title">Status Actual Locales por Activo</div>
-        <div class="charts-grid-2" id="grid-status-locales"></div>
+      <div class="section-title">Aspectos del Mes</div>
+      <div class="aspectos-mes-box" id="txt-aspectos-mes-t"></div>
+
+      <div class="cols cols-page3-mid">
+        <div>
+          <div class="section-title">Tasaciones</div>
+          <div style="overflow-x:auto">
+            <table id="tbl-tasaciones-t">
+              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+              <tbody id="tbl-tasaciones-tbody-t"></tbody>
+            </table>
+          </div>
+          <div style="overflow-x:auto;margin-top:8px">
+            <table id="tbl-tasaciones-comp-t">
+              <thead><tr><th></th><th id="th-tasacion-prev-t"></th><th id="th-tasacion-actual-t"></th><th>Var % UF</th></tr></thead>
+              <tbody id="tbl-tasaciones-comp-tbody-t"></tbody>
+            </table>
+          </div>
+
+          <div class="section-title" style="margin-top:10px">Resultados Parking (UF)</div>
+          <div class="chart-placeholder" id="chart-parking" style="height:260px">Pendiente de datos</div>
+        </div>
+        <div class="fotos-grid" id="grid-fotos-t"></div>
       </div>
     </div>
   </div>
@@ -1688,18 +1807,29 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   </div>
 
   <div id="page4-body">
-    <div class="section-title" id="mercado-titulo">Análisis de Mercado de Oficinas — Submercado —</div>
-    <p class="small placeholder" id="txt-mercado-p1">Pendiente: párrafo de vacancia (informe JLL) — actualización manual, no proviene de la DB.</p>
-    <p class="small placeholder" id="txt-mercado-p2">Pendiente: párrafo de canon de arriendo (informe JLL) — actualización manual, no proviene de la DB.</p>
-    <div style="overflow-x:auto">
-      <table id="tbl-mercado">
-        <thead><tr>
-          <th>Comuna</th><th>Clase</th><th>Inventario (m²)</th>
-          <th>Absorción neta U12M (m²)</th><th>Vacancia (%)</th>
-          <th>Renta (UF/m²)</th><th>Construcción (m²)</th>
-        </tr></thead>
-        <tbody id="tbl-mercado-tbody"></tbody>
-      </table>
+    <!-- Análisis de mercado de oficinas: solo si S.page4.submercado está definido
+         (hoy Apo). PT no tiene esta sección en su PDF de referencia. -->
+    <div id="page4-mercado" class="hidden">
+      <div class="section-title" id="mercado-titulo">Análisis de Mercado de Oficinas — Submercado —</div>
+      <p class="small placeholder" id="txt-mercado-p1">Pendiente: párrafo de vacancia (informe JLL) — actualización manual, no proviene de la DB.</p>
+      <p class="small placeholder" id="txt-mercado-p2">Pendiente: párrafo de canon de arriendo (informe JLL) — actualización manual, no proviene de la DB.</p>
+      <div style="overflow-x:auto">
+        <table id="tbl-mercado">
+          <thead><tr>
+            <th>Comuna</th><th>Clase</th><th>Inventario (m²)</th>
+            <th>Absorción neta U12M (m²)</th><th>Vacancia (%)</th>
+            <th>Renta (UF/m²)</th><th>Construcción (m²)</th>
+          </tr></thead>
+          <tbody id="tbl-mercado-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Plano de planta: solo si S.page4.plano está definido (hoy PT — Plano
+         Local 100, Piso -1 / Piso -2). Sin gráfico real disponible aún. -->
+    <div id="page4-plano" class="hidden">
+      <div class="section-title" id="plano-titulo">—</div>
+      <div class="charts-grid-2" id="grid-plano"></div>
     </div>
 
     <div class="section-title">Notas</div>
@@ -2184,73 +2314,100 @@ function switchFund(f){
   document.getElementById("page3-body").classList.toggle("hidden", !hasPage3);
   if (hasPage3) {
     const p3 = S.page3;
+    const edificioMode = !!p3.edificios;
     document.getElementById("page3-titulo").textContent = p3.titulo;
-    document.getElementById("tbl-aspectos").innerHTML =
-      p3.aspectos.map(([k]) => `<tr><td>${k}</td><td class="placeholder">—</td></tr>`).join("");
-
-    document.getElementById("grid-fotos").innerHTML =
-      p3.edificios.map(n => {
-        const src = p3.fotos[n];
-        const body = src
-          ? `<img src="${src}" alt="${n}">`
-          : `<div class="foto-placeholder">📷<br>${n}<br>(sin foto)</div>`;
-        return `<div><div class="foto-box">${body}</div><div class="foto-caption">${n}</div></div>`;
-      }).join("");
+    document.getElementById("page3-layout-edificio").classList.toggle("hidden", !edificioMode);
+    document.getElementById("page3-layout-tenant").classList.toggle("hidden", edificioMode);
 
     const donutPending = (containerId) => {
       document.getElementById(containerId).innerHTML =
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     };
-    donutPending("donut-gla");
+    const fillFotos = (containerId, fotosList) => {
+      document.getElementById(containerId).innerHTML =
+        fotosList.map(({caption, src}, i) => {
+          const body = src
+            ? `<img src="${src}" alt="${caption}">`
+            : `<div class="foto-placeholder">📷<br>${caption}<br>(sin foto)</div>`;
+          const cls = i === 0 ? " foto-big" : "";
+          return `<div class="${cls.trim()}"><div class="foto-box">${body}</div><div class="foto-caption">${caption}</div></div>`;
+        }).join("");
+    };
+    const fillAspectos = (containerId) => {
+      document.getElementById(containerId).innerHTML =
+        p3.aspectos.map(([k,v]) => v == null
+          ? `<tr><td>${k}</td><td class="placeholder">—</td></tr>`
+          : `<tr><td>${k}</td><td>${v}</td></tr>`
+        ).join("");
+    };
+    const fillAspectosMes = (containerId) => {
+      document.getElementById(containerId).innerHTML =
+        p3.aspectos_mes.map(([k]) => `<p><b>${k}:</b> <span class="placeholder">Pendiente.</span></p>`).join("");
+    };
+    const fillTasaciones = (tbodyId, compTheadPrevId, compTheadActualId, compTbodyId) => {
+      document.getElementById(tbodyId).innerHTML =
+        p3.tasaciones_edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
+        + `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+      document.getElementById(compTheadPrevId).textContent = p3.tasaciones_periodo[0];
+      document.getElementById(compTheadActualId).textContent = p3.tasaciones_periodo[1];
+      document.getElementById(compTbodyId).innerHTML =
+        [...p3.tasaciones_edificios, p3.tasaciones_total_nombre]
+          .map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
+    };
 
-    const occBox = (nombre) => `
-      <div class="chart-box">
-        <div class="chart-title">${nombre}</div>
-        <div class="occ-box">
-          <div class="occ-bar"><div class="occ-bar-fill" style="width:0%"></div></div>
-          <div class="occ-label placeholder">Ocupación: —</div>
-        </div>
-      </div>`;
-    document.getElementById("grid-status-oficinas").innerHTML =
-      p3.status_oficinas.map(([n]) => occBox(n)).join("");
-    document.getElementById("grid-status-locales").innerHTML =
-      p3.status_locales.map(([n]) => occBox(n)).join("");
+    if (edificioMode) {
+      // Layout Apo — sin cambios respecto al original.
+      fillAspectos("tbl-aspectos");
+      fillFotos("grid-fotos", p3.edificios.map(n => ({ caption: n, src: p3.fotos[n] })));
+      donutPending("donut-gla"); // donut-ingresos lo llena render() con dato real si existe
+      fillAspectosMes("txt-aspectos-mes");
 
-    document.getElementById("txt-aspectos-mes").innerHTML =
-      p3.aspectos_mes.map(([k]) => `<p><b>${k}:</b> <span class="placeholder">Pendiente.</span></p>`).join("");
+      const occBox = (nombre) => `
+        <div class="chart-box">
+          <div class="chart-title">${nombre}</div>
+          <div class="occ-box">
+            <div class="occ-bar"><div class="occ-bar-fill" style="width:0%"></div></div>
+            <div class="occ-label placeholder">Ocupación: —</div>
+          </div>
+        </div>`;
+      document.getElementById("grid-status-oficinas").innerHTML =
+        p3.status_oficinas.map(([n]) => occBox(n)).join("");
+      document.getElementById("grid-status-locales").innerHTML =
+        p3.status_locales.map(([n]) => occBox(n)).join("");
 
-    const [pAnt, pAct] = p3.vacancia_periodo;
-    document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
-    const vacanciaBox = (ed) => `
-      <div class="subtable-box">
-        <div class="subtable-title">${ed.nombre}</div>
-        <table>
-          <thead><tr><th></th><th>${pAnt}</th><th>${pAct}</th><th>Variación</th></tr></thead>
-          <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
-        </table>
-      </div>`;
-    document.getElementById("grid-vacancia").innerHTML = p3.vacancia_edificios.map(vacanciaBox).join("");
-    document.getElementById("txt-vacancia-fondo").textContent = "—";
+      const [pAnt, pAct] = p3.vacancia_periodo;
+      document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
+      const vacanciaBox = (ed) => `
+        <div class="subtable-box">
+          <div class="subtable-title">${ed.nombre}</div>
+          <table>
+            <thead><tr><th></th><th>${pAnt}</th><th>${pAct}</th><th>Variación</th></tr></thead>
+            <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+          </table>
+        </div>`;
+      document.getElementById("grid-vacancia").innerHTML = p3.vacancia_edificios.map(vacanciaBox).join("");
+      document.getElementById("txt-vacancia-fondo").textContent = "—";
 
-    const resumenBox = (ed) => `
-      <div class="subtable-box">
-        <div class="subtable-title">${ed.nombre}</div>
-        <table>
-          <thead><tr><th></th><th>m²</th><th>% del total</th></tr></thead>
-          <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
-        </table>
-      </div>`;
-    document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
+      const resumenBox = (ed) => `
+        <div class="subtable-box">
+          <div class="subtable-title">${ed.nombre}</div>
+          <table>
+            <thead><tr><th></th><th>m²</th><th>% del total</th></tr></thead>
+            <tbody>${ed.rows.map(r => `<tr><td>${r}</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")}</tbody>
+          </table>
+        </div>`;
+      document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
 
-    document.getElementById("tbl-tasaciones-tbody").innerHTML =
-      p3.tasaciones_edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
-      + `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
-
-    document.getElementById("th-tasacion-prev").textContent = p3.tasaciones_periodo[0];
-    document.getElementById("th-tasacion-actual").textContent = p3.tasaciones_periodo[1];
-    document.getElementById("tbl-tasaciones-comp-tbody").innerHTML =
-      [...p3.tasaciones_edificios, p3.tasaciones_total_nombre]
-        .map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
+      fillTasaciones("tbl-tasaciones-tbody", "th-tasacion-prev", "th-tasacion-actual", "tbl-tasaciones-comp-tbody");
+    } else {
+      // Layout PT (tenant): ids propios sufijo "-t", separados del layout Apo.
+      fillAspectos("tbl-aspectos-t");
+      fillFotos("grid-fotos-t", p3.fotos_list || []);
+      donutPending("donut-gla-t");
+      donutPending("donut-ingresos-t");
+      fillAspectosMes("txt-aspectos-mes-t");
+      fillTasaciones("tbl-tasaciones-tbody-t", "th-tasacion-prev-t", "th-tasacion-actual-t", "tbl-tasaciones-comp-tbody-t");
+    }
   }
 
   // Página 4 — notas metodológicas + análisis de mercado (headers solo, datos después de pc/usadoOp)
@@ -2627,7 +2784,7 @@ function render(){
   // Página 3 Apo: donut de ingresos UF/mes por edificio, solo si hay dato real
   // para el período operacional exacto (usadoOp) — nunca mostrar el del mes
   // anterior/siguiente, para no dejar "pegado" un gráfico de otro período.
-  if (S.page3) {
+  if (S.page3 && S.page3.edificios) {
     const ingresosPorPeriodo = F.ingresos_edificios || {};
     const ingresosData = usadoOp ? ingresosPorPeriodo[usadoOp] : null;
     const edificiosConDato = ingresosData ? S.page3.edificios.filter(n => ingresosData[n] != null) : [];
@@ -2669,113 +2826,134 @@ function render(){
       el.textContent = mesOpLabel;
     });
 
-    document.getElementById("mercado-titulo").textContent =
-      `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
-    function celdaMercado(v, esPct) {
-      if (v === null || v === undefined) return '<td class="placeholder">—</td>';
-      const texto = esPct
-        ? v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
-        : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
-      return `<td>${texto}</td>`;
-    }
-    // El informe JLL es trimestral: solo se muestra si el período operacional
-    // seleccionado cae dentro del mismo trimestre calendario que el dato ingestado.
-    const quarterEndOf = (periodo) => {
-      const [y, m] = periodo.split("-").map(Number);
-      const qEndMonth = Math.ceil(m / 3) * 3;
-      return y + "-" + String(qEndMonth).padStart(2, "0");
-    };
-    const mercadoPeriodo = usadoOp ? quarterEndOf(usadoOp) : null;
-    const mercadoRows = (F.mercado && F.mercado[mercadoPeriodo]) || S.page4.mercado_rows;
+    // Análisis de mercado de oficinas: solo si el fondo define submercado
+    // (hoy Apo). PT no tiene esta sección en su PDF de referencia — en su
+    // lugar muestra el plano de planta (ver bloque "page4-plano" más abajo).
+    const hasMercado = !!S.page4.submercado;
+    document.getElementById("page4-mercado").classList.toggle("hidden", !hasMercado);
+    if (hasMercado) {
+      document.getElementById("mercado-titulo").textContent =
+        `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
+      function celdaMercado(v, esPct) {
+        if (v === null || v === undefined) return '<td class="placeholder">—</td>';
+        const texto = esPct
+          ? v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+          : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
+        return `<td>${texto}</td>`;
+      }
+      // El informe JLL es trimestral: solo se muestra si el período operacional
+      // seleccionado cae dentro del mismo trimestre calendario que el dato ingestado.
+      const quarterEndOf = (periodo) => {
+        const [y, m] = periodo.split("-").map(Number);
+        const qEndMonth = Math.ceil(m / 3) * 3;
+        return y + "-" + String(qEndMonth).padStart(2, "0");
+      };
+      const mercadoPeriodo = usadoOp ? quarterEndOf(usadoOp) : null;
+      const mercadoRows = (F.mercado && F.mercado[mercadoPeriodo]) || S.page4.mercado_rows || [];
 
-    // ---- Párrafos de vacancia / canon de arriendo: redactados desde la DB,
-    // comparando el trimestre actual contra el inmediatamente anterior. ----
-    function prevQuarterPeriodo(p) {
-      const { year, q } = periodoToYQ(p);
-      const prevQ = q === 1 ? 4 : q - 1;
-      const prevYear = q === 1 ? parseInt(year, 10) - 1 : parseInt(year, 10);
-      return prevYear + "-" + String(prevQ * 3).padStart(2, "0");
-    }
-    const ORDINAL_TRIMESTRE = { 1: "primer", 2: "segundo", 3: "tercer", 4: "cuarto" };
-    function findMercadoRow(rows, comunaPrefix, clase) {
-      if (!rows) return null;
-      return rows.find(r => r.comuna && r.comuna.startsWith(comunaPrefix) &&
-        r.clase === clase && r.vacancia_pct !== undefined) || null;
-    }
-    function fmtMercadoNum(v, dec) {
-      return (v === null || v === undefined) ? null :
-        v.toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-    }
-    const p1El = document.getElementById("txt-mercado-p1");
-    const p2El = document.getElementById("txt-mercado-p2");
-    if (mercadoPeriodo) {
-      const prevPeriodo = prevQuarterPeriodo(mercadoPeriodo);
-      const prevRows = F.mercado && F.mercado[prevPeriodo];
-      const submercado = S.page4.submercado;
-      const totalAct = findMercadoRow(mercadoRows, submercado, "Total");
-      const totalPrev = findMercadoRow(prevRows, submercado, "Total");
-      const claseAAct = findMercadoRow(mercadoRows, submercado, "A");
-      const claseAPrev = findMercadoRow(prevRows, submercado, "A");
-      const claseBAct = findMercadoRow(mercadoRows, submercado, "B");
-      const claseBPrev = findMercadoRow(prevRows, submercado, "B");
+      // ---- Párrafos de vacancia / canon de arriendo: redactados desde la DB,
+      // comparando el trimestre actual contra el inmediatamente anterior. ----
+      function prevQuarterPeriodo(p) {
+        const { year, q } = periodoToYQ(p);
+        const prevQ = q === 1 ? 4 : q - 1;
+        const prevYear = q === 1 ? parseInt(year, 10) - 1 : parseInt(year, 10);
+        return prevYear + "-" + String(prevQ * 3).padStart(2, "0");
+      }
+      const ORDINAL_TRIMESTRE = { 1: "primer", 2: "segundo", 3: "tercer", 4: "cuarto" };
+      function findMercadoRow(rows, comunaPrefix, clase) {
+        if (!rows) return null;
+        return rows.find(r => r.comuna && r.comuna.startsWith(comunaPrefix) &&
+          r.clase === clase && r.vacancia_pct !== undefined) || null;
+      }
+      function fmtMercadoNum(v, dec) {
+        return (v === null || v === undefined) ? null :
+          v.toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+      }
+      const p1El = document.getElementById("txt-mercado-p1");
+      const p2El = document.getElementById("txt-mercado-p2");
+      if (mercadoPeriodo) {
+        const prevPeriodo = prevQuarterPeriodo(mercadoPeriodo);
+        const prevRows = F.mercado && F.mercado[prevPeriodo];
+        const submercado = S.page4.submercado;
+        const totalAct = findMercadoRow(mercadoRows, submercado, "Total");
+        const totalPrev = findMercadoRow(prevRows, submercado, "Total");
+        const claseAAct = findMercadoRow(mercadoRows, submercado, "A");
+        const claseAPrev = findMercadoRow(prevRows, submercado, "A");
+        const claseBAct = findMercadoRow(mercadoRows, submercado, "B");
+        const claseBPrev = findMercadoRow(prevRows, submercado, "B");
 
-      if (totalAct) {
-        const vAct = totalAct.vacancia_pct;
-        const vPrev = totalPrev ? totalPrev.vacancia_pct : null;
-        let verbo = "fue de";
-        let comparativo = "";
-        if (vPrev !== null && vPrev !== undefined) {
-          if (vAct < vPrev) verbo = "disminuyó a";
-          else if (vAct > vPrev) verbo = "aumentó a";
-          else verbo = "se mantuvo en";
-          comparativo = ` (${fmtQ(prevPeriodo)} ${fmtMercadoNum(vPrev, 1)}%)`;
+        if (totalAct) {
+          const vAct = totalAct.vacancia_pct;
+          const vPrev = totalPrev ? totalPrev.vacancia_pct : null;
+          let verbo = "fue de";
+          let comparativo = "";
+          if (vPrev !== null && vPrev !== undefined) {
+            if (vAct < vPrev) verbo = "disminuyó a";
+            else if (vAct > vPrev) verbo = "aumentó a";
+            else verbo = "se mantuvo en";
+            comparativo = ` (${fmtQ(prevPeriodo)} ${fmtMercadoNum(vPrev, 1)}%)`;
+          }
+          p1El.textContent = `Respecto al submercado ${submercado}, donde se encuentran los edificios ` +
+            `${S.page3.edificios.join(" y ")}, según el informe de JLL durante el ${fmtQ(mercadoPeriodo)} la vacancia ` +
+            `${verbo} ${fmtMercadoNum(vAct, 1)}%${comparativo}.`;
+          p1El.classList.remove("placeholder");
+        } else {
+          p1El.textContent = "Pendiente: párrafo de vacancia (informe JLL) — sin datos ingestados para este trimestre.";
+          p1El.classList.add("placeholder");
         }
-        p1El.textContent = `Respecto al submercado ${submercado}, donde se encuentran los edificios ` +
-          `${S.page3.edificios.join(" y ")}, según el informe de JLL durante el ${fmtQ(mercadoPeriodo)} la vacancia ` +
-          `${verbo} ${fmtMercadoNum(vAct, 1)}%${comparativo}.`;
-        p1El.classList.remove("placeholder");
-      } else {
-        p1El.textContent = "Pendiente: párrafo de vacancia (informe JLL) — sin datos ingestados para este trimestre.";
-        p1El.classList.add("placeholder");
+
+        const partesRenta = [];
+        if (claseAAct) {
+          const rAct = fmtMercadoNum(claseAAct.renta_uf_m2, 2);
+          const rPrev = claseAPrev ? fmtMercadoNum(claseAPrev.renta_uf_m2, 2) : null;
+          partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase A`);
+        }
+        if (claseBAct) {
+          const rAct = fmtMercadoNum(claseBAct.renta_uf_m2, 2);
+          const rPrev = claseBPrev ? fmtMercadoNum(claseBPrev.renta_uf_m2, 2) : null;
+          partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase B`);
+        }
+        if (partesRenta.length) {
+          const { q } = periodoToYQ(mercadoPeriodo);
+          p2El.textContent = `Respecto al canon de arriendo promedio en ${submercado}, durante el ` +
+            `${ORDINAL_TRIMESTRE[q]} trimestre fue ${partesRenta.join(" y ")}.`;
+          p2El.classList.remove("placeholder");
+        } else {
+          p2El.textContent = "Pendiente: párrafo de canon de arriendo (informe JLL) — sin datos ingestados para este trimestre.";
+          p2El.classList.add("placeholder");
+        }
       }
 
-      const partesRenta = [];
-      if (claseAAct) {
-        const rAct = fmtMercadoNum(claseAAct.renta_uf_m2, 2);
-        const rPrev = claseAPrev ? fmtMercadoNum(claseAPrev.renta_uf_m2, 2) : null;
-        partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase A`);
-      }
-      if (claseBAct) {
-        const rAct = fmtMercadoNum(claseBAct.renta_uf_m2, 2);
-        const rPrev = claseBPrev ? fmtMercadoNum(claseBPrev.renta_uf_m2, 2) : null;
-        partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase B`);
-      }
-      if (partesRenta.length) {
-        const { q } = periodoToYQ(mercadoPeriodo);
-        p2El.textContent = `Respecto al canon de arriendo promedio en ${submercado}, durante el ` +
-          `${ORDINAL_TRIMESTRE[q]} trimestre fue ${partesRenta.join(" y ")}.`;
-        p2El.classList.remove("placeholder");
-      } else {
-        p2El.textContent = "Pendiente: párrafo de canon de arriendo (informe JLL) — sin datos ingestados para este trimestre.";
-        p2El.classList.add("placeholder");
-      }
+      document.getElementById("tbl-mercado-tbody").innerHTML =
+        mercadoRows.map(r => {
+          const cls = r.total ? ' class="row-total"' : '';
+          if (r.inventario_m2 === undefined) {
+            // sin datos ingestados para este trimestre: placeholders
+            return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+          }
+          return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
+            celdaMercado(r.inventario_m2, false) +
+            celdaMercado(r.absorcion_u12m_m2, false) +
+            celdaMercado(r.vacancia_pct, true) +
+            celdaMercado(r.renta_uf_m2, false) +
+            celdaMercado(r.construccion_m2, false) +
+            `</tr>`;
+        }).join("");
     }
 
-    document.getElementById("tbl-mercado-tbody").innerHTML =
-      mercadoRows.map(r => {
-        const cls = r.total ? ' class="row-total"' : '';
-        if (r.inventario_m2 === undefined) {
-          // sin datos ingestados para este trimestre: placeholders
-          return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
-        }
-        return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
-          celdaMercado(r.inventario_m2, false) +
-          celdaMercado(r.absorcion_u12m_m2, false) +
-          celdaMercado(r.vacancia_pct, true) +
-          celdaMercado(r.renta_uf_m2, false) +
-          celdaMercado(r.construccion_m2, false) +
-          `</tr>`;
-      }).join("");
+    // Plano de planta: solo si el fondo lo define (hoy PT — Plano Local 100).
+    // Sin gráfico real disponible aún: se muestra un placeholder por piso.
+    const hasPlano = !!S.page4.plano;
+    document.getElementById("page4-plano").classList.toggle("hidden", !hasPlano);
+    if (hasPlano) {
+      document.getElementById("plano-titulo").textContent = S.page4.plano.titulo;
+      document.getElementById("grid-plano").innerHTML =
+        S.page4.plano.pisos.map(piso => `
+          <div class="chart-box">
+            <div class="chart-title">${piso}</div>
+            <div class="chart-placeholder" style="height:160px">Plano pendiente</div>
+          </div>`).join("");
+    }
   }
 }
 
