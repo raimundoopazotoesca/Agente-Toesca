@@ -217,6 +217,77 @@ B
 """
 
 
+TEXTO_JLL_FLAT_Q2_2026 = """Clase
+Inventario
+(m²)
+Absorción neta
+trimestral
+(m²)
+Absorción neta
+últimos 12 meses
+(m²)
+Vacancia
+(%)
+Renta pedida
+promedio
+(UF/m²/mes)
+Renta pedida
+promedio
+(USD/m²/mes)
+Producción
+trimestral
+(m²)
+Producción
+últimos 12 meses
+(m²)
+En
+Construcción
+(m²)
+Las Condes (CBD) Total 1.726.409 8.445 40.573 5,8% 0,55 24,03 0 29.691 111.200
+Providencia Total 561.938 11.011 30.333 11,9% 0,50 21,64 0 47.885 17.218
+Santiago Centro Total 373.249 2.696 13.456 8,5% 0,34 14,65 0 0 0
+Vitacura Total 173.394 1.671 4.156 12,5% 0,49 21,53 0 0 0
+Ciudad Empresarial Total 288.515 1.404 3.636 8,5% 0,24 10,56 0 0 0
+Estoril Total 69.242 1.029 905 20,5% 0,39 17,20 0 0 0
+Santiago Total 3.192.747 26.256 93.059 8,1% 0,47 20,40 0 77.576 128.418
+Las Condes (CBD) A 1.076.580 5.675 30.304 5,7% 0,59 25,97 0 29.691 99.400
+Providencia A 166.610 11.785 21.272 26,2% 0,52 22,84 0 47.885 10.800
+Santiago Centro A 81.180 2.093 7.609 12,6% 0,31 13,41 0 0 0
+Santiago A 1.324.370 19.553 59.186 8,7% 0,54 23,67 0 77.576 110.200
+Las Condes (CBD) B 649.829 2.770 10.269 5,9% 0,48 20,92 0 0 11.800
+Providencia B 395.328 -774 9.062 5,9% 0,44 19,43 0 0 6.418
+Santiago Centro B 292.069 604 5.847 7,4% 0,35 15,24 0 0 0
+Vitacura B 173.394 1.671 4.156 12,5% 0,49 21,53 0 0 0
+Ciudad Empresarial B 288.515 1.404 3.636 8,5% 0,24 10,56 0 0 0
+Estoril B 69.242 1.029 905 20,5% 0,39 17,20 0 0 0
+Santiago B 1.868.377 6.703 33.874 7,7% 0,41 17,78 0 0 18.218
+"""
+
+
+def test_parse_tabla_jll_formato_plano_18_filas():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_Q2_2026)
+    assert len(filas) == 18
+
+
+def test_parse_tabla_jll_formato_plano_pares_coinciden_con_expected():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_Q2_2026)
+    pares = {(f["submercado"], f["clase"]) for f in filas}
+    assert pares == mod.EXPECTED_PARES
+
+
+def test_parse_tabla_jll_formato_plano_normaliza_ciudad_empresarial():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_Q2_2026)
+    f = [f for f in filas if f["clase"] == "Total" and f["submercado"].lower() == "ciudad empresarial"][0]
+    assert f["submercado"] == "Ciudad empresarial"
+    assert f["inventario_m2"] == 288515.0
+
+
+def test_parse_tabla_jll_formato_plano_negativo():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_Q2_2026)
+    f = [f for f in filas if f["submercado"] == "Providencia" and f["clase"] == "B"][0]
+    assert f["absorcion_trim_m2"] == -774.0
+
+
 def test_parse_num_cl_miles():
     assert mod._parse_num_cl("1.733.422") == 1733422.0
 

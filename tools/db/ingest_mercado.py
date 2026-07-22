@@ -1,14 +1,20 @@
 """Ingesta de datos de mercado de oficinas (JLL, trimestral) desde texto
 copy-paste de la tabla del PDF del informe.
 
-Formato de entrada (una línea por valor, sin tabs):
+Soporta dos formatos de entrada:
+
+1. Una línea por valor (típico al copiar celda por celda desde el PDF):
     Clase
     Inventario (m²)
-    ... (10 líneas de encabezado)
+    ... (encabezado)
     <submercado>
     <clase>
     <9 valores numéricos>
     ... (18 bloques de 11 líneas)
+
+2. Una línea por fila completa (típico al copiar la tabla ya tabulada):
+    <submercado> <clase> <9 valores numéricos separados por espacio>
+    ... (18 líneas, encabezado se ignora automáticamente)
 
 No expone CLI; lo consume scripts/ingesta_server.py (Flask).
 """
@@ -52,6 +58,16 @@ _CAMPOS_NO_NEGATIVOS = (
     "construccion_m2", "renta_uf_m2", "renta_usd_m2",
 )
 
+_CLASES_VALIDAS = ("Total", "A", "B")
+
+_SUBMERCADO_CANONICAL = {
+    "ciudad empresarial": "Ciudad empresarial",
+}
+
+
+def _normalizar_submercado(nombre: str) -> str:
+    return _SUBMERCADO_CANONICAL.get(nombre.lower(), nombre)
+
 
 def _parse_num_cl(raw: str) -> float:
     """Convierte formato numérico chileno a float.
@@ -68,9 +84,52 @@ def _parse_num_cl(raw: str) -> float:
     return float(s)
 
 
+def _is_numeric_token(tok: str) -> bool:
+    try:
+        _parse_num_cl(tok)
+        return True
+    except ValueError:
+        return False
+
+
+def _try_parse_filas_planas(lines: list[str]) -> list[dict] | None:
+    """Intenta parsear el formato de "una línea por fila completa"
+    (submercado + clase + 9 valores separados por espacio en una sola línea).
+    Las líneas de encabezado no calzan el patrón y se ignoran solas.
+    Devuelve None si no encuentra ninguna fila con ese formato.
+    """
+    filas = []
+    for line in lines:
+        tokens = line.split()
+        if len(tokens) < 11:
+            continue
+        valores_raw = tokens[-9:]
+        if not all(_is_numeric_token(t) for t in valores_raw):
+            continue
+        resto = tokens[:-9]
+        clase = resto[-1]
+        if clase not in _CLASES_VALIDAS:
+            continue
+        submercado = _normalizar_submercado(" ".join(resto[:-1]))
+        valores = [_parse_num_cl(v) for v in valores_raw]
+        fila = {
+            "submercado": submercado,
+            "clase": clase,
+            "es_total": 1 if submercado == "Santiago" else 0,
+        }
+        fila.update(dict(zip(_METRIC_KEYS, valores)))
+        filas.append(fila)
+    return filas if filas else None
+
+
 def parse_tabla_jll(texto: str) -> list[dict]:
     """Parsea el texto copy-paste de la tabla de mercado JLL."""
     lines = [l.strip() for l in texto.strip().splitlines() if l.strip()]
+
+    filas_planas = _try_parse_filas_planas(lines)
+    if filas_planas is not None:
+        return filas_planas
+
     if lines and lines[0] == "Clase":
         lines = lines[10:]
     if len(lines) % 11 != 0:

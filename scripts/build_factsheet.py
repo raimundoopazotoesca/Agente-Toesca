@@ -598,6 +598,20 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         for periodo in periodos_disponibles:
             mercado_por_periodo[periodo] = _fetch_mercado_rows(str(DB), periodo)
 
+    # ---- Página 3 Apo: ingresos UF/mes por edificio, para el donut ----
+    ingresos_edificios_por_periodo: dict[str, dict[str, float]] = {}
+    if fondo_key == "Apo" and cfg.get("page3"):
+        edificio_activo_key = {"Apoquindo 4501": "Apo4501", "Apoquindo 4700": "Apo4700"}
+        activo_key_a_edificio = {v: k for k, v in edificio_activo_key.items()}
+        for activo_key, periodo, monto in cur.execute(
+            "SELECT activo_key, periodo, SUM(COALESCE(monto_uf, monto_clp)) FROM raw_er_activo_line "
+            "WHERE seccion='INGRESOS_OPERACION' AND superseded_at IS NULL "
+            "AND activo_key IN (?,?) GROUP BY activo_key, periodo",
+            tuple(edificio_activo_key.values()),
+        ).fetchall():
+            edificio = activo_key_a_edificio[activo_key]
+            ingresos_edificios_por_periodo.setdefault(periodo, {})[edificio] = monto
+
     return {
         "static": cfg,
         "contable": dict(sorted(contable.items())),
@@ -608,6 +622,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "uf": uf_por_periodo,
         "dividendos": dividendos,
         "mercado": mercado_por_periodo,
+        "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "perf_data": _fetch_perf_data(fondo_key),
     }
 
@@ -1264,12 +1279,16 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   #tbl-tasaciones-comp td:first-child, #tbl-tasaciones-comp th:first-child { text-align: left; }
 
   /* Donut chart (conic-gradient) con leyenda */
-  .donut-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .donut { width: 84px; height: 84px; border-radius: 50%; position: relative; flex: none; }
-  .donut::after { content: ""; position: absolute; inset: 17px; background: #fff; border-radius: 50%; }
-  .donut-legend { font-size: 10px; }
-  .donut-legend .row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-  .donut-legend .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+  .donut-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 20px; }
+  .donut { width: 150px; height: 150px; border-radius: 50%; position: relative; flex: none; }
+  .donut::after { content: ""; position: absolute; inset: 36px; background: #fff; border-radius: 50%; }
+  .donut-legend { font-size: 13px; }
+  .donut-legend .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .donut-legend .dot { width: 12px; height: 12px; border-radius: 2px; display: inline-block; flex: none; }
+  .donut-pct {
+    position: absolute; transform: translate(-50%, -50%); font-size: 12px;
+    font-weight: 700; white-space: nowrap;
+  }
 
   /* Barra de ocupación (reemplaza el treemap de la referencia — mismo dato, layout simplificado) */
   .occ-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 8px 6px; }
@@ -2183,7 +2202,6 @@ function switchFund(f){
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     };
     donutPending("donut-gla");
-    donutPending("donut-ingresos");
 
     const occBox = (nombre) => `
       <div class="chart-box">
@@ -2299,11 +2317,25 @@ function renderDonut(containerId, data){
     const start = acc; acc += pct;
     return `${DONUT_COLORS[i % DONUT_COLORS.length]} ${start}% ${acc}%`;
   }).join(", ");
-  const legend = data.map(([label, pct], i) =>
-    `<div class="row"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label} ${pct}%</div>`
+  // Etiquetas de % centradas en el anillo (radio medio), en el ángulo medio de
+  // cada segmento. Anillo grueso (inset 36px sobre donut de 150px -> banda de
+  // 39px) para que el texto no toque ni el hueco central ni el borde exterior.
+  let accLabel = 0;
+  const R = 75, RING_R = 60;
+  const labels = data.map(([, pct], i) => {
+    const mid = accLabel + pct / 2; accLabel += pct;
+    const angle = (mid / 100) * 2 * Math.PI;
+    const x = R + RING_R * Math.sin(angle);
+    const y = R - RING_R * Math.cos(angle);
+    const color = DONUT_COLORS[i % DONUT_COLORS.length];
+    const claro = color === "#E0E0E0" || color === "#C8ECD8";
+    return `<span class="donut-pct" style="left:${x}px; top:${y}px; color:${claro ? "#33413b" : "#fff"}">${pct}%</span>`;
+  }).join("");
+  const legend = data.map(([label], i) =>
+    `<div class="row"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label}</div>`
   ).join("");
   document.getElementById(containerId).innerHTML =
-    `<div class="donut" style="background:conic-gradient(${stops})"></div><div class="donut-legend">${legend}</div>`;
+    `<div class="donut" style="background:conic-gradient(${stops})">${labels}</div><div class="donut-legend">${legend}</div>`;
 }
 
 function renderPerfActivosHeader(p2, perfData){
@@ -2592,6 +2624,24 @@ function render(){
   document.getElementById("month-bar3").textContent = mesRef;
   document.getElementById("month-bar4").textContent = mesRef;
 
+  // Página 3 Apo: donut de ingresos UF/mes por edificio (mismo período operacional que usadoOp)
+  if (S.page3) {
+    const ingresosPorPeriodo = F.ingresos_edificios || {};
+    const ingresosKeys = Object.keys(ingresosPorPeriodo).sort();
+    const ingresosLower = usadoOp ? ingresosKeys.filter(k => k <= usadoOp) : [];
+    const ingresosPeriodo = ingresosLower.length ? ingresosLower[ingresosLower.length - 1] : ingresosKeys[ingresosKeys.length - 1];
+    const ingresosData = ingresosPeriodo ? ingresosPorPeriodo[ingresosPeriodo] : null;
+    const edificiosConDato = ingresosData ? S.page3.edificios.filter(n => ingresosData[n] != null) : [];
+    if (edificiosConDato.length === S.page3.edificios.length) {
+      const total = edificiosConDato.reduce((s, n) => s + ingresosData[n], 0);
+      const donutData = edificiosConDato.map(n => [n, total ? Math.round(ingresosData[n] / total * 1000) / 10 : 0]);
+      renderDonut("donut-ingresos", donutData);
+    } else {
+      document.getElementById("donut-ingresos").innerHTML =
+        `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
+    }
+  }
+
   // Página 4: rellenar notas con fechas dinámicas (ahora pc y usadoOp están definidas)
   const hasPage4 = !!S.page4;
   if (hasPage4) {
@@ -2682,7 +2732,7 @@ function render(){
           comparativo = ` (${fmtQ(prevPeriodo)} ${fmtMercadoNum(vPrev, 1)}%)`;
         }
         p1El.textContent = `Respecto al submercado ${submercado}, donde se encuentran los edificios ` +
-          `${S.edificios.join(" y ")}, según el informe de JLL durante el ${fmtQ(mercadoPeriodo)} la vacancia ` +
+          `${S.page3.edificios.join(" y ")}, según el informe de JLL durante el ${fmtQ(mercadoPeriodo)} la vacancia ` +
           `${verbo} ${fmtMercadoNum(vAct, 1)}%${comparativo}.`;
         p1El.classList.remove("placeholder");
       } else {

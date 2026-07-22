@@ -137,7 +137,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="eeff">EEFF</button>
     <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
-    <button class="tab-btn" data-tab="mercado">Mercado</button>
+    <button class="tab-btn" data-tab="mercado">Mercado Oficinas</button>
   </div>
 </header>
 
@@ -296,9 +296,11 @@
     <div class="step-title"><span class="step-num">1</span> Período y proveedor</div>
     <div class="row">
       <label class="muted" for="mercado-periodo">Período del informe (trimestral):</label>
-      <input type="month" id="mercado-periodo">
+      <select id="mercado-periodo" style="width:160px">
+        <option value="">Elige trimestre...</option>
+      </select>
       <label class="muted" for="mercado-proveedor">Proveedor:</label>
-      <select id="mercado-proveedor">
+      <select id="mercado-proveedor" style="width:160px">
         <option value="JLL">JLL</option>
       </select>
     </div>
@@ -939,6 +941,29 @@ let lastMercadoPeriodo = null;
 let lastMercadoProveedor = null;
 let lastMercadoValidationOk = false;
 
+// Poblar select de trimestres (03, 06, 09, 12)
+function populateMercadoTrimestres() {
+  const trimestres = [3, 6, 9, 12];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentTrimestre = currentMonth <= 3 ? 3 : currentMonth <= 6 ? 6 : currentMonth <= 9 ? 9 : 12;
+  const selectedTrimestre = currentTrimestre;
+  const selectedYear = currentMonth > selectedTrimestre ? currentYear : currentYear - 1;
+
+  for (let y = currentYear - 2; y <= currentYear + 2; y++) {
+    for (const m of trimestres) {
+      const opt = document.createElement('option');
+      opt.value = `${y}-${String(m).padStart(2, '0')}`;
+      opt.textContent = `${y}-${String(m).padStart(2, '0')}`;
+      mercadoPeriodo.appendChild(opt);
+      if (y === selectedYear && m === selectedTrimestre) {
+        opt.selected = true;
+      }
+    }
+  }
+}
+
 const mercadoPeriodo = document.getElementById('mercado-periodo');
 const mercadoProveedor = document.getElementById('mercado-proveedor');
 const mercadoInput = document.getElementById('mercado-input');
@@ -1071,6 +1096,9 @@ btnMercadoConfirm.addEventListener('click', async () => {
     btnMercadoConfirm.disabled = false;
   }
 });
+
+populateMercadoTrimestres();
+checkMercadoPeriodoStatus();
 </script>
 </body>
 </html>
