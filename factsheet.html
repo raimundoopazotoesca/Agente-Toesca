@@ -1578,9 +1578,17 @@ function render(){
     document.getElementById("lst-notas").innerHTML =
       S.page4.notas.map(n => `<li>${n}</li>`).join("");
 
+    // Helper: calcular el último día del mes para una fecha en formato YYYY-MM
+    const lastDayOfMonth = (periodo) => {
+      if (!periodo) return "";
+      const [y, m] = periodo.split("-");
+      const lastDay = new Date(y, m, 0).getDate();
+      return `${y}-${m}-${String(lastDay).padStart(2, "0")}`;
+    };
+
     // Rellenar slots de fecha en las notas
-    const fechaCbISO = pc ? pc + "-30" : "";
-    const fechaOpISO = usadoOp ? usadoOp + "-30" : "";
+    const fechaCbISO = pc ? lastDayOfMonth(pc) : "";
+    const fechaOpISO = usadoOp ? lastDayOfMonth(usadoOp) : "";
     const mesOpLabel = usadoOp ? mesEspanol(usadoOp) : "";
     document.querySelectorAll("[data-slot=\"fecha-cb\"]").forEach(el => {
       el.textContent = fmtFechaLarga(fechaCbISO);
