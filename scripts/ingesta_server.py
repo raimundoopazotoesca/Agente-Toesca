@@ -23,6 +23,15 @@ from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
+from scripts import build_factsheet  # noqa: E402
+
+
+def _rebuild_factsheet() -> None:
+    """Regenera factsheet.html para que toda ingesta se refleje de inmediato."""
+    try:
+        build_factsheet.main()
+    except Exception as exc:  # no debe romper la respuesta de ingesta
+        print(f"WARN: no se pudo regenerar factsheet.html: {exc}")
 
 app = Flask(__name__, static_folder=None)
 
@@ -121,6 +130,7 @@ def api_ingest():
         summary = core.commit(texto, fondo, periodo_declarado, fecha_publicacion)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
     return jsonify({"ok": True, **summary})
 
 
@@ -150,6 +160,7 @@ def api_rentroll_commit():
         summary = rr_core.commit(file_bytes, file.filename, periodo)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
     return jsonify({"ok": True, **summary})
 
 
@@ -191,6 +202,7 @@ def api_mercado_commit():
         summary = mercado_core.commit(texto, periodo, proveedor)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
     return jsonify({"ok": True, **summary})
 
 

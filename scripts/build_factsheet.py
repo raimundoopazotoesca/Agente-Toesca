@@ -587,23 +587,19 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     ):
         dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
 
-    static_cfg = cfg
-    if fondo_key == "APO" and cfg.get("page4"):
+    mercado_por_periodo: dict[str, list[dict]] = {}
+    if fondo_key == "Apo" and cfg.get("page4"):
         periodos_disponibles = [
             r[0] for r in cur.execute(
                 "SELECT DISTINCT periodo FROM raw_mercado_oficinas "
-                "WHERE proveedor='JLL' AND superseded_at IS NULL ORDER BY periodo DESC"
+                "WHERE proveedor='JLL' AND superseded_at IS NULL ORDER BY periodo"
             )
         ]
-        mercado_rows_db = (
-            _fetch_mercado_rows(str(DB), periodos_disponibles[0])
-            if periodos_disponibles else []
-        )
-        if mercado_rows_db:
-            static_cfg = {**cfg, "page4": {**cfg["page4"], "mercado_rows": mercado_rows_db}}
+        for periodo in periodos_disponibles:
+            mercado_por_periodo[periodo] = _fetch_mercado_rows(str(DB), periodo)
 
     return {
-        "static": static_cfg,
+        "static": cfg,
         "contable": dict(sorted(contable.items())),
         "bursatil": dict(sorted(bursatil.items())),
         "fondo_kpi": dict(sorted(fondo_kpi.items())),
@@ -611,6 +607,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "gastos": dict(sorted(gastos.items())),
         "uf": uf_por_periodo,
         "dividendos": dividendos,
+        "mercado": mercado_por_periodo,
         "perf_data": _fetch_perf_data(fondo_key),
     }
 
@@ -2575,8 +2572,17 @@ function render(){
         : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
       return `<td>${texto}</td>`;
     }
+    // El informe JLL es trimestral: solo se muestra si el período operacional
+    // seleccionado cae dentro del mismo trimestre calendario que el dato ingestado.
+    const quarterEndOf = (periodo) => {
+      const [y, m] = periodo.split("-").map(Number);
+      const qEndMonth = Math.ceil(m / 3) * 3;
+      return y + "-" + String(qEndMonth).padStart(2, "0");
+    };
+    const mercadoPeriodo = usadoOp ? quarterEndOf(usadoOp) : null;
+    const mercadoRows = (F.mercado && F.mercado[mercadoPeriodo]) || S.page4.mercado_rows;
     document.getElementById("tbl-mercado-tbody").innerHTML =
-      S.page4.mercado_rows.map(r => {
+      mercadoRows.map(r => {
         const cls = r.total ? ' class="row-total"' : '';
         if (r.inventario_m2 === undefined) {
           // sin datos ingestados para este trimestre: placeholders
