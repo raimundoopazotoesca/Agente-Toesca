@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
+from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 
 app = Flask(__name__, static_folder=None)
@@ -147,6 +148,47 @@ def api_rentroll_commit():
     file_bytes = file.read()
     try:
         summary = rr_core.commit(file_bytes, file.filename, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/mercado/periodo_check")
+def api_mercado_periodo_check():
+    periodo = request.args.get("periodo", "")
+    proveedor = request.args.get("proveedor", "JLL")
+    if not periodo:
+        return jsonify({"ya_ingestado": False})
+    con = get_conn_for(str(mercado_core.DB_PATH))
+    try:
+        n = con.execute(
+            "SELECT COUNT(*) FROM raw_mercado_oficinas "
+            "WHERE periodo=? AND proveedor=? AND superseded_at IS NULL",
+            (periodo, proveedor),
+        ).fetchone()[0]
+        return jsonify({"ya_ingestado": bool(n), "n_filas": n})
+    finally:
+        con.close()
+
+
+@app.post("/api/mercado/validate")
+def api_mercado_validate():
+    body = request.get_json(force=True, silent=True) or {}
+    texto = body.get("texto", "")
+    periodo = body.get("periodo", "")
+    proveedor = body.get("proveedor", "JLL")
+    result = mercado_core.validate(texto, periodo, proveedor)
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/mercado/commit")
+def api_mercado_commit():
+    body = request.get_json(force=True, silent=True) or {}
+    texto = body.get("texto", "")
+    periodo = body.get("periodo", "")
+    proveedor = body.get("proveedor", "JLL")
+    try:
+        summary = mercado_core.commit(texto, periodo, proveedor)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     return jsonify({"ok": True, **summary})
