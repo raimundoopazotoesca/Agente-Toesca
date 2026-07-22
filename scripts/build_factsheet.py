@@ -1732,6 +1732,22 @@ function periodoToYQ(p){
   const q = {3:1,6:2,9:3,12:4}[mm] || null;
   return { year: y, q: q, month: mm };
 }
+// ---- Sincronización de trimestre entre selector operacional (mensual) y contable/bursátil (trimestral) ----
+// No deben poder mostrarse dos períodos de trimestres distintos al mismo tiempo.
+function quarterId(p){
+  const [y,m] = p.split("-");
+  return parseInt(y,10)*10 + Math.ceil(parseInt(m,10)/3);
+}
+function quarterEndPeriodo(p){
+  const [y,m] = p.split("-");
+  const endMonth = Math.ceil(parseInt(m,10)/3)*3;
+  return y+"-"+String(endMonth).padStart(2,"0");
+}
+function quarterStartPeriodo(p){
+  const [y,m] = p.split("-");
+  const startMonth = Math.ceil(parseInt(m,10)/3)*3-2;
+  return y+"-"+String(startMonth).padStart(2,"0");
+}
 // ---- Trazabilidad admin: marcar celdas con metadata para modal ----
 function attachTrace(el, kpi, ctx){
   if (!el || !kpi) return;
@@ -1938,6 +1954,7 @@ function initPeriodNav(periodos, defVal, suffix, format){
   });
   sel.value = initial;
   sel.dataset.periodFmt = format;
+  sel.dataset.prevValue = initial;
 
   function fmtMonth(p){
     const [y, m] = p.split("-");
@@ -1996,6 +2013,39 @@ function initPeriodNav(periodos, defVal, suffix, format){
     document.querySelectorAll(".period-dropdown").forEach(function(dd){ dd.style.display = "none"; });
   };
 
+  // Sincroniza el selector contrario para que nunca queden dos trimestres distintos
+  // seleccionados a la vez: op -> siguiente trimestre; cb -> primer mes (adelante) o
+  // último mes (atrás) del trimestre elegido.
+  window["syncPeriodSelectors"] = function(changedSuffix, oldVal, newVal){
+    if (!oldVal || !newVal || oldVal === newVal) return;
+    const counterpartSuffix = changedSuffix === "op" ? "cb" : "op";
+    const cSel = document.getElementById("sel-periodo-" + counterpartSuffix);
+    if (!cSel || !cSel.options.length) return;
+    const cOpts = Array.from(cSel.options).map(o => o.value).sort();
+
+    function pickClosest(target){
+      if (cOpts.includes(target)) return target;
+      const atOrBefore = cOpts.filter(o => o <= target);
+      return atOrBefore.length ? atOrBefore[atOrBefore.length - 1] : cOpts[0];
+    }
+
+    let target;
+    if (changedSuffix === "op") {
+      target = quarterEndPeriodo(newVal);
+    } else {
+      if (quarterId(newVal) === quarterId(oldVal)) return;
+      const forward = quarterId(newVal) > quarterId(oldVal);
+      target = forward ? quarterStartPeriodo(newVal) : newVal;
+    }
+
+    if (quarterId(target) === quarterId(cSel.value)) return;
+
+    const chosen = pickClosest(target);
+    if (chosen === cSel.value) return;
+    cSel.value = chosen;
+    cSel.dispatchEvent(new Event("change"));
+  };
+
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".period-nav-group") && !e.target.closest(".period-dropdown")){
       hidePeriodDropdown();
@@ -2003,7 +2053,14 @@ function initPeriodNav(periodos, defVal, suffix, format){
   });
 
   sel.addEventListener("change", () => {
+    const oldVal = sel.dataset.prevValue;
+    const newVal = sel.value;
+    sel.dataset.prevValue = newVal;
     updateDisplay();
+    if (!window.__syncingPeriodNav) {
+      window.__syncingPeriodNav = true;
+      try { window.syncPeriodSelectors(suffix, oldVal, newVal); } finally { window.__syncingPeriodNav = false; }
+    }
     render();
   });
 
@@ -2581,6 +2638,80 @@ function render(){
     };
     const mercadoPeriodo = usadoOp ? quarterEndOf(usadoOp) : null;
     const mercadoRows = (F.mercado && F.mercado[mercadoPeriodo]) || S.page4.mercado_rows;
+
+    // ---- Párrafos de vacancia / canon de arriendo: redactados desde la DB,
+    // comparando el trimestre actual contra el inmediatamente anterior. ----
+    function prevQuarterPeriodo(p) {
+      const { year, q } = periodoToYQ(p);
+      const prevQ = q === 1 ? 4 : q - 1;
+      const prevYear = q === 1 ? parseInt(year, 10) - 1 : parseInt(year, 10);
+      return prevYear + "-" + String(prevQ * 3).padStart(2, "0");
+    }
+    const ORDINAL_TRIMESTRE = { 1: "primer", 2: "segundo", 3: "tercer", 4: "cuarto" };
+    function findMercadoRow(rows, comunaPrefix, clase) {
+      if (!rows) return null;
+      return rows.find(r => r.comuna && r.comuna.startsWith(comunaPrefix) &&
+        r.clase === clase && r.vacancia_pct !== undefined) || null;
+    }
+    function fmtMercadoNum(v, dec) {
+      return (v === null || v === undefined) ? null :
+        v.toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    }
+    const p1El = document.getElementById("txt-mercado-p1");
+    const p2El = document.getElementById("txt-mercado-p2");
+    if (mercadoPeriodo) {
+      const prevPeriodo = prevQuarterPeriodo(mercadoPeriodo);
+      const prevRows = F.mercado && F.mercado[prevPeriodo];
+      const submercado = S.page4.submercado;
+      const totalAct = findMercadoRow(mercadoRows, submercado, "Total");
+      const totalPrev = findMercadoRow(prevRows, submercado, "Total");
+      const claseAAct = findMercadoRow(mercadoRows, submercado, "A");
+      const claseAPrev = findMercadoRow(prevRows, submercado, "A");
+      const claseBAct = findMercadoRow(mercadoRows, submercado, "B");
+      const claseBPrev = findMercadoRow(prevRows, submercado, "B");
+
+      if (totalAct) {
+        const vAct = totalAct.vacancia_pct;
+        const vPrev = totalPrev ? totalPrev.vacancia_pct : null;
+        let verbo = "fue de";
+        let comparativo = "";
+        if (vPrev !== null && vPrev !== undefined) {
+          if (vAct < vPrev) verbo = "disminuyó a";
+          else if (vAct > vPrev) verbo = "aumentó a";
+          else verbo = "se mantuvo en";
+          comparativo = ` (${fmtQ(prevPeriodo)} ${fmtMercadoNum(vPrev, 1)}%)`;
+        }
+        p1El.textContent = `Respecto al submercado ${submercado}, donde se encuentran los edificios ` +
+          `${S.edificios.join(" y ")}, según el informe de JLL durante el ${fmtQ(mercadoPeriodo)} la vacancia ` +
+          `${verbo} ${fmtMercadoNum(vAct, 1)}%${comparativo}.`;
+        p1El.classList.remove("placeholder");
+      } else {
+        p1El.textContent = "Pendiente: párrafo de vacancia (informe JLL) — sin datos ingestados para este trimestre.";
+        p1El.classList.add("placeholder");
+      }
+
+      const partesRenta = [];
+      if (claseAAct) {
+        const rAct = fmtMercadoNum(claseAAct.renta_uf_m2, 2);
+        const rPrev = claseAPrev ? fmtMercadoNum(claseAPrev.renta_uf_m2, 2) : null;
+        partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase A`);
+      }
+      if (claseBAct) {
+        const rAct = fmtMercadoNum(claseBAct.renta_uf_m2, 2);
+        const rPrev = claseBPrev ? fmtMercadoNum(claseBPrev.renta_uf_m2, 2) : null;
+        partesRenta.push(`de ${rAct} UF/m² ${rPrev ? `(${fmtQ(prevPeriodo)} ${rPrev} UF/m²) ` : ""}en oficinas clase B`);
+      }
+      if (partesRenta.length) {
+        const { q } = periodoToYQ(mercadoPeriodo);
+        p2El.textContent = `Respecto al canon de arriendo promedio en ${submercado}, durante el ` +
+          `${ORDINAL_TRIMESTRE[q]} trimestre fue ${partesRenta.join(" y ")}.`;
+        p2El.classList.remove("placeholder");
+      } else {
+        p2El.textContent = "Pendiente: párrafo de canon de arriendo (informe JLL) — sin datos ingestados para este trimestre.";
+        p2El.classList.add("placeholder");
+      }
+    }
+
     document.getElementById("tbl-mercado-tbody").innerHTML =
       mercadoRows.map(r => {
         const cls = r.total ? ' class="row-total"' : '';
