@@ -1603,8 +1603,28 @@ function render(){
 
     document.getElementById("mercado-titulo").textContent =
       `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
+    function celdaMercado(v, esPct) {
+      if (v === null || v === undefined) return '<td class="placeholder">—</td>';
+      const texto = esPct
+        ? v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+        : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
+      return `<td>${texto}</td>`;
+    }
     document.getElementById("tbl-mercado-tbody").innerHTML =
-      S.page4.mercado_rows.map(r => `<tr${r.total ? ' class="row-total"' : ''}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
+      S.page4.mercado_rows.map(r => {
+        const cls = r.total ? ' class="row-total"' : '';
+        if (r.inventario_m2 === undefined) {
+          // sin datos ingestados para este trimestre: placeholders
+          return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+        }
+        return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
+          celdaMercado(r.inventario_m2, false) +
+          celdaMercado(r.absorcion_u12m_m2, false) +
+          celdaMercado(r.vacancia_pct, true) +
+          celdaMercado(r.renta_uf_m2, false) +
+          celdaMercado(r.construccion_m2, false) +
+          `</tr>`;
+      }).join("");
   }
 }
 

@@ -368,6 +368,39 @@ FONDOS_CFG = {
 }
 
 
+def _fetch_mercado_rows(db_path: str, periodo: str, proveedor: str = "JLL") -> list[dict]:
+    """Lee raw_mercado_oficinas para el periodo/proveedor dado, ordenado igual
+    que la tabla del fact sheet (Total, luego A, luego B; Santiago al final
+    de cada bloque)."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT submercado, clase, inventario_m2, absorcion_u12m_m2,
+                      vacancia_pct, renta_uf_m2, construccion_m2, es_total
+               FROM raw_mercado_oficinas
+               WHERE periodo = ? AND proveedor = ? AND superseded_at IS NULL
+               ORDER BY
+                   CASE clase WHEN 'Total' THEN 0 WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 3 END,
+                   es_total, id""",
+            (periodo, proveedor),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "comuna": r[0],
+            "clase": r[1],
+            "inventario_m2": r[2],
+            "absorcion_u12m_m2": r[3],
+            "vacancia_pct": r[4],
+            "renta_uf_m2": r[5],
+            "construccion_m2": r[6],
+            "total": bool(r[7]),
+        }
+        for r in rows
+    ]
+
+
 def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     cur = con.cursor()
     series_nemos = [s["nemo"] for s in cfg["series"]]
@@ -554,8 +587,23 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     ):
         dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
 
+    static_cfg = cfg
+    if fondo_key == "APO" and cfg.get("page4"):
+        periodos_disponibles = [
+            r[0] for r in cur.execute(
+                "SELECT DISTINCT periodo FROM raw_mercado_oficinas "
+                "WHERE proveedor='JLL' AND superseded_at IS NULL ORDER BY periodo DESC"
+            )
+        ]
+        mercado_rows_db = (
+            _fetch_mercado_rows(str(DB), periodos_disponibles[0])
+            if periodos_disponibles else []
+        )
+        if mercado_rows_db:
+            static_cfg = {**cfg, "page4": {**cfg["page4"], "mercado_rows": mercado_rows_db}}
+
     return {
-        "static": cfg,
+        "static": static_cfg,
         "contable": dict(sorted(contable.items())),
         "bursatil": dict(sorted(bursatil.items())),
         "fondo_kpi": dict(sorted(fondo_kpi.items())),
@@ -2520,8 +2568,28 @@ function render(){
 
     document.getElementById("mercado-titulo").textContent =
       `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
+    function celdaMercado(v, esPct) {
+      if (v === null || v === undefined) return '<td class="placeholder">—</td>';
+      const texto = esPct
+        ? v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+        : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
+      return `<td>${texto}</td>`;
+    }
     document.getElementById("tbl-mercado-tbody").innerHTML =
-      S.page4.mercado_rows.map(r => `<tr${r.total ? ' class="row-total"' : ''}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
+      S.page4.mercado_rows.map(r => {
+        const cls = r.total ? ' class="row-total"' : '';
+        if (r.inventario_m2 === undefined) {
+          // sin datos ingestados para este trimestre: placeholders
+          return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+        }
+        return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
+          celdaMercado(r.inventario_m2, false) +
+          celdaMercado(r.absorcion_u12m_m2, false) +
+          celdaMercado(r.vacancia_pct, true) +
+          celdaMercado(r.renta_uf_m2, false) +
+          celdaMercado(r.construccion_m2, false) +
+          `</tr>`;
+      }).join("");
   }
 }
 
