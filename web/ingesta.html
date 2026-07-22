@@ -137,6 +137,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="eeff">EEFF</button>
     <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
+    <button class="tab-btn" data-tab="mercado">Mercado</button>
   </div>
 </header>
 
@@ -288,6 +289,61 @@
 
 </div>
 
+<!-- ══════════════════════════ TAB MERCADO ══════════════════════════ -->
+<div id="tab-mercado" class="tab-panel">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Período y proveedor</div>
+    <div class="row">
+      <label class="muted" for="mercado-periodo">Período del informe (trimestral):</label>
+      <input type="month" id="mercado-periodo">
+      <label class="muted" for="mercado-proveedor">Proveedor:</label>
+      <select id="mercado-proveedor">
+        <option value="JLL">JLL</option>
+      </select>
+    </div>
+    <div class="row" id="mercado-periodo-status-row" style="margin-top:6px"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">2</span> Copia la tabla del PDF y pégala aquí</div>
+    <ol class="instructions">
+      <li>Abre el informe JLL del trimestre.</li>
+      <li>Selecciona y copia la tabla de mercado de oficinas completa (encabezado + las 18 filas).</li>
+      <li>Pega el texto tal cual en el cuadro de abajo.</li>
+    </ol>
+    <textarea id="mercado-input" placeholder="Pega aquí el texto copiado de la tabla del informe JLL..."></textarea>
+    <div class="row">
+      <button id="btn-mercado-validate">Validar y previsualizar</button>
+      <span id="mercado-validate-status" class="muted"></span>
+    </div>
+
+    <div id="mercado-preview" class="preview hidden">
+      <div class="badges" id="mercado-badges"></div>
+      <ul id="mercado-errors" class="msg-list err"></ul>
+      <ul id="mercado-warnings" class="msg-list warn"></ul>
+
+      <div id="mercado-section-tabla" class="hidden">
+        <h3>Filas detectadas</h3>
+        <table>
+          <thead><tr>
+            <th>Submercado</th><th>Clase</th><th class="num">Inventario (m²)</th>
+            <th class="num">Absorción U12M (m²)</th><th class="num">Vacancia (%)</th>
+            <th class="num">Renta (UF/m²)</th><th class="num">En construcción (m²)</th>
+          </tr></thead>
+          <tbody id="mercado-tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-mercado-confirm" disabled>Confirmar e ingestar</button>
+      <span id="mercado-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+</div>
+
 </main>
 
 <script>
@@ -302,6 +358,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 if (location.hash === '#rentroll') {
   document.querySelector('[data-tab="rentroll"]').click();
+} else if (location.hash === '#mercado') {
+  document.querySelector('[data-tab="mercado"]').click();
 }
 
 function fmt(n) {
@@ -872,6 +930,145 @@ btnRrConfirm.addEventListener('click', async () => {
   } catch (e) {
     rrIngestStatus.textContent = 'Error al ingestar: ' + e.message;
     btnRrConfirm.disabled = false;
+  }
+});
+
+// ── TAB MERCADO ──────────────────────────────────────────────────────────
+let lastMercadoTexto = null;
+let lastMercadoPeriodo = null;
+let lastMercadoProveedor = null;
+let lastMercadoValidationOk = false;
+
+const mercadoPeriodo = document.getElementById('mercado-periodo');
+const mercadoProveedor = document.getElementById('mercado-proveedor');
+const mercadoInput = document.getElementById('mercado-input');
+const btnMercadoValidate = document.getElementById('btn-mercado-validate');
+const mercadoValidateStatus = document.getElementById('mercado-validate-status');
+const btnMercadoConfirm = document.getElementById('btn-mercado-confirm');
+const mercadoIngestStatus = document.getElementById('mercado-ingest-status');
+const mercadoPeriodoStatusRow = document.getElementById('mercado-periodo-status-row');
+
+async function checkMercadoPeriodoStatus() {
+  const periodo = mercadoPeriodo.value;
+  const proveedor = mercadoProveedor.value;
+  mercadoPeriodoStatusRow.innerHTML = '';
+  if (!periodo) return;
+  try {
+    const res = await fetch(`/api/mercado/periodo_check?periodo=${periodo}&proveedor=${proveedor}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot warn"></span>${proveedor} ${periodo} ya tiene ${data.n_filas} fila(s) vigentes — reingestar las reemplazará.`;
+      mercadoPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) { /* silencioso */ }
+}
+mercadoPeriodo.addEventListener('change', checkMercadoPeriodoStatus);
+mercadoProveedor.addEventListener('change', checkMercadoPeriodoStatus);
+
+function resetMercadoPreview() {
+  document.getElementById('mercado-preview').classList.add('hidden');
+  btnMercadoConfirm.disabled = true;
+  lastMercadoValidationOk = false;
+  mercadoIngestStatus.textContent = '';
+}
+mercadoInput.addEventListener('input', resetMercadoPreview);
+mercadoPeriodo.addEventListener('change', resetMercadoPreview);
+
+function renderMercadoPreview(data) {
+  document.getElementById('mercado-preview').classList.remove('hidden');
+  const badges = document.getElementById('mercado-badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('mercado-errors');
+  const warnUl = document.getElementById('mercado-warnings');
+  errUl.innerHTML = '';
+  warnUl.innerHTML = '';
+
+  function addBadge(label, status) {
+    const el = document.createElement('span');
+    el.className = 'badge';
+    el.innerHTML = `<span class="dot ${status}"></span>${label}`;
+    badges.appendChild(el);
+  }
+  addBadge(data.ok ? 'Validación OK' : 'Validación con errores', data.ok ? 'ok' : 'err');
+  (data.errors || []).forEach(e => {
+    const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li);
+  });
+  (data.warnings || []).forEach(w => {
+    const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li);
+  });
+
+  const tablaBody = document.getElementById('mercado-tabla-body');
+  tablaBody.innerHTML = '';
+  if (data.ok && data.filas && data.filas.length) {
+    document.getElementById('mercado-section-tabla').classList.remove('hidden');
+    data.filas.forEach(f => {
+      const tr = document.createElement('tr');
+      if (f.es_total) tr.style.fontWeight = '700';
+      tr.innerHTML = `<td>${f.submercado}</td><td>${f.clase}</td>` +
+        `<td class="num">${fmt(f.inventario_m2)}</td><td class="num">${fmt(f.absorcion_u12m_m2)}</td>` +
+        `<td class="num">${f.vacancia_pct}%</td><td class="num">${f.renta_uf_m2}</td>` +
+        `<td class="num">${fmt(f.construccion_m2)}</td>`;
+      tablaBody.appendChild(tr);
+    });
+  } else {
+    document.getElementById('mercado-section-tabla').classList.add('hidden');
+  }
+
+  lastMercadoValidationOk = data.ok;
+  btnMercadoConfirm.disabled = !data.ok;
+}
+
+btnMercadoValidate.addEventListener('click', async () => {
+  const texto = mercadoInput.value;
+  const periodo = mercadoPeriodo.value;
+  const proveedor = mercadoProveedor.value;
+  if (!periodo) { mercadoValidateStatus.textContent = 'Declara el período del informe.'; return; }
+  mercadoValidateStatus.textContent = 'Validando…';
+  btnMercadoConfirm.disabled = true;
+  try {
+    const res = await fetch('/api/mercado/validate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto, periodo, proveedor}),
+    });
+    const data = await res.json();
+    lastMercadoTexto = texto;
+    lastMercadoPeriodo = periodo;
+    lastMercadoProveedor = proveedor;
+    renderMercadoPreview(data);
+    mercadoValidateStatus.textContent = '';
+  } catch (e) {
+    mercadoValidateStatus.textContent = 'Error: ' + e.message;
+  }
+});
+
+btnMercadoConfirm.addEventListener('click', async () => {
+  if (!lastMercadoValidationOk || lastMercadoTexto !== mercadoInput.value ||
+      lastMercadoPeriodo !== mercadoPeriodo.value || lastMercadoProveedor !== mercadoProveedor.value) {
+    mercadoIngestStatus.textContent = 'Los datos cambiaron desde la última validación — vuelve a validar.';
+    return;
+  }
+  btnMercadoConfirm.disabled = true;
+  mercadoIngestStatus.textContent = 'Ingestando…';
+  try {
+    const res = await fetch('/api/mercado/commit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto: lastMercadoTexto, periodo: lastMercadoPeriodo, proveedor: lastMercadoProveedor}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+    if (data.status === 'skipped_duplicate') {
+      mercadoIngestStatus.textContent = 'Este texto ya había sido ingestado antes — no se creó nada nuevo.';
+    } else {
+      mercadoIngestStatus.textContent =
+        `Listo: ${data.filas_insertadas} filas insertadas` +
+        (data.filas_superseded ? `, ${data.filas_superseded} filas anteriores reemplazadas` : '') +
+        ` (run #${data.run_id}).`;
+    }
+  } catch (e) {
+    mercadoIngestStatus.textContent = 'Error al ingestar: ' + e.message;
+    btnMercadoConfirm.disabled = false;
   }
 });
 </script>
