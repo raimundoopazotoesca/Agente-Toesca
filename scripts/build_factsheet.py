@@ -19,20 +19,29 @@ OUT = ROOT / "factsheet.html"
 
 def _notas_template(has_bursatil: bool) -> list[str]:
     """Notas (i)-(x) de metodología de la página 4 — boilerplate prácticamente
-    igual entre fondos, ver fact sheet Apo octubre 2025. Sin fechas hardcodeadas
-    (las fechas concretas de cada indicador ya se muestran en la página 1/2);
-    la única variación real entre fondos es si hay o no valor bursátil.
+    igual entre fondos (ver fact sheet Apo octubre 2025, que usa el formato dual
+    bursátil/contable en las notas aun cuando el fondo no tenga valor bursátil
+    vigente en el período — es el texto metodológico genérico, no depende de si
+    hay dato real). `has_bursatil` solo cambia si se describe la opción bursátil
+    además de la contable.
+
+    Las fechas concretas (cierre EEFF/contable, cierre bursátil/operacional, mes
+    operacional) NO se hardcodean acá: se insertan en runtime vía spans
+    data-slot="fecha-cb" / "fecha-op" / "mes-op", rellenados en render() según
+    el período seleccionado en cada momento (ver fillNotasFechas()).
     """
-    val_a = "al valor bursátil de las cuotas" if has_bursatil else "al valor libro de las cuotas"
+    fcb = "<span class=\"auto\" data-slot=\"fecha-cb\">—</span>"
+    fop = "<span class=\"auto\" data-slot=\"fecha-op\">—</span>"
+    mop = "<span class=\"auto\" data-slot=\"mes-op\">—</span>"
     val_ab = (
-        "a) aportes, repartos y venta de los inmuebles al valor bursátil de las cuotas, y "
-        "b) aportes, repartos y venta de los inmuebles al valor contable de las cuotas"
+        f"a) aportes, repartos y venta de los inmuebles al valor bursátil de las cuotas al {fop}, y "
+        f"b) aportes, repartos y venta de los inmuebles al valor contable al {fcb}"
         if has_bursatil else
-        "aportes, repartos y venta de los inmuebles al valor contable de las cuotas"
+        f"aportes, repartos y venta de los inmuebles al valor contable al {fcb}"
     )
     div_ab = (
-        "a) valor bursátil de las cuotas, y b) valor libro de las cuotas"
-        if has_bursatil else "valor libro de las cuotas"
+        f"a) valor bursátil de las cuotas al {fop}, y b) valor libro de las cuotas al {fcb}"
+        if has_bursatil else f"valor libro de las cuotas al {fcb}"
     )
     patrim_ab = (
         "la suma del valor bursátil del patrimonio y el saldo insoluto de la deuda"
@@ -40,23 +49,22 @@ def _notas_template(has_bursatil: bool) -> list[str]:
         "la suma del valor libro del patrimonio y el saldo insoluto de la deuda"
     )
     return [
-        f"Rentabilidad considerando: {val_ab}, al cierre del período.",
-        f"Suma de los dividendos de los últimos 12 meses sobre {div_ab}, al cierre del período. "
-        "Se consideran los últimos 4 dividendos repartidos.",
+        f"Rentabilidad considerando: {val_ab}.",
+        f"Suma de los dividendos de los últimos 12 meses sobre: {div_ab}. "
+        "Para este informe se consideró los últimos 4 dividendos repartidos.",
         f"Además de la suma de los dividendos de los últimos 12 meses, considera la amortización "
-        f"de capital en las cuotas de financiamiento de los últimos 12 meses, sobre {div_ab}.",
-        "Deuda consolidada del Fondo al cierre del período / Patrimonio contable al cierre del período.",
-        "Deuda consolidada del Fondo al cierre del período / Valor Activos según tasación.",
-        "Costo promedio de la deuda financiera del fondo, calculada ponderando la tasa de cada "
-        "financiamiento con el saldo insoluto respectivo al cierre del período.",
-        "Promedio ponderado del vencimiento de la deuda financiera del Fondo al cierre del período, "
+        f"de capital en las cuotas de financiamiento de los últimos 12 meses, sobre: {div_ab}.",
+        f"Deuda consolidada del Fondo al {fcb} / Patrimonio contable al {fcb}.",
+        f"Deuda consolidada del Fondo al {fcb} / Valor Activos según tasación.",
+        f"Costo promedio de la deuda financiera del fondo, calculada ponderando la tasa de cada "
+        f"financiamiento con el saldo insoluto respectivo al {fcb}.",
+        f"Promedio ponderado del vencimiento de la deuda financiera del Fondo al {fcb}, "
         "calculado utilizando la fórmula de Macaulay.",
-        "Porcentaje de la deuda financiera que se amortiza dentro de cada periodo a partir del "
-        "cierre del período.",
-        f"Ingreso renta percibido últimos 12 meses / Valor Activo (considera {patrim_ab}, neto de "
-        "la caja consolidada del fondo y de las inversiones en construcción).",
-        f"NOI percibido últimos 12 meses / Valor Activo (considera {patrim_ab}, neto de la caja "
-        "consolidada del fondo y de las inversiones en construcción).",
+        f"Porcentaje de la deuda financiera que se amortiza dentro de cada periodo a partir del {fcb}.",
+        f"Ingreso renta percibido últimos 12 meses (hasta {mop}) / Valor Activo (considera {patrim_ab}, "
+        f"neto de la caja consolidada del fondo y de las inversiones en construcción al {fop}).",
+        f"NOI percibido últimos 12 meses (hasta {mop}) / Valor Activo (considera {patrim_ab}, neto de "
+        f"la caja consolidada del fondo y de las inversiones en construcción al {fop}).",
     ]
 
 
@@ -305,7 +313,10 @@ FONDOS_CFG = {
         # Notas (i)-(x): boilerplate metodológico, prácticamente igual entre fondos —
         # solo cambia si el fondo tiene serie bursátil (S.has_bursatil).
         "page4": {
-            "notas": _notas_template(has_bursatil=False),
+            # Nota: la PDF real de Apo usa el formato dual bursátil/contable en las
+            # notas metodológicas aunque el fondo no tenga valor bursátil vigente
+            # (S.has_bursatil=False más arriba) — es boilerplate genérico compartido.
+            "notas": _notas_template(has_bursatil=True),
             "submercado": "Las Condes",
             "mercado_rows": [
                 {"comuna": "Las Condes (CBD)", "clase": "Total"},
@@ -1603,9 +1614,6 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
 
   <div id="page4-body">
-    <div class="section-title">Notas</div>
-    <ol id="lst-notas" style="font-size:10px;color:#333;padding-left:16px;line-height:1.5"></ol>
-
     <div class="section-title" id="mercado-titulo">Análisis de Mercado de Oficinas — Submercado —</div>
     <p class="small placeholder" id="txt-mercado-p1">Pendiente: párrafo de vacancia (informe JLL) — actualización manual, no proviene de la DB.</p>
     <p class="small placeholder" id="txt-mercado-p2">Pendiente: párrafo de canon de arriendo (informe JLL) — actualización manual, no proviene de la DB.</p>
@@ -1619,6 +1627,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <tbody id="tbl-mercado-tbody"></tbody>
       </table>
     </div>
+
+    <div class="section-title">Notas</div>
+    <ol id="lst-notas" style="font-size:10px;color:#333;padding-left:16px;line-height:1.5"></ol>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -2112,25 +2123,12 @@ function switchFund(f){
         .map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
   }
 
-  // Página 4 — notas metodológicas + análisis de mercado
+  // Página 4 — notas metodológicas + análisis de mercado (headers solo, datos después de pc/usadoOp)
   document.getElementById("hdr4-nombre").textContent = S.nombre;
   document.getElementById("hdr4-sub").textContent = S.sub;
   const hasPage4 = !!S.page4;
   document.getElementById("page4-pending").classList.toggle("hidden", hasPage4);
   document.getElementById("page4-body").classList.toggle("hidden", !hasPage4);
-  if (hasPage4) {
-    document.getElementById("lst-notas").innerHTML =
-      S.page4.notas.map(n => `<li>${n}</li>`).join("");
-
-    document.getElementById("mercado-titulo").textContent =
-      `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
-    document.getElementById("tbl-mercado-tbody").innerHTML =
-      S.page4.mercado_rows.map(r => `<tr${r.total ? ' class="row-total"' : ''}>
-        <td>${r.comuna}</td><td>${r.clase}</td>
-        <td class="placeholder">—</td><td class="placeholder">—</td>
-        <td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td>
-      </tr>`).join("");
-  }
 
   // Headers de tablas dependientes de series
   const seriesCols = S.series.map(s=>`<th>Serie ${s.label}</th>`).join("");
@@ -2481,6 +2479,32 @@ function render(){
   const mesRef = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
   document.getElementById("month-bar3").textContent = mesRef;
   document.getElementById("month-bar4").textContent = mesRef;
+
+  // Página 4: rellenar notas con fechas dinámicas (ahora pc y usadoOp están definidas)
+  const hasPage4 = !!S.page4;
+  if (hasPage4) {
+    document.getElementById("lst-notas").innerHTML =
+      S.page4.notas.map(n => `<li>${n}</li>`).join("");
+
+    // Rellenar slots de fecha en las notas
+    const fechaCbISO = pc ? pc + "-30" : "";
+    const fechaOpISO = usadoOp ? usadoOp + "-30" : "";
+    const mesOpLabel = usadoOp ? mesEspanol(usadoOp) : "";
+    document.querySelectorAll("[data-slot=\"fecha-cb\"]").forEach(el => {
+      el.textContent = fmtFechaLarga(fechaCbISO);
+    });
+    document.querySelectorAll("[data-slot=\"fecha-op\"]").forEach(el => {
+      el.textContent = fmtFechaLarga(fechaOpISO);
+    });
+    document.querySelectorAll("[data-slot=\"mes-op\"]").forEach(el => {
+      el.textContent = mesOpLabel;
+    });
+
+    document.getElementById("mercado-titulo").textContent =
+      `Análisis de Mercado de Oficinas — Submercado ${S.page4.submercado}`;
+    document.getElementById("tbl-mercado-tbody").innerHTML =
+      S.page4.mercado_rows.map(r => `<tr${r.total ? ' class="row-total"' : ''}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
+  }
 }
 
 // Init
