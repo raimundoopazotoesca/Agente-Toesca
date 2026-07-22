@@ -3,6 +3,7 @@ para los 3 fondos (TRI, PT, Apo) con selectores de fondo y período.
 """
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import sys
@@ -15,6 +16,12 @@ if str(ROOT) not in sys.path:
 
 DB = ROOT / "memory" / "agente_toesca_v2.db"
 OUT = ROOT / "factsheet.html"
+ASSETS = ROOT / "assets"
+
+
+def _data_uri(filename: str) -> str:
+    data = (ASSETS / filename).read_bytes()
+    return f"data:image/png;base64,{base64.b64encode(data).decode()}"
 
 
 def _notas_template(has_bursatil: bool) -> list[str]:
@@ -278,8 +285,10 @@ FONDOS_CFG = {
                 ("Administración", None),
                 ("Vacancia (m²)", None),
             ],
-            # foto por edificio: null hasta que se agregue el archivo (data URI o /static/...)
-            "fotos": {"Apoquindo 4501": None, "Apoquindo 4700": None},
+            "fotos": {
+                "Apoquindo 4501": _data_uri("apo4501fs.png"),
+                "Apoquindo 4700": _data_uri("apo4700fs.png"),
+            },
             "donut_gla": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
             "donut_ingresos": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
             "status_oficinas": [("Apoquindo 4501", None), ("Apoquindo 4700", None)],
@@ -906,7 +915,8 @@ def _raw_meta(cuenta_codigo: str) -> dict:
     }
 
 
-HTML_TEMPLATE = r"""<!DOCTYPE html>
+HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py — NO editar factsheet.html a mano, los cambios se pierden al regenerar. Editar HTML_TEMPLATE en el script y correr `python scripts/build_factsheet.py`. -->
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
@@ -1224,7 +1234,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   /* Fotos de activos (página 3) */
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-  .foto-box { aspect-ratio: 4/3; border-radius: 6px; overflow: hidden; background: #F4F4F4;
+  .foto-box { aspect-ratio: 403/669; border-radius: 6px; overflow: hidden; background: #F4F4F4;
     display: flex; align-items: center; justify-content: center; }
   .foto-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .foto-box .foto-placeholder { font-size: 10px; color: #999; text-align: center; padding: 8px; }
@@ -1285,7 +1295,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <select id="sel-periodo-cb" style="display:none" aria-hidden="true"></select>
     <select id="sel-periodo-op" style="display:none" aria-hidden="true"></select>
   </div>
-  <a href="http://localhost:8765/ingesta" target="_blank" rel="noopener" id="btn-ingesta" class="admin-toggle" style="text-decoration:none;text-align:center;display:block;margin-top:6px" title="Ingestar un nuevo EEFF a la base de datos (requiere tener ingesta.bat corriendo)">Ingesta EEFF</a>
+  <a href="http://localhost:8765/ingesta" target="_blank" rel="noopener" id="btn-ingesta" class="admin-toggle" style="text-decoration:none;text-align:center;display:block;margin-top:6px" title="Ingestar un nuevo EEFF a la base de datos (requiere tener ingesta.bat corriendo)">Ingesta FS</a>
   <button type="button" id="btn-admin" class="admin-toggle" title="Modo admin: click en cualquier número para ver cómo se calculó, y editar fechas de Noticias">✎ Admin</button>
 </div>
 <div id="main-content">
