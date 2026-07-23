@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 DB = ROOT / "memory" / "agente_toesca_v2.db"
 OUT = ROOT / "factsheet.html"
 ASSETS = ROOT / "assets"
+CHAT_BUBBLE_JS = ROOT / "web" / "chat_bubble.js"
 
 
 def _data_uri(filename: str) -> str:
@@ -3662,6 +3663,7 @@ function render(){
 })();
 </script>
 </div><!-- #main-content -->
+<script>__CHAT_BUBBLE_JS__</script>
 </body>
 </html>
 """
@@ -3678,10 +3680,12 @@ def main():
             meta_out[k] = _raw_meta(k)
         else:
             meta_out[k] = v
+    chat_bubble_js = CHAT_BUBBLE_JS.read_text(encoding="utf-8")
     html = (
         HTML_TEMPLATE
         .replace("__DATA_JSON__", json.dumps(all_data, ensure_ascii=False))
         .replace("__KPI_META_JSON__", json.dumps(meta_out, ensure_ascii=False))
+        .replace("__CHAT_BUBBLE_JS__", chat_bubble_js)
     )
     OUT.write_text(html, encoding="utf-8")
     print(f"OK -> {OUT}")

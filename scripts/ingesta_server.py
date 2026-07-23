@@ -26,6 +26,7 @@ from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
+from tools import db_chat  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
 
 
@@ -37,6 +38,24 @@ def _rebuild_factsheet() -> None:
         print(f"WARN: no se pudo regenerar factsheet.html: {exc}")
 
 app = Flask(__name__, static_folder=None)
+
+
+@app.after_request
+def _add_cors_headers(response):
+    # factsheet.html suele abrirse como file:// (origen "null"), que necesita
+    # CORS explicito para poder llamar a /api/chat en localhost.
+    origin = request.headers.get("Origin", "")
+    if origin in ("null", "") or origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost"):
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+@app.route("/api/chat", methods=["OPTIONS"])
+def _api_chat_preflight():
+    return "", 204
+
 
 PROMPTS_DIR = ROOT / "prompts"
 WEB_DIR = ROOT / "web"
@@ -69,6 +88,33 @@ def serve_page():
 @app.get("/db-diagrama")
 def serve_db_diagram():
     return send_from_directory(WEB_DIR, "db_diagrama_interactivo.html")
+
+
+@app.get("/factsheet")
+def serve_factsheet():
+    return send_from_directory(str(ROOT), "factsheet.html")
+
+
+@app.get("/chat_bubble.js")
+def serve_chat_bubble():
+    return send_from_directory(WEB_DIR, "chat_bubble.js", mimetype="application/javascript")
+
+
+@app.post("/api/chat")
+def api_chat():
+    body = request.get_json(force=True, silent=True) or {}
+    question = str(body.get("question", ""))
+    history = body.get("history") or []
+    if not isinstance(history, list):
+        history = []
+    try:
+        result = db_chat.answer(question, history)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({
+            "answer_md": f"⚠️ Error inesperado: {exc}",
+            "error": "server_error",
+        }), 500
+    return jsonify(result)
 
 
 @app.get("/api/estado_ingesta")
