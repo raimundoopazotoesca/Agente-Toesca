@@ -228,7 +228,7 @@
   .mini-fuente { font-size: 10.5px; color: #a0a0a0; margin-top: 10px; }
 
   .mini-bursatil-table {
-    display: grid; grid-template-columns: 48px 1fr 82px;
+    display: grid; grid-template-columns: 48px 1fr 90px 82px;
     gap: 5px 10px; margin-top: 12px;
   }
   .mini-bursatil-row { display: contents; }
@@ -243,6 +243,7 @@
   .mini-serie { font-size: 12px; color: #2b2b2b; font-weight: 600; align-self: center; }
   .mini-fecha { font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
   .mini-bursatil-headrow .mini-fecha { text-align: right; }
+  .mini-precio { font-size: 15px; font-weight: 700; color: #2b2b2b; text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
 </style>
 </head>
 <body>
@@ -1290,6 +1291,7 @@ function renderMiniCards(data) {
     <div class="mini-bursatil-row">
       <span class="mini-fondo-badge">${v.fondo || '—'}</span>
       <span class="mini-serie">${v.serie ? 'Serie ' + v.serie : v.nemotecnico}</span>
+      <span class="mini-precio">${_fmtCLP(v.precio_clp)}</span>
       <span class="mini-fecha">${v.fecha || '—'}</span>
     </div>
   `).join('');
@@ -1302,7 +1304,7 @@ function renderMiniCards(data) {
       <div class="mini-sub">${bSub}</div>
       <div class="mini-bursatil-table">
         <div class="mini-bursatil-row mini-bursatil-headrow">
-          <span>Fondo</span><span>Serie</span><span>Fecha</span>
+          <span>Fondo</span><span>Serie</span><span style="text-align:right">Valor cuota</span><span>Fecha</span>
         </div>
         ${filasHtml}
       </div>

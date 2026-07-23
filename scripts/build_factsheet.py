@@ -287,6 +287,8 @@ FONDOS_CFG = {
             ],
             "parking": True,
             "tasaciones_edificios": ["Torre A", "Inmobiliaria Boulevard"],
+            "tasaciones_activo_map": {"Torre A": "Torre A", "Inmobiliaria Boulevard": "Boulevard"},
+            "tasaciones_deuda_por_activo": True,
             "tasaciones_total_nombre": "Fondo Rentas PT",
             "tasaciones_periodo": ("Tasación año anterior", "Tasación año actual"),
         },
@@ -711,6 +713,81 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             edificio = activo_key_a_edificio[activo_key]
             ingresos_edificios_por_periodo.setdefault(periodo, {})[edificio] = monto
 
+    # ---- Página 3: tasaciones por edificio (fact_tasacion, tasador='Promedio') ----
+    # Se exporta la serie COMPLETA (todos los años / todos los meses de deuda)
+    # en vez de un snapshot fijo: el JS elige en render(), según el período
+    # seleccionado por el usuario (usadoOp), el año de tasación y el mes de
+    # deuda vigentes a esa fecha ("último dato disponible <= período
+    # seleccionado" — así en 2026 sigue mostrando la tasación 2025, la más
+    # reciente existente). ingresos_activo_map se reutiliza como fallback
+    # cuando el fondo no define tasaciones_activo_map propio (labels
+    # coinciden, caso Apo). Por defecto la deuda se combina a nivel fondo
+    # (Apo: un solo crédito para ambos edificios); con
+    # page3.tasaciones_deuda_por_activo=True además se exporta la deuda por
+    # activo_key (PT: Torre A y Boulevard tienen créditos separados).
+    tasaciones_data = None
+    tasaciones_activo_map = (cfg.get("page3") or {}).get("tasaciones_activo_map") or ingresos_activo_map
+    tasaciones_deuda_por_activo = (cfg.get("page3") or {}).get("tasaciones_deuda_por_activo", False)
+    if (cfg.get("page3") or {}).get("tasaciones_edificios") and tasaciones_activo_map:
+        edificios_out: dict[str, dict] = {}
+        for edificio, activo_key in tasaciones_activo_map.items():
+            rows = cur.execute(
+                "SELECT periodo, fecha, valor_uf, variacion_pct FROM fact_tasacion "
+                "WHERE activo_key = ? AND tasador = 'Promedio' ORDER BY periodo",
+                (activo_key,),
+            ).fetchall()
+            if not rows:
+                continue
+            years = {r[0]: {"fecha": r[1], "valor_uf": r[2], "variacion_pct": r[3]} for r in rows}
+
+            deuda_por_mes_ed = {}
+            if tasaciones_deuda_por_activo:
+                deuda_por_mes_ed = {
+                    r[0]: r[1] for r in cur.execute(
+                        "SELECT s.periodo, s.saldo_uf FROM dim_credito c JOIN raw_saldo_deuda s ON s.credito_key = c.credito_key "
+                        "WHERE c.fondo_key = ? AND c.activo_key = ? AND c.estado = 'VIGENTE' ORDER BY s.periodo",
+                        (fondo_key, activo_key),
+                    ).fetchall()
+                }
+            edificios_out[edificio] = {"years": years, "deuda_por_mes": deuda_por_mes_ed}
+
+        if edificios_out:
+            deuda_fondo_por_mes = {
+                r[0]: r[1] for r in cur.execute(
+                    "SELECT s.periodo, SUM(s.saldo_uf) FROM dim_credito c JOIN raw_saldo_deuda s ON s.credito_key = c.credito_key "
+                    "WHERE c.fondo_key = ? AND c.estado = 'VIGENTE' GROUP BY s.periodo ORDER BY s.periodo",
+                    (fondo_key,),
+                ).fetchall()
+            }
+            tasaciones_data = {
+                "edificios": edificios_out,
+                "deuda_por_activo": tasaciones_deuda_por_activo,
+                "deuda_fondo_por_mes": deuda_fondo_por_mes,
+            }
+
+    # ---- Página 3: "Resultados Parking (UF)" — serie mensual PT ----
+    parking_data = None
+    if (cfg.get("page3") or {}).get("parking"):
+        rows = cur.execute(
+            """SELECT r.periodo, r.ingresos_abonados_uf, r.ingresos_variables_uf,
+                      r.resultado_neto_uf, o.ocupacion_mensual
+                 FROM v_parking_resultado_uf r
+                 LEFT JOIN v_parking_ocupacion_mensual o
+                        ON o.periodo = r.periodo AND o.activo_key = 'Parking PT'
+                ORDER BY r.periodo"""
+        ).fetchall()
+        if rows:
+            parking_data = [
+                {
+                    "periodo": periodo,
+                    "abonados_uf": abonados_uf,
+                    "variables_uf": variables_uf,
+                    "resultado_uf": resultado_uf,
+                    "ocupacion": ocupacion,
+                }
+                for periodo, abonados_uf, variables_uf, resultado_uf, ocupacion in rows
+            ]
+
     return {
         "static": cfg,
         "contable": dict(sorted(contable.items())),
@@ -722,6 +799,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "dividendos": dividendos,
         "mercado": mercado_por_periodo,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
+        "tasaciones": tasaciones_data,
+        "parking": parking_data,
         "perf_data": _fetch_perf_data(fondo_key),
     }
 
@@ -1392,6 +1471,36 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     font-weight: 700; white-space: nowrap;
   }
 
+  /* Grafico "Resultados Parking (UF)" - SVG combo (barras apiladas + lineas), sin librerias */
+  .parking-chart {
+    position: relative; display: flex; flex-direction: column; height: 100%;
+    padding-top: 2px;
+  }
+  .parking-chart svg {
+    flex: 1; width: 100%; height: auto; overflow: visible;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  .parking-legend {
+    display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center;
+    font-size: 10px; color: #33413b; margin-top: 4px;
+  }
+  .parking-legend .row { display: flex; align-items: center; gap: 5px; }
+  .parking-legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .parking-legend .swatch.line { height: 3px; border-radius: 3px; }
+  .parking-tooltip {
+    position: absolute; min-width: 168px; pointer-events: none; opacity: 0;
+    transform: translate(-50%, -108%); transition: opacity 120ms ease;
+    background: rgba(255,255,255,0.97); border: 1px solid #D8E0DD;
+    border-radius: 6px; box-shadow: 0 6px 18px rgba(25,45,38,0.16);
+    padding: 8px 9px; font-size: 10px; color: #26352F; z-index: 2;
+  }
+  .parking-tooltip.on { opacity: 1; }
+  .parking-tooltip .title { font-weight: 700; margin-bottom: 5px; color: #15221D; }
+  .parking-tooltip .line { display: flex; justify-content: space-between; gap: 16px; margin: 2px 0; }
+  .parking-tooltip .label { display: flex; align-items: center; gap: 5px; color: #52645D; }
+  .parking-tooltip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .parking-tooltip .value { font-weight: 700; color: #25342F; }
+
   /* Barra de ocupación (reemplaza el treemap de la referencia — mismo dato, layout simplificado) */
   .occ-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 8px 6px; }
   .occ-bar { background: #EDEDED; border-radius: 4px; height: 14px; overflow: hidden; }
@@ -1760,7 +1869,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           <div class="section-title">Tasaciones</div>
           <div style="overflow-x:auto">
             <table id="tbl-tasaciones">
-              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th id="th-tasacion-deuda">Deuda</th><th>LTV</th></tr></thead>
               <tbody id="tbl-tasaciones-tbody"></tbody>
             </table>
           </div>
@@ -1809,7 +1918,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           <div class="section-title">Tasaciones</div>
           <div style="overflow-x:auto">
             <table id="tbl-tasaciones-t">
-              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th>Deuda</th><th>LTV</th></tr></thead>
+              <thead><tr><th></th><th>Valor Tasación</th><th>Fecha Tasación</th><th id="th-tasacion-deuda-t">Deuda</th><th>LTV</th></tr></thead>
               <tbody id="tbl-tasaciones-tbody-t"></tbody>
             </table>
           </div>
@@ -1821,7 +1930,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           </div>
 
           <div class="section-title" style="margin-top:10px">Resultados Parking (UF)</div>
-          <div class="chart-placeholder" id="chart-parking" style="height:260px">Pendiente de datos</div>
+          <div id="chart-parking" style="height:260px"></div>
         </div>
         <div class="fotos-grid" id="grid-fotos-t"></div>
       </div>
@@ -2078,6 +2187,108 @@ function fmtPct(v,d=1){ if(v==null||isNaN(v)) return "—"; return (v*100).toFix
 function fmtNum(v,d=1){ if(v==null||isNaN(v)) return "—"; return Number(v).toFixed(d).replace(".",","); }
 function fmtEnteroMiles(v){ if(v==null||isNaN(v)) return "—"; return Math.round(v).toLocaleString("es-CL"); }
 function fmtFechaCorta(iso){ if(!iso) return ""; const p=iso.split("-"); return p[2]+"-"+p[1]+"-"+p[0]; }
+function fmtTrimestre(iso){ if(!iso) return ""; const [y,m]=iso.split("-"); return `${Math.ceil(Number(m)/3)}Q${y.slice(2)}`; }
+function fmtMesAno(periodo){ if(!periodo) return ""; const [y,m]=periodo.split("-"); return `${m}-${y.slice(2)}`; }
+
+// Del diccionario {periodo: valor} (años "YYYY" o meses "YYYY-MM", comparables
+// como string), devuelve la entrada con el período más reciente <= target.
+function latestAtOrBefore(dict, target){
+  if (!dict || !target) return null;
+  const keys = Object.keys(dict).filter(k => k <= target).sort();
+  if (!keys.length) return null;
+  const k = keys[keys.length - 1];
+  return { periodo: k, value: dict[k] };
+}
+
+// Página 3 — tabla de Tasaciones (edificio/tenant): recalcula año de
+// tasación y mes de deuda vigentes según el período operacional seleccionado
+// (usadoOp) — "último dato disponible <= usadoOp", así en 2026 sigue
+// mostrando la tasación 2025 mientras no exista una más nueva.
+function fillTasaciones(F, p3, usadoOp, tbodyId, deudaTheadId, compTheadPrevId, compTheadActualId, compTbodyId){
+  const td = F.tasaciones;
+  const edificios = p3.tasaciones_edificios;
+  const n = edificios.length;
+  const selectedYear = usadoOp ? usadoOp.slice(0, 4) : null;
+
+  const perEdificio = {};
+  edificios.forEach(nombre => {
+    const e = td && td.edificios[nombre];
+    const years = e && e.years ? Object.keys(e.years).sort() : [];
+    const atOrBefore = selectedYear ? years.filter(y => y <= selectedYear) : years;
+    const actualYear = atOrBefore.length ? atOrBefore[atOrBefore.length - 1] : null;
+    const priorYears = actualYear ? years.filter(y => y < actualYear) : [];
+    const prevYear = priorYears.length ? priorYears[priorYears.length - 1] : null;
+    perEdificio[nombre] = {
+      actual: actualYear ? { periodo: actualYear, ...e.years[actualYear] } : null,
+      prev: prevYear ? { periodo: prevYear, ...e.years[prevYear] } : null,
+    };
+  });
+
+  const actualYears = edificios.map(nombre => perEdificio[nombre].actual && perEdificio[nombre].actual.periodo).filter(Boolean).sort();
+  const fundActualYear = actualYears.length ? actualYears[actualYears.length - 1] : null;
+  const prevYears = edificios.map(nombre => perEdificio[nombre].prev && perEdificio[nombre].prev.periodo).filter(Boolean).sort();
+  const fundPrevYear = prevYears.length ? prevYears[prevYears.length - 1] : null;
+
+  let totalValorActual = 0, totalValorPrev = 0, anyActual = false, anyPrev = false;
+  edificios.forEach(nombre => {
+    const a = perEdificio[nombre].actual, p = perEdificio[nombre].prev;
+    if (a) { totalValorActual += a.valor_uf || 0; anyActual = true; }
+    if (p) { totalValorPrev += p.valor_uf || 0; anyPrev = true; }
+  });
+  const totalVarPct = (anyActual && anyPrev && totalValorPrev) ? (totalValorActual - totalValorPrev) / totalValorPrev : null;
+
+  const deudaFondo = usadoOp ? latestAtOrBefore(td && td.deuda_fondo_por_mes, usadoOp) : null;
+  const deudaTotal = deudaFondo ? deudaFondo.value : null;
+  const totalLtv = (deudaTotal != null && totalValorActual) ? deudaTotal / totalValorActual : null;
+
+  document.getElementById(deudaTheadId).textContent =
+    deudaFondo ? `Deuda (${fmtMesAno(deudaFondo.periodo)})` : "Deuda";
+  const deudaCell = deudaTotal != null ? fmtEnteroMiles(deudaTotal) : "—";
+  const ltvCell = totalLtv != null ? fmtPct(totalLtv) : "—";
+
+  const porActivo = !!(td && td.deuda_por_activo);
+  const rowSnapshot = (nombre, i) => {
+    const a = perEdificio[nombre].actual;
+    const valor = a ? fmtEnteroMiles(a.valor_uf) : "—";
+    const fecha = a && a.fecha ? fmtTrimestre(a.fecha) : "—";
+    if (porActivo) {
+      const e = td && td.edificios[nombre];
+      const deudaEdEntry = usadoOp ? latestAtOrBefore(e && e.deuda_por_mes, usadoOp) : null;
+      const deudaEdVal = deudaEdEntry ? deudaEdEntry.value : null;
+      const ltvEd = (deudaEdVal != null && a && a.valor_uf) ? deudaEdVal / a.valor_uf : null;
+      return `<tr><td>${nombre}</td><td>${valor}</td><td>${fecha}</td><td>${deudaEdVal != null ? fmtEnteroMiles(deudaEdVal) : "—"}</td><td>${ltvEd != null ? fmtPct(ltvEd) : "—"}</td></tr>`;
+    }
+    const merged = i === 0
+      ? `<td rowspan="${n}">${deudaCell}</td><td rowspan="${n}">${ltvCell}</td>`
+      : "";
+    return `<tr><td>${nombre}</td><td>${valor}</td><td>${fecha}</td>${merged}</tr>`;
+  };
+  const totalSnapshot =
+    `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td>${anyActual ? fmtEnteroMiles(totalValorActual) : "—"}</td><td></td>`
+    + `<td>${deudaCell}</td><td>${ltvCell}</td></tr>`;
+  document.getElementById(tbodyId).innerHTML =
+    edificios.map(rowSnapshot).join("") + totalSnapshot;
+
+  document.getElementById(compTheadPrevId).textContent =
+    fundPrevYear ? `Tasación ${fundPrevYear}` : p3.tasaciones_periodo[0];
+  document.getElementById(compTheadActualId).textContent =
+    fundActualYear ? `Tasación ${fundActualYear}` : p3.tasaciones_periodo[1];
+
+  const placeholderRow3 = (nombre) =>
+    `<tr><td>${nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+  const rowComp = (nombre) => {
+    const a = perEdificio[nombre].actual, p = perEdificio[nombre].prev;
+    if (!a) return placeholderRow3(nombre);
+    const prevVal = p ? fmtEnteroMiles(p.valor_uf) : "—";
+    const varPct = a.variacion_pct;
+    return `<tr><td>${nombre}</td><td>${prevVal}</td><td>${fmtEnteroMiles(a.valor_uf)}</td><td>${varPct != null ? fmtPct(varPct) : "—"}</td></tr>`;
+  };
+  const totalComp = anyActual
+    ? `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td>${anyPrev ? fmtEnteroMiles(totalValorPrev) : "—"}</td><td>${fmtEnteroMiles(totalValorActual)}</td><td>${totalVarPct != null ? fmtPct(totalVarPct) : "—"}</td></tr>`
+    : placeholderRow3(p3.tasaciones_total_nombre);
+  document.getElementById(compTbodyId).innerHTML =
+    [...edificios.map(rowComp), totalComp].join("");
+}
 function fmtFechaLarga(iso){
   if(!iso) return "";
   const [y,m,d] = iso.split("-").map(Number);
@@ -2456,16 +2667,9 @@ function switchFund(f){
       document.getElementById(containerId).innerHTML =
         p3.aspectos_mes.map(([k]) => `<p><b>${k}:</b> <span class="placeholder">Pendiente.</span></p>`).join("");
     };
-    const fillTasaciones = (tbodyId, compTheadPrevId, compTheadActualId, compTbodyId) => {
-      document.getElementById(tbodyId).innerHTML =
-        p3.tasaciones_edificios.map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
-        + `<tr class="row-total"><td>${p3.tasaciones_total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
-      document.getElementById(compTheadPrevId).textContent = p3.tasaciones_periodo[0];
-      document.getElementById(compTheadActualId).textContent = p3.tasaciones_periodo[1];
-      document.getElementById(compTbodyId).innerHTML =
-        [...p3.tasaciones_edificios, p3.tasaciones_total_nombre]
-          .map(n => `<tr><td>${n}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("");
-    };
+    // Tasaciones (valores reales, dependientes del período) se llenan en
+    // render(), que corre justo después y sí tiene acceso al período
+    // seleccionado (usadoOp) — ver fillTasaciones() a nivel de módulo.
 
     if (edificioMode) {
       // Layout Apo — sin cambios respecto al original.
@@ -2509,8 +2713,6 @@ function switchFund(f){
           </table>
         </div>`;
       document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
-
-      fillTasaciones("tbl-tasaciones-tbody", "th-tasacion-prev", "th-tasacion-actual", "tbl-tasaciones-comp-tbody");
     } else if (tenantMode) {
       // Layout PT (tenant): ids propios sufijo "-t", separados del layout Apo.
       fillAspectos("tbl-aspectos-t");
@@ -2518,7 +2720,6 @@ function switchFund(f){
       donutPending("donut-gla-t");
       donutPending("donut-ingresos-t");
       fillAspectosMes("txt-aspectos-mes-t");
-      fillTasaciones("tbl-tasaciones-tbody-t", "th-tasacion-prev-t", "th-tasacion-actual-t", "tbl-tasaciones-comp-tbody-t");
     }
     // Layout "mercado" (TRI): la tabla/párrafos se rellenan en render(), que
     // corre después de switchFund() y tiene acceso al período seleccionado.
@@ -2607,6 +2808,161 @@ function renderDonut(containerId, data){
   ).join("");
   document.getElementById(containerId).innerHTML =
     `<div class="donut" style="background:conic-gradient(${stops})">${labels}</div><div class="donut-legend">${legend}</div>`;
+}
+
+// "Resultados Parking (UF)" - barras apiladas + lineas de resultado y ocupación.
+function renderParkingChart(containerId, rows){
+  const el = document.getElementById(containerId);
+  if (!rows || !rows.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = {
+    abonados: "#46504D",
+    variables: "#05A978",
+    resultado: "#2C6FB3",
+    ocupacion: "#D49B28",
+    grid: "#E8EEEB",
+    axis: "#AEBBB5",
+    text: "#6D7C75"
+  };
+  const W = 900, H = 280, padL = 52, padR = 48, padT = 18, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = rows.length;
+  const x = i => padL + (i + 0.5) * (plotW / n);
+  const bw = Math.max(3, (plotW / n) * 0.50);
+
+  const maxUf = Math.max(1, ...rows.map(r => (r.abonados_uf||0) + (r.variables_uf||0)), ...rows.map(r => r.resultado_uf||0));
+  const yMax = Math.ceil(maxUf / 500) * 500;
+  const maxOcc = Math.max(0.1, ...rows.map(r => r.ocupacion||0));
+  const yMaxPct = Math.min(1, Math.ceil(maxOcc / 0.1) * 0.1 + 0.1);
+  const yUf = v => padT + plotH - (v / yMax) * plotH;
+  const yPct = v => padT + plotH - (v / yMaxPct) * plotH;
+
+  const nGrid = 5;
+  let gridLines = "", yLabelsL = "", yLabelsR = "";
+  for (let g = 0; g <= nGrid; g++){
+    const vUf = yMax * g / nGrid, vPct = yMaxPct * g / nGrid;
+    const y = padT + plotH - plotH * g / nGrid;
+    const strong = g === 0;
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="${strong ? C.axis : C.grid}" stroke-width="${strong ? 1.2 : 1}"/>`;
+    yLabelsL += `<text x="${padL-8}" y="${y+3}" font-size="10" text-anchor="end" fill="${C.text}">${vUf.toLocaleString('es-CL')}</text>`;
+    yLabelsR += `<text x="${W-padR+8}" y="${y+3}" font-size="10" text-anchor="start" fill="${C.text}">${Math.round(vPct*100)}%</text>`;
+  }
+  const axisLabels =
+    `<text x="${padL}" y="10" font-size="10" font-weight="700" text-anchor="start" fill="${C.text}">UF</text>` +
+    `<text x="${W-padR}" y="10" font-size="10" font-weight="700" text-anchor="end" fill="${C.text}">Ocup.</text>`;
+
+  const bars = rows.map((r,i) => {
+    const abon = r.abonados_uf||0, vari = r.variables_uf||0;
+    const xb = x(i) - bw/2;
+    const yAbonTop = yUf(abon), yBase = yUf(0), yVariTop = yUf(abon+vari);
+    return `<rect x="${xb.toFixed(1)}" y="${yAbonTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,yBase-yAbonTop).toFixed(1)}" rx="2" fill="${C.abonados}"/>` +
+           `<rect x="${xb.toFixed(1)}" y="${yVariTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,yAbonTop-yVariTop).toFixed(1)}" rx="2" fill="${C.variables}"/>`;
+  }).join("");
+
+  const path = (fn) => rows.map((r,i) => `${i===0?'M':'L'}${x(i).toFixed(1)},${fn(r).toFixed(1)}`).join(" ");
+  const lineRes = path(r => yUf(r.resultado_uf||0));
+  const lineOcc = path(r => yPct(r.ocupacion||0));
+
+  const monthLabels = {1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun", 7: "jul", 8: "ago", 9: "sept", 10: "oct", 11: "nov", 12: "dic"};
+  const pxPerMonth = plotW / n;
+  const tickInterval = pxPerMonth >= 42 ? 1 : (pxPerMonth >= 28 ? 2 : 3);
+  const xLabels = rows.map((r,i) => {
+    const [y,m] = r.periodo.split("-");
+    const mm = parseInt(m,10);
+    const quarterMonth = [3, 6, 9, 12].includes(mm);
+    const showTick = tickInterval === 3 ? quarterMonth : (i % tickInterval === 0);
+    if (!showTick) return "";
+    const xx = x(i);
+    const label = `${monthLabels[mm]}-${y.slice(2)}`;
+    return `<line x1="${xx}" y1="${padT+plotH}" x2="${xx}" y2="${padT+plotH+4}" stroke="${C.axis}" stroke-width="1"/>` +
+           `<text x="${xx}" y="${H-11}" font-size="10" text-anchor="middle" fill="${C.text}">${label}</text>`;
+  }).join("");
+  const hitW = plotW / n;
+  const hoverRects = rows.map((r,i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Resultados mensuales del parking en UF y ocupación">
+        ${gridLines}
+        ${axisLabels}
+        ${bars}
+        <path d="${lineRes}" fill="none" stroke="${C.resultado}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="${lineOcc}" fill="none" stroke="${C.ocupacion}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        <circle class="parking-marker parking-marker-res" cx="0" cy="0" r="4.2" fill="#fff" stroke="${C.resultado}" stroke-width="2" opacity="0"/>
+        <circle class="parking-marker parking-marker-occ" cx="0" cy="0" r="4.2" fill="#fff" stroke="${C.ocupacion}" stroke-width="2" opacity="0"/>
+        ${yLabelsL}${yLabelsR}${xLabels}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+      <div class="parking-legend">
+        <div class="row"><span class="swatch" style="background:${C.abonados}"></span>Ingresos Abonados</div>
+        <div class="row"><span class="swatch" style="background:${C.variables}"></span>Ingresos Variables</div>
+        <div class="row"><span class="swatch line" style="background:${C.resultado}"></span>Resultados UF</div>
+        <div class="row"><span class="swatch line" style="background:${C.ocupacion}"></span>Ocupación</div>
+      </div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const markerRes = el.querySelector(".parking-marker-res");
+  const markerOcc = el.querySelector(".parking-marker-occ");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return {
+      left: s.left - w.left + (vx / W) * s.width,
+      top: s.top - w.top + (vy / H) * s.height
+    };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const r = rows[i], xx = x(i);
+    const stack = (r.abonados_uf||0) + (r.variables_uf||0);
+    const resY = yUf(r.resultado_uf||0), occY = yPct(r.ocupacion||0);
+    const p = toPx(xx, Math.min(yUf(stack), resY, occY));
+    const [year, month] = r.periodo.split("-");
+    const periodo = `${MESES[parseInt(month,10)-1]} ${year}`;
+    tooltip.innerHTML =
+      `<div class="title">${periodo}</div>` +
+      htmlLine("Abonados", `${fmtEnteroMiles(r.abonados_uf)} UF`, C.abonados) +
+      htmlLine("Variables", `${fmtEnteroMiles(r.variables_uf)} UF`, C.variables) +
+      htmlLine("Resultado", `${fmtEnteroMiles(r.resultado_uf)} UF`, C.resultado) +
+      htmlLine("Ocupación", fmtPct(r.ocupacion), C.ocupacion);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(74, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+    markerRes.setAttribute("cx", xx);
+    markerRes.setAttribute("cy", resY);
+    markerRes.setAttribute("opacity", "1");
+    markerOcc.setAttribute("cx", xx);
+    markerOcc.setAttribute("cy", occY);
+    markerOcc.setAttribute("opacity", "1");
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+    markerRes.setAttribute("opacity", "0");
+    markerOcc.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
 }
 
 function renderPerfActivosHeader(p2, perfData){
@@ -2910,6 +3266,24 @@ function render(){
       document.getElementById("donut-ingresos").innerHTML =
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     }
+  }
+
+  // Página 3 Apo/PT: tabla de Tasaciones — depende del período seleccionado
+  // (usadoOp), se recalcula en cada render() en vez de una sola vez al
+  // cambiar de fondo.
+  if (S.page3 && S.page3.tasaciones_edificios) {
+    if (S.page3.edificios) {
+      fillTasaciones(F, S.page3, usadoOp, "tbl-tasaciones-tbody", "th-tasacion-deuda", "th-tasacion-prev", "th-tasacion-actual", "tbl-tasaciones-comp-tbody");
+    } else {
+      fillTasaciones(F, S.page3, usadoOp, "tbl-tasaciones-tbody-t", "th-tasacion-deuda-t", "th-tasacion-prev-t", "th-tasacion-actual-t", "tbl-tasaciones-comp-tbody-t");
+    }
+  }
+
+  // Página 3 PT: parking debe seguir el selector operacional. Se muestran
+  // solo los meses disponibles hasta el período seleccionado.
+  if (S.page3 && S.page3.parking) {
+    const parkingRows = (F.parking || []).filter(r => !usadoOp || r.periodo <= usadoOp);
+    renderParkingChart("chart-parking", parkingRows);
   }
 
   // Página 3 TRI: tabla de mercado de oficinas — misma fuente que la del

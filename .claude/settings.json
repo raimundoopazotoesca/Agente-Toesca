@@ -28,12 +28,14 @@
       "Bash(git reset *)",
       "Bash(cp \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/69f243a9-1050-4c9f-b807-9082e93d9ca2/scratchpad/NOI_PT.xlsx\" \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/02786c58-6c23-4b0e-b32a-a02ab3700f81/scratchpad/NOI_PT.xlsx\" *)",
       "Bash(python scripts/build_factsheet.py)",
-      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" status)"
+      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" status)",
+      "Bash(cp \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\\\\scratch_page3.png\" \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/66e5a4a7-7b02-48de-87d5-2196e700394f/scratchpad/scratch_page3.png\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\raimundo.opazo\\.claude\\skills",
       "c:\\Users\\raimundo.opazo\\automation_agent\\docs\\superpowers\\specs",
-      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\69f243a9-1050-4c9f-b807-9082e93d9ca2\\scratchpad"
+      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\69f243a9-1050-4c9f-b807-9082e93d9ca2\\scratchpad",
+      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\66e5a4a7-7b02-48de-87d5-2196e700394f\\scratchpad"
     ]
   },
   "enabledPlugins": {
