@@ -41,6 +41,7 @@
 | [[activos/vina-centro]] | Viña Centro — Tres Asociados | TRI | 2026-05-01 |
 | [[activos/mall-curico]] | Mall Curicó — Tres Asociados | TRI | 2026-05-01 |
 | [[activos/inmosa]] | INMOSA | TRI | 2026-05-01 |
+| [[activos/parking-pt]] | Parking PT (SABA) — ingresos, tickets, ocupación diaria/mensual | PT | 2026-07-23 |
 
 ## Procesos
 

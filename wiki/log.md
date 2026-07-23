@@ -3,6 +3,17 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-23] db | Ocupación Parking PT — metodología y vistas (migración 055)
+
+Consolidado el histórico de tickets/ingresos del Parking PT (SABA) en migraciones 053/054. El
+usuario definió la metodología de ocupación diaria/mensual: tiempo total del día = bruto_día/40
+(tarifa CLP/min), tiempo disponible = 8h×60×estacionamientos_no_abonados, y
+estacionamientos_no_abonados = (ingresos_variables_u12m/ingresos_totales_u12m)×502 (502 fijo,
+ratio U12M fijo por ahora). Confirmado que ocupación mensual = sum/sum equivale al promedio
+simple de diarias mientras el denominador sea constante intra-mes. Migración 055 agrega
+`v_parking_ratio_no_abonados`, `v_parking_ocupacion_diaria`, `v_parking_ocupacion_mensual`. Ver
+[[activos/parking-pt]].
+
 ## [2026-07-21] factsheet | Página 3 Apo — vuelta a estructura sin datos
 
 El commit anterior (e2768a1) hardcodeó valores reales del snapshot Apo octubre 2025. El
