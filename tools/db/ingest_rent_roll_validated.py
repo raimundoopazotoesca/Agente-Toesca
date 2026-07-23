@@ -1,4 +1,9 @@
-"""Valida y persiste un archivo Rent Roll JLL (.xlsx) a raw_rent_roll_line.
+"""Valida y persiste archivos Rent Roll JLL/TresA (.xlsx) a raw_rent_roll_line.
+
+Ubicación operativa:
+SharePoint > Inmobiliario Toesca > Renta Comercial > Rent Rolls.
+JLL lo envía Nicole; TresA lo envía Sebastián Bravo.
+Generalmente hay que pedirlos e insistir, porque se demoran en mandarlos.
 
 Reusa el parser y las 4 validaciones de tools/rentroll_tools.py y agrega:
   - gate duro: no se puede ingestar si el validador (VAL1-VAL4 o lectura)

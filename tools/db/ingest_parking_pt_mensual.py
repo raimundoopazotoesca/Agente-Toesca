@@ -1,6 +1,11 @@
 """Ingesta mensual del parking Parque Titanium desde la planilla
 'MM-YYYY Liquidacion Parque Titanium.xlsx' (SABA).
 
+Ubicación operativa:
+SharePoint > Inmobiliario Toesca > Renta Comercial > Fondo PT > Parking PT.
+El archivo lo envía Marcos Quiroga por mail.
+El período a ingestar puede ser anterior o igual al mes del archivo.
+
 Formato de la planilla (distinto al histórico 'Parking PT DB.xlsx'):
 - Hoja 'Resumen':
     fila 3 col D-O: fechas por mes (2026-01-01 ... 2026-12-01)
@@ -24,6 +29,7 @@ Feriados: se determinan automáticamente con `holidays.CL()`.
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 import tempfile
 from datetime import date, datetime
@@ -73,6 +79,17 @@ class ValidationResult:
 
 def _file_hash(file_bytes: bytes) -> str:
     return hashlib.sha256(file_bytes).hexdigest()
+
+
+def _periodo_archivo(filename: str) -> str | None:
+    """Extrae YYYY-MM desde nombres tipo 'MM-YYYY Liquidacion Parque Titanium.xlsx'."""
+    m = re.search(r"(?<!\d)(\d{2})-(\d{4})(?!\d)", Path(filename).name)
+    if not m:
+        return None
+    month, year = int(m.group(1)), int(m.group(2))
+    if not 1 <= month <= 12:
+        return None
+    return f"{year:04d}-{month:02d}"
 
 
 def _write_tmp(file_bytes: bytes, filename: str) -> str:
@@ -368,6 +385,14 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
         r = ValidationResult()
         r.add_error("Periodo debe tener formato YYYY-MM.")
         return r
+    archivo_periodo = _periodo_archivo(filename)
+    if archivo_periodo and periodo > archivo_periodo:
+        r = ValidationResult()
+        r.add_error(
+            f"El periodo seleccionado ({periodo}) no puede ser posterior al mes del archivo "
+            f"({archivo_periodo})."
+        )
+        return r
     tmp = _write_tmp(file_bytes, filename)
     try:
         result, _ = _parse(tmp, periodo)
@@ -396,6 +421,12 @@ def _get_or_create_concepto(cur, codigo, nombre, tipo, signo) -> int:
 def commit(file_bytes: bytes, filename: str, periodo: str) -> dict:
     if not periodo or len(periodo) != 7 or periodo[4] != "-":
         raise ValueError("Periodo debe tener formato YYYY-MM.")
+    archivo_periodo = _periodo_archivo(filename)
+    if archivo_periodo and periodo > archivo_periodo:
+        raise ValueError(
+            f"El periodo seleccionado ({periodo}) no puede ser posterior al mes del archivo "
+            f"({archivo_periodo})."
+        )
 
     tmp = _write_tmp(file_bytes, filename)
     try:

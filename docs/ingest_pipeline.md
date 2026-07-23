@@ -13,6 +13,11 @@ La DB `memory/agente_toesca.db` es la fuente primaria de consulta. Cada archivo 
 | Rent Roll Tres A | `Excel Tres A <activo> <Mes> AAAA.xlsx` | `tools/rentroll_tools.py` (backfill) | `raw_rent_roll_line` |
 | EEFF PDF (CMF) | PDF de EEFF trimestral | `scripts/ingest_eeff.py` | `raw_eeff_line` |
 
+Los Rent Rolls se buscan en SharePoint:
+`Inmobiliario Toesca > Renta Comercial > Rent Rolls`.
+JLL los envía Nicole; TresA los envía Sebastián Bravo. Generalmente hay que pedirlos
+e insistir, porque se demoran en mandarlos.
+
 ## Cómo ingestar
 
 ### Archivo único (conversacional, vía agente)

@@ -422,6 +422,11 @@
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Período, proveedor y archivo</div>
+    <p class="muted" style="margin:0 0 10px;">
+      Sube el Rent Roll desde <code>Inmobiliario Toesca &gt; Renta Comercial &gt; Rent Rolls</code>.<br>
+      JLL lo envía Nicole; TresA lo envía Sebastián Bravo.<br>
+      Generalmente hay que pedirlos e insistir, porque se demoran en mandarlos.
+    </p>
     <div class="row">
       <label class="muted" for="rr-periodo">Período del Rent Roll:</label>
       <input type="month" id="rr-periodo">
@@ -435,7 +440,7 @@
     <div class="row" id="rr-periodo-status-row" style="margin-top:6px"></div>
     <div class="row">
       <div id="rr-dropzone" class="dropzone" style="flex:1">
-        Arrastra aquí el archivo <code>{AAMM} Rent Roll y NOI.xlsx</code> (JLL) o haz click para elegirlo
+        Arrastra aquí {AAMM} Rent Roll y NOI.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Rent Rolls o haz click para elegirlo. Lo envía Nicole de JLL.
         <input type="file" id="rr-file" accept=".xlsx" class="hidden">
       </div>
     </div>
@@ -546,9 +551,10 @@
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Periodo y archivo</div>
     <p class="muted" style="margin:0 0 10px;">
-      Sube la planilla <strong>Balances Consolidados.xlsx</strong> desde
-      <code>Inmobiliario Toesca &gt; NUEVO ORDEN &gt; Renta Comercial &gt; Balances Consolidados</code>.
-      Usa la hoja del periodo con formato <code>MM-YYYY</code>, por ejemplo <code>03-2026</code>.
+      Sube la planilla <strong>Balances Consolidados.xlsx</strong><br>
+      desde <code>Inmobiliario Toesca &gt; NUEVO ORDEN &gt; Renta Comercial &gt; Balances Consolidados</code>.<br>
+      Elige un periodo trimestral en el selector: marzo, junio, septiembre o diciembre.<br>
+      La planilla debe tener una hoja con formato <code>MM-YYYY</code>, por ejemplo <code>03-2026</code>.
     </p>
     <div class="row">
       <label class="muted" for="balance-periodo">Periodo del balance (trimestral):</label>
@@ -561,7 +567,7 @@
     <div class="row" id="balance-periodo-status-row" style="margin-top:6px"></div>
     <div class="row">
       <div id="balance-dropzone" class="dropzone" style="flex:1">
-        Arrastra aqui Balances Consolidados.xlsx o haz click para elegirla
+        Arrastra aquí Balances Consolidados.xlsx desde SharePoint > Inmobiliario Toesca > NUEVO ORDEN > Renta Comercial > Balances Consolidados o haz click para elegirla
         <input type="file" id="balance-file" accept=".xlsx" class="hidden">
       </div>
     </div>
@@ -594,6 +600,14 @@
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+    <p class="muted" style="margin:0 0 10px;">
+      Sube la planilla <strong>MM-YYYY Liquidacion Parque Titanium.xlsx</strong><br>
+      desde <code>Inmobiliario Toesca &gt; Renta Comercial &gt; Fondo PT &gt; Parking PT</code>.<br>
+      El archivo lo envía Marcos Quiroga por mail.<br>
+      Elige un mes anterior o igual al mes del archivo.<br>
+      La planilla debe tener hoja <code>Resumen</code> y hoja diaria <code>MM-YYYY</code>,
+      por ejemplo <code>06-2026</code>.
+    </p>
     <div class="row">
       <label class="muted" for="pk-periodo">Período a ingestar:</label>
       <input type="month" id="pk-periodo">
@@ -601,7 +615,7 @@
     <div class="row" id="pk-periodo-status-row" style="margin-top:6px"></div>
     <div class="row">
       <div id="pk-dropzone" class="dropzone" style="flex:1">
-        Arrastra aquí el archivo <code>MM-YYYY Liquidacion Parque Titanium.xlsx</code> o haz click para elegirlo
+        Arrastra aquí MM-YYYY Liquidacion Parque Titanium.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Fondo PT > Parking PT o haz click para elegirlo. Lo envía Marcos Quiroga por mail.
         <input type="file" id="pk-file" accept=".xlsx" class="hidden">
       </div>
     </div>
@@ -973,9 +987,9 @@ const btnRrCopyErrdetalle = document.getElementById('btn-rr-copy-errdetalle');
 const rrCopyFlash = document.getElementById('rr-copy-flash');
 
 const _DROPZONE_TEXT = {
-  jll: 'Arrastra aquí el archivo {AAMM} Rent Roll y NOI.xlsx (JLL) o haz click para elegirlo',
-  tresa_vina: 'Arrastra aquí el archivo Excel Tres A Viña {Mes} {Año}.xlsx o haz click para elegirlo',
-  tresa_curico: 'Arrastra aquí el archivo Excel Tres A Curicó {Mes} {Año}.xlsx o haz click para elegirlo',
+  jll: 'Arrastra aquí {AAMM} Rent Roll y NOI.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Rent Rolls o haz click para elegirlo. Lo envía Nicole de JLL.',
+  tresa_vina: 'Arrastra aquí Excel Tres A Viña {Mes} {Año}.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Rent Rolls o haz click para elegirlo. Lo envía Sebastián Bravo de TresA.',
+  tresa_curico: 'Arrastra aquí Excel Tres A Curicó {Mes} {Año}.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Rent Rolls o haz click para elegirlo. Lo envía Sebastián Bravo de TresA.',
 };
 const rrPeriodoStatusRow = document.getElementById('rr-periodo-status-row');
 
@@ -1438,7 +1452,7 @@ const balancePreview = document.getElementById('balance-preview');
 const btnBalanceConfirm = document.getElementById('btn-balance-confirm');
 const balanceIngestStatus = document.getElementById('balance-ingest-status');
 const balancePeriodoStatusRow = document.getElementById('balance-periodo-status-row');
-const _BALANCE_DROPZONE_TEXT = 'Arrastra aqui Balances Consolidados.xlsx o haz click para elegirla';
+const _BALANCE_DROPZONE_TEXT = 'Arrastra aquí Balances Consolidados.xlsx desde SharePoint > Inmobiliario Toesca > NUEVO ORDEN > Renta Comercial > Balances Consolidados o haz click para elegirla';
 
 let balanceSelectedFile = null;
 let balanceLastValidationOk = false;
@@ -2025,7 +2039,7 @@ const pkPreview = document.getElementById('pk-preview');
 const btnPkConfirm = document.getElementById('btn-pk-confirm');
 const pkIngestStatus = document.getElementById('pk-ingest-status');
 const pkPeriodoStatusRow = document.getElementById('pk-periodo-status-row');
-const _PK_DROPZONE_TEXT = 'Arrastra aquí el archivo MM-YYYY Liquidacion Parque Titanium.xlsx o haz click para elegirlo';
+const _PK_DROPZONE_TEXT = 'Arrastra aquí MM-YYYY Liquidacion Parque Titanium.xlsx desde SharePoint > Inmobiliario Toesca > Renta Comercial > Fondo PT > Parking PT o haz click para elegirlo. Lo envía Marcos Quiroga por mail.';
 
 let pkSelectedFile = null;
 let pkLastValidationOk = false;

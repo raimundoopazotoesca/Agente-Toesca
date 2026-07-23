@@ -17,6 +17,10 @@ Fuentes:
   `scripts/ingest_parking_pt_historico.py` — no reusable, rangos hardcodeados.
 - **Mensual (recurrente)**: `MM-YYYY Liquidacion Parque Titanium.xlsx` (SABA), ingesta vía
   UI web (tab "Parking PT" en `/ingesta`) → `tools/db/ingest_parking_pt_mensual.py`.
+  Buscarla en SharePoint:
+  `Inmobiliario Toesca > Renta Comercial > Fondo PT > Parking PT`. El archivo lo envía
+  Marcos Quiroga por mail. En la UI se puede elegir un período anterior o igual al mes
+  del archivo.
 
 ## Ingesta mensual (planilla Liquidación SABA)
 

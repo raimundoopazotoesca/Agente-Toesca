@@ -11,7 +11,7 @@ Esta es la fuente de verdad para rutas. `RAW/` es solo bandeja de entrada; los a
 - `Fondos/` se ordena por vehiculo/fondo: `Rentas TRI`, `Rentas PT`, `Rentas Apoquindo`, `Renta Residencial`.
 - En `Fondos/Rentas TRI/Activos/` van fuentes operativas por activo: rent rolls, EEFF de administradores, flujos y contabilidad operacional.
 - En `Fondos/Rentas TRI/Sociedades/` van fuentes legales/contables usadas por balances consolidados: EEFF y analisis de SPVs o sociedades.
-- `Rent Rolls/JLL/` queda separado porque el archivo JLL alimenta varios fondos/activos al mismo tiempo.
+- `Renta Comercial/Rent Rolls/` concentra los Rent Rolls de JLL y TresA.
 - `Referencia/` es solo lectura: ejemplos, formatos y materiales historicos no operativos.
 
 ## Rutas activas
@@ -22,9 +22,9 @@ Esta es la fuente de verdad para rutas. `RAW/` es solo bandeja de entrada; los a
 | Balances consolidados | `Control de Gestión/Balances Consolidados/{YYYY}/{Q}/` | `{MM.YYYY}- Balance Consolidado Rentas {fondo}*.xlsx` |
 | Saldo Caja | `Control de Gestión/Saldo Caja/{YYYY}/` | `{YYMMDD} Saldo Caja + FFMM Inmobiliario.xlsx` |
 | Calculo TIR | `Control de Gestión/Cálculo TIR/` | `Cálculo TIR Fondo Rentas*.xlsx` |
-| RR JLL | `Rent Rolls/JLL/{YYYY}/` | `{AAMM} Rent Roll y NOI.xlsx` |
-| RR Tres A Vina | `Fondos/Rentas TRI/Activos/Viña Centro/Rent Roll/{YYYY}/` | `Excel Tres A Viña {Mes} {YYYY}.xlsx` |
-| RR Tres A Curico | `Fondos/Rentas TRI/Activos/Curicó/Rent Roll/{YYYY}/` | `Excel Tres A Curicó {Mes} {YYYY}.xlsx` |
+| RR JLL | `Renta Comercial/Rent Rolls/` | `{AAMM} Rent Roll y NOI.xlsx` |
+| RR Tres A Vina | `Renta Comercial/Rent Rolls/` | `Excel Tres A Viña {Mes} {YYYY}.xlsx` |
+| RR Tres A Curico | `Renta Comercial/Rent Rolls/` | `Excel Tres A Curicó {Mes} {YYYY}.xlsx` |
 | EEFF Vina | `Fondos/Rentas TRI/Activos/Viña Centro/EEFF/{YYYY}/` | `{MM-YYYY} INFORME EEFF VIÑA CENTRO SPA*.xlsx` |
 | EEFF Curico | `Fondos/Rentas TRI/Activos/Curicó/EEFF/{YYYY}/` | `{MM-YYYY} INFORME*CURIC*.xlsx` |
 | INMOSA flujos NOI | `Fondos/Rentas TRI/Activos/INMOSA/Flujos/{YYYY}/` | `ER-FC INMOSA*.xlsx` |
@@ -81,7 +81,7 @@ Fondos/
   Rentas PT/{EEFF,Fact Sheets}/
   Rentas Apoquindo/{EEFF,Fact Sheets}/
   Renta Residencial/
-Rent Rolls/JLL/{YYYY}/
+Renta Comercial/Rent Rolls/
 Informes de Mercado/
 Referencia/
 RAW/
