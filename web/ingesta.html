@@ -32,9 +32,13 @@
   }
   .tab-btn:hover { color: #fff; }
   .tab-btn.active { color: #fff; border-bottom-color: var(--green); }
-  main { max-width: 880px; margin: 12px auto 40px; padding: 0 24px; }
+  main {
+    width: min(100%, 1440px); margin: 12px auto 40px;
+    padding: 0 clamp(16px, 2.5vw, 32px);
+  }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+  .tab-panel:not(#tab-inicio) { max-width: 880px; margin: 0 auto; }
   .step {
     background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -176,6 +180,30 @@
     display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 16px; margin-top: 4px;
   }
+  .inicio-cards.grouped { display: block; }
+  .inicio-card-group + .inicio-card-group { margin-top: 18px; }
+  .inicio-card-group-title {
+    font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    margin: 4px 0 8px;
+  }
+  .inicio-card-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .inicio-sortbar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+    margin: -6px 0 10px;
+  }
+  .inicio-sortbar label {
+    font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .inicio-sortbar select { width: 220px; background: #fff; }
+  @media (max-width: 760px) {
+    .inicio-sortbar { justify-content: flex-start; align-items: stretch; flex-direction: column; }
+    .inicio-sortbar select { width: 100%; }
+  }
   .inicio-card {
     background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px;
@@ -264,14 +292,13 @@
   .inicio-matrix .dot.na { background: #d0d0d0; }
 
   .inicio-mini-cards {
-    display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 14px 0 0;
   }
   .inicio-mini-card {
-    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 14px 18px;
-    flex: 1 1 220px;
+    background: #FAFAFA; border: 1px solid #e8e8e8; border-radius: 4px;
+    padding: 10px 12px; flex: 0 1 260px;
   }
-  .inicio-mini-card.mini-wide { flex: 2 1 360px; }
+  .inicio-mini-card.mini-wide { flex: 0 1 760px; }
   .mini-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .mini-title { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
   .mini-pill {
@@ -281,13 +308,13 @@
   .mini-pill.ok { background: var(--green-soft); color: #0d3a29; }
   .mini-pill.warn { background: #fff4d9; color: var(--warn); }
   .mini-pill.miss { background: #fbe3e0; color: var(--err); }
-  .mini-value { font-size: 24px; font-weight: 700; color: #2b2b2b; font-variant-numeric: tabular-nums; margin: 8px 0 12px; }
+  .mini-value { font-size: 17px; font-weight: 700; color: #2b2b2b; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
   .mini-sub { font-size: 11.5px; color: var(--muted); }
-  .mini-stats { border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px; }
+  .mini-stats { border-top: 1px solid #eee; padding-top: 6px; margin-top: 2px; }
   .mini-stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
   .mini-stat-row .mini-stat-label { color: var(--muted); }
   .mini-stat-row .mini-stat-value { font-weight: 600; color: #2b2b2b; font-variant-numeric: tabular-nums; }
-  .mini-fuente { font-size: 10.5px; color: #a0a0a0; margin-top: 10px; }
+  .mini-fuente { font-size: 10.5px; color: #a0a0a0; margin-top: 6px; }
 
   .mini-bursatil-table {
     display: grid; grid-template-columns: 48px 1fr 90px 82px;
@@ -333,8 +360,16 @@
     </div>
     <a class="inicio-action-btn" href="/db-diagrama" target="_blank" rel="noopener">Abrir mapa DB</a>
   </div>
-  <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
+  <div class="inicio-sortbar">
+    <label for="inicio-sort">Orden</label>
+    <select id="inicio-sort">
+      <option value="urgent-desc">Más urgentes primero</option>
+      <option value="urgent-asc">Menos urgentes primero</option>
+      <option value="freq-quarter-first">Trimestrales - mensuales</option>
+    </select>
+  </div>
   <div id="inicio-cards" class="inicio-cards"></div>
+  <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
 </div>
 
 <!-- ══════════════════════════ TAB EEFF ══════════════════════════ -->
@@ -1848,11 +1883,82 @@ function renderMiniCards(data) {
   `);
 }
 
+const inicioSort = document.getElementById('inicio-sort');
+let _inicioEstadoData = null;
+
+function _inicioPendientesTipo(tipo) {
+  if (tipo.sub_ingestas && tipo.sub_ingestas.length) {
+    return tipo.sub_ingestas
+      .filter(s => !s.al_dia && s.pendiente)
+      .map(s => s.pendiente);
+  }
+  return !tipo.al_dia && tipo.pendiente ? [tipo.pendiente] : [];
+}
+
+function _inicioUrgenciaTipo(tipo) {
+  const pendientes = _inicioPendientesTipo(tipo).sort();
+  return {
+    count: pendientes.length,
+    primero: pendientes[0] || '9999-99',
+    ultimo: pendientes[pendientes.length - 1] || '0000-00',
+  };
+}
+
+function _inicioCompararUrgenciaDesc(a, b) {
+  const ua = _inicioUrgenciaTipo(a);
+  const ub = _inicioUrgenciaTipo(b);
+  if (ub.count !== ua.count) return ub.count - ua.count;
+  if (ua.primero !== ub.primero) return ua.primero.localeCompare(ub.primero);
+  return a.label.localeCompare(b.label);
+}
+
+function _inicioOrdenarTipos(tipos) {
+  const modo = inicioSort ? inicioSort.value : 'urgent-desc';
+  return tipos.slice().sort((a, b) => {
+    if (modo === 'urgent-asc') {
+      const ua = _inicioUrgenciaTipo(a);
+      const ub = _inicioUrgenciaTipo(b);
+      if (ua.count !== ub.count) return ua.count - ub.count;
+      if (ua.ultimo !== ub.ultimo) return ub.ultimo.localeCompare(ua.ultimo);
+      return a.label.localeCompare(b.label);
+    }
+    if (modo === 'freq-quarter-first') {
+      const fa = a.frecuencia === 'trimestral' ? 0 : 1;
+      const fb = b.frecuencia === 'trimestral' ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return _inicioCompararUrgenciaDesc(a, b);
+    }
+    return _inicioCompararUrgenciaDesc(a, b);
+  });
+}
+
 function renderEstadoIngesta(data) {
+  _inicioEstadoData = data;
   renderMiniCards(data);
   const container = document.getElementById('inicio-cards');
   container.innerHTML = '';
-  for (const tipo of data.tipos) {
+  const agruparPorFrecuencia = inicioSort && inicioSort.value === 'freq-quarter-first';
+  container.classList.toggle('grouped', agruparPorFrecuencia);
+
+  let cardTargets = null;
+  if (agruparPorFrecuencia) {
+    cardTargets = {};
+    [
+      ['trimestral', 'Trimestrales'],
+      ['mensual', 'Mensuales'],
+    ].forEach(([frecuencia, label]) => {
+      const group = document.createElement('section');
+      group.className = 'inicio-card-group';
+      group.innerHTML = `
+        <div class="inicio-card-group-title">${label}</div>
+        <div class="inicio-card-grid" data-frequency-grid="${frecuencia}"></div>
+      `;
+      container.appendChild(group);
+      cardTargets[frecuencia] = group.querySelector('.inicio-card-grid');
+    });
+  }
+
+  for (const tipo of _inicioOrdenarTipos(data.tipos)) {
     const card = document.createElement('div');
     card.className = 'inicio-card';
     card.dataset.tipoId = tipo.id;
@@ -1937,7 +2043,7 @@ function renderEstadoIngesta(data) {
       ${expandHtml}
       <button class="ingestar-btn" data-tab-destino="${tipo.tab_destino}" data-pendiente="${tipo.pendiente || ''}" style="margin-top:${tieneSubs ? '10px' : '0'}">Ingestar →</button>
     `;
-    container.appendChild(card);
+    (cardTargets ? cardTargets[tipo.frecuencia] : container).appendChild(card);
   }
 
   container.querySelectorAll('[data-toggle-expand]').forEach(btn => {
@@ -2025,6 +2131,12 @@ async function loadEstadoIngesta() {
   } catch (e) {
     container.innerHTML = '<p class="muted">No se pudo cargar el estado de ingesta.</p>';
   }
+}
+
+if (inicioSort) {
+  inicioSort.addEventListener('change', () => {
+    if (_inicioEstadoData) renderEstadoIngesta(_inicioEstadoData);
+  });
 }
 
 loadEstadoIngesta();
