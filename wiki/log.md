@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-23] ingesta | Ingesta mensual Parking PT (planilla Liquidación SABA)
+
+Nuevo flujo recurrente para cargar la planilla `MM-YYYY Liquidacion Parque Titanium.xlsx`:
+`tools/db/ingest_parking_pt_mensual.py` + 3 endpoints en `scripts/ingesta_server.py`
+(`/api/parking/{periodo_check,validate,commit}`) + tab "Parking PT" en `web/ingesta.html`.
+Idempotencia por supersede sobre `(activo_key, periodo)` en las 4 tablas raw (no por
+file_hash, porque el archivo se actualiza mes a mes). Feriados detectados automáticamente
+con `holidays.CL()`. Deduplicación de conceptos ignorando `codigo` — los códigos internos
+SABA de la mensual (988, 345) difieren de los del histórico (363, 253, 200) pero son
+mismos conceptos de negocio; ejecutado merge de duplicados (`Notas de credito` id 7 → 4).
+Test end-to-end contra 2026-05 OK: sumas cuadran con totales de planilla dentro de 1 CLP.
+
+Preview del tab muestra 4 KPIs con Δ% vs mes anterior: **ingresos abonados UF**,
+**ingresos variables UF**, **resultado neto UF**, **ocupación mensual** — reproducen las
+fórmulas de `v_parking_resultado_uf` y `v_parking_ocupacion_mensual` en Python para poder
+mostrar antes de commit; el mes anterior se lee directo de las vistas. Card "Parking PT"
+agregado a la pantalla de Inicio vía `tools/db/estado_ingesta.py` (frecuencia mensual,
+sin sub-ingestas, timeline de 6 meses).
+
 ## [2026-07-23] db | Ocupación Parking PT — metodología y vistas (migración 055)
 
 Consolidado el histórico de tickets/ingresos del Parking PT (SABA) en migraciones 053/054. El

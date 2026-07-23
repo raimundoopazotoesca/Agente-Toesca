@@ -11,9 +11,41 @@ parking del complejo Parque Titanium completo (no una torre específica), operad
   de la planilla, agregada en migración 054)
 - `raw_parking_facturacion_line` — mensual: neto/iva/bruto SABA y liquidación, `pago_a_pt`
 
-Fuente: `RAW/Parking PT DB.xlsx` (hojas Ingresos + Tickets), ingesta one-shot vía
-`scripts/ingest_parking_pt_historico.py` (no reusable, rangos de filas hardcodeados contra esa
-planilla puntual).
+Fuentes:
+
+- **Histórico (one-shot)**: `RAW/Parking PT DB.xlsx` (hojas Ingresos + Tickets), ingesta vía
+  `scripts/ingest_parking_pt_historico.py` — no reusable, rangos hardcodeados.
+- **Mensual (recurrente)**: `MM-YYYY Liquidacion Parque Titanium.xlsx` (SABA), ingesta vía
+  UI web (tab "Parking PT" en `/ingesta`) → `tools/db/ingest_parking_pt_mensual.py`.
+
+## Ingesta mensual (planilla Liquidación SABA)
+
+Formato distinto al histórico:
+
+- Hoja `Resumen`: fila 3 fechas por mes (col D-O); ventas filas 5-11; gastos filas 14-25;
+  totales filas 13 y 26; Facturación SABA filas 28-30 (Neto/IVA/Bruto), Liquidación factura
+  filas 32-34, Pago a PT fila 36.
+- Hoja `MM-YYYY`: detalle diario, col B=día, col C=tickets, col J=total bruto CLP.
+
+Reglas:
+
+- **Feriados**: se determinan automáticamente con `holidays.CL()` (feriados nacionales
+  oficiales). No hay columna de feriado en la planilla mensual.
+- **Idempotencia por supersede** (no por file_hash — el archivo se actualiza mes a mes).
+  Antes de insertar, marca `superseded_at=now` las filas del mismo `(activo_key='Parking PT',
+  periodo)` en las 4 tablas raw (`fecha LIKE 'YYYY-MM-%'` para tickets).
+- **Deduplicación de conceptos**: `_get_or_create_concepto` busca por
+  `(nombre, tipo, signo)` ignorando `codigo`. Los códigos internos SABA en la planilla
+  mensual (`988`, `345`) son distintos a los del histórico (`363`, `253`, `200`) pero
+  representan los mismos conceptos de negocio.
+
+Endpoints REST (`scripts/ingesta_server.py`):
+
+- `GET /api/parking/periodo_check?periodo=YYYY-MM` — avisa si hay data previa que se
+  sobrescribirá.
+- `POST /api/parking/validate` (multipart: file + periodo) — parsea y devuelve preview con
+  sumas y coherencia vs. totales de planilla.
+- `POST /api/parking/commit` — ejecuta supersede + insert.
 
 ## Ocupación (migración 055)
 

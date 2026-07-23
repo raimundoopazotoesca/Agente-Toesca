@@ -255,6 +255,7 @@
     <button class="tab-btn" data-tab="eeff">EEFF</button>
     <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
     <button class="tab-btn" data-tab="mercado">Mercado Oficinas</button>
+    <button class="tab-btn" data-tab="parking">Parking PT</button>
   </div>
 </header>
 
@@ -464,6 +465,58 @@
     <div class="row" style="margin-top:20px;">
       <button id="btn-mercado-confirm" disabled>Confirmar e ingestar</button>
       <span id="mercado-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════ TAB PARKING PT ══════════════════════════ -->
+<div id="tab-parking" class="tab-panel">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+    <div class="row">
+      <label class="muted" for="pk-periodo">Período a ingestar:</label>
+      <input type="month" id="pk-periodo">
+    </div>
+    <div class="row" id="pk-periodo-status-row" style="margin-top:6px"></div>
+    <div class="row">
+      <div id="pk-dropzone" class="dropzone" style="flex:1">
+        Arrastra aquí el archivo <code>MM-YYYY Liquidacion Parque Titanium.xlsx</code> o haz click para elegirlo
+        <input type="file" id="pk-file" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <button id="btn-pk-validate">Validar y previsualizar</button>
+      <span id="pk-validate-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="pk-preview" class="step preview hidden">
+    <div class="badges" id="pk-badges"></div>
+    <ul id="pk-errors" class="msg-list err"></ul>
+    <ul id="pk-warnings" class="msg-list warn"></ul>
+
+    <div id="pk-section-kpis" class="hidden">
+      <h3>KPIs del período (vs. mes anterior)</h3>
+      <table>
+        <thead><tr>
+          <th>KPI</th><th class="num">Valor</th><th class="num">Mes anterior</th><th class="num">Δ %</th>
+        </tr></thead>
+        <tbody id="pk-kpis-body"></tbody>
+      </table>
+    </div>
+
+    <div id="pk-section-resumen" class="hidden">
+      <h3>Detalle del período</h3>
+      <table>
+        <tbody id="pk-resumen-body"></tbody>
+      </table>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-pk-confirm" disabled>Confirmar e ingestar</button>
+      <span id="pk-ingest-status" class="muted"></span>
     </div>
   </div>
 
@@ -1246,6 +1299,9 @@ function _irAIngestar(tabDestino, pendiente, subKey) {
   } else if (tabDestino === 'mercado') {
     if (pendiente) mercadoPeriodo.value = pendiente;
     checkMercadoPeriodoStatus();
+  } else if (tabDestino === 'parking') {
+    if (pendiente) pkPeriodo.value = pendiente;
+    checkPkPeriodoStatus();
   }
 }
 
@@ -1493,6 +1549,189 @@ async function loadEstadoIngesta() {
 }
 
 loadEstadoIngesta();
+
+// ── TAB PARKING PT ───────────────────────────────────────────────────────
+const pkPeriodo = document.getElementById('pk-periodo');
+const pkDropzone = document.getElementById('pk-dropzone');
+const pkFileInput = document.getElementById('pk-file');
+const btnPkValidate = document.getElementById('btn-pk-validate');
+const pkValidateStatus = document.getElementById('pk-validate-status');
+const pkPreview = document.getElementById('pk-preview');
+const btnPkConfirm = document.getElementById('btn-pk-confirm');
+const pkIngestStatus = document.getElementById('pk-ingest-status');
+const pkPeriodoStatusRow = document.getElementById('pk-periodo-status-row');
+const _PK_DROPZONE_TEXT = 'Arrastra aquí el archivo MM-YYYY Liquidacion Parque Titanium.xlsx o haz click para elegirlo';
+
+let pkSelectedFile = null;
+let pkLastValidationOk = false;
+
+(function initPk(){
+  const n = new Date();
+  const prev = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+  pkPeriodo.value = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+})();
+
+function setPkFile(file) {
+  pkSelectedFile = file;
+  if (file) {
+    pkDropzone.textContent = `Archivo seleccionado: ${file.name}`;
+    pkDropzone.classList.add('has-file');
+  } else {
+    pkDropzone.textContent = _PK_DROPZONE_TEXT;
+    pkDropzone.classList.remove('has-file');
+  }
+  pkDropzone.appendChild(pkFileInput);
+  resetPkPreview();
+}
+
+function resetPkPreview() {
+  pkPreview.classList.add('hidden');
+  btnPkConfirm.disabled = true;
+  pkLastValidationOk = false;
+  pkIngestStatus.textContent = '';
+}
+
+pkDropzone.addEventListener('click', () => pkFileInput.click());
+pkFileInput.addEventListener('change', () => setPkFile(pkFileInput.files[0] || null));
+pkDropzone.addEventListener('dragover', e => { e.preventDefault(); pkDropzone.classList.add('drag'); });
+pkDropzone.addEventListener('dragleave', () => pkDropzone.classList.remove('drag'));
+pkDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  pkDropzone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setPkFile(f);
+});
+pkPeriodo.addEventListener('change', () => { resetPkPreview(); checkPkPeriodoStatus(); });
+
+async function checkPkPeriodoStatus() {
+  pkPeriodoStatusRow.innerHTML = '';
+  const periodo = pkPeriodo.value;
+  if (!periodo) return;
+  try {
+    const res = await fetch(`/api/parking/periodo_check?periodo=${periodo}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot warn"></span><strong>Ya hay data para ${periodo}</strong> (${data.n_ingresos} filas ingresos, ${data.n_tickets} tickets). Ingestar sobrescribirá (supersede).`;
+      pkPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) {}
+}
+
+checkPkPeriodoStatus();
+
+function renderPkPreview(data) {
+  pkPreview.classList.remove('hidden');
+  const badges = document.getElementById('pk-badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('pk-errors');
+  const warnUl = document.getElementById('pk-warnings');
+  errUl.innerHTML = ''; warnUl.innerHTML = '';
+  (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+  (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+  const secKpis = document.getElementById('pk-section-kpis');
+  const bodyKpis = document.getElementById('pk-kpis-body');
+  const section = document.getElementById('pk-section-resumen');
+  const body = document.getElementById('pk-resumen-body');
+
+  if (data.ok) {
+    // KPIs
+    secKpis.classList.remove('hidden');
+    const k = data.kpis || {};
+    const prev = k.mes_anterior || {};
+    const dlt = k.delta || {};
+    const fmtUF = v => v === null || v === undefined ? '—' : Number(v).toLocaleString('es-CL', {maximumFractionDigits: 1});
+    const fmtPct = v => v === null || v === undefined ? '—' : (v * 100).toLocaleString('es-CL', {maximumFractionDigits: 1}) + '%';
+    const fmtDelta = v => {
+      if (v === null || v === undefined) return '<span class="muted">—</span>';
+      const pct = (v * 100).toLocaleString('es-CL', {maximumFractionDigits: 1}) + '%';
+      const color = v >= 0 ? 'var(--green, #00b482)' : 'var(--err, #c00)';
+      const sign = v >= 0 ? '▲ ' : '▼ ';
+      return `<span style="color:${color};font-weight:600">${sign}${pct}</span>`;
+    };
+    const kpiRows = [
+      ['Ingresos abonados (UF)', fmtUF(k.ingresos_abonados_uf), fmtUF(prev.ingresos_abonados_uf), fmtDelta(dlt.ingresos_abonados_uf)],
+      ['Ingresos variables (UF)', fmtUF(k.ingresos_variables_uf), fmtUF(prev.ingresos_variables_uf), fmtDelta(dlt.ingresos_variables_uf)],
+      ['Resultado neto (UF)', fmtUF(k.resultado_neto_uf), fmtUF(prev.resultado_neto_uf), fmtDelta(dlt.resultado_neto_uf)],
+      ['Ocupación mensual', fmtPct(k.ocupacion_mensual), fmtPct(prev.ocupacion_mensual), fmtDelta(dlt.ocupacion_mensual)],
+    ];
+    bodyKpis.innerHTML = kpiRows.map(([kn, v, p, d]) =>
+      `<tr><td>${kn}</td><td class="num"><strong>${v}</strong></td><td class="num muted">${p}</td><td class="num">${d}</td></tr>`
+    ).join('');
+    const uf = k.uf_valor ? ` · UF último día ${data.periodo} = ${Number(k.uf_valor).toLocaleString('es-CL', {maximumFractionDigits: 2})}` : '';
+    const est = k.estacionamientos_no_abonados ? ` · Est. no abonados = ${Number(k.estacionamientos_no_abonados).toFixed(0)}` : '';
+    document.getElementById('pk-section-kpis').querySelector('h3').innerHTML =
+      `KPIs del período (vs. ${prev.periodo || 'mes anterior'})<span class="muted" style="font-weight:normal;font-size:0.85em">${uf}${est}</span>`;
+
+    // Detalle
+    section.classList.remove('hidden');
+    const rows = [
+      ['Período', data.periodo],
+      ['Líneas de ingresos', data.n_ingresos],
+      ['Suma ingresos (CLP)', fmt(data.suma_ingresos)],
+      ['Líneas de gastos', data.n_gastos],
+      ['Suma gastos (CLP)', fmt(data.suma_gastos)],
+      ['Pago a PT (CLP)', fmt(data.pago_a_pt)],
+      ['Facturación (conceptos)', data.n_facturacion],
+      ['Días con datos', data.n_dias],
+      ['Feriados detectados', data.n_feriados],
+      ['Tickets totales', fmt(data.tickets_total)],
+    ];
+    body.innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td class="num"><strong>${v ?? '—'}</strong></td></tr>`).join('');
+  } else {
+    secKpis.classList.add('hidden');
+    section.classList.add('hidden');
+  }
+
+  pkLastValidationOk = !!data.ok;
+  btnPkConfirm.disabled = !pkLastValidationOk;
+}
+
+btnPkValidate.addEventListener('click', async () => {
+  if (!pkSelectedFile) { pkValidateStatus.textContent = 'Elige un archivo primero.'; return; }
+  if (!pkPeriodo.value) { pkValidateStatus.textContent = 'Elige el período primero.'; return; }
+  pkValidateStatus.textContent = 'Validando...';
+  const fd = new FormData();
+  fd.append('file', pkSelectedFile);
+  fd.append('periodo', pkPeriodo.value);
+  try {
+    const res = await fetch('/api/parking/validate', { method: 'POST', body: fd });
+    const data = await res.json();
+    pkValidateStatus.textContent = data.ok ? 'OK — revisa el preview' : 'Errores — revisa abajo';
+    renderPkPreview(data);
+  } catch (e) {
+    pkValidateStatus.textContent = 'Error: ' + e.message;
+  }
+});
+
+btnPkConfirm.addEventListener('click', async () => {
+  if (!pkSelectedFile || !pkPeriodo.value) return;
+  btnPkConfirm.disabled = true;
+  pkIngestStatus.textContent = 'Ingestando...';
+  const fd = new FormData();
+  fd.append('file', pkSelectedFile);
+  fd.append('periodo', pkPeriodo.value);
+  try {
+    const res = await fetch('/api/parking/commit', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok) {
+      pkIngestStatus.textContent = 'Error: ' + (data.error || 'desconocido');
+      btnPkConfirm.disabled = false;
+      return;
+    }
+    const ins = data.insertados, sup = data.superseded;
+    pkIngestStatus.innerHTML =
+      `✓ Ingesta OK (run ${data.run_id}). ` +
+      `Insertados: ${ins.ingresos} ingresos, ${ins.gastos} gastos, ${ins.facturacion} facturación, ${ins.tickets} tickets. ` +
+      `Reemplazados: ${sup.ingresos + sup.gastos + sup.facturacion + sup.tickets} filas previas.`;
+    checkPkPeriodoStatus();
+  } catch (e) {
+    pkIngestStatus.textContent = 'Error: ' + e.message;
+    btnPkConfirm.disabled = false;
+  }
+});
 </script>
 </body>
 </html>

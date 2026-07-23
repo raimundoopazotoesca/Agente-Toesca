@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
+from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
@@ -235,6 +236,60 @@ def api_mercado_commit():
     proveedor = body.get("proveedor", "JLL")
     try:
         summary = mercado_core.commit(texto, periodo, proveedor)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
+    return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/parking/periodo_check")
+def api_parking_periodo_check():
+    periodo = request.args.get("periodo", "")
+    if not periodo:
+        return jsonify({"ya_ingestado": False})
+    DB_PATH = ROOT / "memory" / "agente_toesca_v2.db"
+    con = get_conn_for(str(DB_PATH))
+    try:
+        n_res = con.execute(
+            "SELECT COUNT(*) FROM raw_parking_ingreso_line "
+            "WHERE activo_key='Parking PT' AND periodo=? AND superseded_at IS NULL",
+            (periodo,),
+        ).fetchone()[0]
+        n_tk = con.execute(
+            "SELECT COUNT(*) FROM raw_parking_ticket_line "
+            "WHERE activo_key='Parking PT' AND fecha LIKE ? AND superseded_at IS NULL",
+            (f"{periodo}-%",),
+        ).fetchone()[0]
+        return jsonify({
+            "ya_ingestado": bool(n_res or n_tk),
+            "n_ingresos": n_res, "n_tickets": n_tk,
+        })
+    finally:
+        con.close()
+
+
+@app.post("/api/parking/validate")
+def api_parking_validate():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube el archivo .xlsx de la liquidación."], "warnings": []})
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
+    result = parking_core.validate(file.read(), file.filename, periodo)
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/parking/commit")
+def api_parking_commit():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube el archivo .xlsx de la liquidación."}), 400
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
+    try:
+        summary = parking_core.commit(file.read(), file.filename, periodo)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     _rebuild_factsheet()

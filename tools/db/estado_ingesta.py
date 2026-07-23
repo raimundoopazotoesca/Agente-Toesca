@@ -97,6 +97,19 @@ CONFIG: list[dict] = [
         "tab_destino": "mercado",
         "sub_ingestas": [],
     },
+    {
+        "id": "parking_pt",
+        "label": "Parking PT",
+        "frecuencia": "mensual",
+        "tabla": "raw_parking_ingreso_line",
+        "columna_periodo": "periodo",
+        "fondos": None,
+        "columna_fondo": None,
+        "columna_sub_ingesta": None,
+        "n_timeline": 6,
+        "tab_destino": "parking",
+        "sub_ingestas": [],
+    },
 ]
 
 
