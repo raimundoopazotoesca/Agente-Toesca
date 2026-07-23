@@ -20,6 +20,17 @@
     font-family:Georgia,"Times New Roman",serif;font-size:24px;letter-spacing:-.5px}
   .tc-fab:hover{transform:translateY(-2px);background:#1e293b}
   .tc-fab.hidden{display:none}
+  .tc-fab-label{position:fixed;right:92px;bottom:32px;z-index:99997;background:#fff;
+    color:#0f172a;border:1px solid #e2e8f0;border-radius:999px;padding:8px 12px;
+    box-shadow:0 10px 25px rgba(15,23,42,.16);font-family:-apple-system,
+    BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:13px;font-weight:600;
+    cursor:pointer;white-space:nowrap;transition:opacity .18s ease,transform .18s ease}
+  .tc-fab-label::after{content:"";position:absolute;right:-5px;top:50%;width:9px;height:9px;
+    background:#fff;border-right:1px solid #e2e8f0;border-top:1px solid #e2e8f0;
+    transform:translateY(-50%) rotate(45deg)}
+  .tc-fab-label:hover{transform:translateY(-1px)}
+  .tc-fab-label.hidden{display:none}
+  @media (max-width: 560px){.tc-fab-label{right:86px;bottom:32px;font-size:12.5px}}
   .tc-panel{position:fixed;right:22px;bottom:22px;z-index:99999;width:420px;
     max-width:calc(100vw - 32px);height:620px;max-height:calc(100vh - 40px);
     background:#fff;border-radius:16px;box-shadow:0 20px 45px rgba(15,23,42,.28);
@@ -82,6 +93,12 @@
   fab.innerHTML = "t.";
   document.body.appendChild(fab);
 
+  const fabLabel = document.createElement("button");
+  fabLabel.className = "tc-fab-label";
+  fabLabel.type = "button";
+  fabLabel.textContent = "Abrir chat";
+  document.body.appendChild(fabLabel);
+
   const panel = document.createElement("div");
   panel.className = "tc-panel";
   panel.innerHTML = `
@@ -122,10 +139,12 @@
     const isOpen = open ?? !panel.classList.contains("open");
     panel.classList.toggle("open", isOpen);
     fab.classList.toggle("hidden", isOpen);
+    fabLabel.classList.toggle("hidden", isOpen);
     if (isOpen) setTimeout(() => input.focus(), 50);
   }
 
   fab.addEventListener("click", () => toggle(true));
+  fabLabel.addEventListener("click", () => toggle(true));
   closeBtn.addEventListener("click", () => toggle(false));
 
   input.addEventListener("keydown", (e) => {
