@@ -24,6 +24,7 @@ from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
+from tools.db import ingest_balance_consolidado as balance_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
 from tools import db_chat  # noqa: E402
@@ -341,6 +342,54 @@ def api_parking_commit():
         return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
     try:
         summary = parking_core.commit(file.read(), file.filename, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
+    return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/balance/periodo_check")
+def api_balance_periodo_check():
+    periodo = request.args.get("periodo", "")
+    if not periodo:
+        return jsonify({"ya_ingestado": False, "fondos": {}})
+    con = get_conn_for(str(balance_core.DB_PATH))
+    try:
+        rows = con.execute(
+            "SELECT fondo_key, COUNT(*) FROM raw_balance_consolidado_line "
+            "WHERE periodo=? AND superseded_at IS NULL GROUP BY fondo_key",
+            (periodo,),
+        ).fetchall()
+        fondos = {row[0]: row[1] for row in rows}
+        return jsonify({"ya_ingestado": bool(fondos), "fondos": fondos})
+    finally:
+        con.close()
+
+
+@app.post("/api/balance/validate")
+def api_balance_validate():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    unidad = request.form.get("unidad", "M$")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube la planilla .xlsx de balances consolidados."], "warnings": []})
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el periodo (YYYY-MM)."], "warnings": []})
+    result = balance_core.validate(file.read(), file.filename, periodo, unidad)
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/balance/commit")
+def api_balance_commit():
+    file = request.files.get("file")
+    periodo = request.form.get("periodo", "")
+    unidad = request.form.get("unidad", "M$")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube la planilla .xlsx de balances consolidados."}), 400
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el periodo (YYYY-MM)."}), 400
+    try:
+        summary = balance_core.commit(file.read(), file.filename, periodo, unidad)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     _rebuild_factsheet()

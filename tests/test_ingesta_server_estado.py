@@ -17,12 +17,12 @@ def client(tmp_db_path, monkeypatch):
         yield c
 
 
-def test_estado_ingesta_endpoint_devuelve_3_tipos(client):
+def test_estado_ingesta_endpoint_devuelve_tipos(client):
     res = client.get("/api/estado_ingesta")
     assert res.status_code == 200
     data = res.get_json()
     ids = {t["id"] for t in data["tipos"]}
-    assert ids == {"eeff", "rentroll", "mercado"}
+    assert ids == {"eeff", "rentroll", "mercado", "balance", "parking_pt"}
     for tipo in data["tipos"]:
         assert "ultimo_ingestado" in tipo
         assert "pendiente" in tipo

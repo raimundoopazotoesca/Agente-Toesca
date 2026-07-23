@@ -1,4 +1,4 @@
-"""Estado de ingesta por tipo de dato (EEFF, Rent Roll, Mercado Oficinas).
+"""Estado de ingesta por tipo de dato (EEFF, Rent Roll, Mercado, etc.).
 
 Calcula, para cada tipo soportado por el menú de ingesta (web/ingesta.html),
 el último período ingestado y el próximo período pendiente, sin cache ni
@@ -96,6 +96,23 @@ CONFIG: list[dict] = [
         "n_timeline": 4,
         "tab_destino": "mercado",
         "sub_ingestas": [],
+    },
+    {
+        "id": "balance",
+        "label": "Balance Consolidado",
+        "frecuencia": "trimestral",
+        "tabla": "raw_balance_consolidado_line",
+        "columna_periodo": "periodo",
+        "fondos": ["TRI", "PT", "Apo"],
+        "columna_fondo": "fondo_key",
+        "columna_sub_ingesta": "fondo_key",
+        "n_timeline": 4,
+        "tab_destino": "balance",
+        "sub_ingestas": [
+            {"key": "TRI", "label": "TRI", "valores": ["TRI"]},
+            {"key": "PT", "label": "PT", "valores": ["PT"]},
+            {"key": "Apo", "label": "Apo", "valores": ["Apo"]},
+        ],
     },
     {
         "id": "parking_pt",
