@@ -1,4 +1,4 @@
-/* Burbuja flotante de chat contra la DB del agente.
+/* Burbuja flotante del Asistente Virtual Inmobiliario Toesca.
    Incluir con un tag <script> apuntando a este archivo (src="/chat_bubble.js" defer),
    o inlineado directo dentro de otro documento (ver build_factsheet.py).
    Requiere endpoint POST /api/chat. */
@@ -68,7 +68,7 @@
 
   const fab = document.createElement("button");
   fab.className = "tc-fab";
-  fab.title = "Preguntale a la DB";
+  fab.title = "Preguntale al asistente";
   fab.innerHTML = "💬";
   document.body.appendChild(fab);
 
@@ -77,8 +77,8 @@
   panel.innerHTML = `
     <div class="tc-head">
       <div>
-        <strong>Agente DB Toesca</strong>
-        <small>Responde solo con datos reales de agente_toesca_v2.db</small>
+        <strong>Asistente Virtual Inmobiliario Toesca</strong>
+        <small>Respuestas con informacion interna verificada</small>
       </div>
       <button class="tc-close" title="Cerrar">×</button>
     </div>
@@ -86,7 +86,7 @@
       <div class="tc-msg bot">
         Hola. Preguntame lo que quieras sobre el portfolio: NOI, vacancia,
         rent roll, EEFF, precios cuota, dividendos, KPIs, comparativas.
-        Respondo <b>solo</b> con lo que hay en la DB.
+        Respondo <b>solo</b> con informacion disponible y verificable.
       </div>
     </div>
     <div class="tc-hint">Ejemplos: "NOI Viña Centro 2026", "vacancia PT ultimos 6 meses", "valor cuota TRI serie A al cierre 2026-03"</div>
@@ -178,7 +178,7 @@
   function addTyping() {
     const div = document.createElement("div");
     div.className = "tc-typing";
-    div.textContent = "Consultando la DB…";
+    div.textContent = "Consultando informacion…";
     body.appendChild(div);
     body.scrollTop = body.scrollHeight;
     return div;
@@ -208,7 +208,7 @@
       if (data.sql) {
         const sqlEsc = escapeHtml(data.sql);
         html += `<div class="tc-sql" onclick="this.classList.toggle('open')">
-          ▸ Ver SQL (${data.rows ? data.rows.length : 0} filas)
+          ▸ Ver detalle tecnico (${data.rows ? data.rows.length : 0} resultados)
           <div class="tc-sql-body">${sqlEsc}</div></div>`;
       }
       addMsg("bot", html);

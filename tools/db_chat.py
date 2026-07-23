@@ -1,9 +1,9 @@
-"""Chat conversacional contra agente_toesca_v2.db.
+"""Chat conversacional del Asistente Virtual Inmobiliario Toesca.
 
 Flujo:
     pregunta -> LLM genera SQL (SELECT-only) o pide aclaracion ->
     ejecutamos read-only con LIMIT -> LLM sintetiza respuesta en Markdown
-    citando SQL y filas. Nunca alucina: si la DB no tiene el dato, lo dice.
+    usando solo datos internos disponibles. Nunca alucina: si no hay datos, lo dice.
 
 Providers soportados (via API OpenAI-compatible):
     - deepseek   DeepSeek V3       (recomendado, ~10-20x mas barato que Gemini Flash)
@@ -138,7 +138,7 @@ def _schema_summary() -> str:
     return _SCHEMA_CACHE
 
 
-# ─── Playbook exhaustivo del agente DB ────────────────────────────────────────
+# ─── Playbook exhaustivo del asistente inmobiliario ───────────────────────────
 # Este bloque es la "capacitacion" del agente: mapa completo de fondos, activos,
 # series, KPIs derivados, tablas raw y ejemplos few-shot. Auditado contra la DB
 # real 2026-07-23, no inventado.
@@ -434,12 +434,12 @@ def _run_sql(sql: str) -> tuple[list[str], list[list[Any]]]:
 
 # ─── Prompts ──────────────────────────────────────────────────────────────────
 _SQL_SYSTEM = """\
-Eres el "Agente DB Toesca": asistente del EQUIPO DE INVERSIONES INMOBILIARIAS de
-Toesca Asset Management y experto absoluto en la base de datos agente_toesca_v2.db.
+Eres el "Asistente Virtual Inmobiliario Toesca": asistente del EQUIPO DE INVERSIONES INMOBILIARIAS de
+Toesca Asset Management y experto absoluto en la informacion interna de los fondos TRI/PT/Apo.
 Tu audiencia son analistas y portfolio managers que operan los fondos TRI/PT/Apo:
 esperan respuestas precisas, sobrias y numericas — no explicaciones basicas.
 
-Tu trabajo es traducir preguntas del equipo a SQL SQLite basandote EXCLUSIVAMENTE
+Tu trabajo interno es traducir preguntas del equipo a SQL SQLite basandote EXCLUSIVAMENTE
 en el playbook (mensaje system siguiente). Si el playbook no cubre algo, pides
 aclaracion; no adivinas ni inventas tablas/columnas.
 
@@ -516,17 +516,20 @@ def _few_shot_messages() -> list[dict]:
 
 
 _ANSWER_SYSTEM = """\
-Eres asistente del EQUIPO DE INVERSIONES INMOBILIARIAS de Toesca Asset Management.
+Eres el Asistente Virtual Inmobiliario Toesca, asistente del EQUIPO DE INVERSIONES INMOBILIARIAS de Toesca Asset Management.
 Tu audiencia son analistas y PMs de los fondos TRI/PT/Apo — no expliques cosas
 basicas, se sobrio y directo. Recibes:
 - pregunta original del equipo
-- SQL ejecutado (verdad absoluta)
-- filas que retorno la DB (verdad absoluta)
+- consulta interna ejecutada
+- datos internos devueltos (verdad absoluta)
 
 Redacta respuesta en Markdown breve y directa. Reglas:
 - Usa SOLO los datos entregados. Si las filas estan vacias, dilo explicitamente
   y sugiere periodos disponibles cuando corresponda.
 - No inventes numeros, fechas, activos ni contexto que no este en las filas.
+- Conversa como un asistente financiero del equipo, no como una interfaz tecnica.
+- No menciones "DB", "base de datos", "SQLite", "SQL", tablas, columnas, filas ni nombres internos, salvo que el usuario lo pida explicitamente.
+- Para citar origen usa lenguaje natural: "segun la informacion interna disponible".
 - SIEMPRE indica la unidad (UF, CLP, %, m², años). Regla: si el SQL saca de
   derived_kpi.valor y la columna unidad no vino, INFIERE la unidad segun el kpi:
     noi_*, ingresos_*, deuda_*, caja_minima → UF (o CLP si es caja_minima)
@@ -540,8 +543,8 @@ Redacta respuesta en Markdown breve y directa. Reglas:
 - Si hay varias filas comparables, arma una tabla Markdown compacta.
 - Para preguntas de contexto amplio (evolucion, comparacion): agrega 1 linea de
   observacion cuantitativa (max, min, tendencia). NO opines ni recomiendes.
-- Cierra con `_Fuente: DB agente_toesca_v2.db_`.
-- No muestres el SQL (la UI ya lo ofrece con un boton).
+- Cierra con `_Fuente: informacion interna Toesca_`.
+- No muestres la consulta interna.
 """
 
 
@@ -640,7 +643,7 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
     err = _validate_sql(sql)
     if err:
         return {
-            "answer_md": f"⚠️ SQL rechazado: {err}",
+            "answer_md": f"⚠️ No pude procesar la consulta interna: {err}",
             "error": "invalid_sql",
             "sql": sql,
             "provider": provider["model"],
@@ -650,7 +653,7 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         cols, rows = _run_sql(sql)
     except sqlite3.Error as exc:
         return {
-            "answer_md": f"⚠️ La consulta fallo al ejecutarse: `{exc}`",
+            "answer_md": f"⚠️ La consulta interna no pudo ejecutarse: `{exc}`",
             "error": "sql_error",
             "sql": sql,
             "provider": provider["model"],
@@ -686,7 +689,7 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         provider = provider2
     except Exception as exc:
         answer_md = (
-            f"Encontré {len(rows)} filas pero fallé al redactar la respuesta: {exc}"
+            f"Encontré {len(rows)} resultados pero fallé al redactar la respuesta: {exc}"
         )
 
     return {

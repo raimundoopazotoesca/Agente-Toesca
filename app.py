@@ -33,7 +33,7 @@ from tools.memory_tools import load_memory, guardar_tarea
 
 # ─── Página ────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Agente Toesca",
+    page_title="Asistente Virtual Inmobiliario Toesca",
     page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="expanded",

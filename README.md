@@ -1,6 +1,6 @@
-# Agente Toesca — Automatización Microsoft 365
+# Asistente Virtual Inmobiliario Toesca — Automatización Microsoft 365
 
-Agente conversacional con Gemini 2.5 Flash para automatizar Outlook, SharePoint y Excel en entorno corporativo.
+Asistente conversacional con Gemini 2.5 Flash para automatizar Outlook, SharePoint y Excel en entorno corporativo inmobiliario.
 
 ## Compatibilidad
 
