@@ -37,3 +37,22 @@ Vistas: `v_parking_ratio_no_abonados` (1 fila, ratio+estacionamientos), `v_parki
 
 Valores de referencia (2026-06): ratio variable ≈0.60, estacionamientos no abonados ≈301,
 ocupación mensual ≈0.48.
+
+## Resultado en UF (migración 056)
+
+Metodología acordada con el usuario 2026-07-23. Verificado exacto contra la planilla para
+2026-06: fila 13 "total ingresos mensual" == fila 33 "liquidación factura-Neto" (118.861.096) y
+fila 27 "total gastos" == fila 29 "facturación SABA-Neto" (16.030.297) — son la misma cifra
+reportada dos veces, no se suman.
+
+- **Ingresos netos** = total ingresos mensual (`SUM` de conceptos `tipo='venta'`)
+- **Gastos netos** = total gastos mensual (`SUM` de conceptos `tipo='gasto'`)
+- **Resultado neto UF** = `(ingresos_netos - gastos_netos) / UF`
+- **Ingresos variables UF** = ingresos_variables (mismo criterio que [[activos/parking-pt]]
+  ocupación: todo `venta` excepto código Abonados) / UF
+- **Ingresos abonados UF** = ingresos_abonados (código `70500003-250`) / UF
+- **UF del periodo** = valor de `raw_uf_diaria` del último día con dato del mes (misma
+  convención que "precio último día del mes del CDG")
+
+Vista: `v_parking_resultado_uf`. Referencia 2026-06: resultado neto ≈2.519 UF, ingresos
+variables ≈1.793 UF, ingresos abonados ≈1.119 UF.

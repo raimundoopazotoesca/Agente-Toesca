@@ -14,6 +14,15 @@ simple de diarias mientras el denominador sea constante intra-mes. Migración 05
 `v_parking_ratio_no_abonados`, `v_parking_ocupacion_diaria`, `v_parking_ocupacion_mensual`. Ver
 [[activos/parking-pt]].
 
+## [2026-07-23] db | Resultados Parking PT en UF (migración 056)
+
+Agregada vista `v_parking_resultado_uf`: resultado neto (ingresos_netos - gastos_netos)/UF,
+ingresos variables/UF, ingresos abonados/UF. Confirmado con el usuario que "ingresos netos" y
+"gastos netos" no son suma de dos filas de la planilla sino la misma cifra reportada dos veces
+(fila 13 total ingresos == fila 33 liquidación neto; fila 27 total gastos == fila 29 SABA neto),
+verificado exacto contra 2026-06. UF del periodo = último día con dato del mes en
+`raw_uf_diaria`. Ver [[activos/parking-pt]].
+
 ## [2026-07-21] factsheet | Página 3 Apo — vuelta a estructura sin datos
 
 El commit anterior (e2768a1) hardcodeó valores reales del snapshot Apo octubre 2025. El
