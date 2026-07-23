@@ -68,6 +68,20 @@
   ol.instructions { color: #444; font-size: 13px; padding-left: 20px; margin: 8px 0 0; }
   ol.instructions li { margin-bottom: 4px; }
   .muted { color: var(--muted); font-size: 12.5px; }
+  .status-inline {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 20px;
+    font-size: 12.5px; font-weight: 600;
+  }
+  .status-inline.loading { color: #33413b; }
+  .status-inline.success { color: var(--green); }
+  .status-inline.error { color: var(--err); }
+  .status-inline.warn { color: var(--warn); }
+  .status-spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #d8d8d8; border-top-color: var(--green);
+    animation: status-spin .8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes status-spin { to { transform: rotate(360deg); } }
   .hidden { display: none !important; }
   .copied-flash { color: var(--green); font-size: 13px; margin-left: 4px; font-weight: 600; }
 
@@ -571,6 +585,21 @@ function fmt(n) {
   return Number(n).toLocaleString('es-CL', {maximumFractionDigits: 2});
 }
 
+function setStatus(el, text = '', state = '') {
+  el.classList.remove('loading', 'success', 'error', 'warn');
+  el.classList.add('status-inline');
+  if (state) el.classList.add(state);
+  if (!text) {
+    el.textContent = '';
+    return;
+  }
+  if (state === 'loading') {
+    el.innerHTML = `<span class="status-spinner" aria-hidden="true"></span><span>${text}</span>`;
+    return;
+  }
+  el.textContent = text;
+}
+
 // ── TAB EEFF ─────────────────────────────────────────────────────────────
 const promptCache = {};
 let lastValidatedText = null;
@@ -643,7 +672,8 @@ function resetPreview() {
   document.getElementById('preview').classList.add('hidden');
   btnConfirm.disabled = true;
   lastValidationOk = false;
-  ingestStatus.textContent = '';
+  setStatus(validateStatus);
+  setStatus(ingestStatus);
 }
 
 function renderPreview(data) {
@@ -762,7 +792,8 @@ btnValidate.addEventListener('click', async () => {
   const fecha_publicacion = eeffFechaPublicacion.value;
   if (!periodo_declarado) { validateStatus.textContent = 'Declara el período del EEFF.'; return; }
   if (!fecha_publicacion) { validateStatus.textContent = 'Declara la fecha de publicación del EEFF.'; return; }
-  validateStatus.textContent = 'Validando…';
+  setStatus(validateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnValidate.disabled = true;
   btnConfirm.disabled = true;
   try {
     const res = await fetch('/api/validate', {
@@ -775,9 +806,11 @@ btnValidate.addEventListener('click', async () => {
     lastValidatedPeriodo = periodo_declarado;
     lastValidatedFechaPublicacion = fecha_publicacion;
     renderPreview(data);
-    validateStatus.textContent = '';
+    setStatus(validateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
   } catch (e) {
-    validateStatus.textContent = 'Error: ' + e.message;
+    setStatus(validateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnValidate.disabled = false;
   }
 });
 
@@ -788,7 +821,7 @@ btnConfirm.addEventListener('click', async () => {
     return;
   }
   btnConfirm.disabled = true;
-  ingestStatus.textContent = 'Ingestando…';
+  setStatus(ingestStatus, 'Ingestando en la base de datos...', 'loading');
   try {
     const res = await fetch('/api/ingest', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -800,14 +833,15 @@ btnConfirm.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
     if (data.status === 'skipped_duplicate') {
-      ingestStatus.textContent = 'Este texto ya había sido ingestado antes — no se creó nada nuevo.';
+      setStatus(ingestStatus, 'Este texto ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
     } else {
-      ingestStatus.textContent =
+      setStatus(ingestStatus,
         `Listo: ${data.rows_eeff} líneas EEFF, ${data.rows_valor_cuota} valor cuota, ` +
-        `${data.rows_dividendos} dividendos insertados (run #${data.run_id}).`;
+        `${data.rows_dividendos} dividendos insertados (run #${data.run_id}).`,
+        'success');
     }
   } catch (e) {
-    ingestStatus.textContent = 'Error al ingestar: ' + e.message;
+    setStatus(ingestStatus, 'Error al ingestar: ' + e.message, 'error');
     btnConfirm.disabled = false;
   }
 });
@@ -940,7 +974,8 @@ function resetRrPreview() {
   rrPreview.classList.add('hidden');
   btnRrConfirm.disabled = true;
   rrLastValidationOk = false;
-  rrIngestStatus.textContent = '';
+  setStatus(rrValidateStatus);
+  setStatus(rrIngestStatus);
 }
 
 function evTag(evento) {
@@ -1090,7 +1125,8 @@ function renderRrPreview(data) {
 btnRrValidate.addEventListener('click', async () => {
   if (!rrSelectedFile) { rrValidateStatus.textContent = 'Selecciona un archivo primero.'; return; }
   if (!rrPeriodo.value) { rrValidateStatus.textContent = 'Selecciona el período.'; return; }
-  rrValidateStatus.textContent = 'Validando…';
+  setStatus(rrValidateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnRrValidate.disabled = true;
   btnRrConfirm.disabled = true;
   try {
     const fd = new FormData();
@@ -1101,9 +1137,11 @@ btnRrValidate.addEventListener('click', async () => {
     rrLastValidatedFile = rrSelectedFile;
     rrLastValidatedPeriodo = rrPeriodo.value;
     renderRrPreview(data);
-    rrValidateStatus.textContent = '';
+    setStatus(rrValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
   } catch (e) {
-    rrValidateStatus.textContent = 'Error: ' + e.message;
+    setStatus(rrValidateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnRrValidate.disabled = false;
   }
 });
 
@@ -1117,7 +1155,7 @@ btnRrConfirm.addEventListener('click', async () => {
     return;
   }
   btnRrConfirm.disabled = true;
-  rrIngestStatus.textContent = 'Ingestando…';
+  setStatus(rrIngestStatus, 'Ingestando en la base de datos...', 'loading');
   try {
     const fd = new FormData();
     fd.append('file', rrLastValidatedFile);
@@ -1126,13 +1164,14 @@ btnRrConfirm.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
     if (data.status === 'skipped_duplicate') {
-      rrIngestStatus.textContent = 'Este archivo ya había sido ingestado antes — no se creó nada nuevo.';
+      setStatus(rrIngestStatus, 'Este archivo ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
     } else {
-      rrIngestStatus.textContent =
-        `Listo: ${data.rows_inserted} filas insertadas para ${data.activos.join(', ')} (run #${data.run_id}).`;
+      setStatus(rrIngestStatus,
+        `Listo: ${data.rows_inserted} filas insertadas para ${data.activos.join(', ')} (run #${data.run_id}).`,
+        'success');
     }
   } catch (e) {
-    rrIngestStatus.textContent = 'Error al ingestar: ' + e.message;
+    setStatus(rrIngestStatus, 'Error al ingestar: ' + e.message, 'error');
     btnRrConfirm.disabled = false;
   }
 });
@@ -1198,7 +1237,8 @@ function resetMercadoPreview() {
   document.getElementById('mercado-preview').classList.add('hidden');
   btnMercadoConfirm.disabled = true;
   lastMercadoValidationOk = false;
-  mercadoIngestStatus.textContent = '';
+  setStatus(mercadoValidateStatus);
+  setStatus(mercadoIngestStatus);
 }
 mercadoInput.addEventListener('input', resetMercadoPreview);
 mercadoPeriodo.addEventListener('change', resetMercadoPreview);
@@ -1252,7 +1292,8 @@ btnMercadoValidate.addEventListener('click', async () => {
   const periodo = mercadoPeriodo.value;
   const proveedor = mercadoProveedor.value;
   if (!periodo) { mercadoValidateStatus.textContent = 'Declara el período del informe.'; return; }
-  mercadoValidateStatus.textContent = 'Validando…';
+  setStatus(mercadoValidateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnMercadoValidate.disabled = true;
   btnMercadoConfirm.disabled = true;
   try {
     const res = await fetch('/api/mercado/validate', {
@@ -1264,9 +1305,11 @@ btnMercadoValidate.addEventListener('click', async () => {
     lastMercadoPeriodo = periodo;
     lastMercadoProveedor = proveedor;
     renderMercadoPreview(data);
-    mercadoValidateStatus.textContent = '';
+    setStatus(mercadoValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
   } catch (e) {
-    mercadoValidateStatus.textContent = 'Error: ' + e.message;
+    setStatus(mercadoValidateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnMercadoValidate.disabled = false;
   }
 });
 
@@ -1277,7 +1320,7 @@ btnMercadoConfirm.addEventListener('click', async () => {
     return;
   }
   btnMercadoConfirm.disabled = true;
-  mercadoIngestStatus.textContent = 'Ingestando…';
+  setStatus(mercadoIngestStatus, 'Ingestando en la base de datos...', 'loading');
   try {
     const res = await fetch('/api/mercado/commit', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1286,15 +1329,16 @@ btnMercadoConfirm.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
     if (data.status === 'skipped_duplicate') {
-      mercadoIngestStatus.textContent = 'Este texto ya había sido ingestado antes — no se creó nada nuevo.';
+      setStatus(mercadoIngestStatus, 'Este texto ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
     } else {
-      mercadoIngestStatus.textContent =
+      setStatus(mercadoIngestStatus,
         `Listo: ${data.filas_insertadas} filas insertadas` +
         (data.filas_superseded ? `, ${data.filas_superseded} filas anteriores reemplazadas` : '') +
-        ` (run #${data.run_id}).`;
+        ` (run #${data.run_id}).`,
+        'success');
     }
   } catch (e) {
-    mercadoIngestStatus.textContent = 'Error al ingestar: ' + e.message;
+    setStatus(mercadoIngestStatus, 'Error al ingestar: ' + e.message, 'error');
     btnMercadoConfirm.disabled = false;
   }
 });
@@ -1614,7 +1658,8 @@ function resetPkPreview() {
   pkPreview.classList.add('hidden');
   btnPkConfirm.disabled = true;
   pkLastValidationOk = false;
-  pkIngestStatus.textContent = '';
+  setStatus(pkValidateStatus);
+  setStatus(pkIngestStatus);
 }
 
 pkDropzone.addEventListener('click', () => pkFileInput.click());
@@ -1718,24 +1763,28 @@ function renderPkPreview(data) {
 btnPkValidate.addEventListener('click', async () => {
   if (!pkSelectedFile) { pkValidateStatus.textContent = 'Elige un archivo primero.'; return; }
   if (!pkPeriodo.value) { pkValidateStatus.textContent = 'Elige el período primero.'; return; }
-  pkValidateStatus.textContent = 'Validando...';
+  setStatus(pkValidateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnPkValidate.disabled = true;
+  btnPkConfirm.disabled = true;
   const fd = new FormData();
   fd.append('file', pkSelectedFile);
   fd.append('periodo', pkPeriodo.value);
   try {
     const res = await fetch('/api/parking/validate', { method: 'POST', body: fd });
     const data = await res.json();
-    pkValidateStatus.textContent = data.ok ? 'OK — revisa el preview' : 'Errores — revisa abajo';
+    setStatus(pkValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
     renderPkPreview(data);
   } catch (e) {
-    pkValidateStatus.textContent = 'Error: ' + e.message;
+    setStatus(pkValidateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnPkValidate.disabled = false;
   }
 });
 
 btnPkConfirm.addEventListener('click', async () => {
   if (!pkSelectedFile || !pkPeriodo.value) return;
   btnPkConfirm.disabled = true;
-  pkIngestStatus.textContent = 'Ingestando...';
+  setStatus(pkIngestStatus, 'Ingestando en la base de datos...', 'loading');
   const fd = new FormData();
   fd.append('file', pkSelectedFile);
   fd.append('periodo', pkPeriodo.value);
@@ -1743,18 +1792,19 @@ btnPkConfirm.addEventListener('click', async () => {
     const res = await fetch('/api/parking/commit', { method: 'POST', body: fd });
     const data = await res.json();
     if (!data.ok) {
-      pkIngestStatus.textContent = 'Error: ' + (data.error || 'desconocido');
+      setStatus(pkIngestStatus, 'Error: ' + (data.error || 'desconocido'), 'error');
       btnPkConfirm.disabled = false;
       return;
     }
     const ins = data.insertados, sup = data.superseded;
-    pkIngestStatus.innerHTML =
+    setStatus(pkIngestStatus,
       `✓ Ingesta OK (run ${data.run_id}). ` +
       `Insertados: ${ins.ingresos} ingresos, ${ins.gastos} gastos, ${ins.facturacion} facturación, ${ins.tickets} tickets. ` +
-      `Reemplazados: ${sup.ingresos + sup.gastos + sup.facturacion + sup.tickets} filas previas.`;
+      `Reemplazados: ${sup.ingresos + sup.gastos + sup.facturacion + sup.tickets} filas previas.`,
+      'success');
     checkPkPeriodoStatus();
   } catch (e) {
-    pkIngestStatus.textContent = 'Error: ' + e.message;
+    setStatus(pkIngestStatus, 'Error: ' + e.message, 'error');
     btnPkConfirm.disabled = false;
   }
 });
