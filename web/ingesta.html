@@ -167,6 +167,25 @@
   .inicio-tl-label { font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .inicio-card button.ingestar-btn { width: 100%; }
 
+  .inicio-actions {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 14px 18px;
+    margin-bottom: 18px; display: flex; justify-content: space-between;
+    align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .inicio-actions-title {
+    font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .inicio-actions-copy { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .inicio-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 34px; padding: 8px 18px; border-radius: 3px;
+    border: 1px solid var(--green); background: var(--green); color: #fff;
+    font-weight: 700; text-decoration: none; white-space: nowrap;
+  }
+  .inicio-action-btn:hover { background: #009c69; color: #fff; }
+
   .inicio-expand-toggle {
     background: transparent; border: none; color: var(--muted); cursor: pointer;
     font-size: 12px; font-weight: 600; padding: 6px 0 0; width: 100%;
@@ -263,6 +282,13 @@
 
 <!-- ══════════════════════════ TAB INICIO ══════════════════════════ -->
 <div id="tab-inicio" class="tab-panel active">
+  <div class="inicio-actions">
+    <div>
+      <div class="inicio-actions-title">Mapa de datos</div>
+      <div class="inicio-actions-copy">Explora tablas, vistas, columnas y relaciones de la DB.</div>
+    </div>
+    <a class="inicio-action-btn" href="/db-diagrama" target="_blank" rel="noopener">Abrir mapa DB</a>
+  </div>
   <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
   <div id="inicio-cards" class="inicio-cards"></div>
 </div>

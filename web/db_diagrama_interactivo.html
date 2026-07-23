@@ -1,0 +1,1122 @@
+<!-- ARCHIVO AUTOGENERADO por scripts/build_db_diagram.py — NO editar a mano. Regenerar con `python -X utf8 scripts/build_db_diagram.py`. -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Toesca · Mapa DB</title>
+<style>
+  :root {
+    --green: #00B27A;
+    --green-soft: #C8ECD8;
+    --green-pale: #EAF7F0;
+    --green-header: #A6DEC1;
+    --text: #202020;
+    --muted: #626262;
+    --border: #A6A6A6;
+    --line: #E6E6E6;
+    --page: #FFFFFF;
+    --paper: #F4F4F4;
+    --dark-a: #3D3D3D;
+    --dark-b: #2B2B2B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--text);
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 12px;
+  }
+  .page {
+    max-width: 1360px;
+    margin: 12px auto;
+    background: var(--page);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    min-height: calc(100vh - 24px);
+  }
+  header {
+    background: linear-gradient(180deg,var(--dark-a),var(--dark-b));
+    color: #fff;
+    padding: 22px 32px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+  }
+  header h1 { margin: 0; font-size: 30px; font-weight: 300; letter-spacing: 0.5px; }
+  header h2 {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: #dedede;
+    font-variant: small-caps;
+    letter-spacing: 1px;
+  }
+  header .logo { height: 32px; width: auto; display: block; }
+  .month-bar {
+    padding: 8px 32px 4px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1px;
+    border-bottom: 2px solid var(--green);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .month-bar span:last-child { color: #555; font-weight: 600; font-size: 11px; letter-spacing: 0; }
+  .content { padding: 18px 32px 26px; }
+  .section-title {
+    background: var(--green-header);
+    color: #000;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 8px;
+  }
+  .control-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.25fr) minmax(200px, 1fr) 140px 145px 160px;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 12px;
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .field-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #4a6b5c;
+  }
+  input, select, button {
+    font: inherit;
+    min-height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: #fff;
+    color: var(--text);
+    padding: 5px 9px;
+  }
+  button {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--green);
+    border-color: var(--green);
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  button:hover { background: #E6F5EC; }
+  button.active { background: var(--green); color: #fff; }
+  .mode-row, .chip-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .mode-btn, .chip-btn { min-width: 74px; }
+  .chip-btn { color: #555; border-color: #d2d2d2; }
+  .chip-btn.active { border-color: var(--green); }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(110px, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    border: 1px solid #DCDCDC;
+    background: #FAFBFA;
+    padding: 8px 10px;
+    min-height: 58px;
+  }
+  .stat strong { display: block; font-size: 20px; line-height: 1; color: #1a1a1a; font-weight: 700; }
+  .stat span { display: block; margin-top: 5px; color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+  .work-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 18px;
+    align-items: start;
+  }
+  .canvas-panel, .detail-panel, .table-panel {
+    border: 1px solid #D8D8D8;
+    background: #fff;
+    min-width: 0;
+  }
+  .panel-head {
+    min-height: 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+    background: #F6F9F7;
+  }
+  .panel-head strong {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #33413b;
+  }
+  .panel-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .panel-actions button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+  .canvas-wrap {
+    height: 620px;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(#F0F0F0 1px, transparent 1px),
+      linear-gradient(90deg, #F0F0F0 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  svg { display: block; width: 100%; height: 100%; }
+  .edge {
+    fill: none;
+    stroke: #8D8D8D;
+    stroke-width: 1.1;
+    opacity: .28;
+  }
+  .edge.declared { stroke-width: 1.9; opacity: .52; }
+  .edge.highlight { stroke: var(--green); stroke-width: 3; opacity: .95; }
+  .edge.hidden { display: none; }
+  .domain-title { font-size: 11px; fill: #33413b; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .domain-count { font-size: 10px; fill: #666; }
+  .node { cursor: pointer; }
+  .node .hitbox { fill: transparent; pointer-events: all; }
+  .node rect.main { fill: #fff; stroke: #A8A8A8; stroke-width: 1; rx: 3; }
+  .node:hover rect.main { fill: var(--green-pale); stroke: var(--green); stroke-width: 2; }
+  .node .stripe { opacity: .98; }
+  .node .name { fill: #1f1f1f; font-size: 12px; font-weight: 700; }
+  .node .meta { fill: #5f5f5f; font-size: 10.5px; }
+  .node .tag { fill: #F6F9F7; stroke: #D8D8D8; rx: 3; }
+  .node .tag-text { fill: #4b4b4b; font-size: 9px; font-weight: 700; }
+  .node.hidden { display: none; }
+  .node.dimmed { opacity: .16; }
+  .node.selected rect.main { fill: #F0F8F4; stroke: var(--green); stroke-width: 2.4; }
+  .node.highlight rect.main { stroke: #222; stroke-width: 2; }
+  .hint {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    background: rgba(255,255,255,.92);
+    border: 1px solid #D8D8D8;
+    padding: 7px 9px;
+    color: #555;
+    font-size: 11px;
+  }
+  .path-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+    margin: 0 0 12px;
+  }
+  .path-result {
+    margin: -4px 0 12px;
+    color: #555;
+    font-size: 11px;
+    min-height: 16px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+  table th, table td {
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.35;
+    border-bottom: 1px solid #E6E6E6;
+    text-align: right;
+    vertical-align: top;
+  }
+  table th:first-child, table td:first-child { text-align: left; }
+  table th {
+    background: #F6F9F7;
+    color: #33413b;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--green);
+  }
+  tbody tr:nth-child(even) { background: #FAFBFA; }
+  tbody tr:hover { background: #EAF7F0; }
+  tr.selected-row, tr.selected-row:nth-child(even) { background: var(--green-soft); color: #0d3a29; font-weight: 700; }
+  .object-table-wrap, .matrix-wrap { max-height: 620px; overflow: auto; }
+  .object-table td:first-child { cursor: pointer; font-weight: 600; color: #1e5f47; }
+  .view { display: none; }
+  .view.active { display: block; }
+  .detail-panel { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  .detail-title {
+    padding: 12px 12px 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .detail-title h3 { margin: 0 0 6px; font-size: 18px; line-height: 1.2; overflow-wrap: anywhere; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pill {
+    display: inline-flex;
+    border: 1px solid #D8D8D8;
+    background: #FAFBFA;
+    border-radius: 3px;
+    padding: 3px 7px;
+    color: #444;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .detail-body { padding: 10px 12px 14px; }
+  .detail-section { margin-bottom: 14px; }
+  .detail-section h4 {
+    margin: 0 0 6px;
+    font-size: 10px;
+    color: #4a6b5c;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #DDD;
+    padding-bottom: 3px;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: 115px minmax(0,1fr);
+    gap: 5px 8px;
+    color: #555;
+    font-size: 11px;
+  }
+  .kv strong { color: #333; }
+  .mini-list {
+    border: 1px solid #E1E1E1;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .mini-row {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 80px 40px;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #EDEDED;
+    font-size: 11px;
+  }
+  .mini-row:last-child { border-bottom: 0; }
+  .mini-row:nth-child(even) { background: #FAFBFA; }
+  .mini-row span { overflow-wrap: anywhere; }
+  .muted { color: #666; }
+  pre {
+    margin: 0;
+    padding: 8px 10px;
+    background: #F6F8F7;
+    border-left: 3px solid var(--green);
+    overflow: auto;
+    max-height: 190px;
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+  .matrix-cell { text-align: center; cursor: pointer; }
+  .matrix-cell.has { color: #0d6b4b; font-weight: 700; background: #F0F8F4; }
+  .matrix-cell.has:hover { background: var(--green-soft); }
+  .notice {
+    color: #555;
+    font-size: 11px;
+    margin: 8px 0 12px;
+    line-height: 1.4;
+  }
+  @media (max-width: 1050px) {
+    .control-grid { grid-template-columns: 1fr 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .work-grid { grid-template-columns: 1fr; }
+    .detail-panel { position: static; max-height: none; }
+  }
+  @media (max-width: 680px) {
+    header, .month-bar, .content { padding-left: 16px; padding-right: 16px; }
+    header { align-items: flex-start; flex-direction: column; }
+    .control-grid, .path-bar, .stats-grid { grid-template-columns: 1fr; }
+    .canvas-wrap { height: 520px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>Mapa de Base de Datos</h1>
+      <h2>Automation Agent · Toesca</h2>
+    </div>
+    <img class="logo" src="data:image/png;base64,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" alt="Toesca">
+  </header>
+
+  <div class="month-bar">
+    <span id="schema-label">SCHEMA VERSION</span>
+    <span id="generated-label">Generado</span>
+  </div>
+
+  <div class="content">
+    <div class="section-title">Explorador interactivo</div>
+    <div class="stats-grid">
+      <div class="stat"><strong id="stat-version">—</strong><span>schema_version</span></div>
+      <div class="stat"><strong id="stat-tables">—</strong><span>tablas</span></div>
+      <div class="stat"><strong id="stat-views">—</strong><span>vistas</span></div>
+      <div class="stat"><strong id="stat-rows">—</strong><span>filas en tablas</span></div>
+      <div class="stat"><strong id="stat-edges">—</strong><span>relaciones</span></div>
+    </div>
+
+    <div class="control-grid">
+      <div class="field">
+        <label class="field-label" for="search">Buscar tabla, vista o columna</label>
+        <input id="search" type="search" placeholder="Ej: raw_eeff_line, periodo, fondo_key">
+      </div>
+      <div class="field">
+        <label class="field-label" for="domain-filter">Dominio</label>
+        <select id="domain-filter"></select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="type-filter">Tipo</label>
+        <select id="type-filter">
+          <option value="all">Tablas y vistas</option>
+          <option value="table">Solo tablas</option>
+          <option value="view">Solo vistas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="edge-filter">Relaciones</label>
+        <select id="edge-filter">
+          <option value="all">Todas</option>
+          <option value="declared">FK declaradas</option>
+          <option value="inferred">Inferidas</option>
+          <option value="selected">Del nodo seleccionado</option>
+          <option value="none">Ocultar</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="row-sort">Orden lista</label>
+        <select id="row-sort">
+          <option value="domain">Dominio</option>
+          <option value="name">Nombre</option>
+          <option value="rows">Filas</option>
+          <option value="columns">Columnas</option>
+          <option value="relations">Relaciones</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="chip-row" id="domain-chips"></div>
+
+    <div class="mode-row">
+      <button class="mode-btn active" type="button" data-mode="map">Mapa</button>
+      <button class="mode-btn" type="button" data-mode="list">Lista</button>
+      <button class="mode-btn" type="button" data-mode="matrix">Matriz</button>
+      <button id="reset-all" type="button">Limpiar foco</button>
+    </div>
+
+    <div class="path-bar">
+      <select id="path-from" aria-label="Origen"></select>
+      <select id="path-to" aria-label="Destino"></select>
+      <button id="path-find" type="button">Buscar ruta</button>
+    </div>
+    <div class="path-result" id="path-result"></div>
+
+    <div class="work-grid">
+      <section>
+        <div class="view active" id="view-map">
+          <div class="canvas-panel">
+            <div class="panel-head">
+              <strong>Mapa entidad-relación</strong>
+              <div class="panel-actions">
+                <button id="zoom-in" type="button">+</button>
+                <button id="zoom-out" type="button">−</button>
+                <button id="center-map" type="button">Centrar</button>
+                <button id="focus-upstream" type="button">Upstream</button>
+                <button id="focus-downstream" type="button">Downstream</button>
+              </div>
+            </div>
+            <div class="canvas-wrap">
+              <svg id="diagram" role="img" aria-label="Mapa de tablas y vistas de SQLite"></svg>
+              <div class="hint">Click en cualquier nodo para ver detalle. Doble click enfoca sus vecinos.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="view" id="view-list">
+          <div class="table-panel">
+            <div class="panel-head">
+              <strong>Inventario del esquema</strong>
+              <span class="muted" id="list-count">—</span>
+            </div>
+            <div class="object-table-wrap">
+              <table class="object-table">
+                <thead>
+                  <tr><th>Objeto</th><th>Dominio</th><th>Tipo</th><th>Filas</th><th>Cols</th><th>Rel.</th><th>Rango principal</th></tr>
+                </thead>
+                <tbody id="object-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="view" id="view-matrix">
+          <div class="table-panel">
+            <div class="panel-head">
+              <strong>Matriz de relaciones por dominio</strong>
+              <span class="muted">Filas: origen · columnas: destino</span>
+            </div>
+            <div class="notice">Haz click en una celda con valor para filtrar el mapa por relaciones entre esos dominios.</div>
+            <div class="matrix-wrap">
+              <table>
+                <thead id="matrix-head"></thead>
+                <tbody id="matrix-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="detail-panel">
+        <div class="panel-head">
+          <strong>Detalle</strong>
+          <div class="panel-actions">
+            <button id="detail-focus" type="button">Foco</button>
+            <button id="detail-neighbors" type="button">Vecinos</button>
+          </div>
+        </div>
+        <div class="detail-title">
+          <h3 id="detail-title">—</h3>
+          <div class="pill-row" id="detail-pills"></div>
+        </div>
+        <div class="detail-body" id="detail-body"></div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<script>
+const DB_DATA = {"generatedAt":"2026-07-23T16:05:38","dbPath":"memory/agente_toesca_v2.db","schemaVersion":56,"tableCount":33,"viewCount":22,"totalRows":74301,"groups":[{"label":"Dimensiones","color":"#2f80ed","key":"dimensiones","count":7},{"label":"Raw financiero","color":"#00a676","key":"raw_finanzas","count":13},{"label":"Raw operacional","color":"#f2994a","key":"raw_operacional","count":8},{"label":"Facts","color":"#9b51e0","key":"facts","count":2},{"label":"KPIs derivados","color":"#eb5757","key":"derived","count":1},{"label":"Auditoria","color":"#828282","key":"audit","count":2},{"label":"Vistas","color":"#56ccf2","key":"views","count":22}],"objects":[{"name":"derived_kpi","type":"table","domain":"derived","domainLabel":"KPIs derivados","rowCount":12752,"columnCount":11,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"entidad_tipo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"entidad_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"kpi","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":5,"name":"variante","type":"TEXT","notnull":false,"default":"NULL","pk":false},{"cid":6,"name":"valor","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"unidad","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"formula","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":9,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":10,"name":"computed_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false}],"dateRanges":[{"column":"periodo","min":"2017-12","max":"2026-08"},{"column":"computed_at","min":"2026-05-25 20:17:01","max":"2026-07-20 19:34:44"}],"facets":{"entidad_key":[{"value":"PT","count":1865},{"value":"Apo","count":1743},{"value":"TRI","count":1203},{"value":"Boulevard","count":694},{"value":"Torre A","count":694},{"value":"CFITOERI1C","count":683},{"value":"CFITOERI1A","count":682},{"value":"CFITOERI1I","count":680},{"value":"CFITRIPT-E","count":642},{"value":"INMOSA","count":608},{"value":"Viña Centro","count":478},{"value":"Mall Curicó","count":379}],"entidad_tipo":[{"value":"activo","count":5456},{"value":"fondo","count":4418},{"value":"serie","count":2878}],"kpi":[{"value":"perfil_vencimiento","count":1236},{"value":"m2_vacantes","count":1091},{"value":"duration_deuda","count":988},{"value":"noi_mensual","count":826},{"value":"ltc","count":750},{"value":"ltv","count":750},{"value":"dscr","count":649},{"value":"ingresos_mensual","count":630},{"value":"dy","count":550},{"value":"dy_amort","count":550},{"value":"ingresos_mes","count":424},{"value":"noi_mes","count":424}],"variante":[{"value":"bursatil","count":778},{"value":"0-3","count":309},{"value":"3-7","count":309},{"value":"7-10","count":309},{"value":">10","count":309},{"value":"contable","count":293},{"value":"capital","count":29}]},"indexes":[{"name":"uq_derived_kpi_logical","unique":true,"origin":"c","partial":false,"columns":["entidad_tipo","entidad_key","periodo","kpi",null]},{"name":"idx_kpi_kpi","unique":false,"origin":"c","partial":false,"columns":["kpi"]},{"name":"idx_kpi_periodo","unique":false,"origin":"c","partial":false,"columns":["periodo"]},{"name":"idx_kpi_entidad","unique":false,"origin":"c","partial":false,"columns":["entidad_tipo","entidad_key"]},{"name":"sqlite_autoindex_derived_kpi_1","unique":true,"origin":"u","partial":false,"columns":["entidad_tipo","entidad_key","periodo","kpi","variante"]}],"sampleRows":[{"id":1,"entidad_tipo":"fondo","entidad_key":"Apo","periodo":"2025-12","kpi":"valor_cuota_libro","variante":null,"valor":27196.5994,"unidad":"CLP","formula":"eeff_pdf_v1"},{"id":2,"entidad_tipo":"fondo","entidad_key":"PT","periodo":"2025-12","kpi":"valor_cuota_libro","variante":null,"valor":13707.435,"unidad":"CLP","formula":"eeff_pdf_v1"},{"id":3,"entidad_tipo":"serie","entidad_key":"CFITOERI1A","periodo":"2025-06","kpi":"valor_cuota_libro","variante":null,"valor":32252.4814,"unidad":"CLP","formula":"eeff_pdf_v1"}],"hasSql":true},{"name":"dim_activo","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":19,"columnCount":10,"columns":[{"cid":0,"name":"activo_key","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"nombre","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"tipo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"participacion_fondo_activo","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"categoria","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"sociedad","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"sociedad_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"participacion_en_sociedad","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"vigente_hasta","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"vigente_hasta","min":"2025-08","max":"2025-08"}],"facets":{"activo_key":[{"value":"Apo3001","count":1},{"value":"Apo4501","count":1},{"value":"Apo4700","count":1},{"value":"Boulevard","count":1},{"value":"Ed. Guardiamarina","count":1},{"value":"Ed. Placilla","count":1},{"value":"INMOSA","count":1},{"value":"Mall Curicó","count":1},{"value":"Parking PT","count":1},{"value":"Residencia Arturo Medina","count":1},{"value":"Residencia Candil","count":1},{"value":"Residencia Colombia","count":1}],"fondo_key":[{"value":"TRI","count":14},{"value":"PT","count":3},{"value":"Apo","count":2}],"sociedad_key":[{"value":"ApoquindoSpA","count":2},{"value":"Chanarcillo","count":2},{"value":"BlvdSpA","count":1},{"value":"CuricoSpA","count":1},{"value":"MachaliSpA","count":1},{"value":"SeniorAssist","count":1},{"value":"TorreASA","count":1},{"value":"VCSpA","count":1}],"tipo":[{"value":"residencia","count":6},{"value":"oficina","count":5},{"value":"retail","count":3},{"value":"residencial","count":2},{"value":"industrial","count":1},{"value":"inmobiliario","count":1},{"value":"parking","count":1}]},"indexes":[{"name":"sqlite_autoindex_dim_activo_1","unique":true,"origin":"pk","partial":false,"columns":["activo_key"]}],"sampleRows":[{"activo_key":"Apo3001","fondo_key":"TRI","nombre":"Apoquindo 3001","tipo":"oficina","participacion_fondo_activo":1.0,"categoria":"Oficinas","sociedad":"Inmobiliaria Chañarcillo Ltda","sociedad_key":"Chanarcillo","participacion_en_sociedad":0.685},{"activo_key":"Apo4501","fondo_key":"Apo","nombre":"Apoquindo 4501","tipo":"oficina","participacion_fondo_activo":1.0,"categoria":"Oficinas","sociedad":"Inmobiliaria Apoquindo SpA","sociedad_key":"ApoquindoSpA","participacion_en_sociedad":1.0},{"activo_key":"Apo4700","fondo_key":"Apo","nombre":"Apoquindo 4700","tipo":"oficina","participacion_fondo_activo":1.0,"categoria":"Oficinas","sociedad":"Inmobiliaria Apoquindo SpA","sociedad_key":"ApoquindoSpA","participacion_en_sociedad":1.0}],"hasSql":true},{"name":"dim_concepto_parking","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":20,"columnCount":7,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"codigo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nombre","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"tipo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"signo","type":"INTEGER","notnull":true,"default":"1","pk":false},{"cid":5,"name":"descripcion","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"activo","type":"INTEGER","notnull":true,"default":"1","pk":false}],"dateRanges":[],"facets":{"tipo":[{"value":"gasto","count":13},{"value":"venta","count":7}]},"indexes":[{"name":"sqlite_autoindex_dim_concepto_parking_1","unique":true,"origin":"u","partial":false,"columns":["codigo","nombre","signo"]}],"sampleRows":[{"id":1,"codigo":"70500000-254","nombre":"Ingresos Efectivos (Neto)","tipo":"venta","signo":1,"descripcion":null,"activo":1},{"id":2,"codigo":"70500001-256","nombre":"Facturas Pre pago","tipo":"venta","signo":1,"descripcion":null,"activo":1},{"id":3,"codigo":"70500002-261","nombre":"Ingresos Empresas (Neto)","tipo":"venta","signo":1,"descripcion":null,"activo":1}],"hasSql":true},{"name":"dim_credito","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":15,"columnCount":15,"columns":[{"cid":0,"name":"credito_key","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"sociedad","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"acreedor","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"tipo_deuda","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"participacion_fondo_deuda","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"deuda_inicial_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"tasa_anual","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"cuota_mensual_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":10,"name":"fecha_inicio","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"fecha_vencimiento","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":12,"name":"estado","type":"TEXT","notnull":false,"default":"'VIGENTE'","pk":false},{"cid":13,"name":"encargado","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":14,"name":"perfil_amortizacion","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_inicio","min":"2017-06-01","max":"2026-01-26"},{"column":"fecha_vencimiento","min":"2026-03-01","max":"2067-09-01"}],"facets":{"acreedor":[{"value":"Metlife","count":4},{"value":"Principal","count":2},{"value":"Security","count":2},{"value":"Arizona - Text Rent","count":1},{"value":"BTG","count":1},{"value":"Bice","count":1},{"value":"Confuturo","count":1},{"value":"Euroamérica","count":1},{"value":"Scotiabank","count":1},{"value":"Zuric","count":1}],"activo_key":[{"value":"INMOSA","count":6},{"value":"Viña Centro","count":2},{"value":"Apo3001","count":1},{"value":"Apo4501","count":1},{"value":"Apo4700","count":1},{"value":"Boulevard","count":1},{"value":"Mall Curicó","count":1},{"value":"Sucden","count":1},{"value":"Torre A","count":1}],"credito_key":[{"value":"APO_APO_BTG","count":1},{"value":"APO_APO_EUROAMERICA","count":1},{"value":"PT_BOULEVARD_SECURITY","count":1},{"value":"PT_TORREA_SECURITY","count":1},{"value":"TRI_APO3001_SCOTIABANK","count":1},{"value":"TRI_CANDIL_METLIFE","count":1},{"value":"TRI_COLOMBIA_PRINCIPAL","count":1},{"value":"TRI_COVENTRY_CONFUTURO","count":1},{"value":"TRI_CURICO_METLIFE","count":1},{"value":"TRI_DOMCALDERON_ZURIC","count":1},{"value":"TRI_INMOBVC_ARIZONA","count":1},{"value":"TRI_MEDINA_METLIFE","count":1}],"fondo_key":[{"value":"TRI","count":11},{"value":"Apo","count":2},{"value":"PT","count":2}]},"indexes":[{"name":"sqlite_autoindex_dim_credito_1","unique":true,"origin":"pk","partial":false,"columns":["credito_key"]}],"sampleRows":[{"credito_key":"APO_APO_BTG","activo_key":"Apo4700","fondo_key":"Apo","sociedad":"Inmobiliaria Apoquindo II","acreedor":"BTG","tipo_deuda":"Crédito","participacion_fondo_deuda":0.3,"deuda_inicial_uf":100000.0,"tasa_anual":0.0465},{"credito_key":"APO_APO_EUROAMERICA","activo_key":"Apo4501","fondo_key":"Apo","sociedad":"Inmobiliaria Apoquindo I","acreedor":"Euroamérica","tipo_deuda":"Leasing","participacion_fondo_deuda":0.3,"deuda_inicial_uf":2800000.0,"tasa_anual":0.0273},{"credito_key":"PT_BOULEVARD_SECURITY","activo_key":"Boulevard","fondo_key":"PT","sociedad":"Inmobiliaria Boulevard PT SpA","acreedor":"Security","tipo_deuda":"Crédito Sindicado","participacion_fondo_deuda":0.333,"deuda_inicial_uf":1081306.48,"tasa_anual":0.0411}],"hasSql":true},{"name":"dim_cuenta_eeff","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":82,"columnCount":5,"columns":[{"cid":0,"name":"cuenta_codigo","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"seccion_eeff","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"grupo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"descripcion","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"es_subtotal","type":"INTEGER","notnull":true,"default":"0","pk":false}],"dateRanges":[],"facets":{"cuenta_codigo":[{"value":"ECP.aportes","count":1},{"value":"ECP.disminucion_patrimonio","count":1},{"value":"ECP.dividendos_pagados","count":1},{"value":"EFE.aportes_financiamiento","count":1},{"value":"EFE.cobranza_cuentas","count":1},{"value":"EFE.cobro_arrendamiento","count":1},{"value":"EFE.compra_activos_fin","count":1},{"value":"EFE.dividendos_recibidos","count":1},{"value":"EFE.flujos_financiamiento","count":1},{"value":"EFE.flujos_inversion","count":1},{"value":"EFE.flujos_operacion","count":1},{"value":"EFE.pago_prestamos","count":1}]},"indexes":[{"name":"sqlite_autoindex_dim_cuenta_eeff_1","unique":true,"origin":"pk","partial":false,"columns":["cuenta_codigo"]}],"sampleRows":[{"cuenta_codigo":"ECP.aportes","seccion_eeff":"ECP","grupo":"movimiento","descripcion":"Aportes del ejercicio","es_subtotal":0},{"cuenta_codigo":"ECP.disminucion_patrimonio","seccion_eeff":"ECP","grupo":"movimiento","descripcion":"Disminución de patrimonio","es_subtotal":0},{"cuenta_codigo":"ECP.dividendos_pagados","seccion_eeff":"ECP","grupo":"movimiento","descripcion":"Dividendos pagados","es_subtotal":0}],"hasSql":true},{"name":"dim_fondo","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":3,"columnCount":5,"columns":[{"cid":0,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"nombre","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"sharepoint_folder","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fondo_padre","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"participacion_en_padre","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[],"facets":{"fondo_key":[{"value":"Apo","count":1},{"value":"PT","count":1},{"value":"TRI","count":1}]},"indexes":[{"name":"sqlite_autoindex_dim_fondo_1","unique":true,"origin":"pk","partial":false,"columns":["fondo_key"]}],"sampleRows":[{"fondo_key":"Apo","nombre":"Fondo Toesca Rentas Inmob Apoquindo","sharepoint_folder":"Fondos\\Rentas Apoquindo","fondo_padre":"TRI","participacion_en_padre":0.3},{"fondo_key":"PT","nombre":"Fondo Toesca Rentas Inmobiliarias PT","sharepoint_folder":"Fondos\\Rentas PT","fondo_padre":"TRI","participacion_en_padre":0.3333333333333333},{"fondo_key":"TRI","nombre":"Toesca Rentas Inmobiliarias Fondo de Inversión","sharepoint_folder":"Fondos\\Rentas TRI","fondo_padre":null,"participacion_en_padre":null}],"hasSql":true},{"name":"dim_serie","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":5,"columnCount":4,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"serie","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"transa_bolsa","type":"INTEGER","notnull":true,"default":"0","pk":false}],"dateRanges":[],"facets":{"fondo_key":[{"value":"TRI","count":3},{"value":"Apo","count":1},{"value":"PT","count":1}],"nemotecnico":[{"value":"Apo","count":1},{"value":"CFITOERI1A","count":1},{"value":"CFITOERI1C","count":1},{"value":"CFITOERI1I","count":1},{"value":"CFITRIPT-E","count":1}]},"indexes":[{"name":"sqlite_autoindex_dim_serie_1","unique":true,"origin":"pk","partial":false,"columns":["nemotecnico"]}],"sampleRows":[{"nemotecnico":"Apo","fondo_key":"Apo","serie":"Única","transa_bolsa":0},{"nemotecnico":"CFITOERI1A","fondo_key":"TRI","serie":"A","transa_bolsa":1},{"nemotecnico":"CFITOERI1C","fondo_key":"TRI","serie":"C","transa_bolsa":1}],"hasSql":true},{"name":"dim_sociedad","type":"table","domain":"dimensiones","domainLabel":"Dimensiones","rowCount":8,"columnCount":4,"columns":[{"cid":0,"name":"sociedad_key","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"nombre","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"participacion_fondo_en_sociedad","type":"REAL","notnull":true,"default":null,"pk":false}],"dateRanges":[],"facets":{"fondo_key":[{"value":"TRI","count":5},{"value":"PT","count":2},{"value":"Apo","count":1}],"sociedad_key":[{"value":"ApoquindoSpA","count":1},{"value":"BlvdSpA","count":1},{"value":"Chanarcillo","count":1},{"value":"CuricoSpA","count":1},{"value":"MachaliSpA","count":1},{"value":"SeniorAssist","count":1},{"value":"TorreASA","count":1},{"value":"VCSpA","count":1}]},"indexes":[{"name":"sqlite_autoindex_dim_sociedad_1","unique":true,"origin":"pk","partial":false,"columns":["sociedad_key"]}],"sampleRows":[{"sociedad_key":"ApoquindoSpA","nombre":"Inmobiliaria Apoquindo SpA","fondo_key":"Apo","participacion_fondo_en_sociedad":1.0},{"sociedad_key":"BlvdSpA","nombre":"Inmobiliaria Boulevard PT SpA","fondo_key":"PT","participacion_fondo_en_sociedad":1.0},{"sociedad_key":"Chanarcillo","nombre":"Inmobiliaria Chañarcillo Ltda","fondo_key":"TRI","participacion_fondo_en_sociedad":1.0}],"hasSql":true},{"name":"fact_adquisicion","type":"table","domain":"facts","domainLabel":"Facts","rowCount":17,"columnCount":11,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fecha_adquisicion","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"valor_activo_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"superficie_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"uf_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"porcentaje_adquirido","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"notas","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"loaded_at","type":"TEXT","notnull":true,"default":"strftime('%Y-%m-%dT%H:%M:%S', 'now')","pk":false},{"cid":10,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_adquisicion","min":"2017-01-01","max":"2021-01-01"},{"column":"loaded_at","min":"2026-07-02T21:43:20","max":"2026-07-02T22:04:17"}],"facets":{"activo_key":[{"value":"Apo3001","count":1},{"value":"Apo4501","count":1},{"value":"Apo4700","count":1},{"value":"Boulevard","count":1},{"value":"Ed. Guardiamarina","count":1},{"value":"Ed. Placilla","count":1},{"value":"INMOSA","count":1},{"value":"Mall Curicó","count":1},{"value":"Residencia Arturo Medina","count":1},{"value":"Residencia Candil","count":1},{"value":"Residencia Colombia","count":1},{"value":"Residencia Coventry","count":1}]},"indexes":[{"name":"sqlite_autoindex_fact_adquisicion_1","unique":true,"origin":"u","partial":false,"columns":["activo_key"]}],"sampleRows":[{"id":1,"activo_key":"Torre A","fecha_adquisicion":"2017-11-23","precio_uf":883333.3333333324,"valor_activo_uf":2650000.0,"superficie_m2":19294.57034999999,"uf_m2":412.03301528815916,"porcentaje_adquirido":0.333333333333333,"notas":"Fuente: tablaflujos.xlsx hoja compra (Torre A)"},{"id":2,"activo_key":"Apo4501","fecha_adquisicion":"2018-01-01","precio_uf":1017300.0,"valor_activo_uf":3391000.0,"superficie_m2":21787.473179999994,"uf_m2":518.7996441785333,"porcentaje_adquirido":0.3,"notas":"Fuente: tablaflujos.xlsx hoja compra (Apoquindo 4501)"},{"id":3,"activo_key":"Apo4700","fecha_adquisicion":"2018-01-01","precio_uf":275760.0,"valor_activo_uf":919200.0,"superficie_m2":6927.679999999998,"uf_m2":442.283708254423,"porcentaje_adquirido":0.3,"notas":"Fuente: tablaflujos.xlsx hoja compra (Apoquindo 4700)"}],"hasSql":true},{"name":"fact_tasacion","type":"table","domain":"facts","domainLabel":"Facts","rowCount":224,"columnCount":17,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"tasador","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":5,"name":"valor_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"superficie_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"uf_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"variacion_pct","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"tasa_dcto","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":10,"name":"cap_rate","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":11,"name":"ltv","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":12,"name":"ltc","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":13,"name":"leverage_fin","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":14,"name":"notas","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":15,"name":"loaded_at","type":"TEXT","notnull":true,"default":"strftime('%Y-%m-%dT%H:%M:%S', 'now')","pk":false},{"cid":16,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2020","max":"2025"},{"column":"fecha","min":"2024-06-30","max":"2025-12-31"},{"column":"loaded_at","min":"2026-07-02T21:42:57","max":"2026-07-02T21:44:15"}],"facets":{"activo_key":[{"value":"Apo3001","count":14},{"value":"Apo4501","count":14},{"value":"Apo4700","count":14},{"value":"Boulevard","count":14},{"value":"Ed. Guardiamarina","count":14},{"value":"Ed. Placilla","count":14},{"value":"Mall Curicó","count":14},{"value":"Residencia Arturo Medina","count":14},{"value":"Residencia Candil","count":14},{"value":"Residencia Colombia","count":14},{"value":"Residencia Coventry","count":14},{"value":"Residencia Domingo Calderón","count":14}]},"indexes":[{"name":"idx_tasacion_activo_periodo","unique":false,"origin":"c","partial":false,"columns":["activo_key","periodo"]},{"name":"sqlite_autoindex_fact_tasacion_1","unique":true,"origin":"u","partial":false,"columns":["activo_key","periodo","tasador"]}],"sampleRows":[{"id":1,"activo_key":"Torre A","periodo":"2020","fecha":null,"tasador":"Promedio","valor_uf":3054908.5,"superficie_m2":19294.57034999999,"uf_m2":158.32995731879572,"variacion_pct":null},{"id":2,"activo_key":"Torre A","periodo":"2021","fecha":null,"tasador":"Promedio","valor_uf":2965141.5,"superficie_m2":19294.57034999999,"uf_m2":153.67750855359168,"variacion_pct":null},{"id":3,"activo_key":"Torre A","periodo":"2022","fecha":null,"tasador":"Real Data","valor_uf":2970680.0,"superficie_m2":19294.57034999999,"uf_m2":153.96455822090908,"variacion_pct":null}],"hasSql":true},{"name":"ingest_run","type":"table","domain":"audit","domainLabel":"Auditoria","rowCount":108,"columnCount":12,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"tool","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"rows_in","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":5,"name":"rows_loaded","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":6,"name":"started_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ended_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"status","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"error","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"periodo_declarado","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"fecha_publicacion","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"started_at","min":"2026-05-25 20:15:05","max":"2026-07-23 11:55:49"},{"column":"ended_at","min":"2026-05-25 20:15:05","max":"2026-07-23 11:55:49"},{"column":"periodo_declarado","min":"2025-12","max":"2026-03"}],"facets":{"status":[{"value":"ok","count":106},{"value":"completed","count":1},{"value":"started","count":1}],"tool":[{"value":"ingest_eeff_tri","count":34},{"value":"ingest_from_json","count":32},{"value":"actualizar_er_vina","count":8},{"value":"ingest_tasaciones","count":6},{"value":"actualizar_er_curico","count":4},{"value":"manual: balance consolidado usuario","count":3},{"value":"backfill_inmosa","count":2},{"value":"ingest_er_curico","count":2},{"value":"ingest_mercado","count":2},{"value":"ingest_rent_roll_validated:jll","count":2},{"value":"correction_er_sucden_sobretasa","count":1},{"value":"ingest_er_apo3001","count":1}]},"indexes":[],"sampleRows":[{"id":14,"tool":"actualizar_er_vina","source_file":"12-2025 INFORME EEFF VIÑA CENTRO SPA V7 VF editado vAsistida.xlsx","file_hash":"71b78b9973034e70f9bdbfa614468e00b11c090a08744eb793959c49da36ad50","rows_in":71,"rows_loaded":71,"started_at":"2026-05-25 20:15:05","ended_at":"2026-05-25 20:15:05","status":"ok"},{"id":15,"tool":"actualizar_er_vina","source_file":"01-2026 INFORME EEFF VIÑA CENTRO SPA V3.xlsx","file_hash":"e7bf115552e77ca6732ba52a0f72fcc767b4c256387abde64bdb5c9b83ea86ee","rows_in":72,"rows_loaded":72,"started_at":"2026-05-25 20:15:07","ended_at":"2026-05-25 20:15:07","status":"ok"},{"id":16,"tool":"actualizar_er_vina","source_file":"02-2026 INFORME EEFF VIÑA CENTRO SPA.xlsx","file_hash":"50d990dca649e0e6b761599cfebecbbaa5c7035c6ae0efaddff0ed00c290109f","rows_in":72,"rows_loaded":72,"started_at":"2026-05-25 20:15:08","ended_at":"2026-05-25 20:15:08","status":"ok"}],"hasSql":true},{"name":"raw_amortizacion","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":3819,"columnCount":5,"columns":[{"cid":0,"name":"credito_key","type":"TEXT","notnull":true,"default":null,"pk":true},{"cid":1,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":true},{"cid":2,"name":"capital_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":3,"name":"intereses_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"saldo_uf","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2017-06","max":"2072-05"}],"facets":{"credito_key":[{"value":"CONSOLIDADO_TRI","count":652},{"value":"TRI_DOMCALDERON_ZURIC","count":366},{"value":"TRI_COVENTRY_CONFUTURO","count":298},{"value":"TRI_PADREERRA_METLIFE","count":298},{"value":"TRI_CANDIL_METLIFE","count":283},{"value":"TRI_COLOMBIA_PRINCIPAL","count":283},{"value":"TRI_CURICO_METLIFE","count":266},{"value":"TRI_VINA_PRINCIPAL","count":259},{"value":"TRI_MEDINA_METLIFE","count":257},{"value":"CONSOLIDADO_PT","count":146},{"value":"PT_BOULEVARD_SECURITY","count":145},{"value":"PT_TORREA_SECURITY","count":145}]},"indexes":[{"name":"idx_amort_credito","unique":false,"origin":"c","partial":false,"columns":["credito_key"]},{"name":"idx_amort_periodo","unique":false,"origin":"c","partial":false,"columns":["periodo"]},{"name":"sqlite_autoindex_raw_amortizacion_1","unique":true,"origin":"pk","partial":false,"columns":["credito_key","periodo"]}],"sampleRows":[{"credito_key":"APO_APO_BTG","periodo":"2024-11","capital_uf":3971.06,"intereses_uf":400.42,"saldo_uf":96028.94},{"credito_key":"APO_APO_BTG","periodo":"2024-12","capital_uf":3999.37,"intereses_uf":396.92,"saldo_uf":92029.57},{"credito_key":"APO_APO_BTG","periodo":"2025-01","capital_uf":4002.98,"intereses_uf":344.73,"saldo_uf":88026.59000000001}],"hasSql":true},{"name":"raw_ar_event","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":53,"columnCount":12,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"detalle","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":5,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":11,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-06-02","max":"2021-09-30"}],"facets":{"fondo_key":[{"value":"TRI","count":49},{"value":"PT","count":3},{"value":"Apo","count":1}],"nemotecnico":[{"value":"CFITOERI1A","count":20},{"value":"CFITOERI1C","count":19},{"value":"CFITOERI1I","count":10},{"value":"CFITRIPT-E","count":3},{"value":"Apo","count":1}]},"indexes":[{"name":"idx_ar_detalle","unique":false,"origin":"c","partial":false,"columns":["detalle"]},{"name":"idx_ar_nemo_fecha","unique":false,"origin":"c","partial":false,"columns":["nemotecnico","fecha"]},{"name":"sqlite_autoindex_raw_ar_event_1","unique":true,"origin":"u","partial":false,"columns":["fondo_key","nemotecnico","fecha","detalle","file_hash"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha":"2017-06-02","detalle":"Aporte","monto_uf":160000.00003754543,"monto_uf_cuota":1.000000000234659,"monto_clp":4261507201.0,"cuotas":160000.0},{"id":2,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha":"2017-06-07","detalle":"Aporte","monto_uf":8256.89986112675,"monto_uf_cuota":1.0005937786144874,"monto_clp":219988583.0,"cuotas":8252.0},{"id":3,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha":"2017-07-27","detalle":"Aporte","monto_uf":68250.63253703625,"monto_uf_cuota":1.0088188804362823,"monto_clp":1816223725.0,"cuotas":67654.0}],"hasSql":true},{"name":"raw_balance_consolidado_line","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":10,"columnCount":9,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"cuenta_codigo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":7,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":8,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2026-03","max":"2026-03"},{"column":"loaded_at","min":"2026-07-06 19:36:09","max":"2026-07-06 19:36:09"}],"facets":{"cuenta_codigo":[{"value":"ESF.efectivo","count":1},{"value":"ESF.otros_activos_corrientes","count":1},{"value":"ESF.otros_activos_no_corrientes","count":1},{"value":"ESF.otros_pasivos","count":1},{"value":"ESF.pasivos_impuestos_diferidos","count":1},{"value":"ESF.patrimonio_neto","count":1},{"value":"ESF.prestamos","count":1},{"value":"ESF.propiedades_inversion","count":1},{"value":"ESF.total_activo","count":1},{"value":"ESF.total_pasivo_patrimonio","count":1}],"fondo_key":[{"value":"TRI","count":10}]},"indexes":[{"name":"ix_raw_balance_consolidado_line_fondo_periodo","unique":false,"origin":"c","partial":false,"columns":["fondo_key","periodo"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","periodo":"2026-03","cuenta_codigo":"ESF.efectivo","monto_clp":4180705000.0,"source_file":"planilla balance consolidado TRI 2026-03 (usuario)","ingest_run_id":102,"loaded_at":"2026-07-06 19:36:09","superseded_at":null},{"id":2,"fondo_key":"TRI","periodo":"2026-03","cuenta_codigo":"ESF.otros_activos_corrientes","monto_clp":6188904000.0,"source_file":"planilla balance consolidado TRI 2026-03 (usuario)","ingest_run_id":102,"loaded_at":"2026-07-06 19:36:09","superseded_at":null},{"id":3,"fondo_key":"TRI","periodo":"2026-03","cuenta_codigo":"ESF.propiedades_inversion","monto_clp":229732868000.0,"source_file":"planilla balance consolidado TRI 2026-03 (usuario)","ingest_run_id":102,"loaded_at":"2026-07-06 19:36:09","superseded_at":null}],"hasSql":true},{"name":"raw_caja","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":221,"columnCount":6,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"saldo_clp","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":4,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false}],"dateRanges":[{"column":"fecha","min":"2018-12-31","max":"2026-03-31"},{"column":"loaded_at","min":"2026-06-17 16:41:48","max":"2026-06-17 16:41:48"}],"facets":{"fondo_key":[{"value":"PT","count":74},{"value":"TRI","count":74},{"value":"Apo","count":73}]},"indexes":[{"name":"idx_caja_fondo_fecha","unique":false,"origin":"c","partial":false,"columns":["fondo_key","fecha"]},{"name":"sqlite_autoindex_raw_caja_1","unique":true,"origin":"u","partial":false,"columns":["fondo_key","fecha"]}],"sampleRows":[{"id":1,"fondo_key":"PT","fecha":"2018-12-31","saldo_clp":493843423.0,"source_file":"screenshot_caja_historica","loaded_at":"2026-06-17 16:41:48"},{"id":2,"fondo_key":"TRI","fecha":"2018-12-31","saldo_clp":2189430542.0,"source_file":"screenshot_caja_historica","loaded_at":"2026-06-17 16:41:48"},{"id":3,"fondo_key":"PT","fecha":"2020-04-06","saldo_clp":1911173535.0,"source_file":"screenshot_caja_historica","loaded_at":"2026-06-17 16:41:48"}],"hasSql":true},{"name":"raw_capital_suscrito","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":65,"columnCount":9,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha_fin_periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"capital_suscrito_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false}],"dateRanges":[{"column":"fecha_fin_periodo","min":"2017-06-02","max":"2026-03-31"},{"column":"periodo","min":"2017-06","max":"2026-03"},{"column":"loaded_at","min":"2026-05-27 15:40:34","max":"2026-07-09 22:29:07"}],"facets":{"fondo_key":[{"value":"TRI","count":64},{"value":"Apo","count":1}],"nemotecnico":[{"value":"CFITOERI1A","count":30},{"value":"CFITOERI1C","count":24},{"value":"CFITOERI1I","count":10},{"value":"Apo","count":1}]},"indexes":[{"name":"idx_capital_suscrito_unico","unique":true,"origin":"c","partial":false,"columns":["fondo_key","nemotecnico","fecha_fin_periodo","capital_suscrito_uf","file_hash"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha_fin_periodo":"2017-10-26","capital_suscrito_uf":56296.97487191998,"periodo":"2017-10","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:40:34"},{"id":2,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha_fin_periodo":"2017-11-16","capital_suscrito_uf":117355.2757294937,"periodo":"2017-11","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:40:34"},{"id":3,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha_fin_periodo":"2017-11-17","capital_suscrito_uf":122967.80138406022,"periodo":"2017-11","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:40:34"}],"hasSql":true},{"name":"raw_cuota_en_circulacion","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":244,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"cuotas","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":5,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":false,"default":"CURRENT_TIMESTAMP","pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-12-31","max":"2025-12-31"},{"column":"periodo","min":"2017-12","max":"2025-12"},{"column":"loaded_at","min":"2026-05-27 15:48:34","max":"2026-06-15 15:57:47"}],"facets":{"fondo_key":[{"value":"TRI","count":183},{"value":"PT","count":33},{"value":"Apo","count":28}],"nemotecnico":[{"value":"CFITOERI1A","count":61},{"value":"CFITOERI1C","count":61},{"value":"CFITOERI1I","count":61},{"value":"CFITRIPT-E","count":33},{"value":"Apo","count":28}]},"indexes":[{"name":"sqlite_autoindex_raw_cuota_en_circulacion_1","unique":true,"origin":"u","partial":false,"columns":["nemotecnico","fecha","file_hash"]}],"sampleRows":[{"id":82,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha":"2018-04-13","cuotas":278882.0,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:48:34"},{"id":83,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha":"2018-04-13","cuotas":896776.0,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:48:34"},{"id":84,"fondo_key":"TRI","nemotecnico":"CFITOERI1I","fecha":"2018-04-13","cuotas":689201.0,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684","loaded_at":"2026-05-27 15:48:34"}],"hasSql":true},{"name":"raw_dividendo","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":212,"columnCount":12,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha_pago","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"monto_uf_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_clp_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":10,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"tipo","type":"TEXT","notnull":true,"default":"'dividendo'","pk":false}],"dateRanges":[{"column":"fecha_pago","min":"2018-04-10","max":"2025-12-29"},{"column":"periodo","min":"2018-04","max":"2025-12"},{"column":"loaded_at","min":"2026-05-25 20:24:00","max":"2026-06-15 15:57:47"}],"facets":{"fondo_key":[{"value":"TRI","count":167},{"value":"PT","count":33},{"value":"Apo","count":12}],"nemotecnico":[{"value":"CFITOERI1A","count":57},{"value":"CFITOERI1C","count":56},{"value":"CFITOERI1I","count":54},{"value":"CFITRIPT-E","count":33},{"value":"Apo","count":12}],"tipo":[{"value":"dividendo","count":206},{"value":"disminucion","count":6}]},"indexes":[{"name":"idx_dividendo_nemo_fecha_tipo","unique":false,"origin":"c","partial":false,"columns":["nemotecnico","fecha_pago","tipo"]},{"name":"idx_raw_div_nemo","unique":false,"origin":"c","partial":false,"columns":["nemotecnico","fecha_pago"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha_pago":"2018-04-13","monto_uf_cuota":0.014679361334046402,"monto_clp_cuota":395.962120179861,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684"},{"id":2,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha_pago":"2018-04-13","monto_uf_cuota":0.014743003991987243,"monto_clp_cuota":397.67882169014337,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684"},{"id":3,"fondo_key":"TRI","nemotecnico":"CFITOERI1I","fecha_pago":"2018-04-13","monto_uf_cuota":0.014746437316534905,"monto_clp_cuota":397.7714324268247,"periodo":"2018-04","source_file":"cdg_extract.xlsx","file_hash":"d217403329044684"}],"hasSql":true},{"name":"raw_eeff_line","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":36793,"columnCount":15,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"cuenta_codigo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"cuenta_nombre","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"source_sheet","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_row","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":12,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":13,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":14,"name":"cuenta_codigo_canonical","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2017-01","max":"2026-03"},{"column":"loaded_at","min":"2026-05-26 14:48:53","max":"2026-07-09 22:28:56"}],"facets":{"cuenta_codigo":[{"value":"76.954.619-7","count":198},{"value":"10","count":146},{"value":"31","count":98},{"value":"39","count":84},{"value":"21","count":72},{"value":"16","count":67},{"value":"19","count":61},{"value":"11","count":50},{"value":"34","count":47},{"value":"32","count":46},{"value":"38","count":46},{"value":"9","count":43}],"fondo_key":[{"value":"APO","count":18009},{"value":"TRI","count":13711},{"value":"PT","count":5070},{"value":"Apo","count":3}]},"indexes":[{"name":"idx_eeff_codigo_canonical","unique":false,"origin":"c","partial":false,"columns":["cuenta_codigo_canonical"]},{"name":"idx_raw_eeff_fondo_periodo","unique":false,"origin":"c","partial":false,"columns":["fondo_key","periodo"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","periodo":"2020-12","cuenta_codigo":null,"cuenta_nombre":"Efectivo y efectivo equivalente","monto_clp":1359774000.0,"monto_uf":null,"source_file":"12.20 Toesca Rentas Inmobiliarias.pdf","source_sheet":"ESF"},{"id":2,"fondo_key":"TRI","periodo":"2020-12","cuenta_codigo":null,"cuenta_nombre":"Activos financieros a valor razonable con efecto en resultados","monto_clp":0.0,"monto_uf":null,"source_file":"12.20 Toesca Rentas Inmobiliarias.pdf","source_sheet":"ESF"},{"id":3,"fondo_key":"TRI","periodo":"2020-12","cuenta_codigo":null,"cuenta_nombre":"Activos financieros a valor razonable con efecto en otros resultados integrales","monto_clp":0.0,"monto_uf":null,"source_file":"12.20 Toesca Rentas Inmobiliarias.pdf","source_sheet":"ESF"}],"hasSql":true},{"name":"raw_er_activo_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":10448,"columnCount":16,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"cuenta_codigo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"cuenta_nombre","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"seccion","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"es_operacional","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"source_sheet","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"source_row","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":12,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":13,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":14,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":15,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2018-01","max":"2026-08"},{"column":"loaded_at","min":"2026-05-26 15:48:24","max":"2026-07-20 17:55:39"}],"facets":{"activo_key":[{"value":"Mall Curicó","count":3110},{"value":"Viña Centro","count":2050},{"value":"Strip Machalí","count":1104},{"value":"INMOSA","count":792},{"value":"Apo4501","count":715},{"value":"Apo4700","count":690},{"value":"Apo3001","count":616},{"value":"Boulevard","count":545},{"value":"Sucden","count":424},{"value":"Torre A","count":402}],"cuenta_codigo":[{"value":"PT_ADM","count":202},{"value":"PT_ING_ARR","count":202},{"value":"PT_SEG","count":201},{"value":"PT_CONTRIB","count":190},{"value":"APO_CONTRIB","count":178},{"value":"APO_ING_ARR","count":178},{"value":"APO_GC_VAC","count":177},{"value":"APO_ADM","count":176},{"value":"APO_COM_CORR","count":172},{"value":"APO_BONOS_LEG","count":168},{"value":"APO_CONSTRUCT","count":130},{"value":"SUCDEN_SOBRETASA","count":112}]},"indexes":[{"name":"idx_raw_er_activo_periodo","unique":false,"origin":"c","partial":false,"columns":["activo_key","periodo"]}],"sampleRows":[{"id":401,"activo_key":"Viña Centro","periodo":"2025-12","cuenta_codigo":"4-1-01-101","cuenta_nombre":"ARRIENDO TIENDAS MENORES","monto_clp":141483700.0,"monto_uf":null,"seccion":null,"es_operacional":1},{"id":402,"activo_key":"Viña Centro","periodo":"2025-12","cuenta_codigo":"4-1-01-102","cuenta_nombre":"ARRIENDO DE MODULOS Y ESPACIOS","monto_clp":33230378.0,"monto_uf":null,"seccion":null,"es_operacional":1},{"id":403,"activo_key":"Viña Centro","periodo":"2025-12","cuenta_codigo":"4-1-01-104","cuenta_nombre":"ARRIENDO DE PARKING","monto_clp":70673619.0,"monto_uf":null,"seccion":null,"es_operacional":1}],"hasSql":true},{"name":"raw_flujo_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":46,"columnCount":14,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"cuenta_codigo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"cuenta_nombre","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"source_sheet","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_row","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":12,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":13,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2026-01","max":"2026-02"},{"column":"loaded_at","min":"2026-05-25 20:15:31","max":"2026-05-25 20:15:31"}],"facets":{"activo_key":[{"value":"INMOSA","count":46}]},"indexes":[{"name":"idx_raw_flujo_activo_periodo","unique":false,"origin":"c","partial":false,"columns":["activo_key","periodo"]}],"sampleRows":[{"id":1,"activo_key":"INMOSA","periodo":"2026-01","cuenta_codigo":null,"cuenta_nombre":"Ingresos operacionales (sin incl contribuciones)","monto_clp":7756.0,"monto_uf":null,"source_file":"ER-FC INMOSA 2026 Ene a Feb.xlsx","source_sheet":"FC 2025"},{"id":2,"activo_key":"INMOSA","periodo":"2026-01","cuenta_codigo":null,"cuenta_nombre":"Ingresos operacionales","monto_clp":7756.0,"monto_uf":null,"source_file":"ER-FC INMOSA 2026 Ene a Feb.xlsx","source_sheet":"FC 2025"},{"id":3,"activo_key":"INMOSA","periodo":"2026-01","cuenta_codigo":null,"cuenta_nombre":"Aseo, mantención, Postventa","monto_clp":-85.0,"monto_uf":null,"source_file":"ER-FC INMOSA 2026 Ene a Feb.xlsx","source_sheet":"FC 2025"}],"hasSql":true},{"name":"raw_mercado_oficinas","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":36,"columnCount":20,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"proveedor","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"submercado","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"clase","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":5,"name":"es_total","type":"INTEGER","notnull":false,"default":"0","pk":false},{"cid":6,"name":"inventario_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"absorcion_trim_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"absorcion_u12m_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"vacancia_pct","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":10,"name":"renta_uf_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":11,"name":"renta_usd_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":12,"name":"produccion_trim_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":13,"name":"produccion_u12m_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":14,"name":"construccion_m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":15,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":16,"name":"source_row","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":17,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":18,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":19,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2025-12","max":"2026-03"},{"column":"loaded_at","min":"2026-07-22 16:59:07","max":"2026-07-22 17:21:29"}],"facets":{"clase":[{"value":"B","count":14},{"value":"Total","count":14},{"value":"A","count":8}],"proveedor":[{"value":"JLL","count":36}],"submercado":[{"value":"Las Condes (CBD)","count":6},{"value":"Providencia","count":6},{"value":"Santiago","count":6},{"value":"Santiago Centro","count":6},{"value":"Ciudad empresarial","count":4},{"value":"Estoril","count":4},{"value":"Vitacura","count":4}]},"indexes":[{"name":"idx_mercado_lookup","unique":false,"origin":"c","partial":true,"columns":["periodo","submercado","clase"]},{"name":"idx_mercado_periodo","unique":false,"origin":"c","partial":false,"columns":["periodo"]},{"name":"sqlite_autoindex_raw_mercado_oficinas_1","unique":true,"origin":"u","partial":false,"columns":["file_hash","source_row"]}],"sampleRows":[{"id":1,"periodo":"2026-03","proveedor":"JLL","submercado":"Las Condes (CBD)","clase":"Total","es_total":0,"inventario_m2":1733422.0,"absorcion_trim_m2":9388.0,"absorcion_u12m_m2":39913.0},{"id":2,"periodo":"2026-03","proveedor":"JLL","submercado":"Providencia","clase":"Total","es_total":0,"inventario_m2":552223.0,"absorcion_trim_m2":8283.0,"absorcion_u12m_m2":36890.0},{"id":3,"periodo":"2026-03","proveedor":"JLL","submercado":"Santiago Centro","clase":"Total","es_total":0,"inventario_m2":373249.0,"absorcion_trim_m2":-7786.0,"absorcion_u12m_m2":8316.0}],"hasSql":true},{"name":"raw_pagare_intercompania","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":16,"columnCount":9,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"acreedor_fondo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"deudor_sociedad","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"tipo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"fecha_inicio","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"fecha_vencimiento","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"tasa_anual","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"saldo_c_intereses","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_inicio","min":"2015-11-19","max":"2020-01-23"},{"column":"fecha_vencimiento","min":"2022-05-31","max":"2030-01-23"}],"facets":{"tipo":[{"value":"Pagaré","count":13},{"value":"Pagaré + Prolongación","count":2},{"value":"Reconocimientos de Deuda","count":1}]},"indexes":[],"sampleRows":[{"id":128,"acreedor_fondo":"Toesca Rentas Inmobiliarias FI","deudor_sociedad":"INMOSA","tipo":"Pagaré","fecha_inicio":"2017-06-13","fecha_vencimiento":"2022-05-31","monto_uf":25276.0,"tasa_anual":null,"saldo_c_intereses":2159.924015850509},{"id":129,"acreedor_fondo":"Toesca Rentas Inmobiliarias FI","deudor_sociedad":"INMOSA","tipo":"Pagaré","fecha_inicio":"2018-08-23","fecha_vencimiento":"2023-08-23","monto_uf":11385.0,"tasa_anual":null,"saldo_c_intereses":475.3559959364596},{"id":130,"acreedor_fondo":"Toesca Rentas Inmobiliarias FI","deudor_sociedad":"Inmob. Chañarcillo","tipo":"Pagaré","fecha_inicio":"2018-01-09","fecha_vencimiento":"2028-01-09","monto_uf":23000.0,"tasa_anual":null,"saldo_c_intereses":2152.136676162759}],"hasSql":true},{"name":"raw_parking_facturacion_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":294,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"concepto","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"monto_clp","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":5,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"},{"column":"loaded_at","min":"2026-07-23 11:40:23","max":"2026-07-23 11:40:23"}],"facets":{"activo_key":[{"value":"Parking PT","count":294}]},"indexes":[{"name":"sqlite_autoindex_raw_parking_facturacion_line_1","unique":true,"origin":"u","partial":false,"columns":["activo_key","periodo","concepto","superseded_at"]}],"sampleRows":[{"id":295,"activo_key":"Parking PT","periodo":"2023-01","concepto":"saba_neto","monto_clp":11688316.15,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":296,"activo_key":"Parking PT","periodo":"2023-02","concepto":"saba_neto","monto_clp":11211039.260756303,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":297,"activo_key":"Parking PT","periodo":"2023-03","concepto":"saba_neto","monto_clp":15303681.58,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"}],"hasSql":true},{"name":"raw_parking_gasto_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":234,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"concepto_id","type":"INTEGER","notnull":true,"default":null,"pk":false},{"cid":4,"name":"monto_clp","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":5,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"},{"column":"loaded_at","min":"2026-07-23 11:40:23","max":"2026-07-23 11:40:23"}],"facets":{"activo_key":[{"value":"Parking PT","count":234}]},"indexes":[{"name":"sqlite_autoindex_raw_parking_gasto_line_1","unique":true,"origin":"u","partial":false,"columns":["activo_key","periodo","concepto_id","superseded_at"]}],"sampleRows":[{"id":224,"activo_key":"Parking PT","periodo":"2023-01","concepto_id":8,"monto_clp":1552650.0,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":225,"activo_key":"Parking PT","periodo":"2023-02","concepto_id":8,"monto_clp":1562425.92,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":226,"activo_key":"Parking PT","periodo":"2023-03","concepto_id":8,"monto_clp":1565321.12,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"}],"hasSql":true},{"name":"raw_parking_ingreso_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":174,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"concepto_id","type":"INTEGER","notnull":true,"default":null,"pk":false},{"cid":4,"name":"monto_clp","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":5,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"},{"column":"loaded_at","min":"2026-07-23 11:40:23","max":"2026-07-23 11:40:23"}],"facets":{"activo_key":[{"value":"Parking PT","count":174}]},"indexes":[{"name":"sqlite_autoindex_raw_parking_ingreso_line_1","unique":true,"origin":"u","partial":false,"columns":["activo_key","periodo","concepto_id","superseded_at"]}],"sampleRows":[{"id":175,"activo_key":"Parking PT","periodo":"2023-01","concepto_id":1,"monto_clp":23422939.0,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":176,"activo_key":"Parking PT","periodo":"2023-02","concepto_id":1,"monto_clp":18530537.81512605,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"},{"id":177,"activo_key":"Parking PT","periodo":"2023-03","concepto_id":1,"monto_clp":26634204.0,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"42c44a6dafc597375e561151232e67faf766e11aab8153ee2dde51acbf061d81","ingest_run_id":122,"loaded_at":"2026-07-23 11:40:23"}],"hasSql":true},{"name":"raw_parking_ticket_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":1277,"columnCount":11,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"tickets","type":"INTEGER","notnull":true,"default":null,"pk":false},{"cid":4,"name":"feriado","type":"INTEGER","notnull":true,"default":"0","pk":false},{"cid":5,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"monto_bruto_clp","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2023-01-01","max":"2026-06-30"},{"column":"loaded_at","min":"2026-07-23 11:40:23","max":"2026-07-23 11:40:23"}],"facets":{"activo_key":[{"value":"Parking PT","count":1277}]},"indexes":[{"name":"sqlite_autoindex_raw_parking_ticket_line_1","unique":true,"origin":"u","partial":false,"columns":["activo_key","fecha","superseded_at"]}],"sampleRows":[{"id":1278,"activo_key":"Parking PT","fecha":"2023-01-01","tickets":2,"feriado":1,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"466a3cae92faf8f771e779f5c6da13a17b89066a3e5bc326e252990372cb1b99","ingest_run_id":123,"loaded_at":"2026-07-23 11:40:23"},{"id":1279,"activo_key":"Parking PT","fecha":"2023-01-02","tickets":12,"feriado":1,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"466a3cae92faf8f771e779f5c6da13a17b89066a3e5bc326e252990372cb1b99","ingest_run_id":123,"loaded_at":"2026-07-23 11:40:23"},{"id":1280,"activo_key":"Parking PT","fecha":"2023-01-03","tickets":254,"feriado":0,"source_file":"C:\\Users\\raimundo.opazo\\OneDrive - Toesca\\Inmobiliario Toesca - Documentos\\RAW\\Parking PT DB.xlsx","file_hash":"466a3cae92faf8f771e779f5c6da13a17b89066a3e5bc326e252990372cb1b99","ingest_run_id":123,"loaded_at":"2026-07-23 11:40:23"}],"hasSql":true},{"name":"raw_rent_roll_line","type":"table","domain":"raw_operacional","domainLabel":"Raw operacional","rowCount":119,"columnCount":16,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"activo_key","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"unidad","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"arrendatario","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"m2","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"renta_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"vencimiento","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"extra_json","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"source_sheet","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"source_row","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":12,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":13,"name":"ingest_run_id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":14,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":15,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2026-05","max":"2026-05"},{"column":"loaded_at","min":"2026-07-21 14:06:26","max":"2026-07-21 14:11:17"}],"facets":{"activo_key":[{"value":"Viña Centro","count":73},{"value":"Mall Curicó","count":46}]},"indexes":[{"name":"idx_raw_rr_activo_periodo","unique":false,"origin":"c","partial":false,"columns":["activo_key","periodo"]}],"sampleRows":[{"id":12064,"activo_key":"Viña Centro","periodo":"2026-05","unidad":"2096","arrendatario":"Vacante","m2":42.0,"renta_uf":0.0,"vencimiento":"2026-02-28","extra_json":"{\"activo1\": \"Paseo Viña Centro\", \"activo2\": \"Viña Centro\", \"tipo_activo_1\": \"Vacante\", \"tipo_activo_3\": \"Vacante\", \"tipo_arrendatario\": \"..."},{"id":12065,"activo_key":"Viña Centro","periodo":"2026-05","unidad":"ANTENA 50 MTS","arrendatario":"Antenas 4 espacios","m2":50.0,"renta_uf":7.2,"vencimiento":"2027-10-14","extra_json":"{\"activo1\": \"Paseo Viña Centro\", \"activo2\": \"Viña Centro\", \"tipo_activo_1\": \"Módulos\", \"tipo_activo_3\": \"Módulos\", \"tipo_arrendatario\": \"..."},{"id":12066,"activo_key":"Viña Centro","periodo":"2026-05","unidad":"1","arrendatario":"Zona Kids","m2":82.62,"renta_uf":0.42,"vencimiento":"2026-07-06","extra_json":"{\"activo1\": \"Paseo Viña Centro\", \"activo2\": \"Viña Centro\", \"tipo_activo_1\": \"Módulos\", \"tipo_activo_3\": \"Módulos\", \"tipo_arrendatario\": \"..."}],"hasSql":true},{"name":"raw_saldo_deuda","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":2764,"columnCount":5,"columns":[{"cid":0,"name":"run_id","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"credito_key","type":"TEXT","notnull":true,"default":null,"pk":true},{"cid":2,"name":"periodo","type":"TEXT","notnull":true,"default":null,"pk":true},{"cid":3,"name":"saldo_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"is_proyeccion","type":"INTEGER","notnull":false,"default":"0","pk":false}],"dateRanges":[{"column":"periodo","min":"2017-06","max":"2047-11"}],"facets":{"credito_key":[{"value":"TRI_DOMCALDERON_ZURIC","count":300},{"value":"TRI_COVENTRY_CONFUTURO","count":298},{"value":"TRI_PADREERRA_METLIFE","count":298},{"value":"TRI_CANDIL_METLIFE","count":283},{"value":"TRI_COLOMBIA_PRINCIPAL","count":283},{"value":"TRI_CURICO_METLIFE","count":266},{"value":"TRI_VINA_PRINCIPAL","count":260},{"value":"TRI_MEDINA_METLIFE","count":257},{"value":"PT_BOULEVARD_SECURITY","count":146},{"value":"PT_TORREA_SECURITY","count":146},{"value":"APO_APO_EUROAMERICA","count":90},{"value":"TRI_APO3001_SCOTIABANK","count":49}]},"indexes":[{"name":"idx_deuda_saldo_credito","unique":false,"origin":"c","partial":false,"columns":["credito_key"]},{"name":"idx_deuda_saldo_periodo","unique":false,"origin":"c","partial":false,"columns":["periodo"]},{"name":"sqlite_autoindex_raw_saldo_deuda_1","unique":true,"origin":"pk","partial":false,"columns":["credito_key","periodo"]}],"sampleRows":[{"run_id":null,"credito_key":"APO_APO_BTG","periodo":"2024-11","saldo_uf":96028.94,"is_proyeccion":0},{"run_id":null,"credito_key":"APO_APO_BTG","periodo":"2024-12","saldo_uf":92029.57,"is_proyeccion":0},{"run_id":null,"credito_key":"APO_APO_BTG","periodo":"2025-01","saldo_uf":88026.59000000001,"is_proyeccion":0}],"hasSql":true},{"name":"raw_uf_diaria","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":3450,"columnCount":4,"columns":[{"cid":0,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":true},{"cid":1,"name":"valor","type":"REAL","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fuente","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"loaded_at","type":"TEXT","notnull":true,"default":"datetime('now')","pk":false}],"dateRanges":[{"column":"fecha","min":"2017-01-01","max":"2026-07-09"},{"column":"loaded_at","min":"2026-07-01 19:55:00","max":"2026-07-01 20:05:12"}],"facets":{},"indexes":[{"name":"ix_raw_uf_diaria_fecha","unique":false,"origin":"c","partial":false,"columns":["fecha"]},{"name":"sqlite_autoindex_raw_uf_diaria_1","unique":true,"origin":"pk","partial":false,"columns":["fecha"]}],"sampleRows":[{"fecha":"2017-01-01","valor":26348.83,"fuente":"CMF","loaded_at":"2026-07-01 19:56:11"},{"fecha":"2017-01-02","valor":26349.68,"fuente":"CMF","loaded_at":"2026-07-01 19:56:11"},{"fecha":"2017-01-03","valor":26350.53,"fuente":"CMF","loaded_at":"2026-07-01 19:56:11"}],"hasSql":true},{"name":"raw_valor_cuota_bursatil","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":514,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"precio_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"fuente","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":6,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"patrimonio_bursatil_uf","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-11-14","max":"2026-06-30"},{"column":"loaded_at","min":"2026-05-25 20:15:46","max":"2026-07-01 20:05:18"}],"facets":{"nemotecnico":[{"value":"CFITOERI1A","count":130},{"value":"CFITOERI1C","count":130},{"value":"CFITOERI1I","count":130},{"value":"CFITRIPT-E","count":124}]},"indexes":[{"name":"idx_raw_valor_cuota_bursatil_nemo_fecha","unique":false,"origin":"c","partial":false,"columns":["nemotecnico","fecha"]},{"name":"sqlite_autoindex_raw_valor_cuota_bursatil_1","unique":true,"origin":"u","partial":false,"columns":["nemotecnico","fecha"]}],"sampleRows":[{"id":1,"nemotecnico":"CFITRIPT-E","fecha":"2024-05-31","precio_clp":20000.0,"fuente":"LarraínVial","loaded_at":"2026-05-25 20:15:46","uf_dia":37438.91,"precio_uf":0.534204,"cuotas":1640000.0},{"id":2,"nemotecnico":"CFITRIPT-E","fecha":"2024-06-28","precio_clp":20000.0,"fuente":"LarraínVial","loaded_at":"2026-05-25 20:15:46","uf_dia":37571.86,"precio_uf":0.532313,"cuotas":1640000.0},{"id":3,"nemotecnico":"CFITRIPT-E","fecha":"2024-07-31","precio_clp":20000.0,"fuente":"LarraínVial","loaded_at":"2026-05-25 20:15:46","uf_dia":37578.95,"precio_uf":0.532213,"cuotas":1640000.0}],"hasSql":true},{"name":"raw_valor_cuota_contable","type":"table","domain":"raw_finanzas","domainLabel":"Raw financiero","rowCount":203,"columnCount":13,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":true,"default":null,"pk":false},{"cid":4,"name":"precio_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"loaded_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false},{"cid":12,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-12-31","max":"2026-03-31"},{"column":"periodo","min":"2017-12","max":"2026-03"},{"column":"loaded_at","min":"2026-05-27 15:45:58","max":"2026-07-09 22:27:11"}],"facets":{"fondo_key":[{"value":"TRI","count":123},{"value":"PT","count":35},{"value":"Apo","count":30},{"value":"APO","count":15}],"nemotecnico":[{"value":"Apo","count":45},{"value":"CFITOERI1A","count":41},{"value":"CFITOERI1C","count":41},{"value":"CFITOERI1I","count":41},{"value":"CFITRIPT-E","count":35}]},"indexes":[{"name":"idx_raw_vc_contable_nemo_fecha","unique":false,"origin":"c","partial":false,"columns":["nemotecnico","fecha"]},{"name":"sqlite_autoindex_raw_valor_cuota_contable_1","unique":true,"origin":"u","partial":false,"columns":["nemotecnico","fecha","source_file"]}],"sampleRows":[{"id":1,"fondo_key":"TRI","nemotecnico":"CFITOERI1A","fecha":"2017-12-31","precio_clp":27211.9411,"precio_uf":1.015441,"uf_dia":26798.14,"cuotas":278882.0,"periodo":"2017-12"},{"id":2,"fondo_key":"TRI","nemotecnico":"CFITOERI1C","fecha":"2017-12-31","precio_clp":27329.9189,"precio_uf":1.019844,"uf_dia":26798.14,"cuotas":896776.0,"periodo":"2017-12"},{"id":3,"fondo_key":"TRI","nemotecnico":"CFITOERI1I","fecha":"2017-12-31","precio_clp":27336.2834,"precio_uf":1.020081,"uf_dia":26798.14,"cuotas":689201.0,"periodo":"2017-12"}],"hasSql":true},{"name":"schema_version","type":"table","domain":"audit","domainLabel":"Auditoria","rowCount":56,"columnCount":2,"columns":[{"cid":0,"name":"version","type":"INTEGER","notnull":false,"default":null,"pk":true},{"cid":1,"name":"applied_at","type":"TEXT","notnull":false,"default":"datetime('now')","pk":false}],"dateRanges":[{"column":"applied_at","min":"2026-06-01 14:48:16","max":"2026-07-23 16:46:51"}],"facets":{},"indexes":[],"sampleRows":[{"version":1,"applied_at":"2026-06-01 14:48:16"},{"version":2,"applied_at":"2026-06-01 17:15:10"},{"version":3,"applied_at":"2026-06-01 17:15:10"}],"hasSql":true},{"name":"fact_dividendo","type":"view","domain":"views","domainLabel":"Vistas","rowCount":203,"columnCount":6,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fecha_pago","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"monto","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":3,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_pago","min":"2018-04-10","max":"2025-12-29"},{"column":"periodo","min":"2018-04","max":"2025-12"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"fact_precio_cuota","type":"view","domain":"views","domainLabel":"Vistas","rowCount":514,"columnCount":4,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"precio","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fuente","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-11-14","max":"2026-06-30"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"fact_uf","type":"view","domain":"views","domainLabel":"Vistas","rowCount":3450,"columnCount":2,"columns":[{"cid":0,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"valor","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-01-01","max":"2026-07-09"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_amortizacion_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":3819,"columnCount":5,"columns":[{"cid":0,"name":"credito_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"capital_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":3,"name":"intereses_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"saldo_uf","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2017-06","max":"2072-05"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_ar_event_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":53,"columnCount":12,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"detalle","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"monto_uf_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"monto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-06-02","max":"2021-09-30"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_caja_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":221,"columnCount":6,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"saldo_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2018-12-31","max":"2026-03-31"},{"column":"loaded_at","min":"2026-06-17 16:41:48","max":"2026-06-17 16:41:48"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_capital_suscrito_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":65,"columnCount":9,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fecha_fin_periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"capital_suscrito_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_fin_periodo","min":"2017-06-02","max":"2026-03-31"},{"column":"periodo","min":"2017-06","max":"2026-03"},{"column":"loaded_at","min":"2026-05-27 15:40:34","max":"2026-07-09 22:29:07"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_cuota_en_circulacion_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":244,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-12-31","max":"2025-12-31"},{"column":"periodo","min":"2017-12","max":"2025-12"},{"column":"loaded_at","min":"2026-05-27 15:48:34","max":"2026-06-15 15:57:47"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_dividendo_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":212,"columnCount":12,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fecha_pago","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"monto_uf_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_clp_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":7,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":8,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"tipo","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_pago","min":"2018-04-10","max":"2025-12-29"},{"column":"periodo","min":"2018-04","max":"2025-12"},{"column":"loaded_at","min":"2026-05-25 20:24:00","max":"2026-06-15 15:57:47"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_saldo_deuda_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":2764,"columnCount":5,"columns":[{"cid":0,"name":"run_id","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"credito_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"saldo_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"is_proyeccion","type":"INTEGER","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2017-06","max":"2047-11"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_valor_cuota_bursatil_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":514,"columnCount":10,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"precio_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"fuente","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":5,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":6,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":9,"name":"patrimonio_bursatil_uf","type":"REAL","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-11-14","max":"2026-06-30"},{"column":"loaded_at","min":"2026-05-25 20:15:46","max":"2026-07-01 20:05:18"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_valor_cuota_contable_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":203,"columnCount":13,"columns":[{"cid":0,"name":"id","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"precio_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":8,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":9,"name":"source_file","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":10,"name":"file_hash","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":11,"name":"loaded_at","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":12,"name":"superseded_at","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-12-31","max":"2026-03-31"},{"column":"periodo","min":"2017-12","max":"2026-03"},{"column":"loaded_at","min":"2026-05-27 15:45:58","max":"2026-07-09 22:27:11"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"raw_valor_cuota_line","type":"view","domain":"views","domainLabel":"Vistas","rowCount":691,"columnCount":8,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"precio_uf","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":3,"name":"precio_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"cuotas","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"tipo","type":"","notnull":false,"default":null,"pk":false},{"cid":7,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-11-14","max":"2026-06-30"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_activo_fondo_efectivo","type":"view","domain":"views","domainLabel":"Vistas","rowCount":14,"columnCount":4,"columns":[{"cid":0,"name":"activo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"participacion_efectiva","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"via","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_capital_suscrito_serie","type":"view","domain":"views","domainLabel":"Vistas","rowCount":115,"columnCount":9,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":4,"name":"cuotas","type":"","notnull":false,"default":null,"pk":false},{"cid":5,"name":"valor_cuota_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"uf_dia","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":7,"name":"patrimonio_contable_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":8,"name":"capital_suscrito_uf","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2017-12-31","max":"2025-12-31"},{"column":"periodo","min":"2017-12","max":"2025-12"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_flujos_tir_serie","type":"view","domain":"views","domainLabel":"Vistas","rowCount":122,"columnCount":6,"columns":[{"cid":0,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fecha_pago","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"tipo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"monto_uf_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":4,"name":"monto_clp_cuota","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha_pago","min":"2018-04-10","max":"2025-12-29"},{"column":"periodo","min":"2018-04","max":"2025-12"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_parking_mensual","type":"view","domain":"views","domainLabel":"Vistas","rowCount":42,"columnCount":4,"columns":[{"cid":0,"name":"activo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"ingresos_totales_clp","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"gastos_totales_clp","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_parking_ocupacion_diaria","type":"view","domain":"views","domainLabel":"Vistas","rowCount":1277,"columnCount":10,"columns":[{"cid":0,"name":"activo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"fecha","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"tickets","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":4,"name":"feriado","type":"INTEGER","notnull":false,"default":null,"pk":false},{"cid":5,"name":"monto_bruto_clp","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":6,"name":"estacionamientos_no_abonados","type":"","notnull":false,"default":null,"pk":false},{"cid":7,"name":"tiempo_total_min","type":"","notnull":false,"default":null,"pk":false},{"cid":8,"name":"tiempo_disponible_min","type":"","notnull":false,"default":null,"pk":false},{"cid":9,"name":"ocupacion_diaria","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"fecha","min":"2023-01-01","max":"2026-06-30"},{"column":"periodo","min":"2023-01","max":"2026-06"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_parking_ocupacion_mensual","type":"view","domain":"views","domainLabel":"Vistas","rowCount":42,"columnCount":8,"columns":[{"cid":0,"name":"activo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"periodo","type":"","notnull":false,"default":null,"pk":false},{"cid":2,"name":"dias","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"tickets_mes","type":"","notnull":false,"default":null,"pk":false},{"cid":4,"name":"bruto_mes","type":"","notnull":false,"default":null,"pk":false},{"cid":5,"name":"tiempo_total_min_mes","type":"","notnull":false,"default":null,"pk":false},{"cid":6,"name":"tiempo_disponible_min_mes","type":"","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ocupacion_mensual","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_parking_ratio_no_abonados","type":"view","domain":"views","domainLabel":"Vistas","rowCount":1,"columnCount":4,"columns":[{"cid":0,"name":"ingresos_variables_u12m","type":"","notnull":false,"default":null,"pk":false},{"cid":1,"name":"ingresos_totales_u12m","type":"","notnull":false,"default":null,"pk":false},{"cid":2,"name":"ratio_variable","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"estacionamientos_no_abonados","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_parking_resultado_uf","type":"view","domain":"views","domainLabel":"Vistas","rowCount":42,"columnCount":8,"columns":[{"cid":0,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"ingresos_netos_clp","type":"","notnull":false,"default":null,"pk":false},{"cid":2,"name":"gastos_netos_clp","type":"","notnull":false,"default":null,"pk":false},{"cid":3,"name":"resultado_neto_clp","type":"","notnull":false,"default":null,"pk":false},{"cid":4,"name":"uf_valor","type":"REAL","notnull":false,"default":null,"pk":false},{"cid":5,"name":"resultado_neto_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":6,"name":"ingresos_variables_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":7,"name":"ingresos_abonados_uf","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2023-01","max":"2026-06"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true},{"name":"v_serie_patrimonio","type":"view","domain":"views","domainLabel":"Vistas","rowCount":177,"columnCount":10,"columns":[{"cid":0,"name":"fondo_key","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":1,"name":"nemotecnico","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":2,"name":"periodo","type":"TEXT","notnull":false,"default":null,"pk":false},{"cid":3,"name":"valor_libro_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":4,"name":"valor_libro_clp","type":"","notnull":false,"default":null,"pk":false},{"cid":5,"name":"uf_dia","type":"","notnull":false,"default":null,"pk":false},{"cid":6,"name":"cuotas","type":"","notnull":false,"default":null,"pk":false},{"cid":7,"name":"patrimonio_libro_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":8,"name":"capital_suscrito_uf","type":"","notnull":false,"default":null,"pk":false},{"cid":9,"name":"divs_acum_uf","type":"","notnull":false,"default":null,"pk":false}],"dateRanges":[{"column":"periodo","min":"2017-12","max":"2026-03"}],"facets":{},"indexes":[],"sampleRows":[],"hasSql":true}],"edges":[{"from":"derived_kpi","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"dim_activo","to":"dim_sociedad","fromColumn":"sociedad_key","toColumn":"sociedad_key","kind":"declared"},{"from":"dim_activo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"dim_activo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"dim_activo","to":"dim_sociedad","fromColumn":"sociedad_key","toColumn":"sociedad_key","kind":"inferred"},{"from":"dim_credito","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"dim_credito","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"dim_fondo","to":"dim_fondo","fromColumn":"fondo_padre","toColumn":"fondo_key","kind":"declared"},{"from":"dim_serie","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"dim_serie","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"dim_sociedad","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"dim_sociedad","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"fact_adquisicion","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"fact_adquisicion","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"fact_adquisicion","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"fact_adquisicion","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"fact_tasacion","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"fact_tasacion","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"fact_tasacion","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"fact_tasacion","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_amortizacion","to":"dim_credito","fromColumn":"credito_key","toColumn":"credito_key","kind":"inferred"},{"from":"raw_ar_event","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_ar_event","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_balance_consolidado_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_balance_consolidado_line","to":"dim_cuenta_eeff","fromColumn":"cuenta_codigo","toColumn":"cuenta_codigo","kind":"declared"},{"from":"raw_balance_consolidado_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"raw_balance_consolidado_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_balance_consolidado_line","to":"dim_cuenta_eeff","fromColumn":"cuenta_codigo","toColumn":"cuenta_codigo","kind":"inferred"},{"from":"raw_balance_consolidado_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_caja","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"raw_caja","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_capital_suscrito","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"raw_capital_suscrito","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_capital_suscrito","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_cuota_en_circulacion","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_cuota_en_circulacion","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_dividendo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"raw_dividendo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_dividendo","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_eeff_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_eeff_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"declared"},{"from":"raw_eeff_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_eeff_line","to":"dim_cuenta_eeff","fromColumn":"cuenta_codigo","toColumn":"cuenta_codigo","kind":"inferred"},{"from":"raw_eeff_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_er_activo_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_er_activo_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_er_activo_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_er_activo_line","to":"dim_cuenta_eeff","fromColumn":"cuenta_codigo","toColumn":"cuenta_codigo","kind":"inferred"},{"from":"raw_er_activo_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_flujo_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_flujo_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_flujo_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_flujo_line","to":"dim_cuenta_eeff","fromColumn":"cuenta_codigo","toColumn":"cuenta_codigo","kind":"inferred"},{"from":"raw_flujo_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_mercado_oficinas","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_mercado_oficinas","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_facturacion_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_facturacion_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_parking_facturacion_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_parking_facturacion_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_gasto_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_gasto_line","to":"dim_concepto_parking","fromColumn":"concepto_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_gasto_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_parking_gasto_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_parking_gasto_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_gasto_line","to":"dim_concepto_parking","fromColumn":"concepto_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_ingreso_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_ingreso_line","to":"dim_concepto_parking","fromColumn":"concepto_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_ingreso_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_parking_ingreso_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_parking_ingreso_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_ingreso_line","to":"dim_concepto_parking","fromColumn":"concepto_id","toColumn":"id","kind":"inferred"},{"from":"raw_parking_ticket_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_parking_ticket_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_parking_ticket_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_parking_ticket_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_rent_roll_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"declared"},{"from":"raw_rent_roll_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"declared"},{"from":"raw_rent_roll_line","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"raw_rent_roll_line","to":"ingest_run","fromColumn":"ingest_run_id","toColumn":"id","kind":"inferred"},{"from":"raw_saldo_deuda","to":"dim_credito","fromColumn":"credito_key","toColumn":"credito_key","kind":"inferred"},{"from":"raw_saldo_deuda","to":"ingest_run","fromColumn":"run_id","toColumn":"id","kind":"inferred"},{"from":"raw_valor_cuota_bursatil","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_valor_cuota_contable","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_valor_cuota_contable","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"fact_dividendo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"fact_dividendo","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"fact_precio_cuota","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_amortizacion_line","to":"dim_credito","fromColumn":"credito_key","toColumn":"credito_key","kind":"inferred"},{"from":"raw_ar_event_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_ar_event_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_caja_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_capital_suscrito_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_capital_suscrito_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_cuota_en_circulacion_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_cuota_en_circulacion_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_dividendo_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_dividendo_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_saldo_deuda_line","to":"dim_credito","fromColumn":"credito_key","toColumn":"credito_key","kind":"inferred"},{"from":"raw_saldo_deuda_line","to":"ingest_run","fromColumn":"run_id","toColumn":"id","kind":"inferred"},{"from":"raw_valor_cuota_bursatil_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_valor_cuota_contable_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_valor_cuota_contable_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"raw_valor_cuota_line","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"raw_valor_cuota_line","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"v_activo_fondo_efectivo","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"v_activo_fondo_efectivo","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"v_capital_suscrito_serie","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"v_capital_suscrito_serie","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"v_flujos_tir_serie","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"},{"from":"v_parking_mensual","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"v_parking_ocupacion_diaria","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"v_parking_ocupacion_mensual","to":"dim_activo","fromColumn":"activo_key","toColumn":"activo_key","kind":"inferred"},{"from":"v_serie_patrimonio","to":"dim_fondo","fromColumn":"fondo_key","toColumn":"fondo_key","kind":"inferred"},{"from":"v_serie_patrimonio","to":"dim_serie","fromColumn":"nemotecnico","toColumn":"nemotecnico","kind":"inferred"}]};
+
+const byName = new Map(DB_DATA.objects.map(obj => [obj.name, obj]));
+const domainByKey = new Map(DB_DATA.groups.map(group => [group.key, group]));
+const svg = document.getElementById("diagram");
+const searchInput = document.getElementById("search");
+const domainFilter = document.getElementById("domain-filter");
+const typeFilter = document.getElementById("type-filter");
+const edgeFilter = document.getElementById("edge-filter");
+const rowSort = document.getElementById("row-sort");
+const pathFrom = document.getElementById("path-from");
+const pathTo = document.getElementById("path-to");
+const pathResult = document.getElementById("path-result");
+const detailTitle = document.getElementById("detail-title");
+const detailPills = document.getElementById("detail-pills");
+const detailBody = document.getElementById("detail-body");
+const objectTbody = document.getElementById("object-tbody");
+
+let selectedName = DB_DATA.objects.find(obj => obj.name === "raw_eeff_line")?.name || DB_DATA.objects[0]?.name;
+let currentMode = "map";
+let activeFocus = null;
+let activePath = [];
+let matrixDomainFilter = null;
+let transform = { x: 20, y: 18, scale: 1 };
+let panning = null;
+let pointerMoved = false;
+
+const NODE_W = 212;
+const NODE_H = 58;
+const GROUP_GAP = 260;
+const ROW_GAP = 78;
+
+function fmt(value) {
+  if (value === null || value === undefined) return "n/d";
+  if (typeof value === "number") return value.toLocaleString("es-CL");
+  return String(value);
+}
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[ch]));
+}
+
+function rangeLabel(obj) {
+  if (!obj.dateRanges.length) return "";
+  const r = obj.dateRanges[0];
+  return `${r.column}: ${r.min} → ${r.max}`;
+}
+
+function relationsFor(name) {
+  return DB_DATA.edges.filter(edge => edge.from === name || edge.to === name);
+}
+
+function outgoing(name) {
+  return DB_DATA.edges.filter(edge => edge.from === name).map(edge => edge.to);
+}
+
+function incoming(name) {
+  return DB_DATA.edges.filter(edge => edge.to === name).map(edge => edge.from);
+}
+
+function dependencySet(name, mode) {
+  const seen = new Set([name]);
+  const queue = [name];
+  while (queue.length) {
+    const current = queue.shift();
+    const next = mode === "upstream" ? outgoing(current) : incoming(current);
+    next.forEach(n => {
+      if (!seen.has(n)) {
+        seen.add(n);
+        queue.push(n);
+      }
+    });
+  }
+  return seen;
+}
+
+function matchesSearch(obj, term) {
+  if (!term) return true;
+  const haystack = [
+    obj.name, obj.domainLabel, obj.type,
+    ...obj.columns.map(col => col.name),
+    ...obj.columns.map(col => col.type || ""),
+    ...Object.keys(obj.facets || {})
+  ].join(" ").toLowerCase();
+  return haystack.includes(term);
+}
+
+function baseVisibleObjects() {
+  const term = searchInput.value.trim().toLowerCase();
+  const domain = domainFilter.value;
+  const type = typeFilter.value;
+  return DB_DATA.objects.filter(obj => {
+    if (domain !== "all" && obj.domain !== domain) return false;
+    if (type !== "all" && obj.type !== type) return false;
+    if (matrixDomainFilter && obj.domain !== matrixDomainFilter.from && obj.domain !== matrixDomainFilter.to) return false;
+    return matchesSearch(obj, term);
+  });
+}
+
+function visibleSet() {
+  let set = new Set(baseVisibleObjects().map(obj => obj.name));
+  if (activeFocus?.names) {
+    set = new Set([...set].filter(name => activeFocus.names.has(name)));
+  }
+  if (activePath.length) {
+    const pathSet = new Set(activePath);
+    set = new Set([...set].filter(name => pathSet.has(name)));
+  }
+  return set;
+}
+
+function computeLayout() {
+  const positions = new Map();
+  const groupStart = new Map();
+  DB_DATA.groups.forEach((group, groupIndex) => {
+    const items = DB_DATA.objects
+      .filter(obj => obj.domain === group.key)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const x = 36 + groupIndex * GROUP_GAP;
+    groupStart.set(group.key, { x, count: items.length, label: group.label, color: group.color });
+    items.forEach((obj, idx) => positions.set(obj.name, { x, y: 64 + idx * ROW_GAP }));
+  });
+  return { positions, groupStart };
+}
+
+const layout = computeLayout();
+
+function edgePath(source, target) {
+  const sx = source.x + NODE_W;
+  const sy = source.y + NODE_H / 2;
+  const tx = target.x;
+  const ty = target.y + NODE_H / 2;
+  const dx = Math.max(60, Math.abs(tx - sx) * .45);
+  return `M ${sx} ${sy} C ${sx + dx} ${sy}, ${tx - dx} ${ty}, ${tx} ${ty}`;
+}
+
+function applyTransform() {
+  const viewport = document.getElementById("viewport");
+  if (viewport) viewport.setAttribute("transform", `translate(${transform.x} ${transform.y}) scale(${transform.scale})`);
+}
+
+function renderMap() {
+  svg.innerHTML = "";
+  const width = Math.max(900, svg.clientWidth || 900);
+  const height = Math.max(620, svg.clientHeight || 620);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const viewport = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  viewport.setAttribute("id", "viewport");
+  svg.appendChild(viewport);
+
+  const headers = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  viewport.appendChild(headers);
+  layout.groupStart.forEach(group => {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("class", "domain-title");
+    t.setAttribute("x", group.x);
+    t.setAttribute("y", 24);
+    t.textContent = group.label;
+    headers.appendChild(t);
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    c.setAttribute("class", "domain-count");
+    c.setAttribute("x", group.x);
+    c.setAttribute("y", 40);
+    c.textContent = `${group.count} objetos`;
+    headers.appendChild(c);
+  });
+
+  const edgesLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  const nodesLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  viewport.appendChild(edgesLayer);
+  viewport.appendChild(nodesLayer);
+
+  DB_DATA.edges.forEach((edge, index) => {
+    const source = layout.positions.get(edge.from);
+    const target = layout.positions.get(edge.to);
+    if (!source || !target) return;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", edgePath(source, target));
+    p.setAttribute("class", `edge ${edge.kind}`);
+    p.dataset.from = edge.from;
+    p.dataset.to = edge.to;
+    p.dataset.kind = edge.kind;
+    p.dataset.index = String(index);
+    edgesLayer.appendChild(p);
+  });
+
+  DB_DATA.objects.forEach(obj => {
+    const pos = layout.positions.get(obj.name);
+    const group = domainByKey.get(obj.domain);
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "node");
+    g.setAttribute("transform", `translate(${pos.x} ${pos.y})`);
+    g.setAttribute("role", "button");
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("aria-label", `Ver detalle de ${obj.name}`);
+    g.dataset.name = obj.name;
+
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `Click: detalle de ${obj.name}. Doble click: vecinos.`;
+    g.appendChild(title);
+
+    const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    hitbox.setAttribute("class", "hitbox");
+    hitbox.setAttribute("width", NODE_W);
+    hitbox.setAttribute("height", NODE_H);
+    g.appendChild(hitbox);
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("class", "main");
+    rect.setAttribute("width", NODE_W);
+    rect.setAttribute("height", NODE_H);
+    g.appendChild(rect);
+
+    const stripe = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    stripe.setAttribute("class", "stripe");
+    stripe.setAttribute("width", "5");
+    stripe.setAttribute("height", NODE_H);
+    stripe.setAttribute("fill", group?.color || "#888");
+    g.appendChild(stripe);
+
+    const name = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    name.setAttribute("class", "name");
+    name.setAttribute("x", "13");
+    name.setAttribute("y", "20");
+    name.textContent = obj.name.length > 25 ? obj.name.slice(0, 23) + "…" : obj.name;
+    g.appendChild(name);
+
+    const meta = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    meta.setAttribute("class", "meta");
+    meta.setAttribute("x", "13");
+    meta.setAttribute("y", "39");
+    meta.textContent = `${fmt(obj.rowCount)} filas · ${obj.columnCount} cols`;
+    g.appendChild(meta);
+
+    const tag = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    tag.setAttribute("class", "tag");
+    tag.setAttribute("x", String(NODE_W - 48));
+    tag.setAttribute("y", "38");
+    tag.setAttribute("width", "40");
+    tag.setAttribute("height", "14");
+    g.appendChild(tag);
+    const tagText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    tagText.setAttribute("class", "tag-text");
+    tagText.setAttribute("x", String(NODE_W - 28));
+    tagText.setAttribute("y", "48");
+    tagText.setAttribute("text-anchor", "middle");
+    tagText.textContent = obj.type === "view" ? "VIEW" : "TABLE";
+    g.appendChild(tagText);
+
+    g.addEventListener("pointerdown", event => event.stopPropagation());
+    g.addEventListener("click", event => {
+      event.stopPropagation();
+      activateNode(obj.name);
+    });
+    g.addEventListener("dblclick", event => {
+      event.stopPropagation();
+      selectNode(obj.name);
+      activePath = [];
+      matrixDomainFilter = null;
+      activeFocus = { mode: "neighbors", names: new Set([obj.name, ...incoming(obj.name), ...outgoing(obj.name)]) };
+      edgeFilter.value = "selected";
+      pathResult.textContent = `Vecinos de ${obj.name}: ${activeFocus.names.size} objetos visibles.`;
+      updateVisibility();
+    });
+    g.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activateNode(obj.name);
+      }
+    });
+    nodesLayer.appendChild(g);
+  });
+
+  applyTransform();
+}
+
+function edgeVisible(edge, visible) {
+  if (!visible.has(edge.from) || !visible.has(edge.to)) return false;
+  if (matrixDomainFilter) {
+    const fromDomain = byName.get(edge.from)?.domain;
+    const toDomain = byName.get(edge.to)?.domain;
+    if (fromDomain !== matrixDomainFilter.from || toDomain !== matrixDomainFilter.to) return false;
+  }
+  const mode = edgeFilter.value;
+  if (mode === "none") return false;
+  if (mode === "selected") return edge.from === selectedName || edge.to === selectedName;
+  if (mode !== "all" && edge.kind !== mode) return false;
+  if (activePath.length) {
+    for (let i = 0; i < activePath.length - 1; i++) {
+      if (edge.from === activePath[i] && edge.to === activePath[i + 1]) return true;
+    }
+    return false;
+  }
+  return true;
+}
+
+function updateVisibility() {
+  const visible = visibleSet();
+  document.querySelectorAll(".node").forEach(node => {
+    const show = visible.has(node.dataset.name);
+    node.classList.toggle("hidden", !show);
+    node.classList.toggle("selected", node.dataset.name === selectedName);
+    node.classList.toggle("highlight", activePath.includes(node.dataset.name));
+    const shouldDim = activeFocus?.names && show && !activeFocus.names.has(node.dataset.name);
+    node.classList.toggle("dimmed", Boolean(shouldDim));
+  });
+  document.querySelectorAll(".edge").forEach(edgeEl => {
+    const edge = {
+      from: edgeEl.dataset.from,
+      to: edgeEl.dataset.to,
+      kind: edgeEl.dataset.kind
+    };
+    const show = edgeVisible(edge, visible);
+    edgeEl.classList.toggle("hidden", !show);
+    const inPath = activePath.some((name, i) => i < activePath.length - 1 && edge.from === name && edge.to === activePath[i + 1]);
+    const selected = edge.from === selectedName || edge.to === selectedName;
+    edgeEl.classList.toggle("highlight", inPath || (selected && edgeFilter.value === "selected"));
+  });
+  renderObjectTable();
+}
+
+function sortObjects(objects) {
+  const mode = rowSort.value;
+  return [...objects].sort((a, b) => {
+    if (mode === "rows") return (b.rowCount || 0) - (a.rowCount || 0);
+    if (mode === "columns") return b.columnCount - a.columnCount;
+    if (mode === "relations") return relationsFor(b.name).length - relationsFor(a.name).length;
+    if (mode === "name") return a.name.localeCompare(b.name);
+    return `${a.domain}-${a.name}`.localeCompare(`${b.domain}-${b.name}`);
+  });
+}
+
+function renderObjectTable() {
+  const visible = visibleSet();
+  const objects = sortObjects(DB_DATA.objects.filter(obj => visible.has(obj.name)));
+  document.getElementById("list-count").textContent = `${objects.length} objetos visibles`;
+  objectTbody.innerHTML = objects.map(obj => `
+    <tr data-name="${esc(obj.name)}" class="${obj.name === selectedName ? "selected-row" : ""}">
+      <td>${esc(obj.name)}</td>
+      <td>${esc(obj.domainLabel)}</td>
+      <td>${esc(obj.type)}</td>
+      <td>${fmt(obj.rowCount)}</td>
+      <td>${fmt(obj.columnCount)}</td>
+      <td>${fmt(relationsFor(obj.name).length)}</td>
+      <td>${esc(rangeLabel(obj) || "—")}</td>
+    </tr>
+  `).join("");
+  objectTbody.querySelectorAll("tr").forEach(row => {
+    row.addEventListener("click", () => selectNode(row.dataset.name));
+  });
+}
+
+function renderMatrix() {
+  const groups = DB_DATA.groups;
+  document.getElementById("matrix-head").innerHTML = `
+    <tr><th>Origen \\ Destino</th>${groups.map(g => `<th>${esc(g.label)}</th>`).join("")}</tr>
+  `;
+  const counts = new Map();
+  DB_DATA.edges.forEach(edge => {
+    const f = byName.get(edge.from)?.domain;
+    const t = byName.get(edge.to)?.domain;
+    if (!f || !t) return;
+    counts.set(`${f}|${t}`, (counts.get(`${f}|${t}`) || 0) + 1);
+  });
+  document.getElementById("matrix-body").innerHTML = groups.map(from => `
+    <tr>
+      <td><strong>${esc(from.label)}</strong></td>
+      ${groups.map(to => {
+        const n = counts.get(`${from.key}|${to.key}`) || 0;
+        return `<td class="matrix-cell ${n ? "has" : ""}" data-from="${esc(from.key)}" data-to="${esc(to.key)}">${n || ""}</td>`;
+      }).join("")}
+    </tr>
+  `).join("");
+  document.querySelectorAll(".matrix-cell.has").forEach(cell => {
+    cell.addEventListener("click", () => {
+      matrixDomainFilter = { from: cell.dataset.from, to: cell.dataset.to };
+      activePath = [];
+      activeFocus = null;
+      setMode("map");
+      updateVisibility();
+      pathResult.textContent = `Filtro matriz: ${domainByKey.get(matrixDomainFilter.from).label} → ${domainByKey.get(matrixDomainFilter.to).label}.`;
+    });
+  });
+}
+
+function renderDetail(obj) {
+  detailTitle.textContent = obj.name;
+  detailPills.innerHTML = `
+    <span class="pill">${esc(obj.type === "table" ? "Tabla" : "Vista")}</span>
+    <span class="pill">${esc(obj.domainLabel)}</span>
+    <span class="pill">${fmt(obj.rowCount)} filas</span>
+    <span class="pill">${fmt(obj.columnCount)} columnas</span>
+  `;
+  const outEdges = DB_DATA.edges.filter(e => e.from === obj.name);
+  const inEdges = DB_DATA.edges.filter(e => e.to === obj.name);
+  const ranges = obj.dateRanges.length
+    ? obj.dateRanges.map(r => `<div class="muted"><strong>${esc(r.column)}</strong>: ${esc(r.min)} → ${esc(r.max)}</div>`).join("")
+    : `<div class="muted">Sin rango de fecha o periodo detectado.</div>`;
+  const relRows = [...outEdges.map(e => ({...e, dir: "sale"})), ...inEdges.map(e => ({...e, dir: "entra"}))]
+    .map(e => `<div class="mini-row"><span>${esc(e.from)}.${esc(e.fromColumn)} → ${esc(e.to)}.${esc(e.toColumn)}</span><span class="muted">${esc(e.kind)}</span><span>${esc(e.dir)}</span></div>`)
+    .join("") || `<div class="mini-row"><span>Sin relaciones detectadas.</span><span></span><span></span></div>`;
+  const colRows = obj.columns.map(col => `
+    <div class="mini-row">
+      <span>${esc(col.name)}</span>
+      <span class="muted">${esc(col.type || "sin tipo")}</span>
+      <span>${col.pk ? "PK" : col.notnull ? "NN" : ""}</span>
+    </div>
+  `).join("");
+  const facetKeys = Object.keys(obj.facets || {});
+  const facets = facetKeys.length
+    ? facetKeys.map(key => {
+      const vals = obj.facets[key].map(item => `${esc(item.value)} (${fmt(item.count)})`).join(", ");
+      return `<div class="mini-row"><span>${esc(key)}</span><span class="muted" style="grid-column: span 2">${vals}</span></div>`;
+    }).join("")
+    : `<div class="mini-row"><span>Sin facetas pequeñas.</span><span></span><span></span></div>`;
+  const indexes = obj.indexes.length
+    ? obj.indexes.map(idx => `<div class="muted"><strong>${esc(idx.name)}</strong>: ${idx.unique ? "UNIQUE · " : ""}${esc(idx.columns.join(", ") || "sin columnas")}</div>`).join("")
+    : `<div class="muted">Sin índices propios reportados.</div>`;
+  const sample = obj.sampleRows.length ? JSON.stringify(obj.sampleRows, null, 2) : "Sin muestra embebida para este objeto.";
+
+  detailBody.innerHTML = `
+    <div class="detail-section">
+      <h4>Resumen</h4>
+      <div class="kv">
+        <strong>Objeto</strong><span>${esc(obj.name)}</span>
+        <strong>Dominio</strong><span>${esc(obj.domainLabel)}</span>
+        <strong>Tipo</strong><span>${esc(obj.type)}</span>
+        <strong>Relaciones</strong><span>${fmt(outEdges.length)} salientes · ${fmt(inEdges.length)} entrantes</span>
+      </div>
+    </div>
+    <div class="detail-section"><h4>Rangos</h4>${ranges}</div>
+    <div class="detail-section"><h4>Relaciones</h4><div class="mini-list">${relRows}</div></div>
+    <div class="detail-section"><h4>Columnas</h4><div class="mini-list">${colRows}</div></div>
+    <div class="detail-section"><h4>Facetas</h4><div class="mini-list">${facets}</div></div>
+    <div class="detail-section"><h4>Índices</h4>${indexes}</div>
+    <div class="detail-section"><h4>Muestra</h4><pre>${esc(sample)}</pre></div>
+  `;
+}
+
+function selectNode(name) {
+  const obj = byName.get(name);
+  if (!obj) return;
+  selectedName = name;
+  renderDetail(obj);
+  updateVisibility();
+}
+
+function activateNode(name) {
+  selectNode(name);
+  activePath = [];
+  matrixDomainFilter = null;
+  activeFocus = null;
+  edgeFilter.value = "selected";
+  pathResult.textContent = `Nodo seleccionado: ${name}. Mostrando sus relaciones directas.`;
+  updateVisibility();
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll(".mode-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
+  document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.id === `view-${mode}`));
+  if (mode === "matrix") renderMatrix();
+  if (mode === "list") renderObjectTable();
+}
+
+function findPath(from, to) {
+  if (from === to) return [from];
+  const prev = new Map();
+  const queue = [from];
+  const seen = new Set([from]);
+  while (queue.length) {
+    const current = queue.shift();
+    DB_DATA.edges.filter(e => e.from === current).forEach(edge => {
+      if (seen.has(edge.to)) return;
+      seen.add(edge.to);
+      prev.set(edge.to, current);
+      queue.push(edge.to);
+    });
+    if (seen.has(to)) break;
+  }
+  if (!seen.has(to)) return [];
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev.get(path[0]));
+  return path;
+}
+
+function applyFocus(mode) {
+  if (!selectedName) return;
+  activePath = [];
+  matrixDomainFilter = null;
+  activeFocus = { mode, names: dependencySet(selectedName, mode) };
+  edgeFilter.value = "all";
+  pathResult.textContent = `${mode === "upstream" ? "Upstream" : "Downstream"} de ${selectedName}: ${activeFocus.names.size} objetos.`;
+  updateVisibility();
+}
+
+function clearFocus() {
+  activeFocus = null;
+  activePath = [];
+  matrixDomainFilter = null;
+  pathResult.textContent = "";
+  domainFilter.value = "all";
+  typeFilter.value = "all";
+  edgeFilter.value = "all";
+  searchInput.value = "";
+  updateVisibility();
+}
+
+function clearSelection() {
+  selectedName = null;
+  activeFocus = null;
+  activePath = [];
+  matrixDomainFilter = null;
+  edgeFilter.value = "all";
+  pathResult.textContent = "";
+  detailTitle.textContent = "Sin nodo seleccionado";
+  detailPills.innerHTML = `<span class="pill">Click en un nodo</span>`;
+  detailBody.innerHTML = `
+    <div class="detail-section">
+      <h4>Detalle</h4>
+      <div class="muted">Selecciona una tabla o vista del mapa o de la lista para ver columnas, relaciones, rangos y muestra.</div>
+    </div>
+  `;
+  updateVisibility();
+}
+
+function initControls() {
+  document.getElementById("schema-label").textContent = `SCHEMA VERSION ${DB_DATA.schemaVersion}`;
+  document.getElementById("generated-label").textContent = `${DB_DATA.dbPath} · ${DB_DATA.generatedAt}`;
+  document.getElementById("stat-version").textContent = fmt(DB_DATA.schemaVersion);
+  document.getElementById("stat-tables").textContent = fmt(DB_DATA.tableCount);
+  document.getElementById("stat-views").textContent = fmt(DB_DATA.viewCount);
+  document.getElementById("stat-rows").textContent = fmt(DB_DATA.totalRows);
+  document.getElementById("stat-edges").textContent = fmt(DB_DATA.edges.length);
+
+  domainFilter.innerHTML = `<option value="all">Todos los dominios</option>` +
+    DB_DATA.groups.map(g => `<option value="${esc(g.key)}">${esc(g.label)} (${g.count})</option>`).join("");
+  const sortedNames = DB_DATA.objects.map(obj => obj.name).sort((a,b) => a.localeCompare(b));
+  pathFrom.innerHTML = sortedNames.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("");
+  pathTo.innerHTML = sortedNames.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("");
+  pathFrom.value = "raw_eeff_line";
+  pathTo.value = "dim_fondo";
+
+  document.getElementById("domain-chips").innerHTML =
+    `<button class="chip-btn active" type="button" data-domain="all">Todos</button>` +
+    DB_DATA.groups.map(g => `<button class="chip-btn" type="button" data-domain="${esc(g.key)}">${esc(g.label)}</button>`).join("");
+  document.querySelectorAll(".chip-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".chip-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      domainFilter.value = btn.dataset.domain;
+      matrixDomainFilter = null;
+      updateVisibility();
+    });
+  });
+
+  [searchInput, domainFilter, typeFilter, edgeFilter, rowSort].forEach(control => {
+    control.addEventListener("input", () => {
+      matrixDomainFilter = null;
+      const visible = baseVisibleObjects();
+      if (!visible.some(obj => obj.name === selectedName) && visible[0]) selectNode(visible[0].name);
+      updateVisibility();
+    });
+  });
+  domainFilter.addEventListener("input", () => {
+    document.querySelectorAll(".chip-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.domain === domainFilter.value));
+  });
+  document.querySelectorAll(".mode-btn").forEach(btn => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
+  document.getElementById("reset-all").addEventListener("click", clearFocus);
+  document.getElementById("center-map").addEventListener("click", () => { transform = { x: 20, y: 18, scale: 1 }; applyTransform(); });
+  document.getElementById("zoom-in").addEventListener("click", () => { transform.scale = Math.min(1.9, transform.scale * 1.12); applyTransform(); });
+  document.getElementById("zoom-out").addEventListener("click", () => { transform.scale = Math.max(.4, transform.scale / 1.12); applyTransform(); });
+  document.getElementById("focus-upstream").addEventListener("click", () => applyFocus("upstream"));
+  document.getElementById("focus-downstream").addEventListener("click", () => applyFocus("downstream"));
+  document.getElementById("detail-focus").addEventListener("click", () => { activeFocus = { mode: "neighbors", names: new Set([selectedName, ...incoming(selectedName), ...outgoing(selectedName)]) }; edgeFilter.value = "selected"; updateVisibility(); });
+  document.getElementById("detail-neighbors").addEventListener("click", () => { edgeFilter.value = "selected"; updateVisibility(); });
+  document.getElementById("path-find").addEventListener("click", () => {
+    activeFocus = null;
+    matrixDomainFilter = null;
+    const path = findPath(pathFrom.value, pathTo.value);
+    activePath = path;
+    if (path.length) {
+      selectedName = path[0];
+      renderDetail(byName.get(selectedName));
+      pathResult.textContent = `Ruta: ${path.join(" → ")}`;
+    } else {
+      pathResult.textContent = `Sin ruta dirigida desde ${pathFrom.value} hacia ${pathTo.value}.`;
+    }
+    updateVisibility();
+    setMode("map");
+  });
+}
+
+function initPanZoom() {
+  svg.addEventListener("wheel", event => {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? .92 : 1.08;
+    transform.scale = Math.min(1.9, Math.max(.4, transform.scale * delta));
+    applyTransform();
+  }, { passive: false });
+  svg.addEventListener("pointerdown", event => {
+    panning = { x: event.clientX, y: event.clientY, tx: transform.x, ty: transform.y };
+    pointerMoved = false;
+    svg.setPointerCapture(event.pointerId);
+  });
+  svg.addEventListener("pointermove", event => {
+    if (!panning) return;
+    if (Math.abs(event.clientX - panning.x) > 3 || Math.abs(event.clientY - panning.y) > 3) pointerMoved = true;
+    transform.x = panning.tx + event.clientX - panning.x;
+    transform.y = panning.ty + event.clientY - panning.y;
+    applyTransform();
+  });
+  svg.addEventListener("pointerup", event => {
+    if (panning && !pointerMoved && event.target === svg) clearSelection();
+    panning = null;
+  });
+  svg.addEventListener("pointercancel", () => { panning = null; pointerMoved = false; });
+}
+
+initControls();
+renderMap();
+renderMatrix();
+selectNode(selectedName);
+initPanZoom();
+window.addEventListener("resize", renderMap);
+</script>
+</body>
+</html>

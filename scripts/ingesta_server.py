@@ -66,6 +66,11 @@ def serve_page():
     return send_from_directory(WEB_DIR, "ingesta.html")
 
 
+@app.get("/db-diagrama")
+def serve_db_diagram():
+    return send_from_directory(WEB_DIR, "db_diagrama_interactivo.html")
+
+
 @app.get("/api/estado_ingesta")
 def api_estado_ingesta():
     con = get_conn_for(str(estado_ingesta.DB_PATH))
