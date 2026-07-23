@@ -489,10 +489,10 @@ st.markdown("""
 <div class="welcome-container" id="toesca-welcome-ui">
     <div class="welcome-logo">toesca.</div>
     <div class="welcome-fade-group">
-        <div class="welcome-tagline">Agente de Gestión de Fondos</div>
+        <div class="welcome-tagline">Asistente Virtual Inmobiliario Toesca</div>
         <div class="welcome-desc">
-            Puedo actualizar el Control de Gestión, calcular el NOI de cada activo,
-            revisar los rent rolls, gestionar la caja y consultar precios bursátiles.
+            ¡Hola! Soy el asistente virtual inmobiliario de Toesca.
+            Pregúntame por un fondo, activo, período o indicador.
         </div>
         <div>
             <span class="welcome-pill">📊 CDG mensual</span>

@@ -14,9 +14,10 @@
 
   const CSS = `
   .tc-fab{position:fixed;right:22px;bottom:22px;z-index:99998;width:58px;height:58px;
-    border-radius:50%;background:#0f172a;color:#fff;display:flex;align-items:center;
+    border-radius:50%;background:#111;color:#e8e3dc;display:flex;align-items:center;
     justify-content:center;cursor:pointer;box-shadow:0 10px 25px rgba(15,23,42,.35);
-    border:none;transition:transform .15s ease, background .15s ease;font-size:26px}
+    border:1px solid #222;transition:transform .15s ease, background .15s ease;
+    font-family:Georgia,"Times New Roman",serif;font-size:24px;letter-spacing:-.5px}
   .tc-fab:hover{transform:translateY(-2px);background:#1e293b}
   .tc-fab.hidden{display:none}
   .tc-panel{position:fixed;right:22px;bottom:22px;z-index:99999;width:420px;
@@ -27,6 +28,11 @@
   .tc-panel.open{display:flex}
   .tc-head{padding:14px 16px;background:#0f172a;color:#fff;display:flex;
     align-items:center;justify-content:space-between}
+  .tc-head-brand{display:flex;align-items:center;gap:10px}
+  .tc-mark{width:32px;height:32px;border-radius:4px;background:#111;border:1px solid #222;
+    color:#e8e3dc;display:inline-flex;align-items:center;justify-content:center;
+    font-family:Georgia,"Times New Roman",serif;font-size:16px;letter-spacing:-.5px;
+    flex:0 0 auto}
   .tc-head strong{font-size:15px}
   .tc-head small{opacity:.75;font-size:11px;display:block;margin-top:2px}
   .tc-close{background:transparent;border:none;color:#fff;font-size:22px;
@@ -44,6 +50,10 @@
   .tc-msg.bot code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12px}
   .tc-msg.bot pre{background:#0f172a;color:#e2e8f0;padding:8px;border-radius:6px;
     overflow-x:auto;font-size:11.5px}
+  .tc-row{display:flex;gap:8px;align-items:flex-end}
+  .tc-row.bot{align-self:flex-start;max-width:94%}
+  .tc-row.bot .tc-msg{max-width:none}
+  .tc-row .tc-mark{width:28px;height:28px;font-size:14px}
   .tc-sql{margin-top:6px;font-size:11px;color:#64748b;cursor:pointer;user-select:none}
   .tc-sql code{background:#f1f5f9;padding:1px 5px;border-radius:3px}
   .tc-sql-body{display:none;margin-top:6px;background:#0f172a;color:#e2e8f0;
@@ -69,27 +79,32 @@
   const fab = document.createElement("button");
   fab.className = "tc-fab";
   fab.title = "Preguntale al asistente";
-  fab.innerHTML = "💬";
+  fab.innerHTML = "t.";
   document.body.appendChild(fab);
 
   const panel = document.createElement("div");
   panel.className = "tc-panel";
   panel.innerHTML = `
     <div class="tc-head">
-      <div>
-        <strong>Asistente Virtual Inmobiliario Toesca</strong>
-        <small>Respuestas con informacion interna verificada</small>
+      <div class="tc-head-brand">
+        <span class="tc-mark">t.</span>
+        <div>
+          <strong>Asistente Virtual Inmobiliario Toesca</strong>
+          <small>Respuestas con informacion interna verificada</small>
+        </div>
       </div>
       <button class="tc-close" title="Cerrar">×</button>
     </div>
     <div class="tc-body" id="tc-body">
-      <div class="tc-msg bot">
-        Hola. Preguntame lo que quieras sobre el portfolio: NOI, vacancia,
-        rent roll, EEFF, precios cuota, dividendos, KPIs, comparativas.
-        Respondo <b>solo</b> con informacion disponible y verificable.
+      <div class="tc-row bot">
+        <span class="tc-mark">t.</span>
+        <div class="tc-msg bot">
+          ¡Hola! Soy el asistente virtual inmobiliario de Toesca.
+          Preguntame por un fondo, activo, periodo o indicador.
+        </div>
       </div>
     </div>
-    <div class="tc-hint">Ejemplos: "NOI Viña Centro 2026", "vacancia PT ultimos 6 meses", "valor cuota TRI serie A al cierre 2026-03"</div>
+    <div class="tc-hint">El contenido generado por la IA puede ser inexacto.</div>
     <div class="tc-input">
       <textarea id="tc-q" placeholder="Escribe tu pregunta…" rows="1"></textarea>
       <button class="tc-send" id="tc-send">Enviar</button>
@@ -167,6 +182,14 @@
   }
 
   function addMsg(role, html) {
+    if (role === "bot") {
+      const row = document.createElement("div");
+      row.className = "tc-row bot";
+      row.innerHTML = `<span class="tc-mark">t.</span><div class="tc-msg bot">${html}</div>`;
+      body.appendChild(row);
+      body.scrollTop = body.scrollHeight;
+      return row;
+    }
     const div = document.createElement("div");
     div.className = `tc-msg ${role}`;
     div.innerHTML = html;
