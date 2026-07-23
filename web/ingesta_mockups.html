@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mockups · Pantalla Inicio Ingesta</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --green: #00B27A; --green-soft: #C8ECD8; --green-header: #A6DEC1;
+    --text: #202020; --border: #A6A6A6; --muted: #6b6b6b;
+    --warn: #B8860B; --err: #C0392B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: "Segoe UI", Arial, sans-serif;
+    background: #F4F4F4; color: var(--text); line-height: 1.5; font-size: 13px;
+  }
+  header {
+    background: linear-gradient(180deg,#3d3d3d,#2b2b2b); color: #fff;
+    padding: 22px 32px;
+  }
+  header h1 { margin: 0; font-size: 26px; font-weight: 300; letter-spacing: 0.5px; }
+  header .subtitle {
+    margin: 4px 0 0; font-size: 12px; font-weight: 400; color: #dedede;
+    font-variant: small-caps; letter-spacing: 1px;
+  }
+  main { max-width: 1100px; margin: 24px auto 60px; padding: 0 24px; }
+  .section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    font-weight: 700; margin: 32px 0 8px; border-bottom: 2px solid var(--green); padding-bottom: 6px;
+  }
+  .section-title:first-child { margin-top: 0; }
+  .section-desc { color: var(--muted); font-size: 12.5px; margin: 0 0 16px; }
+
+  /* Card base */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #2b2b2b; }
+  .card .card-subtitle { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12.5px; margin-bottom: 8px;
+  }
+  .stat-row .label { color: var(--muted); }
+  .stat-row .value { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .value.ok { color: var(--green); }
+  .value.miss { color: var(--err); }
+  .value.warn { color: var(--warn); }
+  .btn {
+    background: var(--green); color: #fff; border: 1px solid var(--green);
+    font-weight: 700; padding: 7px 14px; border-radius: 3px; cursor: pointer; font-size: 12.5px;
+    width: 100%;
+  }
+  .btn.ghost { background: #fff; color: var(--green); }
+  .btn.small { width: auto; padding: 5px 10px; font-size: 12px; }
+
+  /* Dots */
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+  .dot.ok { background: var(--green); }
+  .dot.miss { background: var(--err); }
+  .dot.na { background: #d0d0d0; }
+  .dot.warn { background: var(--warn); }
+
+  /* ── Solución A: expand-in-place ── */
+  .a-card .expand-toggle {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 12px; font-weight: 600; padding: 6px 0; width: 100%;
+    text-align: left; margin-top: 10px; border-top: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .a-card .expand-toggle:hover { color: var(--green); }
+  .a-card .expand-body { display: none; margin-top: 10px; }
+  .a-card.open .expand-body { display: block; }
+  .a-card.open .chev { transform: rotate(180deg); }
+  .chev { transition: transform .15s; }
+  .matrix-mini {
+    display: grid; grid-template-columns: 90px repeat(4, 1fr); gap: 4px 8px;
+    font-size: 11.5px; align-items: center;
+  }
+  .matrix-mini .head { color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; font-size: 10.5px; }
+  .matrix-mini .rowname { color: #2b2b2b; font-weight: 600; }
+  .matrix-mini .cell { text-align: center; cursor: pointer; padding: 4px 0; border-radius: 3px; }
+  .matrix-mini .cell:hover { background: #f4f4f4; }
+
+  /* ── Solución B: matrix landing ── */
+  .matrix-full {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px;
+  }
+  .matrix-full .filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-chip {
+    font-size: 11.5px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: #FAFAFA; cursor: pointer; font-weight: 600;
+  }
+  .filter-chip.active { background: var(--green-soft); border-color: var(--green); color: #0d3a29; }
+  .matrix-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .matrix-table th, .matrix-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+  .matrix-table th { color: var(--muted); font-weight: 600; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .matrix-table th.period { text-align: center; font-variant-numeric: tabular-nums; }
+  .matrix-table td.period { text-align: center; cursor: pointer; }
+  .matrix-table td.period:hover { background: #f4f4f4; }
+  .matrix-table tr.type-row { background: #FAFAFA; }
+  .matrix-table tr.type-row td { font-weight: 700; color: #2b2b2b; }
+  .matrix-table tr.sub-row td.rowname { padding-left: 26px; color: #444; }
+  .summary-mini { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; margin-left: 8px; }
+
+  /* ── Solución C: task queue ── */
+  .queue-card, .queue-done {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px; margin-bottom: 14px;
+  }
+  .queue-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .queue-header h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .queue-header .count { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .task {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 4px; border-bottom: 1px solid #f0f0f0;
+  }
+  .task:last-child { border-bottom: none; }
+  .task .icon { flex-shrink: 0; font-size: 16px; }
+  .task .body { flex: 1; }
+  .task .task-title { font-weight: 600; font-size: 13px; color: #2b2b2b; }
+  .task .task-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .task .task-meta .sla-late { color: var(--err); font-weight: 600; }
+  .task .task-meta .sla-soon { color: var(--warn); font-weight: 600; }
+  .queue-done h3 { color: var(--muted); font-weight: 600; font-size: 13px; margin: 0; }
+  .queue-done .summary { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .queue-done .breakdown { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; }
+  .queue-done .breakdown span { color: #2b2b2b; }
+
+  /* Callout */
+  .callout {
+    background: #FFF9EC; border-left: 4px solid var(--warn); padding: 12px 16px;
+    margin-bottom: 24px; font-size: 12.5px; color: #5a4a1a;
+  }
+  .callout strong { color: #2b2b2b; }
+
+  /* Recommendation box */
+  .reco {
+    margin-top: 32px; background: linear-gradient(180deg, #F0FAF5, #FFFFFF);
+    border: 1px solid var(--green-soft); border-radius: 4px; padding: 20px 24px;
+  }
+  .reco h3 { margin: 0 0 6px; font-size: 14px; color: #0d3a29; }
+  .reco p { margin: 0; font-size: 13px; color: #2b2b2b; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mockups · Pantalla Inicio Ingesta</h1>
+  <div class="subtitle">3 propuestas para exponer sub-ingestas (fondos EEFF · proveedores RR)</div>
+</header>
+
+<main>
+
+<div class="callout">
+  <strong>El flaw:</strong> el card actual colapsa <em>N</em> sub-ingestas en un solo estado.
+  EEFF = 3 fondos independientes (TRI, PT, APO). RR = 3 proveedores independientes (JLL, Viña, Curicó).
+  Si TRI está al día pero PT no, el card dice "pendiente" sin decir cuál — o peor, dice "al día" ignorando a los demás.
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Solución A · Expand-in-place</div>
+<p class="section-desc">
+  Cards siguen siendo el landing. Un chevron abajo revela la matriz sub-ingesta × período.
+  Cerrado por default = mismo look que hoy. Abierto = granularidad completa.
+</p>
+
+<div class="card-grid">
+
+  <!-- EEFF -->
+  <div class="card a-card open" id="a-eeff">
+    <h3>EEFF</h3>
+    <div class="card-subtitle">Trimestral · 3 fondos</div>
+    <div class="stat-row">
+      <span class="label">Al día</span>
+      <span class="value warn">2 de 3 fondos</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Próximo pendiente</span>
+      <span class="value miss">APO · T1 2026</span>
+    </div>
+    <button class="btn" style="margin-top:8px">Ingestar APO T1 2026 →</button>
+
+    <button class="expand-toggle" onclick="document.getElementById('a-eeff').classList.toggle('open')">
+      <span>Ver detalle por fondo</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="expand-body">
+      <div class="matrix-mini">
+        <div></div>
+        <div class="head">T2'25</div><div class="head">T3'25</div><div class="head">T4'25</div><div class="head">T1'26</div>
+
+        <div class="rowname">TRI</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+
+        <div class="rowname">PT</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+
+        <div class="rowname">APO</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell" title="Click: ingestar APO T1 2026"><span class="dot miss"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rent Roll -->
+  <div class="card a-card open" id="a-rr">
+    <h3>Rent Roll</h3>
+    <div class="card-subtitle">Mensual · 3 proveedores</div>
+    <div class="stat-row">
+      <span class="label">Al día</span>
+      <span class="value warn">1 de 3 proveedores</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Próximos pendientes</span>
+      <span class="value miss">Viña · Jun · Curicó · Jun</span>
+    </div>
+    <button class="btn" style="margin-top:8px">Ingestar el más urgente →</button>
+
+    <button class="expand-toggle" onclick="document.getElementById('a-rr').classList.toggle('open')">
+      <span>Ver detalle por proveedor</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="expand-body">
+      <div class="matrix-mini" style="grid-template-columns: 90px repeat(6, 1fr);">
+        <div></div>
+        <div class="head">Ene</div><div class="head">Feb</div><div class="head">Mar</div>
+        <div class="head">Abr</div><div class="head">May</div><div class="head">Jun</div>
+
+        <div class="rowname">JLL</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+
+        <div class="rowname">Viña</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot miss"></span></div>
+
+        <div class="rowname">Curicó</div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot ok"></span></div>
+        <div class="cell"><span class="dot miss"></span></div>
+        <div class="cell"><span class="dot miss"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mercado -->
+  <div class="card a-card">
+    <h3>Mercado Oficinas</h3>
+    <div class="card-subtitle">Trimestral · 1 proveedor</div>
+    <div class="stat-row">
+      <span class="label">Último ingestado</span>
+      <span class="value ok">T4 2025</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Próximo pendiente</span>
+      <span class="value miss">T1 2026</span>
+    </div>
+    <button class="btn" style="margin-top:8px">Ingestar T1 2026 →</button>
+    <button class="expand-toggle">
+      <span>Un único proveedor · sin sub-ingestas</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Solución B · Matriz completa como landing</div>
+<p class="section-desc">
+  Una sola matriz con todos los tipos y sub-ingestas visibles de entrada.
+  Filas colapsables por tipo. Filtros arriba para acotar la vista.
+</p>
+
+<div class="matrix-full">
+  <div class="filters">
+    <span class="filter-chip active">Todos</span>
+    <span class="filter-chip">Solo pendientes</span>
+    <span class="filter-chip">Últimos 6 períodos</span>
+    <span class="filter-chip">🔍 Buscar…</span>
+  </div>
+
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th style="width: 30%">Ingesta</th>
+        <th class="period">T2'25 / Ene</th>
+        <th class="period">T3'25 / Feb-Abr</th>
+        <th class="period">T4'25 / May</th>
+        <th class="period">T1'26 / Jun</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="type-row">
+        <td>EEFF (trimestral) <span class="summary-mini">2 / 3 al día</span></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong style="color:var(--warn)">2/3</strong></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ TRI</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ PT</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ APO</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot miss"></span></td>
+      </tr>
+
+      <tr class="type-row">
+        <td>Rent Roll (mensual) <span class="summary-mini">1 / 3 al día</span></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong>3/3</strong></td>
+        <td class="period"><strong style="color:var(--err)">1/3</strong></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ JLL (PT, Apo, Apo3001)</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ Tres A · Viña</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot miss"></span></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ Tres A · Curicó</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot miss"></span></td>
+        <td class="period"><span class="dot miss"></span></td>
+      </tr>
+
+      <tr class="type-row">
+        <td>Mercado Oficinas (trimestral) <span class="summary-mini">0 / 1 al día</span></td>
+        <td class="period"><strong>1/1</strong></td>
+        <td class="period"><strong>1/1</strong></td>
+        <td class="period"><strong>1/1</strong></td>
+        <td class="period"><strong style="color:var(--err)">0/1</strong></td>
+      </tr>
+      <tr class="sub-row">
+        <td class="rowname">▸ JLL</td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot ok"></span></td>
+        <td class="period"><span class="dot miss"></span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="section-title">Solución C · Cola de trabajo priorizada</div>
+<p class="section-desc">
+  Cero granularidad visual, máxima acción. Lista de qué falta ingestar, ordenada por urgencia.
+  El estado "al día" queda relegado a un card colapsable abajo.
+</p>
+
+<div class="queue-card">
+  <div class="queue-header">
+    <h3>Pendientes</h3>
+    <span class="count">4 tareas</span>
+  </div>
+
+  <div class="task">
+    <div class="icon">⚠</div>
+    <div class="body">
+      <div class="task-title">EEFF · APO · T1 2026</div>
+      <div class="task-meta">Publicado 2026-05-15 · <span class="sla-late">atrasado 8 días</span></div>
+    </div>
+    <button class="btn small">Ingestar →</button>
+  </div>
+
+  <div class="task">
+    <div class="icon">⚠</div>
+    <div class="body">
+      <div class="task-title">Rent Roll · Tres A · Curicó · May 2026</div>
+      <div class="task-meta">Cierre mensual · <span class="sla-late">atrasado 24 días</span></div>
+    </div>
+    <button class="btn small">Ingestar →</button>
+  </div>
+
+  <div class="task">
+    <div class="icon">○</div>
+    <div class="body">
+      <div class="task-title">Rent Roll · Tres A · Curicó · Jun 2026</div>
+      <div class="task-meta">Cierre mensual · <span class="sla-soon">próximo a vencer</span></div>
+    </div>
+    <button class="btn small ghost">Ingestar →</button>
+  </div>
+
+  <div class="task">
+    <div class="icon">○</div>
+    <div class="body">
+      <div class="task-title">Rent Roll · Tres A · Viña · Jun 2026</div>
+      <div class="task-meta">Cierre mensual · pendiente</div>
+    </div>
+    <button class="btn small ghost">Ingestar →</button>
+  </div>
+
+  <div class="task">
+    <div class="icon">○</div>
+    <div class="body">
+      <div class="task-title">Mercado Oficinas · JLL · T1 2026</div>
+      <div class="task-meta">Cierre trimestral · pendiente</div>
+    </div>
+    <button class="btn small ghost">Ingestar →</button>
+  </div>
+</div>
+
+<div class="queue-done">
+  <div class="queue-header">
+    <h3>Al día</h3>
+    <span class="count">▾ ver detalle</span>
+  </div>
+  <div class="summary">EEFF · 2 fondos · Rent Roll · 1 proveedor · Mercado · 0 proveedores</div>
+  <div class="breakdown">
+    <span><span class="dot ok"></span> EEFF TRI hasta T1'26</span>
+    <span><span class="dot ok"></span> EEFF PT hasta T1'26</span>
+    <span><span class="dot ok"></span> RR JLL hasta Jun'26</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<div class="reco">
+  <h3>Mi recomendación</h3>
+  <p>
+    Con solo 3 sub-ingestas por tipo, <strong>Solución A</strong> es la más barata y natural:
+    conserva la landing de 3 cards, el detalle vive detrás de un chevron, y el cambio de backend
+    es puramente aditivo (agregar <code>sub_ingestas[]</code> al response de <code>/api/estado_ingesta</code>).
+    Solución B es la ganadora si en el futuro sumás más tipos de ingesta o más sub-ingestas por tipo.
+    Solución C es la más "acción pura" pero pierde el mapa mental de qué existe.
+  </p>
+</div>
+
+</main>
+</body>
+</html>

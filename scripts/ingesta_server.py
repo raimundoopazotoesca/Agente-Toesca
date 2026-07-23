@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -54,6 +55,11 @@ def _extract_fenced_block(markdown_text: str) -> str:
     return match.group(1).strip() if match else markdown_text.strip()
 
 
+@app.get("/")
+def index():
+    return redirect("/ingesta")
+
+
 @app.get("/ingesta")
 def serve_page():
     return send_from_directory(WEB_DIR, "ingesta.html")
@@ -64,6 +70,25 @@ def api_estado_ingesta():
     con = get_conn_for(str(estado_ingesta.DB_PATH))
     try:
         return jsonify(estado_ingesta.estado_ingesta(con))
+    finally:
+        con.close()
+
+
+@app.get("/api/estado_ingesta/timeline_range")
+def api_estado_ingesta_timeline_range():
+    tipo_id = request.args.get("tipo", "")
+    try:
+        offset_min = int(request.args.get("offset_min", "-8"))
+        offset_max = int(request.args.get("offset_max", "1"))
+    except ValueError:
+        return jsonify({"error": "offset_min/offset_max inválidos"}), 400
+    if tipo_id not in {c["id"] for c in estado_ingesta.CONFIG}:
+        return jsonify({"error": f"tipo desconocido: {tipo_id}"}), 400
+    if offset_min > offset_max:
+        return jsonify({"error": "offset_min no puede ser mayor que offset_max"}), 400
+    con = get_conn_for(str(estado_ingesta.DB_PATH))
+    try:
+        return jsonify(estado_ingesta.timeline_rango(con, tipo_id, date.today(), offset_min, offset_max))
     finally:
         con.close()
 

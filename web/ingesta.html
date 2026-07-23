@@ -147,8 +147,17 @@
   .inicio-stat-row .value { font-weight: 700; font-variant-numeric: tabular-nums; }
   .inicio-stat-row .value.ok { color: var(--green); }
   .inicio-stat-row .value.miss { color: var(--err); }
+  .inicio-timeline-row {
+    display: flex; align-items: center; gap: 4px; margin: 14px 0; padding-top: 10px; border-top: 1px solid #eee;
+  }
+  .inicio-tl-nav {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 13px; padding: 2px 4px; flex-shrink: 0; line-height: 1; width: auto;
+  }
+  .inicio-tl-nav:hover:not(:disabled) { color: var(--green); }
+  .inicio-tl-nav:disabled { color: #d8d8d8; cursor: default; }
   .inicio-timeline {
-    display: flex; gap: 6px; margin: 14px 0; padding-top: 10px; border-top: 1px solid #eee;
+    display: flex; gap: 6px; flex: 1; min-width: 0;
   }
   .inicio-tl-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .inicio-tl-dot { width: 11px; height: 11px; border-radius: 50%; }
@@ -156,7 +165,84 @@
   .inicio-tl-dot.miss { background: var(--err); }
   .inicio-tl-dot.na { background: #d0d0d0; }
   .inicio-tl-label { font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .inicio-card button { width: 100%; }
+  .inicio-card button.ingestar-btn { width: 100%; }
+
+  .inicio-expand-toggle {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 12px; font-weight: 600; padding: 6px 0 0; width: 100%;
+    text-align: left; margin-top: 10px; border-top: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .inicio-expand-toggle:hover { color: var(--green); }
+  .inicio-expand-toggle:focus { outline: none; color: var(--green); }
+  .inicio-expand-toggle:focus-visible { outline: 2px solid var(--green-soft); outline-offset: 2px; }
+  .inicio-expand-body { display: none; margin-top: 10px; overflow-x: auto; }
+  .inicio-card.open .inicio-expand-body { display: block; }
+  .inicio-card.open .inicio-chev { transform: rotate(180deg); }
+  .inicio-chev { transition: transform .15s; display: inline-block; }
+  .inicio-matrix {
+    display: grid; grid-template-columns: 62px repeat(var(--cols, 4), minmax(34px, 1fr));
+    gap: 4px 6px; font-size: 11px; align-items: center; min-width: max-content;
+  }
+  .inicio-matrix .head {
+    color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; font-size: 9.5px;
+    white-space: nowrap;
+  }
+  .inicio-matrix .rowname {
+    color: #2b2b2b; font-weight: 600; font-size: 11px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .inicio-matrix .cell {
+    text-align: center; cursor: pointer; padding: 4px 0; border-radius: 3px;
+  }
+  .inicio-matrix .cell:hover { background: #f4f4f4; }
+  .inicio-matrix .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .inicio-matrix .dot.ok { background: var(--green); }
+  .inicio-matrix .dot.miss { background: var(--err); }
+  .inicio-matrix .dot.na { background: #d0d0d0; }
+
+  .inicio-mini-cards {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
+  }
+  .inicio-mini-card {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 14px 18px;
+    flex: 1 1 220px;
+  }
+  .inicio-mini-card.mini-wide { flex: 2 1 360px; }
+  .mini-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .mini-title { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .mini-pill {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  }
+  .mini-pill.ok { background: var(--green-soft); color: #0d3a29; }
+  .mini-pill.warn { background: #fff4d9; color: var(--warn); }
+  .mini-pill.miss { background: #fbe3e0; color: var(--err); }
+  .mini-value { font-size: 24px; font-weight: 700; color: #2b2b2b; font-variant-numeric: tabular-nums; margin: 8px 0 12px; }
+  .mini-sub { font-size: 11.5px; color: var(--muted); }
+  .mini-stats { border-top: 1px solid #eee; padding-top: 8px; margin-top: 2px; }
+  .mini-stat-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+  .mini-stat-row .mini-stat-label { color: var(--muted); }
+  .mini-stat-row .mini-stat-value { font-weight: 600; color: #2b2b2b; font-variant-numeric: tabular-nums; }
+  .mini-fuente { font-size: 10.5px; color: #a0a0a0; margin-top: 10px; }
+
+  .mini-bursatil-table {
+    display: grid; grid-template-columns: 48px 1fr 82px;
+    gap: 5px 10px; margin-top: 12px;
+  }
+  .mini-bursatil-row { display: contents; }
+  .mini-bursatil-row.mini-bursatil-headrow span {
+    font-size: 9.5px; text-transform: uppercase; color: var(--muted); font-weight: 700;
+    letter-spacing: .02em; padding-bottom: 5px; border-bottom: 1px solid #eee;
+  }
+  .mini-fondo-badge {
+    font-size: 11px; font-weight: 700; color: #0d3a29; background: var(--green-soft);
+    border-radius: 3px; padding: 1px 6px; width: fit-content; align-self: center;
+  }
+  .mini-serie { font-size: 12px; color: #2b2b2b; font-weight: 600; align-self: center; }
+  .mini-fecha { font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
+  .mini-bursatil-headrow .mini-fecha { text-align: right; }
 </style>
 </head>
 <body>
@@ -175,6 +261,7 @@
 
 <!-- ══════════════════════════ TAB INICIO ══════════════════════════ -->
 <div id="tab-inicio" class="tab-panel active">
+  <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
   <div id="inicio-cards" class="inicio-cards"></div>
 </div>
 
@@ -1143,12 +1230,97 @@ function _inicioPeriodoLabel(periodo, frecuencia) {
   return `${meses[parseInt(m, 10) - 1]} ${y}`;
 }
 
+function _irAIngestar(tabDestino, pendiente, subKey) {
+  document.querySelector(`[data-tab="${tabDestino}"]`).click();
+  if (tabDestino === 'eeff') {
+    if (subKey) fondoSelect.value = subKey;
+    if (pendiente) eeffPeriodo.value = pendiente;
+    fetchPrompt(fondoSelect.value).catch(() => {});
+    checkEeffPeriodoStatus();
+  } else if (tabDestino === 'rentroll') {
+    if (subKey) rrProveedor.value = subKey;
+    if (pendiente) rrPeriodo.value = pendiente;
+    rrProveedor.dispatchEvent(new Event('change'));
+    checkRrPeriodoStatus();
+  } else if (tabDestino === 'mercado') {
+    if (pendiente) mercadoPeriodo.value = pendiente;
+    checkMercadoPeriodoStatus();
+  }
+}
+
+const _MINI_PILL_LABEL = { ok: 'Al día', warn: 'Por confirmar', miss: 'Atrasado' };
+
+function _fmtCLP(n) {
+  return n == null ? '—' : n.toLocaleString('es-CL', { maximumFractionDigits: 2 });
+}
+
+function renderMiniCards(data) {
+  const container = document.getElementById('inicio-mini-cards');
+  container.innerHTML = '';
+
+  const uf = data.uf;
+  const ufActualizado = uf.dias_atraso == null ? '—'
+    : uf.dias_atraso <= 0 ? 'Hoy'
+    : uf.dias_atraso === 1 ? 'Ayer'
+    : `Hace ${uf.dias_atraso} días`;
+  container.insertAdjacentHTML('beforeend', `
+    <div class="inicio-mini-card">
+      <div class="mini-head">
+        <span class="mini-title">UF</span>
+        <span class="mini-pill ${uf.estado}">${_MINI_PILL_LABEL[uf.estado] || uf.estado}</span>
+      </div>
+      <div class="mini-value">${_fmtCLP(uf.ultimo_valor)}</div>
+      <div class="mini-stats">
+        <div class="mini-stat-row"><span class="mini-stat-label">Última fecha</span><span class="mini-stat-value">${uf.ultima_fecha || '—'}</span></div>
+        <div class="mini-stat-row"><span class="mini-stat-label">Actualizado</span><span class="mini-stat-value">${ufActualizado}</span></div>
+      </div>
+      <div class="mini-fuente">Fuente: ${uf.fuente || '—'}</div>
+    </div>
+  `);
+
+  const b = data.bursatil;
+  const bSub = b.al_dia
+    ? `Al día · corte ${b.ultima_fecha}`
+    : `Pendiente ${_inicioPeriodoLabel(b.pendiente, 'mensual')}`;
+  const valores = (b.valores || []).slice().sort((x, y) => {
+    const f = (x.fondo || '').localeCompare(y.fondo || '');
+    return f !== 0 ? f : (x.serie || '').localeCompare(y.serie || '');
+  });
+  const filasHtml = valores.map(v => `
+    <div class="mini-bursatil-row">
+      <span class="mini-fondo-badge">${v.fondo || '—'}</span>
+      <span class="mini-serie">${v.serie ? 'Serie ' + v.serie : v.nemotecnico}</span>
+      <span class="mini-fecha">${v.fecha || '—'}</span>
+    </div>
+  `).join('');
+  container.insertAdjacentHTML('beforeend', `
+    <div class="inicio-mini-card mini-wide">
+      <div class="mini-head">
+        <span class="mini-title">Valor cuota bursátil</span>
+        <span class="mini-pill ${b.estado}">${_MINI_PILL_LABEL[b.estado] || b.estado}</span>
+      </div>
+      <div class="mini-sub">${bSub}</div>
+      <div class="mini-bursatil-table">
+        <div class="mini-bursatil-row mini-bursatil-headrow">
+          <span>Fondo</span><span>Serie</span><span>Fecha</span>
+        </div>
+        ${filasHtml}
+      </div>
+      <div class="mini-fuente">Fuente: ${b.fuente || '—'}</div>
+    </div>
+  `);
+}
+
 function renderEstadoIngesta(data) {
+  renderMiniCards(data);
   const container = document.getElementById('inicio-cards');
   container.innerHTML = '';
   for (const tipo of data.tipos) {
     const card = document.createElement('div');
     card.className = 'inicio-card';
+    card.dataset.tipoId = tipo.id;
+    card.dataset.frecuencia = tipo.frecuencia;
+    card.dataset.offset = '0';
 
     const timelineHtml = tipo.timeline.map(t => `
       <div class="inicio-tl-item">
@@ -1157,45 +1329,154 @@ function renderEstadoIngesta(data) {
       </div>
     `).join('');
 
-    const pendienteHtml = tipo.al_dia
-      ? `<span class="value ok">Al día</span>`
-      : `<span class="value miss">${_inicioPeriodoLabel(tipo.pendiente, tipo.frecuencia)}</span>`;
+    const tieneSubs = tipo.sub_ingestas && tipo.sub_ingestas.length > 0;
+
+    let alDiaHtml, pendienteHtml;
+    if (tieneSubs) {
+      const r = tipo.resumen;
+      const cls = r.al_dia === r.total ? 'ok' : 'miss';
+      alDiaHtml = `<span class="value ${cls}">${r.al_dia} de ${r.total}</span>`;
+      const faltantes = tipo.sub_ingestas.filter(s => !s.al_dia);
+      if (!faltantes.length) {
+        pendienteHtml = `<span class="value ok">Al día</span>`;
+      } else {
+        const periodoMasAntiguo = faltantes
+          .map(s => s.pendiente)
+          .filter(Boolean)
+          .sort()[0];
+        pendienteHtml = `<span class="value miss">${_inicioPeriodoLabel(periodoMasAntiguo, tipo.frecuencia)}</span>`;
+      }
+    } else {
+      alDiaHtml = `<span class="value ok">${tipo.ultimo_ingestado ? _inicioPeriodoLabel(tipo.ultimo_ingestado, tipo.frecuencia) : '—'}</span>`;
+      pendienteHtml = tipo.al_dia
+        ? `<span class="value ok">Al día</span>`
+        : `<span class="value miss">${_inicioPeriodoLabel(tipo.pendiente, tipo.frecuencia)}</span>`;
+    }
+
+    let expandHtml = '';
+    if (tieneSubs) {
+      const cols = tipo.sub_ingestas[0].timeline.length;
+      const headHtml = tipo.sub_ingestas[0].timeline
+        .map(t => `<div class="head">${_inicioPeriodoLabel(t.periodo, tipo.frecuencia)}</div>`).join('');
+      const rowsHtml = tipo.sub_ingestas.map(sub => {
+        const cellsHtml = sub.timeline.map(t => `
+          <div class="cell" data-sub-key="${sub.key}" data-periodo="${t.periodo}" data-estado="${t.estado}"
+               title="${sub.label} · ${_inicioPeriodoLabel(t.periodo, tipo.frecuencia)}">
+            <span class="dot ${t.estado}"></span>
+          </div>
+        `).join('');
+        return `<div class="rowname" title="${sub.label}">${sub.label}</div>${cellsHtml}`;
+      }).join('');
+      expandHtml = `
+        <button class="inicio-expand-toggle" data-toggle-expand>
+          <span>Ver detalle</span>
+          <span class="inicio-chev">▾</span>
+        </button>
+        <div class="inicio-expand-body">
+          <div class="inicio-matrix" style="--cols:${cols}">
+            <div></div>${headHtml}
+            ${rowsHtml}
+          </div>
+        </div>
+      `;
+    }
 
     card.innerHTML = `
       <h3>${tipo.label}</h3>
-      <div class="inicio-subtitle">${tipo.frecuencia === 'trimestral' ? 'Trimestral' : 'Mensual'}</div>
+      <div class="inicio-subtitle">${tipo.frecuencia === 'trimestral' ? 'Trimestral' : 'Mensual'}${tieneSubs ? ' · ' + tipo.resumen.total + (tipo.id === 'eeff' ? ' fondos' : ' proveedores') : ''}</div>
       <div class="inicio-stat-row">
-        <span class="label">Último ingestado</span>
-        <span class="value ok">${tipo.ultimo_ingestado ? _inicioPeriodoLabel(tipo.ultimo_ingestado, tipo.frecuencia) : '—'}</span>
+        <span class="label">${tieneSubs ? 'Al día' : 'Último ingestado'}</span>
+        ${alDiaHtml}
       </div>
       <div class="inicio-stat-row">
         <span class="label">Próximo pendiente</span>
         ${pendienteHtml}
       </div>
-      <div class="inicio-timeline">${timelineHtml}</div>
-      <button data-tab-destino="${tipo.tab_destino}" data-pendiente="${tipo.pendiente || ''}">Ingestar →</button>
+      <div class="inicio-timeline-row">
+        <button class="inicio-tl-nav" data-tl-prev title="Períodos anteriores">◀</button>
+        <div class="inicio-timeline">${timelineHtml}</div>
+        <button class="inicio-tl-nav" data-tl-next title="Períodos siguientes">▶</button>
+      </div>
+      ${expandHtml}
+      <button class="ingestar-btn" data-tab-destino="${tipo.tab_destino}" data-pendiente="${tipo.pendiente || ''}" style="margin-top:${tieneSubs ? '10px' : '0'}">Ingestar →</button>
     `;
     container.appendChild(card);
   }
 
-  container.querySelectorAll('button[data-tab-destino]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabDestino = btn.dataset.tabDestino;
-      const pendiente = btn.dataset.pendiente;
-      document.querySelector(`[data-tab="${tabDestino}"]`).click();
-      if (!pendiente) return;
-      if (tabDestino === 'eeff') {
-        eeffPeriodo.value = pendiente;
-        checkEeffPeriodoStatus();
-      } else if (tabDestino === 'rentroll') {
-        rrPeriodo.value = pendiente;
-        checkRrPeriodoStatus();
-      } else if (tabDestino === 'mercado') {
-        mercadoPeriodo.value = pendiente;
-        checkMercadoPeriodoStatus();
-      }
+  container.querySelectorAll('[data-toggle-expand]').forEach(btn => {
+    btn.addEventListener('click', () => btn.closest('.inicio-card').classList.toggle('open'));
+  });
+
+  container.querySelectorAll('.inicio-matrix .cell[data-estado="miss"]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const card = cell.closest('.inicio-card');
+      const tabDestino = card.querySelector('button[data-tab-destino]').dataset.tabDestino;
+      _irAIngestar(tabDestino, cell.dataset.periodo, cell.dataset.subKey);
     });
   });
+
+  container.querySelectorAll('button[data-tab-destino]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _irAIngestar(btn.dataset.tabDestino, btn.dataset.pendiente || null, null);
+    });
+  });
+
+  container.querySelectorAll('.inicio-card').forEach(card => {
+    const prevBtn = card.querySelector('[data-tl-prev]');
+    const nextBtn = card.querySelector('[data-tl-next]');
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    prevBtn.addEventListener('click', () => navegarTimeline(card, -1));
+    nextBtn.addEventListener('click', () => navegarTimeline(card, 1));
+    precargarTimelineRango(card.dataset.tipoId).then(() => actualizarBotonesNav(card));
+  });
+}
+
+// Cache del rango completo navegable por tipo (offset -8..1), precargado una
+// sola vez al render — las flechas después solo recortan este array en el
+// cliente, sin más llamadas al servidor (navegación instantánea).
+const _timelineRangoCache = {};
+
+async function precargarTimelineRango(tipoId) {
+  try {
+    const res = await fetch(`/api/estado_ingesta/timeline_range?tipo=${tipoId}&offset_min=-8&offset_max=1`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+    _timelineRangoCache[tipoId] = data;
+  } catch (e) {
+    /* silencioso: las flechas quedan deshabilitadas si no se pudo precargar */
+  }
+}
+
+function actualizarBotonesNav(card) {
+  const cache = _timelineRangoCache[card.dataset.tipoId];
+  const prevBtn = card.querySelector('[data-tl-prev]');
+  const nextBtn = card.querySelector('[data-tl-next]');
+  if (!cache) return;
+  const offset = parseInt(card.dataset.offset, 10);
+  prevBtn.disabled = offset <= cache.offset_min;
+  nextBtn.disabled = offset >= cache.offset_max;
+}
+
+function navegarTimeline(card, delta) {
+  const cache = _timelineRangoCache[card.dataset.tipoId];
+  if (!cache) return;
+  const offsetActual = parseInt(card.dataset.offset, 10);
+  const nuevoOffset = Math.max(cache.offset_min, Math.min(cache.offset_max, offsetActual + delta));
+  if (nuevoOffset === offsetActual) return;
+  card.dataset.offset = String(nuevoOffset);
+
+  const frecuencia = card.dataset.frecuencia;
+  const start = nuevoOffset - cache.offset_min;
+  const ventana = cache.periodos.slice(start, start + cache.n);
+  card.querySelector('.inicio-timeline').innerHTML = ventana.map(t => `
+    <div class="inicio-tl-item">
+      <div class="inicio-tl-dot ${t.estado}"></div>
+      <span class="inicio-tl-label">${_inicioPeriodoLabel(t.periodo, frecuencia)}</span>
+    </div>
+  `).join('');
+
+  actualizarBotonesNav(card);
 }
 
 async function loadEstadoIngesta() {
