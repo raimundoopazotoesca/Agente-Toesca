@@ -128,6 +128,35 @@
     background: #FFF9EC; border: 1px solid #f0d9a0; border-radius: 3px; font-size: 12.5px;
   }
   .raro-item input[type=checkbox] { margin-top: 2px; flex-shrink: 0; }
+
+  .inicio-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px; margin-top: 4px;
+  }
+  .inicio-card {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px;
+  }
+  .inicio-card h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: #2b2b2b; }
+  .inicio-card .inicio-subtitle { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+  .inicio-stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12.5px; margin-bottom: 8px;
+  }
+  .inicio-stat-row .label { color: var(--muted); }
+  .inicio-stat-row .value { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .inicio-stat-row .value.ok { color: var(--green); }
+  .inicio-stat-row .value.miss { color: var(--err); }
+  .inicio-timeline {
+    display: flex; gap: 6px; margin: 14px 0; padding-top: 10px; border-top: 1px solid #eee;
+  }
+  .inicio-tl-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .inicio-tl-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .inicio-tl-dot.ok { background: var(--green); }
+  .inicio-tl-dot.miss { background: var(--err); }
+  .inicio-tl-dot.na { background: #d0d0d0; }
+  .inicio-tl-label { font-size: 9.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .inicio-card button { width: 100%; }
 </style>
 </head>
 <body>
@@ -135,7 +164,8 @@
   <h1>Ingesta</h1>
   <div class="subtitle">Toesca · Fact Sheets dinámicos</div>
   <div class="tabs">
-    <button class="tab-btn active" data-tab="eeff">EEFF</button>
+    <button class="tab-btn active" data-tab="inicio">Inicio</button>
+    <button class="tab-btn" data-tab="eeff">EEFF</button>
     <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
     <button class="tab-btn" data-tab="mercado">Mercado Oficinas</button>
   </div>
@@ -143,8 +173,13 @@
 
 <main>
 
+<!-- ══════════════════════════ TAB INICIO ══════════════════════════ -->
+<div id="tab-inicio" class="tab-panel active">
+  <div id="inicio-cards" class="inicio-cards"></div>
+</div>
+
 <!-- ══════════════════════════ TAB EEFF ══════════════════════════ -->
-<div id="tab-eeff" class="tab-panel active">
+<div id="tab-eeff" class="tab-panel">
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Elige el fondo y copia el prompt</div>
@@ -1099,6 +1134,82 @@ btnMercadoConfirm.addEventListener('click', async () => {
 
 populateMercadoTrimestres();
 checkMercadoPeriodoStatus();
+
+// ── TAB INICIO ───────────────────────────────────────────────────────────
+function _inicioPeriodoLabel(periodo, frecuencia) {
+  const [y, m] = periodo.split('-');
+  if (frecuencia === 'trimestral') return `T${{'03':1,'06':2,'09':3,'12':4}[m]} ${y}`;
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${meses[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function renderEstadoIngesta(data) {
+  const container = document.getElementById('inicio-cards');
+  container.innerHTML = '';
+  for (const tipo of data.tipos) {
+    const card = document.createElement('div');
+    card.className = 'inicio-card';
+
+    const timelineHtml = tipo.timeline.map(t => `
+      <div class="inicio-tl-item">
+        <div class="inicio-tl-dot ${t.estado}"></div>
+        <span class="inicio-tl-label">${_inicioPeriodoLabel(t.periodo, tipo.frecuencia)}</span>
+      </div>
+    `).join('');
+
+    const pendienteHtml = tipo.al_dia
+      ? `<span class="value ok">Al día</span>`
+      : `<span class="value miss">${_inicioPeriodoLabel(tipo.pendiente, tipo.frecuencia)}</span>`;
+
+    card.innerHTML = `
+      <h3>${tipo.label}</h3>
+      <div class="inicio-subtitle">${tipo.frecuencia === 'trimestral' ? 'Trimestral' : 'Mensual'}</div>
+      <div class="inicio-stat-row">
+        <span class="label">Último ingestado</span>
+        <span class="value ok">${tipo.ultimo_ingestado ? _inicioPeriodoLabel(tipo.ultimo_ingestado, tipo.frecuencia) : '—'}</span>
+      </div>
+      <div class="inicio-stat-row">
+        <span class="label">Próximo pendiente</span>
+        ${pendienteHtml}
+      </div>
+      <div class="inicio-timeline">${timelineHtml}</div>
+      <button data-tab-destino="${tipo.tab_destino}" data-pendiente="${tipo.pendiente || ''}">Ingestar →</button>
+    `;
+    container.appendChild(card);
+  }
+
+  container.querySelectorAll('button[data-tab-destino]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabDestino = btn.dataset.tabDestino;
+      const pendiente = btn.dataset.pendiente;
+      document.querySelector(`[data-tab="${tabDestino}"]`).click();
+      if (!pendiente) return;
+      if (tabDestino === 'eeff') {
+        eeffPeriodo.value = pendiente;
+        checkEeffPeriodoStatus();
+      } else if (tabDestino === 'rentroll') {
+        rrPeriodo.value = pendiente;
+        checkRrPeriodoStatus();
+      } else if (tabDestino === 'mercado') {
+        mercadoPeriodo.value = pendiente;
+        checkMercadoPeriodoStatus();
+      }
+    });
+  });
+}
+
+async function loadEstadoIngesta() {
+  const container = document.getElementById('inicio-cards');
+  try {
+    const res = await fetch('/api/estado_ingesta');
+    const data = await res.json();
+    renderEstadoIngesta(data);
+  } catch (e) {
+    container.innerHTML = '<p class="muted">No se pudo cargar el estado de ingesta.</p>';
+  }
+}
+
+loadEstadoIngesta();
 </script>
 </body>
 </html>
