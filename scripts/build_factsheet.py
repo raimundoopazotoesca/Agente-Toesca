@@ -159,6 +159,52 @@ FONDOS_CFG = {
             ],
             "tipo_activo": ["Oficinas", "Comercial", "Industrial", "Residencias"],
         },
+        # Página 3 — "Análisis de Mercado" (fact sheet TRI abril 2026, PDF de
+        # referencia): oficinas / bodegas / centros comerciales. A diferencia de
+        # PT/Apo (detalle de activos propios), esta página es un reporte de mercado
+        # de terceros (JLL, GPS Property, Colliers, CNC). La tabla de oficinas
+        # reutiliza raw_mercado_oficinas (misma fuente que Apo.page4.mercado) — los
+        # párrafos se redactan en runtime desde la DB (ver renderPage3Mercado()).
+        # Bodegas y centros comerciales NO tienen tabla en la DB todavía: solo
+        # estructura (zonas/categorías), valores en placeholder hasta que se
+        # ingeste una fuente (GPS Property / CNC respectivamente).
+        "page3": {
+            "modo": "mercado",
+            "titulo": "Análisis de Mercado",
+            # Estructura fija de la tabla de oficinas (comuna/clase) para meses en
+            # que el trimestre JLL correspondiente aún no fue ingestado — se
+            # muestra igual, con celdas en placeholder (mismo criterio que Apo).
+            "mercado_rows": [
+                {"comuna": "Las Condes (CBD)", "clase": "Total"},
+                {"comuna": "Providencia", "clase": "Total"},
+                {"comuna": "Santiago Centro", "clase": "Total"},
+                {"comuna": "Vitacura", "clase": "Total"},
+                {"comuna": "Ciudad empresarial", "clase": "Total"},
+                {"comuna": "Estoril", "clase": "Total"},
+                {"comuna": "Santiago", "clase": "Total", "total": True},
+                {"comuna": "Las Condes (CBD)", "clase": "A"},
+                {"comuna": "Providencia", "clase": "A"},
+                {"comuna": "Santiago Centro", "clase": "A"},
+                {"comuna": "Santiago", "clase": "A", "total": True},
+                {"comuna": "Las Condes (CBD)", "clase": "B"},
+                {"comuna": "Providencia", "clase": "B"},
+                {"comuna": "Santiago Centro", "clase": "B"},
+                {"comuna": "Vitacura", "clase": "B"},
+                {"comuna": "Ciudad empresarial", "clase": "B"},
+                {"comuna": "Estoril", "clase": "B"},
+                {"comuna": "Santiago", "clase": "B", "total": True},
+            ],
+            "bodegas": {
+                "zonas": ["Centro", "Nor-Poniente", "Norte", "Poniente", "Sur"],
+                "total_nombre": "Gran Santiago",
+            },
+            "centros_comerciales": {
+                "categorias": [
+                    "Total Comercio", "Vestuario", "Calzado", "Artefactos Eléctricos",
+                    "Línea Hogar", "Muebles", "Supermercados",
+                ],
+            },
+        },
     },
     "PT": {
         "nombre": "Toesca Rentas Inmobiliarias PT",
@@ -636,7 +682,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
 
     mercado_por_periodo: dict[str, list[dict]] = {}
-    if (cfg.get("page4") or {}).get("submercado"):
+    if (cfg.get("page4") or {}).get("submercado") or (cfg.get("page3") or {}).get("modo") == "mercado":
         periodos_disponibles = [
             r[0] for r in cur.execute(
                 "SELECT DISTINCT periodo FROM raw_mercado_oficinas "
@@ -1176,6 +1222,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .period-dropdown-item:last-child { border-bottom: none; }
   .cols { display: grid; grid-template-columns: 30% 1fr; gap: 24px; }
   .cols-page3 { grid-template-columns: 1fr 34%; }
+  .cols-page3-bodegas { grid-template-columns: 1fr 1.2fr; }
   .cols-page3-lower { grid-template-columns: 1fr 34%; align-items: start; }
   .cols-page3-top { grid-template-columns: 1fr 1fr 1fr; align-items: start; }
   .cols-page3-mid { grid-template-columns: 2fr 1fr; align-items: stretch; }
@@ -1779,6 +1826,68 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         <div class="fotos-grid" id="grid-fotos-t"></div>
       </div>
     </div>
+
+    <!-- Layout "mercado" (TRI): reporte de mercado de terceros — oficinas
+         (tabla real desde raw_mercado_oficinas), bodegas y centros comerciales
+         (solo estructura, sin fuente en DB todavía). ids propios sufijo "-m". -->
+    <div id="page3-layout-mercado" class="hidden">
+      <div class="section-title">Análisis de Mercado - Oficinas</div>
+      <p class="small placeholder" id="txt-mercado3-p1">Pendiente: párrafo de absorción (informe JLL) — actualización manual, no proviene de la DB.</p>
+      <p class="small placeholder" id="txt-mercado3-p2">Pendiente: párrafo de concentración por comuna (informe JLL).</p>
+      <div style="overflow-x:auto">
+        <table id="tbl-mercado3">
+          <thead><tr>
+            <th>Comuna</th><th>Clase</th><th>Inventario (m²)</th>
+            <th>Absorción neta U12M (m²)</th><th>Vacancia (%)</th>
+            <th>Renta (UF/m²)</th><th>Construcción (m²)</th>
+          </tr></thead>
+          <tbody id="tbl-mercado3-tbody"></tbody>
+        </table>
+      </div>
+      <div class="charts-grid-2">
+        <div class="chart-box">
+          <div class="chart-title">Evolución anual vacancia (%) Oficinas Las Condes</div>
+          <div class="chart-placeholder" id="chart-vacancia-oficinas">Pendiente: histórico insuficiente en DB para graficar evolución (solo trimestres recientes ingestados)</div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Evolución anual rentas (UF/m²) Oficinas Las Condes</div>
+          <div class="chart-placeholder" id="chart-rentas-oficinas">Pendiente: histórico insuficiente en DB para graficar evolución (solo trimestres recientes ingestados)</div>
+        </div>
+      </div>
+
+      <div class="section-title">Análisis de Mercado - Bodegas</div>
+      <p class="small placeholder" id="txt-mercado3-bodegas">Pendiente: párrafo de mercado de bodegas (informe GPS Property) — sin fuente ingestada en la DB todavía.</p>
+      <div class="cols cols-page3-bodegas">
+        <div class="chart-box">
+          <div class="chart-title">Evolución vacancia y canon de arriendo Bodegas</div>
+          <div class="chart-placeholder" id="chart-bodegas">Pendiente de datos</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="tbl-bodegas">
+            <thead><tr><th>Zona</th><th>Producción (m²)</th><th>Inventario Final (m²)</th><th>Vacancia (%)</th><th>Arriendo (UF/m²)</th></tr></thead>
+            <tbody id="tbl-bodegas-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-title">Análisis de Mercado - Centros Comerciales</div>
+      <p class="small placeholder" id="txt-mercado3-comercio">Pendiente: párrafo de comercio (Cámara Nacional de Comercio) — sin fuente ingestada en la DB todavía.</p>
+      <div style="overflow-x:auto">
+        <table id="tbl-comercio">
+          <thead><tr id="tbl-comercio-thead"></tr></thead>
+          <tbody id="tbl-comercio-tbody"></tbody>
+        </table>
+      </div>
+      <div class="chart-box" style="margin-top:10px">
+        <div class="chart-title">Variaciones reales acumuladas Total Locales RM (CNC)</div>
+        <div class="chart-placeholder" id="chart-comercio">Pendiente de datos</div>
+      </div>
+
+      <p class="small" style="margin-top:10px;color:#888">
+        Fuentes: Jones Lang Lasalle (Panorama de Mercado de Oficinas), GPS Property (Reporte Global Mercado Bodegas),
+        Colliers (Reporte Centros de Bodegaje), Cámara Nacional de Comercio, Servicios y Turismo.
+      </p>
+    </div>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -2314,10 +2423,13 @@ function switchFund(f){
   document.getElementById("page3-body").classList.toggle("hidden", !hasPage3);
   if (hasPage3) {
     const p3 = S.page3;
-    const edificioMode = !!p3.edificios;
+    const mercadoMode = p3.modo === "mercado";
+    const edificioMode = !mercadoMode && !!p3.edificios;
+    const tenantMode = !mercadoMode && !edificioMode;
     document.getElementById("page3-titulo").textContent = p3.titulo;
     document.getElementById("page3-layout-edificio").classList.toggle("hidden", !edificioMode);
-    document.getElementById("page3-layout-tenant").classList.toggle("hidden", edificioMode);
+    document.getElementById("page3-layout-tenant").classList.toggle("hidden", !tenantMode);
+    document.getElementById("page3-layout-mercado").classList.toggle("hidden", !mercadoMode);
 
     const donutPending = (containerId) => {
       document.getElementById(containerId).innerHTML =
@@ -2399,7 +2511,7 @@ function switchFund(f){
       document.getElementById("grid-resumen-anual").innerHTML = p3.resumen_anual_edificios.map(resumenBox).join("");
 
       fillTasaciones("tbl-tasaciones-tbody", "th-tasacion-prev", "th-tasacion-actual", "tbl-tasaciones-comp-tbody");
-    } else {
+    } else if (tenantMode) {
       // Layout PT (tenant): ids propios sufijo "-t", separados del layout Apo.
       fillAspectos("tbl-aspectos-t");
       fillFotos("grid-fotos-t", p3.fotos_list || []);
@@ -2408,6 +2520,8 @@ function switchFund(f){
       fillAspectosMes("txt-aspectos-mes-t");
       fillTasaciones("tbl-tasaciones-tbody-t", "th-tasacion-prev-t", "th-tasacion-actual-t", "tbl-tasaciones-comp-tbody-t");
     }
+    // Layout "mercado" (TRI): la tabla/párrafos se rellenan en render(), que
+    // corre después de switchFund() y tiene acceso al período seleccionado.
   }
 
   // Página 4 — notas metodológicas + análisis de mercado (headers solo, datos después de pc/usadoOp)
@@ -2796,6 +2910,90 @@ function render(){
       document.getElementById("donut-ingresos").innerHTML =
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     }
+  }
+
+  // Página 3 TRI: tabla de mercado de oficinas — misma fuente que la del
+  // Análisis de Mercado de Apo (raw_mercado_oficinas), reutilizada acá con
+  // párrafos propios (absorción/concentración) en vez de vacancia/canon.
+  // Bodegas y centros comerciales no tienen fuente en la DB todavía: solo
+  // estructura, valores en placeholder.
+  if (S.page3 && S.page3.modo === "mercado") {
+    const quarterEndOfM = (periodo) => {
+      const [y, m] = periodo.split("-").map(Number);
+      const qEndMonth = Math.ceil(m / 3) * 3;
+      return y + "-" + String(qEndMonth).padStart(2, "0");
+    };
+    const mercadoPeriodoM = usadoOp ? quarterEndOfM(usadoOp) : null;
+    const mercadoRowsM = (F.mercado && F.mercado[mercadoPeriodoM]) || S.page3.mercado_rows || [];
+    const findRowM = (rows, comuna, clase) =>
+      (rows || []).find(r => r.comuna === comuna && r.clase === clase && r.vacancia_pct !== undefined) || null;
+    const fmtNumM = (v, dec) => (v === null || v === undefined) ? null :
+      v.toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const celdaM = (v, esPct) => {
+      if (v === null || v === undefined) return '<td class="placeholder">—</td>';
+      const texto = esPct ? v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+        : v.toLocaleString("es-CL", {maximumFractionDigits: 2});
+      return `<td>${texto}</td>`;
+    };
+
+    const p1 = document.getElementById("txt-mercado3-p1");
+    const p2 = document.getElementById("txt-mercado3-p2");
+    const totalSantiagoAct = findRowM(mercadoRowsM, "Santiago", "Total");
+    if (totalSantiagoAct) {
+      // Absorción total del año calendario anterior: dato ingestado al cierre de diciembre.
+      const prevYear = mercadoPeriodoM ? parseInt(mercadoPeriodoM.slice(0, 4), 10) - 1 : null;
+      const periodoDicPrev = prevYear ? `${prevYear}-12` : null;
+      const rowsDicPrev = periodoDicPrev ? F.mercado && F.mercado[periodoDicPrev] : null;
+      const totalDicPrev = findRowM(rowsDicPrev, "Santiago", "Total");
+      const absAct = totalSantiagoAct.absorcion_u12m_m2;
+      const absPrev = totalDicPrev ? totalDicPrev.absorcion_u12m_m2 : null;
+      let comparativo = "";
+      if (absPrev !== null && absPrev !== undefined) {
+        const verbo = absAct > absPrev ? "supera" : (absAct < absPrev ? "está por debajo de" : "iguala");
+        comparativo = ` lo que ${verbo} al registrado durante el total del año ${prevYear} (${fmtNumM(absPrev, 0)} m²)`;
+      }
+      p1.textContent = `El mercado de oficinas en Santiago presenta una absorción neta acumulada durante los ` +
+        `últimos 12 meses por ${fmtNumM(absAct, 0)} m²${comparativo}.`;
+      p1.classList.remove("placeholder");
+
+      const comunasM = mercadoRowsM.filter(r => r.clase === "Total" && r.comuna !== "Santiago" && r.absorcion_u12m_m2 !== undefined);
+      const top2 = [...comunasM].sort((a, b) => (b.absorcion_u12m_m2 || 0) - (a.absorcion_u12m_m2 || 0)).slice(0, 2).map(r => r.comuna);
+      if (top2.length) {
+        p2.textContent = `Esta se concentra principalmente en la comuna de ${top2.join(" y ")}.`;
+        p2.classList.remove("placeholder");
+      } else {
+        p2.classList.add("placeholder");
+      }
+    } else {
+      p1.textContent = "Pendiente: párrafo de absorción (informe JLL) — sin datos ingestados para este trimestre.";
+      p1.classList.add("placeholder");
+      p2.textContent = "Pendiente: párrafo de concentración por comuna (informe JLL).";
+      p2.classList.add("placeholder");
+    }
+
+    document.getElementById("tbl-mercado3-tbody").innerHTML = mercadoRowsM.map(r => {
+      const cls = r.total ? ' class="row-total"' : '';
+      if (r.inventario_m2 === undefined) {
+        return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+      }
+      return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
+        celdaM(r.inventario_m2, false) + celdaM(r.absorcion_u12m_m2, false) +
+        celdaM(r.vacancia_pct, true) + celdaM(r.renta_uf_m2, false) +
+        celdaM(r.construccion_m2, false) + `</tr>`;
+    }).join("");
+
+    // Bodegas / centros comerciales: sin fuente en DB todavía — solo estructura.
+    const bod = S.page3.bodegas;
+    document.getElementById("tbl-bodegas-tbody").innerHTML =
+      bod.zonas.map(z => `<tr><td>${z}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
+      + `<tr class="row-total"><td>${bod.total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+
+    const cc = S.page3.centros_comerciales;
+    document.getElementById("tbl-comercio-thead").innerHTML =
+      "<th></th>" + cc.categorias.map(c => `<th>${c}</th>`).join("");
+    document.getElementById("tbl-comercio-tbody").innerHTML =
+      `<tr><td>${usadoOp ? mesEspanol(usadoOp) : "—"}</td>` +
+      cc.categorias.map(() => '<td class="placeholder">—</td>').join("") + `</tr>`;
   }
 
   // Página 4: rellenar notas con fechas dinámicas (ahora pc y usadoOp están definidas)
