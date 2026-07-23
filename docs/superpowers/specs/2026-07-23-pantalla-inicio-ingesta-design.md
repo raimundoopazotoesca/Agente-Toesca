@@ -26,9 +26,15 @@ Solo los 3 tipos ya presentes en el menú de ingesta manual:
 | Rent Roll | `raw_rent_roll_line` | `periodo` (YYYY-MM) | Mensual | única (todos los activos juntos) |
 | Mercado Oficinas | `raw_mercado_oficinas` | `periodo` (YYYY-MM, fin de trimestre) | Trimestral | única |
 
-Explícitamente fuera de alcance en v1: ER activos, dividendos, precios cuota, capital
-suscrito, flujos, y cualquier otra tabla `raw_*` no ingestada desde este menú. Se irán
-agregando a futuro por configuración (ver "Extensibilidad").
+Nota sobre `raw_dividendo` y `raw_valor_cuota_contable`: se escriben en el mismo commit
+que `raw_eeff_line` (mismo paste de ChatGPT del EEFF, no son un tipo de ingesta aparte
+en el menú — ver `tools/db/ingest_eeff_validated.py::commit`). No se les crea card propia;
+quedan cubiertos implícitamente por el estado de la card EEFF.
+
+Explícitamente fuera de alcance en v1 (se ingestan por scripts fuera de este menú, no
+tienen tab propio hoy): ER activos, capital suscrito, flujos, precios cuota bursátil, y
+cualquier otra tabla `raw_*` no ingestada desde este menú. Se irán agregando a futuro por
+configuración (ver "Extensibilidad").
 
 Todas las consultas filtran `WHERE superseded_at IS NULL`.
 
