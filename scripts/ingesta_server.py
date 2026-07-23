@@ -23,6 +23,7 @@ from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
+from tools.db import estado_ingesta  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
 
 
@@ -56,6 +57,15 @@ def _extract_fenced_block(markdown_text: str) -> str:
 @app.get("/ingesta")
 def serve_page():
     return send_from_directory(WEB_DIR, "ingesta.html")
+
+
+@app.get("/api/estado_ingesta")
+def api_estado_ingesta():
+    con = get_conn_for(str(estado_ingesta.DB_PATH))
+    try:
+        return jsonify(estado_ingesta.estado_ingesta(con))
+    finally:
+        con.close()
 
 
 @app.get("/api/prompt/<fondo>")
