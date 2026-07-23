@@ -1460,7 +1460,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   #tbl-tasaciones-comp td:first-child, #tbl-tasaciones-comp th:first-child { text-align: left; }
 
   /* Donut chart (conic-gradient) con leyenda */
-  .donut-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 20px; }
+  .donut-wrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 20px; position: relative; }
   .donut { width: 150px; height: 150px; border-radius: 50%; position: relative; flex: none; }
   .donut::after { content: ""; position: absolute; inset: 36px; background: #fff; border-radius: 50%; }
   .donut-legend { font-size: 13px; }
@@ -1468,7 +1468,27 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .donut-legend .dot { width: 12px; height: 12px; border-radius: 2px; display: inline-block; flex: none; }
   .donut-pct {
     position: absolute; transform: translate(-50%, -50%); font-size: 12px;
-    font-weight: 700; white-space: nowrap;
+    font-weight: 700; white-space: nowrap; pointer-events: none; z-index: 3;
+  }
+  .donut-hit-layer {
+    position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2;
+  }
+  .donut-hit { cursor: default; }
+  .donut-tooltip {
+    position: absolute; min-width: 168px; pointer-events: none; opacity: 0;
+    transform: translate(-50%, -108%); transition: opacity 120ms ease;
+    background: rgba(255,255,255,0.97); border: 1px solid #D8E0DD;
+    border-radius: 6px; box-shadow: 0 6px 18px rgba(25,45,38,0.16);
+    padding: 8px 9px; font-size: 10px; color: #26352F; z-index: 4;
+  }
+  .donut-tooltip.on { opacity: 1; }
+  .donut-tooltip .title { font-weight: 700; margin-bottom: 5px; color: #15221D; }
+  .donut-tooltip .line { display: flex; justify-content: space-between; gap: 16px; margin: 2px 0; }
+  .donut-tooltip .label { display: flex; align-items: center; gap: 5px; color: #52645D; }
+  .donut-tooltip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+  .donut-tooltip .value { font-weight: 700; color: #25342F; }
+  .donut-legend .row.is-active {
+    color: #15221D; font-weight: 700;
   }
 
   /* Grafico "Resultados Parking (UF)" - SVG combo (barras apiladas + lineas), sin librerias */
@@ -2783,7 +2803,7 @@ function fmtPerfCell(v, esPct){
 
 // Donut chart (conic-gradient) — data: [[label, pct], ...], pct suma 100.
 const DONUT_COLORS = ["#00B27A", "#C8ECD8", "#7FCDA0", "#E0E0E0"];
-function renderDonut(containerId, data){
+function renderDonut(containerId, data, options = {}){
   let acc = 0;
   const stops = data.map(([, pct], i) => {
     const start = acc; acc += pct;
@@ -2803,11 +2823,73 @@ function renderDonut(containerId, data){
     const claro = color === "#E0E0E0" || color === "#C8ECD8";
     return `<span class="donut-pct" style="left:${x}px; top:${y}px; color:${claro ? "#33413b" : "#fff"}">${pct}%</span>`;
   }).join("");
+  let accHit = 0;
+  const polar = (radius, pct) => {
+    const angle = (pct / 100) * 2 * Math.PI;
+    return [R + radius * Math.sin(angle), R - radius * Math.cos(angle)];
+  };
+  const hitPaths = data.map(([, pct], i) => {
+    const start = accHit, end = accHit + pct; accHit = end;
+    if (pct <= 0) return "";
+    const outerR = 75, innerR = 36;
+    const [x1, y1] = polar(outerR, start);
+    const [x2, y2] = polar(outerR, end);
+    const [x3, y3] = polar(innerR, end);
+    const [x4, y4] = polar(innerR, start);
+    const large = pct > 50 ? 1 : 0;
+    return `<path class="donut-hit" data-i="${i}" d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${outerR} ${outerR} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${innerR} ${innerR} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z" fill="transparent" pointer-events="all"/>`;
+  }).join("");
   const legend = data.map(([label], i) =>
-    `<div class="row"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label}</div>`
+    `<div class="row" data-i="${i}"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label}</div>`
   ).join("");
   document.getElementById(containerId).innerHTML =
-    `<div class="donut" style="background:conic-gradient(${stops})">${labels}</div><div class="donut-legend">${legend}</div>`;
+    `<div class="donut" style="background:conic-gradient(${stops})">${labels}<svg class="donut-hit-layer" viewBox="0 0 150 150" aria-hidden="true">${hitPaths}</svg></div><div class="donut-legend">${legend}</div><div class="donut-tooltip" aria-hidden="true"></div>`;
+
+  const el = document.getElementById(containerId);
+  const tooltip = el.querySelector(".donut-tooltip");
+  const legendRows = el.querySelectorAll(".donut-legend .row");
+  const hasTooltip = data.some(d => d[2] && (d[2].value !== undefined || d[2].tooltip !== undefined));
+  if (!hasTooltip) return;
+
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const positionTooltip = (event) => {
+    const r = el.getBoundingClientRect();
+    const left = Math.max(92, Math.min(el.clientWidth - 92, event.clientX - r.left));
+    const top = Math.max(72, event.clientY - r.top - 8);
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+  const showTooltip = (i, event) => {
+    const [label, pct, meta = {}] = data[i];
+    const color = DONUT_COLORS[i % DONUT_COLORS.length];
+    const value = meta.value !== undefined ? `${fmtEnteroMiles(meta.value)} ${meta.unit || "UF"}` : (meta.tooltip || "");
+    tooltip.innerHTML =
+      `<div class="title">${options.tooltipTitle || "Detalle"}</div>` +
+      htmlLine(label, value, color) +
+      htmlLine("Participación", `${pct}%`, color);
+    positionTooltip(event);
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    legendRows.forEach((row, idx) => row.classList.toggle("is-active", idx === i));
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    legendRows.forEach(row => row.classList.remove("is-active"));
+  };
+  el.querySelectorAll(".donut-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", (event) => showTooltip(i, event));
+    hit.addEventListener("mousemove", (event) => showTooltip(i, event));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+  legendRows.forEach(row => {
+    const i = Number(row.dataset.i);
+    row.addEventListener("mouseenter", (event) => showTooltip(i, event));
+    row.addEventListener("mousemove", (event) => showTooltip(i, event));
+    row.addEventListener("mouseleave", hideTooltip);
+  });
 }
 
 // "Resultados Parking (UF)" - barras apiladas + lineas de resultado y ocupación.
@@ -3260,8 +3342,12 @@ function render(){
     const edificiosConDato = ingresosData ? S.page3.edificios.filter(n => ingresosData[n] != null) : [];
     if (edificiosConDato.length === S.page3.edificios.length) {
       const total = edificiosConDato.reduce((s, n) => s + ingresosData[n], 0);
-      const donutData = edificiosConDato.map(n => [n, total ? Math.round(ingresosData[n] / total * 1000) / 10 : 0]);
-      renderDonut("donut-ingresos", donutData);
+      const donutData = edificiosConDato.map(n => [
+        n,
+        total ? Math.round(ingresosData[n] / total * 1000) / 10 : 0,
+        { value: ingresosData[n], unit: "UF" }
+      ]);
+      renderDonut("donut-ingresos", donutData, { tooltipTitle: `Ingresos ${mesEspanol(usadoOp)}` });
     } else {
       document.getElementById("donut-ingresos").innerHTML =
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
