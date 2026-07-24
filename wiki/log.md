@@ -3,6 +3,24 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-24] doc | Diagnóstico integral + roadmap Financial Intelligence Platform
+
+Auditoría completa del sistema real (código + DB productiva, 4 exploraciones paralelas) y
+contraste con el documento de visión "Financial Intelligence Platform". Tres documentos
+nuevos en la raíz: `system_architecture.md` (arquitectura as-is verificada, con divergencias
+doc↔código↔DB), `ai_principles.md` (los 5 principios de la visión operacionalizados con
+estado de cumplimiento) y `ROADMAP.md` v2.0 (reemplaza al de abril; fases F0-F4 partiendo
+del estado real). Hallazgos críticos documentados: (1) la DB productiva no fue construida
+por las migraciones — versiones 2-22 marcadas en lote sin ejecutarse; faltan los
+UNIQUE(file_hash,source_row) → ~12.300 filas duplicadas vivas en `raw_eeff_line`;
+(2) 20.487 violaciones FK (18.009 por `APO` vs `Apo` en `raw_eeff_line`, 2.378 filas con
+file-hashes de texto en `ingest_run_id`); (3) tab EEFF de la web roto desde 2026-07-20
+(`NameError existing_hash` en `ingest_eeff_validated.py:317`, sin tests de ese path);
+(4) `ingesta_server.py` sin auth con `debug=True` y CORS laxo; (5) skill financiera
+(TIR/LTV) externa al repo y ausente en esta máquina; (6) factsheet triplicado (HTML/
+Streamlit/PPTX) — el PPTX cliente no lee la DB; (7) `derived_kpi` 99,8% sin
+`ingest_run_id` y sin invalidación. Sin cambios de código — solo documentación.
+
 ## [2026-07-23] ingesta | Ingesta mensual Parking PT (planilla Liquidación SABA)
 
 Nuevo flujo recurrente para cargar la planilla `MM-YYYY Liquidacion Parque Titanium.xlsx`:
