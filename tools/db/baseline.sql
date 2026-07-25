@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- BASELINE del esquema — equivale a aplicar las migraciones 001..060.
+-- BASELINE del esquema — equivale a aplicar las migraciones 001..063.
 --
 -- GENERADO POR scripts/regenerar_baseline.py — no editar a mano.
 --
@@ -12,7 +12,7 @@
 -- producción, y los tests validaban un esquema que producción no tenía.
 --
 -- Este archivo es el esquema real de producción. El runner lo aplica a una DB
--- vacía y registra 1..60 como aplicadas — ahora sí de forma veraz, porque el
+-- vacía y registra 1..63 como aplicadas — ahora sí de forma veraz, porque el
 -- baseline incorpora sus efectos. Las migraciones históricas se conservan como
 -- referencia pero ya no se ejecutan sobre DBs nuevas.
 --
@@ -272,7 +272,7 @@ CREATE TABLE raw_eeff_line (
     ingest_run_id INTEGER REFERENCES ingest_run(id),
     loaded_at     TEXT DEFAULT (datetime('now')),
     superseded_at TEXT
-, cuenta_codigo_canonical TEXT);
+, cuenta_codigo_canonical TEXT, lineage_status TEXT, seccion TEXT, seccion_original TEXT);
 
 CREATE TABLE raw_er_activo_line (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -515,6 +515,8 @@ CREATE INDEX idx_raw_eeff_hash         ON raw_eeff_line(file_hash);
 
 CREATE INDEX idx_raw_eeff_periodo      ON raw_eeff_line(periodo);
 
+CREATE INDEX idx_raw_eeff_seccion ON raw_eeff_line(seccion);
+
 CREATE INDEX idx_raw_er_activo_hash    ON raw_er_activo_line(file_hash);
 
 CREATE INDEX idx_raw_er_activo_noi     ON raw_er_activo_line(activo_key, periodo, es_operacional);
@@ -554,6 +556,12 @@ CREATE UNIQUE INDEX uq_derived_kpi_logical
         kpi,
         COALESCE(variante, '')
     );
+
+CREATE UNIQUE INDEX uq_raw_flujo_hash_row_periodo
+    ON raw_flujo_line(file_hash, source_row, periodo);
+
+CREATE UNIQUE INDEX uq_raw_rent_roll_hash_row
+    ON raw_rent_roll_line(file_hash, source_row);
 
 CREATE VIEW fact_dividendo AS
 SELECT

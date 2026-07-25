@@ -88,13 +88,6 @@ def test_persist_rent_roll_salta_activo_no_mapeable(tmp_db_path, tmp_path, monke
     assert n == 0
 
 
-@pytest.mark.xfail(
-    reason="Producción no tiene UNIQUE(file_hash, source_row): el INSERT OR IGNORE "
-           "de los repos es un no-op y por eso hay duplicados vivos. La restricción "
-           "entra tras el saneamiento (ROADMAP F0.4); cuando eso ocurra este test "
-           "pasará y strict=True obligará a quitar el marcador.",
-    strict=True,
-)
 def test_persist_rent_roll_idempotente(tmp_db_path, tmp_path, monkeypatch):
     apply_migrations(tmp_db_path)
     _seed_activos_jll(get_conn_for(tmp_db_path))

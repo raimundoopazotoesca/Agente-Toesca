@@ -142,13 +142,51 @@ def test_integridad_fisica_de_la_db(con):
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 
-# ── Deudas conocidas: se documentan como umbral, no como cero ────────────────
+# ── Integridad referencial ───────────────────────────────────────────────────
 
-def test_violaciones_fk_no_empeoran(con):
-    """La migración 058 bajó las violaciones de 20.487 a 2.478. Las restantes son
-    `ingest_run_id` inválidos (2.378 de ellos con file-hashes de texto en una
-    columna INTEGER), pendientes de reparación. Este test evita que crezcan."""
-    violaciones = len(con.execute("PRAGMA foreign_key_check").fetchall())
-    assert violaciones <= 2478, (
-        f"las violaciones de FK subieron a {violaciones} (tope conocido: 2478)"
+def test_cero_violaciones_de_fk(con):
+    """Exigencia dura, sin umbral.
+
+    Recorrido: 20.487 violaciones → 2.478 (migración 058, consolidación de
+    `fondo_key` APO→Apo) → **0** (migración 061, que devolvió el hash cruzado a
+    `file_hash` y dejó `ingest_run_id` en NULL). El tope intermedio fue una
+    protección temporal; el estado aceptable es cero.
+    """
+    violaciones = con.execute("PRAGMA foreign_key_check").fetchall()
+    detalle = [f"{r[0]}→{r[2]}" for r in violaciones[:5]]
+    assert not violaciones, (
+        f"{len(violaciones)} violaciones de integridad referencial: {detalle}"
+    )
+
+
+def test_todas_las_filas_de_eeff_tienen_file_hash(con):
+    """Sin `file_hash` una fila es inalcanzable para `mark_superseded()`: no se
+    puede versionar ni corregir. Eran 2.484 filas antes de la migración 061."""
+    sin_hash = con.execute(
+        "SELECT COUNT(*) FROM raw_eeff_line WHERE file_hash IS NULL"
+    ).fetchone()[0]
+    assert sin_hash == 0, f"{sin_hash} filas de raw_eeff_line sin file_hash"
+
+
+def test_lineage_status_usa_el_vocabulario_definido(con):
+    """Las cargas sin corrida registrada se marcan explícitamente en vez de
+    inventarles un `ingest_run` sintético."""
+    valores = {
+        r[0] for r in con.execute(
+            "SELECT DISTINCT lineage_status FROM raw_eeff_line WHERE lineage_status IS NOT NULL"
+        )
+    }
+    assert valores <= {"legacy_untracked", "manual_sin_archivo"}, (
+        f"lineage_status fuera del vocabulario: {valores}"
+    )
+
+
+def test_seccion_usa_el_vocabulario_normalizado(con):
+    valores = {
+        r[0] for r in con.execute(
+            "SELECT DISTINCT seccion FROM raw_eeff_line WHERE seccion IS NOT NULL"
+        )
+    }
+    assert valores <= {"ESF", "ER", "EFE", "ECP", "NOTA", "OTRO"}, (
+        f"seccion fuera del vocabulario normalizado: {valores}"
     )

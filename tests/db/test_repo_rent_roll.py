@@ -44,13 +44,6 @@ def test_insert_lines(tmp_db):
     assert n == 1
 
 
-@pytest.mark.xfail(
-    reason="Producción no tiene UNIQUE(file_hash, source_row): el INSERT OR IGNORE "
-           "de los repos es un no-op y por eso hay duplicados vivos. La restricción "
-           "entra tras el saneamiento (ROADMAP F0.4); cuando eso ocurra este test "
-           "pasará y strict=True obligará a quitar el marcador.",
-    strict=True,
-)
 def test_insert_lines_idempotente(tmp_db):
     _seed_activo(tmp_db, "PT")
     run_id = _seed_run(tmp_db)

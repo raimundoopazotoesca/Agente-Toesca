@@ -31,13 +31,6 @@ def test_persist_flujo_inmosa(tmp_db_path, tmp_path, monkeypatch):
     conn.close()
 
 
-@pytest.mark.xfail(
-    reason="Producción no tiene UNIQUE(file_hash, source_row): el INSERT OR IGNORE "
-           "de los repos es un no-op y por eso hay duplicados vivos. La restricción "
-           "entra tras el saneamiento (ROADMAP F0.4); cuando eso ocurra este test "
-           "pasará y strict=True obligará a quitar el marcador.",
-    strict=True,
-)
 def test_persist_flujo_idempotente(tmp_db_path, tmp_path, monkeypatch):
     from tools.db import ingest_flujo
     apply_migrations(tmp_db_path)
