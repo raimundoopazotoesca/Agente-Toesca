@@ -31,20 +31,3 @@ def test_list_series_de_fondo(tmp_db):
     series = repo_fondo.list_series(tmp_db, fondo_key="TRI")
     keys = sorted(s["nemotecnico"] for s in series)
     assert keys == ["CFITOERI1A", "CFITOERI1C", "CFITOERI1I"]
-
-
-def test_upsert_cuenta(tmp_db):
-    repo_fondo.upsert_cuenta(tmp_db, codigo="4-01-001", nombre="Ingresos arriendo", tipo_eeff="ER", signo=1)
-    cur = tmp_db.execute("SELECT nombre, tipo_eeff, signo FROM dim_cuenta WHERE codigo=?", ("4-01-001",))
-    row = cur.fetchone()
-    assert row["nombre"] == "Ingresos arriendo"
-    assert row["signo"] == 1
-
-
-def test_upsert_cuenta_idempotente(tmp_db):
-    repo_fondo.upsert_cuenta(tmp_db, codigo="4-01-001", nombre="V1", tipo_eeff="ER", signo=1)
-    repo_fondo.upsert_cuenta(tmp_db, codigo="4-01-001", nombre="V2", tipo_eeff="ER", signo=1)
-    cur = tmp_db.execute("SELECT COUNT(*) AS n, nombre FROM dim_cuenta WHERE codigo=?", ("4-01-001",))
-    row = cur.fetchone()
-    assert row["n"] == 1
-    assert row["nombre"] == "V2"

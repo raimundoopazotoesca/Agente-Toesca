@@ -40,6 +40,12 @@ def test_precio_mas_reciente(tmp_db_path, monkeypatch):
 def test_rent_roll(tmp_db_path, monkeypatch):
     _patch_conn(monkeypatch, tmp_db_path)
     conn = get_conn_for(tmp_db_path)
+    # 'PT' no es un activo_key del catálogo real (los activos de PT son Torre A,
+    # Boulevard y Parking PT); es como JLL entrega el rent roll. Ver ROADMAP §8.
+    conn.execute(
+        "INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre) "
+        "VALUES ('PT', 'PT', 'Parque Titanium')"
+    )
     rid = repo_audit.start_ingest_run(conn, tool="t", source_file=None, file_hash="H")
     repo_rent_roll.insert_lines(conn, [
         {"activo_key": "PT", "periodo": "2026-03", "unidad": "1001",

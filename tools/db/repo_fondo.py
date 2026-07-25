@@ -58,29 +58,6 @@ def get_serie(conn: sqlite3.Connection, nemotecnico: str) -> sqlite3.Row:
         raise NotFoundError(f"Serie no encontrada: {nemotecnico}")
     return row
 
-
-def upsert_cuenta(
-    conn: sqlite3.Connection,
-    codigo: str,
-    nombre: str,
-    tipo_eeff: str | None = None,
-    signo: int = 1,
-) -> None:
-    conn.execute(
-        """INSERT INTO dim_cuenta (codigo, nombre, tipo_eeff, signo)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(codigo) DO UPDATE SET
-             nombre = excluded.nombre,
-             tipo_eeff = excluded.tipo_eeff,
-             signo = excluded.signo""",
-        (codigo, nombre, tipo_eeff, signo),
-    )
-    conn.commit()
-
-
-def get_cuenta(conn: sqlite3.Connection, codigo: str) -> sqlite3.Row:
-    cur = conn.execute("SELECT * FROM dim_cuenta WHERE codigo=?", (codigo,))
-    row = cur.fetchone()
-    if row is None:
-        raise NotFoundError(f"Cuenta no encontrada: {codigo}")
-    return row
+# Nota: `dim_cuenta` quedó obsoleta (la reemplazó `dim_cuenta_eeff`) y nunca
+# existió en producción; `upsert_cuenta`/`get_cuenta` fallaban con "no such
+# table". Se eliminaron al construir el baseline.

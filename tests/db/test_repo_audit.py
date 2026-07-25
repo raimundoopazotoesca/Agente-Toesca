@@ -30,18 +30,3 @@ def test_fail_ingest_run(tmp_db):
     assert row["status"] == "failed"
     assert row["error"] == "boom"
 
-
-def test_publish_run_lifecycle(tmp_db):
-    run_id = repo_audit.start_publish_run(
-        tmp_db,
-        tool="publish_cdg_renta_pt",
-        target_excel="/x/cdg.xlsx",
-        target_sheet="PT",
-        periodo="2026-04",
-    )
-    repo_audit.finish_publish_run(tmp_db, run_id, rows_written=42, status="ok")
-    row = tmp_db.execute(
-        "SELECT rows_written, status FROM publish_run WHERE id=?", (run_id,)
-    ).fetchone()
-    assert row["rows_written"] == 42
-    assert row["status"] == "ok"

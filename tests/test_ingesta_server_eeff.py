@@ -42,28 +42,12 @@ def _texto(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-_CUENTAS = (
-    "ESF.total_activo", "ER.depreciaciones", "ER.otros_gastos",
-    "ER.total_gastos_operacion",
-)
-
-
 @pytest.fixture
 def client(tmp_db_path, monkeypatch):
+    # Ya no hace falta sembrar dim_cuenta: el baseline (F0.2) eliminó esa tabla
+    # obsoleta y su FK, que existían solo en la cadena de migraciones y hacían
+    # fallar toda ingesta con cuenta_codigo en una DB nueva.
     apply_migrations(tmp_db_path)
-    # El schema migrado declara FK raw_eeff_line.cuenta_codigo -> dim_cuenta(codigo)
-    # y deja dim_cuenta vacía; la DB productiva NO tiene esa FK ni esa tabla (las
-    # migraciones 1-22 se marcaron aplicadas sin ejecutarse). Sin sembrar aquí, el
-    # path real de ingesta es intesteable sobre una DB nueva. Ver ROADMAP F0.2.
-    con = get_conn_for(tmp_db_path)
-    try:
-        con.executemany(
-            "INSERT OR IGNORE INTO dim_cuenta (codigo, nombre) VALUES (?,?)",
-            [(c, c) for c in _CUENTAS],
-        )
-        con.commit()
-    finally:
-        con.close()
     monkeypatch.setattr(core, "DB_PATH", tmp_db_path)
     from scripts import ingesta_server
     monkeypatch.setattr(ingesta_server, "_rebuild_factsheet", lambda: None)

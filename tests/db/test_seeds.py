@@ -16,8 +16,14 @@ def test_seed_activos(tmp_db_path):
     cur = conn.execute("SELECT activo_key, fondo_key FROM dim_activo ORDER BY activo_key")
     rows = cur.fetchall()
     keys = [r[0] for r in rows]
-    # Sucden se agrega en la migración 007 (activo del NOI).
-    assert {"INMOSA", "PT", "Viña Centro", "Mall Curicó", "Apoquindo", "Apo3001", "Sucden"} <= set(keys)
+    # Catálogo real de activos (el que tiene producción). Ojo: 'PT' y 'Apoquindo'
+    # NO son activo_key — son el fondo y el agregado de sus dos edificios. Los
+    # activos de PT son Torre A, Boulevard y Parking PT; los de Apo, Apo4501 y
+    # Apo4700. Los seeds antiguos sí los traían y por eso este test los exigía.
+    # PROVEEDOR_ACTIVOS['jll'] todavía los espera: ver ROADMAP §8 (pendiente).
+    assert {"INMOSA", "Viña Centro", "Mall Curicó", "Apo3001", "Sucden",
+            "Torre A", "Boulevard", "Apo4501", "Apo4700"} <= set(keys)
+    assert "PT" not in keys and "Apoquindo" not in keys
 
 
 def test_seed_series(tmp_db_path):

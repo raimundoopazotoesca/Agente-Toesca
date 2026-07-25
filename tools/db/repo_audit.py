@@ -42,43 +42,6 @@ def fail_ingest_run(conn: sqlite3.Connection, run_id: int, error: str) -> None:
     )
     conn.commit()
 
-
-def start_publish_run(
-    conn: sqlite3.Connection,
-    tool: str,
-    target_excel: str,
-    target_sheet: str,
-    periodo: str,
-) -> int:
-    cur = conn.execute(
-        """INSERT INTO publish_run (tool, target_excel, target_sheet, periodo, status)
-           VALUES (?, ?, ?, ?, 'started')""",
-        (tool, target_excel, target_sheet, periodo),
-    )
-    conn.commit()
-    return cur.lastrowid
-
-
-def finish_publish_run(
-    conn: sqlite3.Connection,
-    run_id: int,
-    rows_written: int,
-    status: str = "ok",
-) -> None:
-    conn.execute(
-        """UPDATE publish_run
-              SET rows_written = ?, status = ?, ended_at = datetime('now')
-            WHERE id = ?""",
-        (rows_written, status, run_id),
-    )
-    conn.commit()
-
-
-def fail_publish_run(conn: sqlite3.Connection, run_id: int, error: str) -> None:
-    conn.execute(
-        """UPDATE publish_run
-              SET status = 'failed', error = ?, ended_at = datetime('now')
-            WHERE id = ?""",
-        (error, run_id),
-    )
-    conn.commit()
+# Nota: `publish_run` nunca se creó en producción y sus helpers fallaban con
+# "no such table". Se eliminaron junto con la tabla al construir el baseline
+# (ver tools/db/baseline.sql).

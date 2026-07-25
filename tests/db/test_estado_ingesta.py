@@ -65,7 +65,6 @@ def _insert_eeff(con, periodo, fondo):
     # Los 3 fondos ya vienen como seed en dim_fondo con su clave canónica
     # ('Apo', no 'APO'); el INSERT OR IGNORE cubre una clave de prueba distinta.
     con.execute("INSERT OR IGNORE INTO dim_fondo (fondo_key, nombre) VALUES (?, ?)", (fondo, fondo))
-    con.execute("INSERT OR IGNORE INTO dim_cuenta (codigo, nombre) VALUES ('X.TEST', 'Test')")
     con.execute(
         "INSERT INTO raw_eeff_line (fondo_key, periodo, cuenta_codigo, monto_clp, file_hash) "
         "VALUES (?, ?, 'X.TEST', 1, ?)",
@@ -75,6 +74,12 @@ def _insert_eeff(con, periodo, fondo):
 
 
 def _insert_rentroll(con, periodo, activo_key="PT"):
+    # dim_activo trae el catálogo real y raw_rent_roll_line.activo_key lo
+    # referencia; las claves ficticias hay que crearlas.
+    con.execute(
+        "INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre) VALUES (?, 'TRI', ?)",
+        (activo_key, activo_key),
+    )
     con.execute(
         "INSERT INTO raw_rent_roll_line (activo_key, periodo, unidad, file_hash) "
         "VALUES (?, ?, 'U1', ?)",

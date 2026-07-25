@@ -11,6 +11,13 @@ DEFAULT_DB_PATH = os.path.join(
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
+# Esquema consolidado equivalente a aplicar las migraciones 001..BASELINE_VERSION.
+# Una DB vacía se crea desde aquí en vez de re-ejecutar la cadena histórica: esa
+# cadena no reproduce el esquema de producción (las versiones 2–22 se marcaron
+# aplicadas sin ejecutarse). Ver el encabezado de baseline.sql.
+BASELINE_PATH = Path(__file__).parent / "baseline.sql"
+BASELINE_VERSION = 60
+
 
 def get_conn_for(db_path: str) -> sqlite3.Connection:
     """Conexión a un .db específico, con foreign keys activadas."""
@@ -94,12 +101,50 @@ def _execute_migration(conn: sqlite3.Connection, sql: str) -> None:
         raise sqlite3.OperationalError("Migración contiene una sentencia SQL incompleta")
 
 
+def _db_esta_vacia(conn: sqlite3.Connection) -> bool:
+    """True si no hay ninguna tabla de negocio (solo puede existir schema_version)."""
+    n = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%' AND name <> 'schema_version'"
+    ).fetchone()[0]
+    return n == 0
+
+
+def _aplicar_baseline(conn: sqlite3.Connection) -> list[int]:
+    """Crea el esquema desde baseline.sql y registra 1..BASELINE_VERSION.
+
+    Marcar esas versiones como aplicadas es veraz: el baseline incorpora sus
+    efectos (salvo los objetos excluidos a propósito, documentados en su
+    encabezado). Todo ocurre en una sola transacción.
+    """
+    sql = BASELINE_PATH.read_text(encoding="utf-8")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        _execute_migration(conn, sql)
+        conn.executemany(
+            "INSERT INTO schema_version (version) VALUES (?)",
+            [(v,) for v in range(1, BASELINE_VERSION + 1)],
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        raise RuntimeError(f"Falló la aplicación del baseline: {exc}") from exc
+    return list(range(1, BASELINE_VERSION + 1))
+
+
 def apply_migrations(db_path: str) -> list[int]:
-    """Aplica todas las migraciones pendientes. Devuelve lista de versions aplicadas."""
+    """Aplica todas las migraciones pendientes. Devuelve lista de versions aplicadas.
+
+    DB vacía → baseline (001..BASELINE_VERSION) y luego las migraciones posteriores.
+    DB existente → solo las migraciones pendientes, como siempre.
+    """
     conn = get_conn_for(db_path)
     applied = []
     try:
         _ensure_schema_version_table(conn)
+        if _db_esta_vacia(conn):
+            applied.extend(_aplicar_baseline(conn))
+
         cur = conn.execute("SELECT version FROM schema_version")
         done = {row[0] for row in cur.fetchall()}
 

@@ -37,9 +37,24 @@ def test_variacion_yoy():
     assert abs(nq.variacion_yoy(serie, "2025-03") - 0.5) < 1e-9
 
 
+def _seed_activos_jll(conn):
+    """Los activos con los que JLL entrega el rent roll y el NOI ('PT' como
+    conjunto, 'Apoquindo' como agregado de 4501+4700) no están en el catálogo
+    real de dim_activo — ver ROADMAP §8. Los tests que ejercitan esa ruta los
+    crean explícitamente en vez de depender de un seed."""
+    conn.executemany(
+        "INSERT OR IGNORE INTO dim_activo "
+        "(activo_key, fondo_key, nombre, participacion_fondo_activo) VALUES (?,?,?,?)",
+        [("PT", "PT", "Parque Titanium", 1.0),
+         ("Apoquindo", "Apo", "Apoquindo (4501+4700)", 0.3)],
+    )
+    conn.commit()
+
+
 def test_serie_mensual_ponderado(tmp_db_path):
     apply_migrations(tmp_db_path)
     conn = get_conn_for(tmp_db_path)
+    _seed_activos_jll(conn)
     # Apoquindo participa 0.3 (de la migración 007)
     repo_kpi.upsert(conn, "activo", "Apoquindo", "2025-01", "noi_mensual", 1000.0, "UF", "cdg_noi_real_v1")
     # 100%
@@ -54,6 +69,7 @@ def test_serie_mensual_ponderado(tmp_db_path):
 def test_serie_mensual_fondo_suma_activos(tmp_db_path):
     apply_migrations(tmp_db_path)
     conn = get_conn_for(tmp_db_path)
+    _seed_activos_jll(conn)
     # Fondo Apo solo tiene Apoquindo (part=0.3). Apo3001 pertenece a TRI.
     repo_kpi.upsert(conn, "activo", "Apoquindo", "2025-01", "noi_mensual", 1000.0, "UF", "cdg_noi_real_v1")
     repo_kpi.upsert(conn, "activo", "Apo3001",   "2025-01", "noi_mensual",  500.0, "UF", "cdg_noi_real_v1")

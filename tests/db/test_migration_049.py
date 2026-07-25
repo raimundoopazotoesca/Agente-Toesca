@@ -22,16 +22,16 @@ def db(tmp_path):
     conn.close()
 
 
-def test_dim_sociedad_existe_y_tiene_7_filas(db):
+def test_dim_sociedad_tiene_el_catalogo_completo(db):
     rows = db.execute(
         "SELECT sociedad_key, fondo_key, participacion_fondo_en_sociedad "
         "FROM dim_sociedad ORDER BY sociedad_key"
     ).fetchall()
-    assert len(rows) == 7
+    assert len(rows) == 8  # 8ª: MachaliSpA, del activo desinvertido en 2025-08
     keys = {r["sociedad_key"] for r in rows}
     assert keys == {
         "ApoquindoSpA", "BlvdSpA", "Chanarcillo", "CuricoSpA",
-        "SeniorAssist", "TorreASA", "VCSpA",
+        "MachaliSpA", "SeniorAssist", "TorreASA", "VCSpA",
     }
 
 
@@ -76,14 +76,16 @@ def test_dim_activo_sociedad_key_poblado(db):
 def test_dim_fondo_padre_poblado(db):
     rows = {r["fondo_key"]: (r["fondo_padre"], r["participacion_en_padre"])
             for r in db.execute("SELECT * FROM dim_fondo")}
-    assert rows["PT"] == ("TRI", 0.333)
+    assert rows["PT"] == ("TRI", 1/3)
     assert rows["Apo"] == ("TRI", 0.30)
     assert rows["TRI"] == (None, None)
 
 
-def test_vista_lookthrough_13_filas(db):
+def test_vista_lookthrough_cubre_todo_el_catalogo(db):
+    """Una fila por (activo, fondo con participación): las directas más las que
+    TRI ve a través de PT y Apo."""
     n = db.execute("SELECT COUNT(*) FROM v_activo_fondo_efectivo").fetchone()[0]
-    assert n == 13, f"esperaba 13 filas, hay {n}"
+    assert n == 14, f"esperaba 14 filas, hay {n}"
 
 
 def test_vista_lookthrough_directas(db):
@@ -96,6 +98,7 @@ def test_vista_lookthrough_directas(db):
         "Apo3001": 0.685,
         "INMOSA": 0.43,
         "Mall Curicó": 0.80,
+        "Strip Machalí": 1.0,  # desinvertido en 2025-08; sigue en el catálogo
         "Sucden": 1.0,
         "Viña Centro": 1.0,
     }
@@ -110,8 +113,8 @@ def test_vista_lookthrough_via_padre(db):
     assert got == {
         "Apo4501": 0.30,
         "Apo4700": 0.30,
-        "Boulevard": 0.333,
-        "Torre A": 0.333,
+        "Boulevard": round(1 / 3, 6),
+        "Torre A": round(1 / 3, 6),
     }
 
 
