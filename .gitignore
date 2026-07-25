@@ -57,6 +57,11 @@ scripts/flujos_tri_*.txt
 # Dashboard generado (regenerable con: python -m tools.db.dashboard)
 dashboard.html
 
+# Factsheet generado (5+ MB, regenerable con: python scripts/build_factsheet.py).
+# Se versionaba y cada build producía un diff completo del archivo.
+factsheet.html
+factsheet_debug.html
+
 # Artefactos temporales de scripts (snapshots, JSON de trabajo, etc.)
 scratchpad/
 

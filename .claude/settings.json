@@ -2,40 +2,24 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(sqlite3 memory/agente_toesca.db \".schema\")",
-      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\('memory/agente_toesca.db'\\); cur=c.cursor\\(\\); cur.execute\\(\\\\\"SELECT sql FROM sqlite_master WHERE type='table'\\\\\"\\); [print\\(r[0]\\) for r in cur.fetchall\\(\\)]\")",
-      "Bash(python -c \"import sqlite3; c=sqlite3.connect\\('memory/agente_toesca.db'\\); cur=c.cursor\\(\\); cur.execute\\('SELECT name FROM sqlite_master WHERE type=\\\\\"table\\\\\"'\\); tables=[r[0] for r in cur.fetchall\\(\\)]; print\\(tables\\); [print\\(t, cur.execute\\(f'SELECT COUNT\\(*\\) FROM {t}'\\).fetchone\\(\\)[0]\\) for t in tables]\")",
+      "Bash(python -X utf8 -c ' *)",
       "Bash(python -c \"import sys; print\\(sys.version\\)\")",
       "Bash(python -c \"import pytest; print\\(pytest.__version__\\)\")",
-      "PowerShell(cd C:\\\\Users\\\\raimundo.opazo\\\\automation_agent; $env:PYTHONIOENCODING=\"utf-8\"; python debug_inmosa.py 2>&1)",
-      "PowerShell(cd C:\\\\Users\\\\raimundo.opazo\\\\automation_agent; $env:PYTHONIOENCODING=\"utf-8\"; python debug_noi.py 2>&1)",
-      "Bash(python -m pytest --collect-only)",
-      "Bash(python -m pytest tests/db/test_migrations.py -v)",
-      "Bash(python -m pytest \"C:/Users/raimundo.opazo/automation_agent/tests/db/test_migrations.py\" -v)",
-      "Bash(python -c \"import sqlite3; con=sqlite3.connect\\(r'memory/agente_toesca.db'\\); cur=con.cursor\\(\\); [print\\(r[0]\\) for r in cur.execute\\(\\\\\"SELECT sql FROM sqlite_master WHERE type='table' ORDER BY name\\\\\"\\).fetchall\\(\\)]\")",
-      "Bash(mkdir \"C:\\\\Users\\\\raimundo.opazo\\\\.claude\\\\skills\\\\db-dashboard-expert\")",
-      "Edit(~/.claude/skills/db-dashboard-expert/**)",
-      "Edit(~/.claude/skills/db-ingestion-expert/**)",
-      "Bash(python -X utf8 -c ' *)",
-      "Bash(python scripts/extract_cdg_vc.py)",
-      "Bash(Get-ChildItem -Recurse -File -Filter \"*.py\")",
-      "Bash(python tools/db/ingest_financing.py --xlsx work/resumen_deudas.xlsx --db memory/agente_toesca.db)",
-      "Bash(python -m markitdown \"work/eeff_ingesta/TRI/cdg_extract.xlsx\")",
       "Bash(python -c \"import numpy_financial; print\\('numpy_financial OK'\\)\")",
       "Bash(python -c \"from scipy.optimize import brentq; print\\('scipy OK'\\)\")",
-      "Edit(~/.claude/skills/real-estate-finance-expert/**)",
-      "Bash(mkdir -p \"c:/Users/raimundo.opazo/automation_agent/docs/superpowers/specs\")",
-      "Bash(git reset *)",
-      "Bash(cp \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/69f243a9-1050-4c9f-b807-9082e93d9ca2/scratchpad/NOI_PT.xlsx\" \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/02786c58-6c23-4b0e-b32a-a02ab3700f81/scratchpad/NOI_PT.xlsx\" *)",
+      "Bash(sqlite3 memory/agente_toesca_v2.db *)",
+      "Bash(python -m pytest --collect-only)",
+      "Bash(python -m pytest tests/ *)",
+      "Bash(python -m pytest tests/db/test_migrations.py -v)",
       "Bash(python scripts/build_factsheet.py)",
-      "Bash(git -C \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\" status)",
-      "Bash(cp \"c:\\\\Users\\\\raimundo.opazo\\\\automation_agent\\\\scratch_page3.png\" \"/c/Users/RAIMUN~1.OPA/AppData/Local/Temp/claude/c--Users-raimundo-opazo-automation-agent/66e5a4a7-7b02-48de-87d5-2196e700394f/scratchpad/scratch_page3.png\")"
+      "Bash(python scripts/extract_cdg_vc.py)",
+      "Bash(python -m markitdown \"work/eeff_ingesta/TRI/cdg_extract.xlsx\")",
+      "Bash(git reset *)",
+      "Edit(~/.claude/skills/real-estate-finance-expert/**)",
+      "Edit(~/.claude/skills/db-ingestion-expert/**)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\raimundo.opazo\\.claude\\skills",
-      "c:\\Users\\raimundo.opazo\\automation_agent\\docs\\superpowers\\specs",
-      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\69f243a9-1050-4c9f-b807-9082e93d9ca2\\scratchpad",
-      "C:\\Users\\RAIMUN~1.OPA\\AppData\\Local\\Temp\\claude\\c--Users-raimundo-opazo-automation-agent\\66e5a4a7-7b02-48de-87d5-2196e700394f\\scratchpad"
+      "~/.claude/skills"
     ]
   },
   "enabledPlugins": {
