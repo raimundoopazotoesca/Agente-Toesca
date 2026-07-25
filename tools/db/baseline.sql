@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- BASELINE del esquema — equivale a aplicar las migraciones 001..066.
+-- BASELINE del esquema — equivale a aplicar las migraciones 001..068.
 --
 -- GENERADO POR scripts/regenerar_baseline.py — no editar a mano.
 --
@@ -12,7 +12,7 @@
 -- producción, y los tests validaban un esquema que producción no tenía.
 --
 -- Este archivo es el esquema real de producción. El runner lo aplica a una DB
--- vacía y registra 1..66 como aplicadas — ahora sí de forma veraz, porque el
+-- vacía y registra 1..68 como aplicadas — ahora sí de forma veraz, porque el
 -- baseline incorpora sus efectos. Las migraciones históricas se conservan como
 -- referencia pero ya no se ejecutan sobre DBs nuevas.
 --
@@ -346,23 +346,20 @@ CREATE TABLE raw_pagare_intercompania (
     saldo_c_intereses REAL
 );
 
-CREATE TABLE raw_parking_facturacion_line (
+CREATE TABLE "raw_parking_facturacion_line" (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   activo_key     TEXT NOT NULL REFERENCES dim_activo(activo_key),
   periodo        TEXT NOT NULL,
-  concepto       TEXT NOT NULL,   -- 'saba_neto' | 'saba_iva' | 'saba_bruto'
-                                  -- 'liquidacion_neto' | 'liquidacion_iva' | 'liquidacion_bruto'
-                                  -- 'pago_a_pt'
+  concepto       TEXT NOT NULL,
   monto_clp      REAL NOT NULL,
   source_file    TEXT,
   file_hash      TEXT,
   ingest_run_id  INTEGER REFERENCES ingest_run(id),
   loaded_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  superseded_at  TEXT,
-  UNIQUE(activo_key, periodo, concepto, superseded_at)
+  superseded_at  TEXT
 );
 
-CREATE TABLE raw_parking_gasto_line (
+CREATE TABLE "raw_parking_gasto_line" (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   activo_key     TEXT NOT NULL REFERENCES dim_activo(activo_key),
   periodo        TEXT NOT NULL,
@@ -372,36 +369,34 @@ CREATE TABLE raw_parking_gasto_line (
   file_hash      TEXT,
   ingest_run_id  INTEGER REFERENCES ingest_run(id),
   loaded_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  superseded_at  TEXT,
-  UNIQUE(activo_key, periodo, concepto_id, superseded_at)
+  superseded_at  TEXT
 );
 
-CREATE TABLE raw_parking_ingreso_line (
+CREATE TABLE "raw_parking_ingreso_line" (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   activo_key     TEXT NOT NULL REFERENCES dim_activo(activo_key),
-  periodo        TEXT NOT NULL,        -- 'YYYY-MM'
+  periodo        TEXT NOT NULL,
   concepto_id    INTEGER NOT NULL REFERENCES dim_concepto_parking(id),
-  monto_clp      REAL NOT NULL,        -- valor tal como viene en la planilla (signo ya incluido en la celda)
+  monto_clp      REAL NOT NULL,
   source_file    TEXT,
   file_hash      TEXT,
   ingest_run_id  INTEGER REFERENCES ingest_run(id),
   loaded_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  superseded_at  TEXT,
-  UNIQUE(activo_key, periodo, concepto_id, superseded_at)
+  superseded_at  TEXT
 );
 
-CREATE TABLE raw_parking_ticket_line (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  activo_key     TEXT NOT NULL REFERENCES dim_activo(activo_key),
-  fecha          TEXT NOT NULL,        -- 'YYYY-MM-DD'
-  tickets        INTEGER NOT NULL,
-  feriado        INTEGER NOT NULL DEFAULT 0,   -- 0/1
-  source_file    TEXT,
-  file_hash      TEXT,
-  ingest_run_id  INTEGER REFERENCES ingest_run(id),
-  loaded_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  superseded_at  TEXT, monto_bruto_clp REAL,
-  UNIQUE(activo_key, fecha, superseded_at)
+CREATE TABLE "raw_parking_ticket_line" (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  activo_key       TEXT NOT NULL REFERENCES dim_activo(activo_key),
+  fecha            TEXT NOT NULL,
+  tickets          INTEGER NOT NULL,
+  feriado          INTEGER NOT NULL DEFAULT 0,
+  source_file      TEXT,
+  file_hash        TEXT,
+  ingest_run_id    INTEGER REFERENCES ingest_run(id),
+  loaded_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  superseded_at    TEXT,
+  monto_bruto_clp  REAL
 );
 
 CREATE TABLE raw_rent_roll_line (
@@ -557,14 +552,33 @@ CREATE UNIQUE INDEX uq_derived_kpi_logical
         COALESCE(variante, '')
     );
 
-CREATE UNIQUE INDEX uq_raw_er_activo_hash_row_periodo_activo
-    ON raw_er_activo_line(file_hash, source_row, periodo, activo_key);
+CREATE UNIQUE INDEX uq_er_activo_vivo
+    ON raw_er_activo_line (file_hash, source_row, periodo, activo_key)
+ WHERE superseded_at IS NULL;
 
-CREATE UNIQUE INDEX uq_raw_flujo_hash_row_periodo
-    ON raw_flujo_line(file_hash, source_row, periodo);
+CREATE UNIQUE INDEX uq_flujo_vivo
+    ON raw_flujo_line (file_hash, source_row, periodo)
+ WHERE superseded_at IS NULL;
 
-CREATE UNIQUE INDEX uq_raw_rent_roll_hash_row
-    ON raw_rent_roll_line(file_hash, source_row);
+CREATE UNIQUE INDEX uq_parking_facturacion_vivo
+    ON raw_parking_facturacion_line (activo_key, periodo, concepto)
+ WHERE superseded_at IS NULL;
+
+CREATE UNIQUE INDEX uq_parking_gasto_vivo
+    ON raw_parking_gasto_line (activo_key, periodo, concepto_id)
+ WHERE superseded_at IS NULL;
+
+CREATE UNIQUE INDEX uq_parking_ingreso_vivo
+    ON raw_parking_ingreso_line (activo_key, periodo, concepto_id)
+ WHERE superseded_at IS NULL;
+
+CREATE UNIQUE INDEX uq_parking_ticket_vivo
+    ON raw_parking_ticket_line (activo_key, fecha)
+ WHERE superseded_at IS NULL;
+
+CREATE UNIQUE INDEX uq_rent_roll_vivo
+    ON raw_rent_roll_line (file_hash, source_row)
+ WHERE superseded_at IS NULL;
 
 CREATE VIEW fact_dividendo AS
 SELECT
