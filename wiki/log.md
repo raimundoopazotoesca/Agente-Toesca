@@ -3,6 +3,25 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-24] doc | Decisiones del usuario incorporadas al roadmap (v2.1) + análisis Apoquindo y cuotas
+
+El usuario resolvió 6 decisiones del roadmap: (1) claves Apoquindo con protocolo de
+migración reversible — análisis entregado en `docs/plan-migracion-claves-apoquindo.md`
+(inventario: `APO` 18.009 filas en raw_eeff_line + 15 en raw_valor_cuota_contable;
+derived_kpi tiene doble esquema de claves de activo `Apo4501`/`Apoquindo 4501` etc. y
+2 entidades ambiguas `Apoquindo`/`Fondo Apoquindo` que detienen la ejecución);
+(2) cuotas divergentes — análisis en `docs/analisis-cuotas-fondos.md`: NO hay
+contradicción, `SHEET_CFG` = cuotas en circulación (coincide exacto con
+`raw_cuota_en_circulacion` al 2025-12-31) y `FONDOS_CFG.cuotas_emitidas` = cuotas
+emitidas de ficha (pendiente confirmar fuente reglamento/CMF); (3) factsheet HTML
+único canónico, PPTX y dashboards Streamlit a eliminación controlada; (4) política
+LLM diferida como gate de producción (fallback actual = config de desarrollo,
+inventario de llamadas en system_architecture.md §5.1); (5) `config.yaml` solo lo lee
+`app.py` — eliminación pendiente de confirmar que la app Streamlit no se usa (tuvo
+commit 2026-07-23); (6) decomiso total del CDG, sin criterio de paridad. Extra: Fase 2
+renombrada "Fortalecimiento y expansión del Asistente Virtual Inmobiliario Toesca" —
+evolución incremental sobre la implementación existente, sin asistentes paralelos.
+
 ## [2026-07-24] doc | Diagnóstico integral + roadmap Financial Intelligence Platform
 
 Auditoría completa del sistema real (código + DB productiva, 4 exploraciones paralelas) y

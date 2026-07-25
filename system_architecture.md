@@ -89,6 +89,18 @@ Plataforma de datos e informes para los 3 fondos de renta inmobiliaria de Toesca
 
 **Principio de diseño observado (correcto):** el LLM solo extrae estructura de documentos no estructurados o traduce lenguaje natural a SQL; nunca escribe a la DB sin un validador determinístico + humano en medio, y nunca es fuente de cifras.
 
+### 5.1 Inventario de puntos de llamada a LLM (qué sale de la infraestructura local)
+
+| # | Punto de llamada | Proveedor(es) y fallback | Información enviada |
+|---|---|---|---|
+| 1 | `agent.py`/`app.py` (`_llm_call`) | Gemini 2.5 Flash (endpoint OpenAI-compatible de Google) | system prompt (mapa de fondos/series/participaciones), instrucción del usuario, memoria acumulada (`load_memory`), resultados de tools (datos financieros, extractos de correos) truncados |
+| 2 | `tools/db_chat.py` (generación SQL + síntesis) | `DB_CHAT_PROVIDER`: DeepSeek → Groq Llama 3.3 (2 cuentas) → Gemini; rota ante 429/quota. Con el `.env` actual solo hay clave Gemini | `_BUSINESS_CONTEXT` (esquema y KPIs), pregunta, historial (hoy provisto por el cliente), y en la síntesis hasta 50 filas de resultados de la DB |
+| 3 | `scripts/ingest_eeff.py` (batch histórico EEFF) | Gemini por defecto; prefijos `groq:`/`anthropic:` opcionales | texto completo del EEFF PDF convertido a Markdown |
+| 4 | Extracción EEFF vía **ChatGPT web** (ruta principal actual) | OpenAI (cuenta del usuario, fuera del sistema) | PDF del EEFF adjuntado manualmente + prompt `eeff-v1` |
+| 5 | `tools/db/ingest_eeff_tri_groq.py` (huérfano, solo tests) | Groq Llama 3.3 | nota "Cuotas emitidas" del PDF TRI |
+
+Estado (decisión 2026-07-24): este fallback es **configuración de desarrollo controlado**; la política formal de proveedores es un gate de salida a producción (ver `ai_principles.md` regla 6 y `ROADMAP.md` §6). No se envían secretos; los prompts instruyen minimización, pero los datos financieros reales sí transitan por estos proveedores.
+
 ## 6. Integridad y trazabilidad — estado real
 
 Hallazgos verificados contra la DB productiva:
