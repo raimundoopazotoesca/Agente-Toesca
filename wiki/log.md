@@ -1,3 +1,47 @@
+## [2026-07-24] fase0 | F0.4 ejecutado: FK a cero, seccion, uniques demostrados
+
+**Ejecutado** (migraciones 061-063, con backup, dry run y transaccion unica):
+- 061: reparado el linaje cruzado de raw_eeff_line. 2.478 filas tenian el hash del
+  archivo en `ingest_run_id` y `file_hash` vacio. El hash vuelve a su columna,
+  `ingest_run_id` queda NULL. **No se crearon corridas sinteticas** (decision del
+  usuario: preferible ausencia explicita de trazabilidad que trazabilidad
+  artificial). Nueva columna `lineage_status` con vocabulario cerrado
+  ('legacy_untracked', 'manual_sin_archivo'). Identificador sintetico
+  `manual:<fondo>:<periodo>:<naturaleza>:<fecha>` para las 6 filas manuales — que
+  resultaron ser DOS grupos, no uno. **violaciones FK 2.478 -> 0**, file_hash NULL
+  2.484 -> 0, cifras intactas. Invariante ahora exige cero, sin umbral.
+- 062: columna `seccion` + `seccion_original` en raw_eeff_line, vocabulario
+  ESF/ER/EFE/ECP/NOTA/OTRO. Backfill solo desde el prefijo del codigo canonico:
+  12.970 filas pobladas, 23.823 quedan NULL a proposito (no se inventa seccion).
+- 063: uniques SOLO donde estan demostrados — rent_roll (file_hash, source_row) y
+  flujo (file_hash, source_row, periodo). El xfail(strict) de esos tests xpaso y se
+  retiraron los marcadores, como se acordo. Quedan 3, de eeff y er_activo.
+
+**Analisis entregados** (`docs/analisis-saneamiento-fase2.md`), todos con el mismo
+patron: el detalle cambio la conclusion previa.
+- Las "10 filas sobrantes" de raw_er_activo_line **no son duplicados**: son un split
+  deliberado 75/25 de las contribuciones de Apoquindo entre Apo4501 y Apo4700, con la
+  regla escrita en el propio cuenta_nombre (ratio 3.0 exacto). La clave correcta es
+  (file_hash, source_row, periodo, **activo_key**) y no requiere saneamiento: 0 sobrantes.
+- Caso 1: de los 346 grupos, **0 son ejecutables automaticamente** — los 346 tienen
+  source_row NULL, ninguno tiene canonico ni seccion.
+- Caso 2: 2.839 grupos, **0 son copia exacta del mismo archivo**, solo 2 tienen
+  canonico (los de Apo 2020-12). Conclusion: no hay NADA ejecutable automaticamente
+  en el saneamiento de duplicados de raw_eeff_line.
+- Apo 2020-12: la "correccion manual" **no corrigio ningun valor** (los dos solapados
+  son identicos al digito); lo que aporto fue `ESF.total_activo`, ausente en el JSON.
+  Cuadra (405.468.000 + 41.937.890.000 = 42.343.358.000) y encaja en la serie. La foto
+  que la respaldo no esta en el repo.
+- Mapeo canonico: cobertura global **18,2%** (Apo solo 11,4%; peor en 2022 con 12,2%).
+  1.986 nombres distintos sin mapear; el top 50 cubre el 27% y el top 200 el 52,6%.
+  Hallazgo: los 1.264 `Serie UNICA - *` no son cuentas contables sino metricas de serie
+  que ya viven en tablas propias — no hay que mapearlas.
+- Rent roll JLL: **no hay archivos sincronizados en esta maquina**, asi que la
+  estructura real queda pendiente de verificar en Windows. Pista concreta del codigo:
+  `_read_rr_locals` ya prefiere `Activo2` sobre `Activo1`, y `Activo1` contiene el
+  nombre del FONDO (por eso el mapeo genera las entidades artificiales 'PT' y
+  'Apoquindo'). El activo real estaria en `Activo2`/`Detalle Activo`.
+
 ## [2026-07-24] fase0 | F0.2 re-baseline + analisis de integridad y duplicados
 
 **F0.2 ejecutado.** `tools/db/baseline.sql` consolida 001..060 desde el esquema real
