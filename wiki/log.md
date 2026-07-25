@@ -1,3 +1,43 @@
+## [2026-07-24] fase0 | Cierre de F0: FK en cero, Etapa 1 cumplida, catalogo de KPIs
+
+**Indices unicos parciales (067-068).** Correccion de la propuesta anterior:
+`UNIQUE(..., superseded_at)` NO protege nada porque SQLite trata cada NULL como
+distinto — verificado empiricamente: dos INSERT en raw_parking_ingreso_line con la
+misma clave y superseded_at NULL fueron aceptados. Las 4 restricciones de parking
+eran decorativas. La forma correcta es `WHERE superseded_at IS NULL`. Ademas el
+UNIQUE inline de parking SI estorbaba (rechaza dos filas anuladas en el mismo
+segundo), asi que hubo que recrear las 4 tablas; el dry run detecto que las 5
+vistas dependen de ellas y se recrean en la misma transaccion. 22 tests nuevos con
+los 4 escenarios sobre 5 familias de tabla.
+
+**Etapa 1 del mapeo canonico cerrada (069).** De los 15 huecos funcionales, **14
+son ausencias legitimas** verificadas una por una contra la fuente: 'Costos de
+transaccion' no figura en esos EEFF de Apo, y lo unico parecido a otros_gastos es
+'Otros gastos de operacion PAGADOS', que es estado de FLUJOS y nunca se mapea a
+ER (141 filas, ninguna mapeada). PT 2017-06 es anterior al inicio de operaciones
+del fondo. Solo 1 era mapeable con respaldo de fuente y seccion. NO se mapearon en
+bloque las otras 25 filas de PT con ese nombre: en la mayoria ya existe una
+contraparte mapeada por carga manual, y mapearlas habria duplicado el gasto.
+Cobertura funcional: 100% en los 3 fondos. El reporte ahora distingue "ausente del
+documento" de "presente sin mapear".
+
+**Catalogo dim_kpi + golden (070).** ltc y dscr -> legacy: sin metodologia escrita
+ni consumidores, se conservan sus 1.399 filas pero no se recalculan ni se publican.
+ltv, duration_deuda, perfil_vencimiento y leverage_financiero quedan marcados como
+vigentes SIN metodologia escrita — tienen consumidores y no pueden congelarse.
+Golden congelado de los 7.226 valores de los 15 KPIs de la skill, con tolerancias
+por familia y modo --verificar (hoy: 0 divergencias).
+
+**F0.6 (skill financiera) queda como PENDIENTE URGENTE bloqueado por acceso al
+computador Windows.** No bloquea nada mas: el factsheet lee derived_kpi, no invoca
+la skill. Lo unico imposible hoy es recalcular.
+
+**Trasladado a F1.1:** supersede (depende de stale_at y del orquestador) y los
+duplicados de raw_eeff_line (dependen de seccion y del mapeo canonico).
+
+Suite: 386 passed, 1 xfailed (el de raw_eeff_line, que se mantiene hasta tener una
+clave demostrada).
+
 ## [2026-07-24] fase0 | Migraciones 064-066 + reporte de cobertura + disenos
 
 **Ejecutado:**
