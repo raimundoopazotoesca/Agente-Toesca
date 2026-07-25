@@ -1,3 +1,41 @@
+## [2026-07-24] fase0 | Migraciones 064-066 + reporte de cobertura + disenos
+
+**Ejecutado:**
+- 064: UNIQUE(file_hash, source_row, periodo, **activo_key**) en raw_er_activo_line.
+  Sin saneamiento: cero sobrantes. Test verifica que el split 75/25 de contribuciones
+  de Apoquindo sigue aceptandose (ratio 3.0 exacto).
+- 065: validacion humana como eje separado del linaje (validado_por, validado_at,
+  validacion_fuente). Apo 2020-12 ESF.total_activo = 42.343.358.000 registrado como
+  confirmado por el usuario contra los EEFF; la fila manual queda vigente y conserva
+  lineage_status='manual_sin_archivo'. Los dos solapados se resolvieron por politica de
+  versionado (valores identicos, ninguna cifra cambia).
+- 066: 1.424 filas 'Serie X - <metrica>' pasan a seccion='METRICA_SERIE'. Son metricas
+  por serie que ya viven en raw_valor_cuota_* — sumarlas seria doble conteo. Fuera del
+  mapeo canonico y de deduplicaciones.
+
+**Hallazgo importante en el reporte de cobertura** (`scripts/reporte_cobertura_mapeo.py`):
+mi primera version media las 10 cuentas ESF del factsheet contra `raw_eeff_line` y
+reportaba **773 huecos**. Esas cuentas NO salen de ahi sino de
+`raw_balance_consolidado_line`, que tiene ingesta propia; y `ER.recurrentes` se calcula
+en el JS del factsheet (honorarios_custodia + remun_comite). Corregido: los huecos reales
+son **15**. Cobertura funcional TRI 100%, PT 97,3%, Apo 94,8%; balance 100%. Es decir:
+el mapeo canonico al 18,2% suena alarmante, pero **funcionalmente estamos al ~97%** — el
+82% de filas sin mapear no lo usa ningun output. La Etapa 1 esta casi cumplida (faltan
+ER.costos_transaccion en 5 cierres antiguos de Apo, ER.otros_gastos en 2, y PT 2017-06).
+
+**Disenos entregados:**
+- `docs/inventario-skill-financiera.md`: la skill NO existe en esta maquina
+  (~/.claude/skills/ no existe). Pero su contrato es deducible del wrapper, sus 6.246
+  resultados estan en derived_kpi con receta versionada, y la metodologia esta en el wiki
+  con valores de referencia validados contra el CDG. Reimplementacion viable y
+  verificable. El factsheet no invoca la skill (lee derived_kpi), por eso sigue
+  funcionando: lo que no se puede es RECALCULAR. Sin metodologia escrita: ltc y dscr.
+- `docs/diseno-supersede.md`: semantica fijada antes de implementar. Unidad de reemplazo
+  = archivo/corrida, nunca fila suelta — la misma primitiva que el saneamiento historico.
+  Detecta un conflicto real: los UNIQUE recien aplicados no incluyen superseded_at, asi
+  que reingerir tras superseder fallaria; propone la opcion de parking (incluirlo en la
+  clave). Depende de stale_at y del orquestador F1.1.
+
 ## [2026-07-24] fase0 | F0.4 ejecutado: FK a cero, seccion, uniques demostrados
 
 **Ejecutado** (migraciones 061-063, con backup, dry run y transaccion unica):
