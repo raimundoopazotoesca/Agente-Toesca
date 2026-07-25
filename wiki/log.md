@@ -1,3 +1,45 @@
+## [2026-07-24] fase0 | F0.2 re-baseline + analisis de integridad y duplicados
+
+**F0.2 ejecutado.** `tools/db/baseline.sql` consolida 001..060 desde el esquema real
+de produccion; `apply_migrations()` lo aplica a DBs vacias y registra 1..60 de forma
+veraz. Migracion 059 recupera los 12 indices que las migraciones declaraban y
+produccion nunca tuvo; 060 normaliza `schema_version.applied_at`. Excluidos con
+justificacion: `dim_cuenta` (obsoleta; su FK sobre una tabla vacia hacia fallar TODA
+ingesta con cuenta_codigo en una DB nueva) y `publish_run` (nunca usada). Verificado
+objeto por objeto: **93 objetos, cero diferencias** entre DB nueva y produccion,
+blindado por `tests/db/test_baseline.py` y `regenerar_baseline.py --check`.
+
+Hallazgo: 8 tests de idempotencia afirmaban una garantia que produccion nunca tuvo
+—pasaban porque la DB de test si tenia el UNIQUE—. Por eso los duplicados se
+acumularon en silencio. Quedan como xfail(strict=True).
+
+**Analisis entregados (sin ejecutar saneamiento):**
+
+`docs/analisis-integridad-referencial.md`: las 2.478 violaciones son UNA sola FK
+(`raw_eeff_line.ingest_run_id`), 25 grupos, todos de PT, periodos 2021-06..2025-12.
+Causa verificada con tres comprobaciones: solape del **100%** entre filas huerfanas y
+filas con `file_hash` NULL; el valor huerfano es un hash de 8 caracteres uniforme; no
+existe ningun `ingest_run` correspondiente (esa tabla solo tiene registros desde
+2026-05-25). Un cargador cruzo las columnas. Reparacion: un UPDATE que mueve el hash a
+`file_hash` y deja `ingest_run_id` NULL -> violaciones a **cero**, sin tocar cifras, y
+devolviendo esas filas al alcance de `mark_superseded` (hoy son inmortales).
+
+`docs/analisis-duplicados-dry-run.md` + `scripts/dry_run_duplicados.py`: politica de 3
+casos aplicada -> 346 exactos, 3.056 redundantes, 2 con precedencia demostrable, **1.098
+detenidos para revision humana**. Dos hallazgos que cambian el plan:
+(a) el `UNIQUE(file_hash, source_row)` de las migraciones es **inutil** en raw_eeff_line
+(93% de source_row NULL, y SQLite trata cada NULL como distinto) y **daNino** en
+raw_er_activo_line/raw_flujo_line, donde una fila de planilla genera legitimamente una
+fila por mes (verificado: 104 filas con el mismo file_hash+source_row, una por periodo);
+(b) **49% de los ambiguos son falsos positivos**: 537 grupos vienen del mismo archivo con
+montos distintos y ninguno tiene codigo canonico — son partidas distintas que comparten
+un nombre generico ('Otros' 102 veces, 'Total' 147). Deduplicarlos borraria datos reales.
+**Impacto en outputs hoy: nulo** — solo 2 grupos duplicados tienen codigo canonico (la
+correccion manual de Apo 2020-12) y ninguna cuenta de gasto del factsheet esta afectada.
+
+Causa de fondo identificada: 23.823 de 29.130 filas vivas (82%) sin
+`cuenta_codigo_canonical`. Sin completar ese mapeo no hay clave de negocio confiable.
+
 # Log — Wiki Agente Toesca
 
 > Log cronológico append-only. Una entrada por operación.

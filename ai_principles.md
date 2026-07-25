@@ -73,7 +73,20 @@ Derivadas de los principios; son condiciones de diseño para toda superficie de 
 1. **Solo lectura por construcción.** El asistente consulta la DB exclusivamente por conexión read-only real (`mode=ro` de SQLite — la garantía es del motor, no del prompt). Las escrituras (ingesta, conocimiento validado) van por endpoints separados, deterministas, con validación y confirmación humana. Nunca por SQL generado por el modelo.
 2. **Validación de SQL antes de ejecutar:** una sola sentencia, solo `SELECT`/`WITH`, lista de operaciones prohibidas, `LIMIT` forzado (hoy 200 filas), y **timeout de ejecución** (pendiente — hoy un `WITH RECURSIVE` puede colgar el servidor; usar `sqlite3.Connection.set_progress_handler` o interrupt).
 3. **Allowlist en vez de acceso irrestricto.** El asistente debe consultar una **capa semántica de vistas curadas** (`v_*` + tablas aprobadadas), no el esquema completo. Métricas con definición canónica (TIR, DY, NOI, cap rate) se responden desde `derived_kpi`/vistas, jamás recalculadas ad-hoc por el modelo.
-4. **Identidad y permisos.** Toda consulta lleva usuario identificado; los permisos por fondo/activo/tipo de información se resuelven server-side (no en el prompt). *Hoy `/api/chat` no tiene autenticación — bloqueante para exponer el sistema a más usuarios.*
+4. **Identidad y permisos.** Toda consulta lleva usuario identificado; los permisos por fondo/activo/tipo de información se resuelven server-side (no en el prompt).
+
+   **Estado (2026-07-24) — el token de `/api/*` es una protección de desarrollo local, aceptada como tal.** Qué es y qué no es:
+
+   | | |
+   |---|---|
+   | **Sí protege de** | que cualquier proceso local o página abierta en el navegador lea la DB por `/api/chat` o escriba por `/api/*/commit`; el CORS ya no refleja orígenes arbitrarios |
+   | **No es** | autenticación multiusuario: hay **un solo token compartido**, sin identidad, sin sesión, sin roles |
+   | **No es** | suficiente para exposición productiva: sin TLS, sin rotación, sin expiración, sin registro de quién hizo qué |
+   | **No aporta** | trazabilidad por usuario (P3): las consultas siguen sin quedar registradas |
+
+   La autenticación real, la identidad por usuario y los permisos por fondo/tipo de dato se resuelven en la Fase 2 (F2.1 y F2.5) y son **requisito de salida a producción**, junto con el gate de proveedores LLM de la regla 6.
+
+   **Flujo vigente para usar el Asistente:** abrir el factsheet desde `http://127.0.0.1:8765/factsheet`. Abrirlo con doble clic sobre el archivo (`file://`) no recibe el token y el Asistente responde 401 con esa instrucción.
 5. **Prompt injection.** Todo texto no generado por el sistema es dato no confiable: contenido de correos/documentos, filas de la DB con texto libre (glosas, arrendatarios, `source_file`, futuros comentarios humanos), y el historial de chat. El historial lo reconstruye el **servidor** (no se acepta historial fabricado por el cliente); el texto almacenado se interpola en prompts con delimitadores y sin capacidad de instruir. La cláusula anti-injection existente en `BASE_PROMPT` debe replicarse en `db_chat`.
 6. **Datos sensibles y proveedores LLM.** El fallback actual (DeepSeek → Groq → Gemini) es una **configuración de desarrollo controlado**, no la política de producción (decisión del usuario, 2026-07-24). Mientras dure el desarrollo: arquitectura desacoplada para cambiar de proveedor, inventario de puntos de llamada documentado (`system_architecture.md` §5), minimización de lo enviado, datos sintéticos en pruebas cuando sea razonable, y jamás secretos (.env, tokens, hashes) en prompts ni en el repo. Aunque sea desarrollo, las llamadas externas sacan datos reales de la infraestructura local — mantener los controles mínimos. **Gate de salida a producción:** decisión humana explícita sobre proveedores autorizados, tipo de cuentas, retención, uso para entrenamiento, fallback permitido, minimización, logging/auditoría y tratamiento de información financiera confidencial.
 7. **Separación de tipos de contenido en toda respuesta:** hecho SQL ≠ cálculo derivado ≠ inferencia del modelo ≠ comentario humano validado. Las cuatro categorías se citan con su origen.
