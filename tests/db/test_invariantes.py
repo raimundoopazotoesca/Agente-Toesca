@@ -187,6 +187,67 @@ def test_seccion_usa_el_vocabulario_normalizado(con):
             "SELECT DISTINCT seccion FROM raw_eeff_line WHERE seccion IS NOT NULL"
         )
     }
-    assert valores <= {"ESF", "ER", "EFE", "ECP", "NOTA", "OTRO"}, (
+    assert valores <= {"ESF", "ER", "EFE", "ECP", "NOTA", "OTRO", "METRICA_SERIE"}, (
         f"seccion fuera del vocabulario normalizado: {valores}"
     )
+
+
+def test_metricas_de_serie_fuera_del_perimetro_contable(con):
+    """Las filas `Serie X - ...` son métricas por serie, no cuentas: ya viven en
+    `raw_valor_cuota_*` y `raw_cuota_en_circulacion`. Sumarlas como partidas
+    contables sería doble conteo."""
+    contables = con.execute(
+        "SELECT COUNT(*) FROM raw_eeff_line "
+        "WHERE seccion = 'METRICA_SERIE' AND cuenta_codigo_canonical IS NOT NULL"
+    ).fetchone()[0]
+    assert contables == 0, (
+        f"{contables} métricas de serie tienen código de cuenta contable"
+    )
+
+
+def test_sin_metricas_de_serie_sin_clasificar(con):
+    """Toda fila con nombre de métrica de serie debe estar marcada, para que no
+    reaparezca en el trabajo de mapeo canónico ni en deduplicaciones."""
+    sin_marcar = con.execute(
+        "SELECT COUNT(*) FROM raw_eeff_line "
+        "WHERE cuenta_nombre LIKE 'Serie %' AND cuenta_nombre LIKE '%-%' "
+        "  AND cuenta_codigo_canonical IS NULL AND seccion IS NOT 'METRICA_SERIE'"
+    ).fetchone()[0]
+    assert sin_marcar == 0, f"{sin_marcar} métricas de serie sin clasificar"
+
+
+# ── Validación humana (eje independiente del linaje) ─────────────────────────
+
+def test_validacion_humana_esta_completa(con):
+    """Si una fila se marcó como validada, debe constar quién y contra qué: una
+    validación sin evidencia no es trazable (P3)."""
+    incompletas = con.execute(
+        "SELECT COUNT(*) FROM raw_eeff_line "
+        "WHERE (validado_por IS NOT NULL OR validado_at IS NOT NULL "
+        "       OR validacion_fuente IS NOT NULL) "
+        "  AND (validado_por IS NULL OR validado_at IS NULL OR validacion_fuente IS NULL)"
+    ).fetchone()[0]
+    assert incompletas == 0, f"{incompletas} filas con validación incompleta"
+
+
+def test_apo_2020_12_total_activo_cuadra(con):
+    """Cifra confirmada por el usuario contra los EEFF (2026-07-24). La fila
+    proviene de una carga manual sin archivo en el repositorio, así que se
+    verifica su coherencia interna."""
+    fila = con.execute(
+        "SELECT monto_clp, validado_por FROM raw_eeff_line "
+        "WHERE fondo_key='Apo' AND periodo='2020-12' "
+        "  AND cuenta_codigo_canonical='ESF.total_activo' AND superseded_at IS NULL"
+    ).fetchall()
+    assert len(fila) == 1, "debe quedar exactamente una fila vigente de total_activo"
+    assert fila[0]["monto_clp"] == 42_343_358_000
+    assert fila[0]["validado_por"] == "usuario"
+
+    partes = dict(con.execute(
+        "SELECT cuenta_codigo_canonical, monto_clp FROM raw_eeff_line "
+        "WHERE fondo_key='Apo' AND periodo='2020-12' AND superseded_at IS NULL "
+        "  AND cuenta_codigo_canonical IN "
+        "      ('ESF.total_activo_corriente','ESF.total_activo_no_corriente')"
+    ).fetchall())
+    assert len(partes) == 2, "cada subtotal debe quedar con una sola fila vigente"
+    assert sum(partes.values()) == fila[0]["monto_clp"]
