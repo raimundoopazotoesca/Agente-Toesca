@@ -16,7 +16,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # cadena no reproduce el esquema de producción (las versiones 2–22 se marcaron
 # aplicadas sin ejecutarse). Ver el encabezado de baseline.sql.
 BASELINE_PATH = Path(__file__).parent / "baseline.sql"
-BASELINE_VERSION = 69
+BASELINE_VERSION = 70
 
 
 def get_conn_for(db_path: str) -> sqlite3.Connection:

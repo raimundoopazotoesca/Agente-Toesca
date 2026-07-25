@@ -142,6 +142,43 @@ def test_integridad_fisica_de_la_db(con):
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
 
+# ── Catálogo de KPIs ─────────────────────────────────────────────────────────
+
+def test_kpis_legacy_no_se_recalculan(con):
+    """`ltc` y `dscr` no tienen metodología escrita ni consumidores. Se conservan
+    sus valores históricos, pero el pipeline no debe producir filas nuevas: sin
+    fórmula documentada, un recálculo sería inventar el número."""
+    legacy = {r[0] for r in con.execute("SELECT kpi FROM dim_kpi WHERE estado='legacy'")}
+    assert legacy, "el catálogo debe marcar al menos ltc y dscr como legacy"
+
+    corte = "2026-07-24"  # fecha en que se marcaron
+    for kpi in legacy:
+        nuevas = con.execute(
+            "SELECT COUNT(*) FROM derived_kpi WHERE kpi=? AND computed_at > ?", (kpi, corte)
+        ).fetchone()[0]
+        assert nuevas == 0, f"{kpi} es legacy y se recalculó {nuevas} veces"
+
+
+def test_kpis_legacy_conservan_su_historia(con):
+    """Legacy significa 'no recalcular', no 'borrar'."""
+    for kpi in ("ltc", "dscr"):
+        n = con.execute("SELECT COUNT(*) FROM derived_kpi WHERE kpi=?", (kpi,)).fetchone()[0]
+        assert n > 0, f"se perdieron los valores históricos de {kpi}"
+
+
+def test_catalogo_cubre_los_kpis_con_consumidores(con):
+    """Todo KPI que alimente un output debe estar en el catálogo: si no, nadie
+    sabe si su metodología está escrita ni si puede recalcularse."""
+    del_factsheet = {
+        "dy", "dy_amort", "ltv", "duration_deuda", "perfil_vencimiento",
+        "leverage_financiero", "noi_mensual", "ingresos_mensual", "m2_vacantes",
+    }
+    catalogados = {r[0] for r in con.execute("SELECT kpi FROM dim_kpi")}
+    assert del_factsheet <= catalogados, (
+        f"KPIs usados por outputs sin entrada en dim_kpi: {del_factsheet - catalogados}"
+    )
+
+
 # ── Integridad referencial ───────────────────────────────────────────────────
 
 def test_cero_violaciones_de_fk(con):
