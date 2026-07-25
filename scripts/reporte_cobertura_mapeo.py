@@ -70,6 +70,30 @@ CUENTAS_DERIVADAS = ("ER.recurrentes",)
 
 CUENTAS_CRITICAS = CUENTAS_ER_EEFF  # las que dependen del mapeo canónico
 
+# Ausencias verificadas una por una contra la fuente: la cuenta NO figura en el
+# documento de ese período, así que no es un hueco de mapeo. Sin esta lista la
+# métrica confunde "falta mapear" con "no existe", que son problemas distintos.
+# Ver migración 069 para el detalle del veredicto de cada caso.
+AUSENCIAS_LEGITIMAS = {
+    # Apo: "Costos de transacción" no figura en el EEFF de esos cierres.
+    ("Apo", "2019-03", "ER.costos_transaccion"),
+    ("Apo", "2019-06", "ER.costos_transaccion"),
+    ("Apo", "2019-09", "ER.costos_transaccion"),
+    ("Apo", "2019-12", "ER.costos_transaccion"),
+    ("Apo", "2020-03", "ER.costos_transaccion"),
+    ("Apo", "2025-09", "ER.costos_transaccion"),
+    ("Apo", "2025-12", "ER.costos_transaccion"),
+    # Apo: lo único parecido es "Otros gastos de operación pagados", que es EFE.
+    ("Apo", "2025-09", "ER.otros_gastos"),
+    ("Apo", "2025-12", "ER.otros_gastos"),
+    # PT inició operaciones el 16-nov-2017: a junio no tenía gastos desglosados.
+    ("PT", "2017-06", "ER.comision_admin"),
+    ("PT", "2017-06", "ER.honorarios_custodia"),
+    ("PT", "2017-06", "ER.remun_comite"),
+    ("PT", "2017-06", "ER.costos_transaccion"),
+    ("PT", "2017-06", "ER.total_gastos_operacion"),
+}
+
 
 # Períodos en los que se espera ver estas cuentas: cierres trimestrales.
 def _es_cierre(periodo: str) -> bool:
@@ -133,6 +157,7 @@ def cobertura_funcional(con, detalle: bool = False) -> int:
     print(f"  Gastos del fondo (raw_eeff_line → depende del mapeo canónico)")
     print(f"  {'fondo':6} {'cierres':>9} {'cuentas ok':>12} {'esperadas':>11} {'%':>7}")
     detalle_filas = []
+    ausentes = 0
     for fondo in fondos:
         cierres = [
             p for (p,) in con.execute(
@@ -152,7 +177,14 @@ def cobertura_funcional(con, detalle: bool = False) -> int:
                     (fondo, periodo),
                 )
             }
-            faltan = [c for c in CUENTAS_CRITICAS if c not in hay]
+            faltan = [
+                c for c in CUENTAS_CRITICAS
+                if c not in hay and (fondo, periodo, c) not in AUSENCIAS_LEGITIMAS
+            ]
+            ausentes += sum(
+                1 for c in CUENTAS_CRITICAS
+                if c not in hay and (fondo, periodo, c) in AUSENCIAS_LEGITIMAS
+            )
             presentes += len(CUENTAS_CRITICAS) - len(faltan)
             if faltan:
                 detalle_filas.append((fondo, periodo, faltan))
@@ -189,6 +221,7 @@ def cobertura_funcional(con, detalle: bool = False) -> int:
               f"{100*presentes/esperadas:>6.1f}%")
 
     print(f"\n  Derivadas en el output, no se mapean: {', '.join(CUENTAS_DERIVADAS)}")
+    print(f"  Ausencias verificadas contra la fuente (no son huecos): {ausentes}")
     return faltantes_totales
 
 
