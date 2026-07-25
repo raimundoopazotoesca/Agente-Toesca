@@ -24,6 +24,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 load_dotenv(encoding="utf-8")
 from config import GEMINI_API_KEY
+from tools.db.fondo_keys import fondo_canonico
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "memory" / "agente_toesca_v2.db"
@@ -317,6 +318,9 @@ def main():
     args = ap.parse_args()
 
     md_dir, pdf_dir, json_dir = paths_for_fondo(args.fondo)
+    # Las carpetas de trabajo usan el alias en mayusculas (work/eeff_ingesta/APO);
+    # a la DB se persiste siempre la clave canonica de dim_fondo.
+    fondo_db = fondo_canonico(args.fondo)
 
     if args.file:
         files = [Path(args.file)]
@@ -328,7 +332,7 @@ def main():
     results = []
     for f in files:
         try:
-            r = process_file(f, fondo_key=args.fondo, pdf_dir=pdf_dir, json_dir=json_dir, dry_run=args.dry_run)
+            r = process_file(f, fondo_key=fondo_db, pdf_dir=pdf_dir, json_dir=json_dir, dry_run=args.dry_run)
         except Exception as e:
             r = {"file": f.name, "error": str(e)}
         results.append(r)

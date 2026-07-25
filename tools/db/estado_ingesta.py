@@ -52,7 +52,9 @@ CONFIG: list[dict] = [
         "frecuencia": "trimestral",
         "tabla": "raw_eeff_line",
         "columna_periodo": "periodo",
-        "fondos": ["TRI", "PT", "APO"],
+        # Claves canónicas de dim_fondo. 'Apo' (no 'APO'): el histórico se
+        # consolidó en la migración 058.
+        "fondos": ["TRI", "PT", "Apo"],
         "columna_fondo": "fondo_key",
         "columna_sub_ingesta": "fondo_key",
         "n_timeline": 4,
@@ -60,7 +62,7 @@ CONFIG: list[dict] = [
         "sub_ingestas": [
             {"key": "TRI", "label": "TRI", "valores": ["TRI"]},
             {"key": "PT", "label": "PT", "valores": ["PT"]},
-            {"key": "APO", "label": "APO", "valores": ["APO"]},
+            {"key": "Apo", "label": "APO", "valores": ["Apo"]},
         ],
     },
     {

@@ -62,8 +62,8 @@ def con(tmp_db_path):
 
 
 def _insert_eeff(con, periodo, fondo):
-    # dim_fondo solo tiene seed 'Apo'; la data real usa fondo_key 'APO'
-    # (ver raw_eeff_line en produccion) — se agrega para que la FK no falle.
+    # Los 3 fondos ya vienen como seed en dim_fondo con su clave canónica
+    # ('Apo', no 'APO'); el INSERT OR IGNORE cubre una clave de prueba distinta.
     con.execute("INSERT OR IGNORE INTO dim_fondo (fondo_key, nombre) VALUES (?, ?)", (fondo, fondo))
     con.execute("INSERT OR IGNORE INTO dim_cuenta (codigo, nombre) VALUES ('X.TEST', 'Test')")
     con.execute(
@@ -106,7 +106,7 @@ def test_config_tiene_los_tipos_del_menu():
 def test_estado_tipo_eeff_completo_y_al_dia(con):
     cfg = next(c for c in CONFIG if c["id"] == "eeff")
     hoy = date(2026, 7, 23)  # cerrado esperado: 2026-06
-    for fondo in ("TRI", "PT", "APO"):
+    for fondo in ("TRI", "PT", "Apo"):
         _insert_eeff(con, "2026-06", fondo)
     resultado = estado_tipo(con, cfg, hoy)
     assert resultado["ultimo_ingestado"] == "2026-06"
@@ -119,7 +119,7 @@ def test_estado_tipo_eeff_incompleto_marca_pendiente(con):
     hoy = date(2026, 7, 23)
     _insert_eeff(con, "2026-06", "TRI")
     _insert_eeff(con, "2026-06", "PT")
-    # falta APO en 2026-06
+    # falta Apo en 2026-06
     resultado = estado_tipo(con, cfg, hoy)
     assert resultado["pendiente"] == "2026-06"
     assert resultado["al_dia"] is False
@@ -173,13 +173,13 @@ def test_eeff_sub_ingestas_por_fondo(con):
     hoy = date(2026, 7, 23)  # cerrado esperado: 2026-06
     _insert_eeff(con, "2026-06", "TRI")
     _insert_eeff(con, "2026-06", "PT")
-    # APO no ingestado en 2026-06
+    # Apo no ingestado en 2026-06
     resultado = estado_tipo(con, cfg, hoy)
     subs = {s["key"]: s for s in resultado["sub_ingestas"]}
     assert subs["TRI"]["al_dia"] is True
     assert subs["PT"]["al_dia"] is True
-    assert subs["APO"]["al_dia"] is False
-    assert subs["APO"]["pendiente"] == "2026-06"
+    assert subs["Apo"]["al_dia"] is False
+    assert subs["Apo"]["pendiente"] == "2026-06"
     assert resultado["resumen"] == {"al_dia": 2, "total": 3}
 
 

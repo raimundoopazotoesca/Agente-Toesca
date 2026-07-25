@@ -15,8 +15,12 @@ import argparse
 import hashlib
 import json
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.db.fondo_keys import fondo_canonico  # noqa: E402
 
 
 def _parse_period(value: object, label: str) -> str:
@@ -218,6 +222,10 @@ def main():
     ap.add_argument("--check-only", action="store_true", help="solo valida el JSON; no inserta en DB")
     args = ap.parse_args()
 
+    # "APO" se acepta como alias de entrada; a la DB va la clave canónica de
+    # dim_fondo ("Apo"). Ver tools/db/fondo_keys.py.
+    fondo_db = fondo_canonico(args.fondo)
+
     json_path = Path(args.json)
     data = json.loads(json_path.read_text(encoding="utf-8"))
 
@@ -282,7 +290,7 @@ def main():
             run_id = cur.lastrowid
 
             rows_eeff = [
-                (args.fondo, L["periodo"], L["cuenta_codigo"], L["cuenta_nombre"],
+                (fondo_db, L["periodo"], L["cuenta_codigo"], L["cuenta_nombre"],
                  L["monto_clp"], L["monto_uf"], source_file, L["section"], None, fhash, run_id)
                 for L in lineas
             ]
@@ -310,7 +318,7 @@ def main():
                            (fondo_key, nemotecnico, fecha, precio_clp, precio_uf,
                             uf_dia, cuotas, periodo, source_file, file_hash)
                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                        (args.fondo, vc["nemotecnico"], vc["fecha"],
+                        (fondo_db, vc["nemotecnico"], vc["fecha"],
                          vc["precio_clp"], vc["precio_uf"], vc["uf_dia"],
                          vc["cuotas"], vc["periodo"], source_file, fhash),
                     )
@@ -341,10 +349,10 @@ def main():
                                  AND superseded_at IS NULL
                            )""",
                         (
-                            args.fondo, div["nemotecnico"], div["fecha_pago"],
+                            fondo_db, div["nemotecnico"], div["fecha_pago"],
                             div["monto_uf_cuota"], div["monto_clp_cuota"],
                             div["periodo"], source_file, fhash,
-                            args.fondo, div["nemotecnico"], div["fecha_pago"],
+                            fondo_db, div["nemotecnico"], div["fecha_pago"],
                             source_file, fhash,
                         ),
                     )

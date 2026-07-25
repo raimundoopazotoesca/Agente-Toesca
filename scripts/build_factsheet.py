@@ -655,7 +655,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         f"WHERE fondo_key=? AND cuenta_codigo_canonical IN ({','.join('?'*len(gasto_cuentas))}) "
         f"AND (superseded_at IS NULL OR superseded_at='') "
         f"GROUP BY periodo, cuenta_codigo_canonical",
-        (fondo_key.upper(), *gasto_cuentas),
+        # fondo_key viene de FONDOS_CFG y ya es la clave canónica ('Apo', no 'APO').
+        (fondo_key, *gasto_cuentas),
     ):
         gastos[periodo][cuenta] = abs(monto) if monto is not None else None
 

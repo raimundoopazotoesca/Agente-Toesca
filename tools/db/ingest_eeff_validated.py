@@ -35,18 +35,10 @@ from tools.db.eeff_cuenta_mapper import get_canonical_code  # noqa: E402
 PROMPT_VERSIONS_CONOCIDAS = {"eeff-v1"}
 FONDOS_VALIDOS = {"TRI", "PT", "APO"}
 
-# El prompt, la UI y el payload de ChatGPT usan "APO", pero la clave canónica del
-# fondo en dim_fondo es "Apo": insertar "APO" viola la FK raw_eeff_line.fondo_key
-# -> dim_fondo(fondo_key). Las 18.009 filas históricas con "APO" entraron por
-# scripts/ingest_eeff.py, que abre la conexión con sqlite3.connect() sin
-# PRAGMA foreign_keys=ON. Aceptamos "APO" como alias de entrada y persistimos
-# siempre el canónico. Las lecturas usan UPPER() para seguir viendo el histórico
-# mientras la consolidación de datos (ROADMAP F0.3) no se haya ejecutado.
-FONDO_CANONICO = {"TRI": "TRI", "PT": "PT", "APO": "Apo"}
-
-
-def fondo_canonico(fondo: str) -> str:
-    return FONDO_CANONICO.get(fondo.upper(), fondo)
+# "APO" se acepta como alias de entrada (lo usan el prompt y la UI) pero se
+# persiste la clave canónica "Apo". Ver tools/db/fondo_keys.py. Las lecturas usan
+# UPPER() para ser indiferentes a la variante.
+from tools.db.fondo_keys import fondo_canonico  # noqa: E402
 
 COMPONENTES_GASTOS = (
     "ER.depreciaciones",
