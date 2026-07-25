@@ -41,18 +41,18 @@ Plataforma de datos e informes para los 3 fondos de renta inmobiliaria de Toesca
               5 scripts     │               │              (embebido en factsheet)
               consolidate_*/│               ▼
               compute_kpis  │   ┌───────────────────────────┐
-              (derived_kpi) │   │ scripts/build_factsheet.py│──▶ factsheet.html (5.2 MB)
-                            │   │ 100% SQL, template string │
-                            │   └───────────────────────────┘
-                            ▼
-              dashboards/{fondos,eeff_tri,tir_tri}.py  (Streamlit, duplican factsheet)
+              (derived_kpi) └──▶│ scripts/build_factsheet.py│──▶ factsheet.html (5.2 MB)
+                                │ 100% SQL, template string │    ÚNICO factsheet canónico
+                                └───────────────────────────┘
 
   ┌──────────────────────────────────────────────────────────────────────┐
-  │ LEGACY aún vivo:                                                     │
-  │ agent.py / app.py (Streamlit + auth) — agente Gemini, 102 tools      │
+  │ LEGACY aún vivo (en decomiso, ver ROADMAP F1.7/F1.8):                │
+  │ agent.py — agente Gemini, 102 tools (solo CLI/--server)              │
   │ tools/gestion_renta_tools.py — escribe el CDG por XML directo        │
-  │ tools/factsheet_tools.py — PPTX cliente, NO lee la DB (PDF+scraping) │
+  │ tools/factsheet_tools.py — PPTX obsoleto, NO lee la DB               │
   └──────────────────────────────────────────────────────────────────────┘
+  ELIMINADO 2026-07-24: app.py (Streamlit+auth), config.yaml, login_template.html,
+  style.css, .streamlit/, dashboards/{fondos,eeff_tri,tir_tri}.py — historial en git.
 ```
 
 ## 3. Flujo de datos principal
@@ -108,7 +108,7 @@ Hallazgos verificados contra la DB productiva:
 1. **La DB no fue construida por las migraciones.** Fue bootstrapeada desde `schema_v2.sql` (2026-06-01) y las versiones 2–22 se marcaron aplicadas en lote (timestamp idéntico) sin ejecutarse. Consecuencia: faltan en producción los `UNIQUE(file_hash, source_row)` de las tablas raw, 8 índices de performance, `dim_cuenta` y `publish_run`. **Los tests corren contra un schema (migraciones desde cero) distinto al de producción.**
 2. **Duplicados reales por falta de UNIQUE:** ~12.300 filas vivas duplicadas en `raw_eeff_line` (33%), ~2.000 en `raw_er_activo_line`. El `INSERT OR IGNORE` de los repos es un no-op. Existen scripts de dedup ad-hoc que compensan.
 3. **20.487 violaciones de FK** (invisibles porque `PRAGMA foreign_keys` solo valida escrituras nuevas): 18.009 por `fondo_key='APO'` vs `dim_fondo.fondo_key='Apo'` (toda la historia EEFF de Apoquindo, conviviendo con 3 filas `'Apo'` nuevas en 2026-03); 2.478 por `ingest_run_id` inválido, de las cuales **2.378 contienen file-hashes de texto en una columna INTEGER**.
-4. **`derived_kpi` es casi no-trazable:** 99,8% de filas con `ingest_run_id` NULL; el upsert pisa valores sin historial; no hay invalidación al re-ingerir raw (flaw 3 de `docs/analisis-flaws-nuevo-enfoque.md`, abierto).
+4. **`derived_kpi` es casi no-trazable:** 99,8% de filas con `ingest_run_id` NULL; el upsert pisa valores sin historial; no hay invalidación al re-ingerir raw (flaw 3 de `docs/analisis-flaws-nuevo-enfoque.md`, abierto). Además conviven **dos convenciones de nombres de entidad** de generaciones distintas de recetas (`Apo4501` vs `Apoquindo 4501`) y dos agregados mal etiquetados como activo (`Apoquindo`, `Fondo Apoquindo`). Verificado 2026-07-24: **no hay solapamiento ni doble conteo** entre convenciones — cada KPI existe bajo una sola de ellas; el problema es de identidad, no de duplicación. Análisis completo en `docs/matriz-claves-ambiguas-apoquindo.md`.
 5. **`file_hash` NULL en 6,8% de `raw_eeff_line`** → esas filas son inalcanzables por `mark_superseded`.
 6. `schema_v2.sql` está obsoleto y no es referenciado por nada; el registro `schema_version` 34–45 tiene timestamps manipulados a mano.
 7. Lo que **sí** funciona bien: `ingest_run` completo (109 corridas, 24 herramientas, correcciones manuales registradas), filtrado `superseded_at IS NULL` consistente en lecturas de negocio, `estado_ingesta.py` calcula completitud on-demand por tipo/fondo/período, `KPI_META` del factsheet permite clickear cualquier número y ver su SQL.
@@ -119,8 +119,8 @@ Hallazgos verificados contra la DB productiva:
 |---|---|
 | `ingesta_server.py` (Flask :8765) | **Sin autenticación**, `debug=True` (consola Werkzeug), CORS acepta `Origin: null` y cualquier localhost, sin `MAX_CONTENT_LENGTH`, sin CSRF. Cualquier proceso local o página abierta en el navegador puede leer la DB vía `/api/chat` **y escribir vía `/api/*/commit`** |
 | `POST /api/chat` | sin auth; `history` 100% controlado por el cliente (vector de prompt injection al generador SQL); sin cláusula anti-injection en los prompts de `db_chat`; **cero logging** de preguntas/SQL/respuestas |
-| `agent.py --server` | bien: bearer token ≥32 chars obligatorio, `hmac.compare_digest`, loopback, límites de tamaño |
-| `app.py` Streamlit | auth con bcrypt; pero `config.yaml` con hashes de 4 usuarios reales **versionado en git** |
+| `agent.py --server` | bien: bearer token ≥32 chars obligatorio, `hmac.compare_digest`, loopback, límites de tamaño. Hoy no arranca (falta `AGENT_SERVER_API_TOKEN` en `.env`) |
+| ~~`app.py` Streamlit~~ | **eliminado 2026-07-24** junto con `config.yaml` (hashes bcrypt de 4 usuarios). Ya no hay superficie autenticada de usuario en el sistema: es una brecha abierta para el Asistente (F2.1) |
 | Path traversal | bien: `tools/path_security.py` + 8 tests |
 | Datos sensibles a terceros | el chat DB envía esquema+filas a DeepSeek/Groq/Google según disponibilidad de API keys — sin política explícita |
 
@@ -131,9 +131,9 @@ Hallazgos verificados contra la DB productiva:
 
 ## 9. Duplicaciones y fragilidades principales
 
-1. **El factsheet existe 3 veces** con 3 fuentes: HTML (DB), Streamlit (DB), PPTX (PDF+scraping+CDG — el único entregable a clientes y el único que NO lee la DB).
+1. ~~**El factsheet existe 3 veces**~~ — **resuelto parcialmente 2026-07-24**: el HTML (DB) es el único canónico por decisión del usuario; los dashboards Streamlit fueron eliminados. Queda por eliminar el PPTX obsoleto (`factsheet_tools.py`, F1.8), acoplado al registry del agente.
 2. **Config de fondos duplicada en ≥4 lugares** (`FONDOS_CFG`, `NOI_ACTIVOS/RR_ACTIVOS`, `SHEET_CFG`, `SERIES_CONFIG`) con valores inconsistentes entre sí, pese a existir `dim_fondo`/`dim_serie`.
-3. **`app.py` reimplementa el loop de `agent.py`** (ya divergieron); `BASE_PROMPT` duplicado en `patch_prompts.py` obsoleto.
+3. ~~**`app.py` reimplementa el loop de `agent.py`**~~ — **resuelto 2026-07-24** al eliminar `app.py`. Persiste `BASE_PROMPT` duplicado en `patch_prompts.py` obsoleto (F0.8).
 4. **`gestion_renta_tools.py`** hardcodea `sheet15/16/17.xml`: reordenar una hoja del CDG corrompe datos en silencio. Único camino de escritura al CDG.
 5. **Skill financiera externa ausente** — TIR, LTV, duration (la mitad del factsheet) se calculan con código fuera del repo, no versionado, con rutas absolutas de Windows en 4 scripts.
 6. **Tab EEFF de la web roto** desde 2026-07-20: `NameError` en `ingest_eeff_validated.py:317` (`existing_hash` no definido); sin tests para ese path ni para rent roll.
@@ -162,6 +162,7 @@ Hallazgos verificados contra la DB productiva:
 - **Uso multi-usuario real:** `config.yaml` tiene 4 usuarios, pero no hay evidencia de uso más allá del autor.
 - **`raw_er_activo_line` de Apo/PT guarda UF en `monto_clp`** por convención heredada — documentado, pero cualquier agregación cross-activo que mezcle unidades es un riesgo latente permanente.
 - Discrepancias de datos aceptadas por el usuario (4 en `raw_caja`; exclusión PT 2019-12) — registradas, no corregidas.
+- **Entorno de tests no reproducible** (verificado 2026-07-24): `pytest` no estaba declarado en `requirements.txt` ni instalado, y faltaban `holidays` (dependencia real de `ingest_parking_pt_mensual.py`, tampoco declarada), `flask`, `pyyaml` y `groq` en el venv local. Corregido: `holidays` agregado a `requirements.txt` y `requirements-dev.txt` creado con `pytest`. Línea base real de la suite: **286 passed, 3 failed, 5 skipped** — los 3 fallos son preexistentes por tests desactualizados (`test_estado_ingesta` espera 3 tipos cuando `CONFIG` ya tiene 5; `test_ingest_er_inmosa` espera `INGRESOS_OPERACION` donde el parser devuelve `GASTOS_OPERACION`). La afirmación del wiki de "124 tests pasan" es de otra máquina y quedó obsoleta.
 
 ## 12. Preparación para las fases siguientes (visión "Financial Intelligence Platform")
 

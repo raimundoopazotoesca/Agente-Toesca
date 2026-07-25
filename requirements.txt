@@ -1,16 +1,16 @@
 openai==2.32.0
 openpyxl==3.1.5
 python-dotenv==1.2.2
+# streamlit: solo como librería, tools/memory_tools.py lee st.session_state.
 streamlit==1.56.0
-streamlit-authenticator==0.3.3
-bcrypt==4.1.3
 beautifulsoup4==4.14.3
 Flask==3.1.3
 lxml==6.1.0
 markitdown==0.1.5
 pandas==3.0.2
 pdfplumber==0.11.9
-plotly==6.7.0
+# holidays: feriados CL en tools/db/ingest_parking_pt_mensual.py.
+holidays==0.101
 python-dateutil==2.9.0.post0
 python-pptx==1.0.2
 PyYAML==6.0.3

@@ -3,6 +3,46 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-24] limpieza | Cluster Streamlit eliminado (app.py + dashboards) — F0.7 completado
+
+Autorizado por el usuario. Eliminados con `git rm`: `app.py`, `config.yaml`,
+`login_template.html`, `style.css`, `.streamlit/config.toml`,
+`dashboards/{fondos,eeff_tri,tir_tri}.py`, `wiki/agente/dashboard-fondos.md`. Retiradas de
+`requirements.txt` las deps exclusivas (`streamlit-authenticator`, `bcrypt`, `plotly`) y
+`AUTH_COOKIE_KEY` de `.env.example`/README. Análisis previo: nadie importaba `app.py` ni
+`dashboards/`; `config.yaml`/`login_template`/`style.css` solo los leía `app.py`. Ojo:
+`config/cuenta_eeff_map.yaml` (usado por `eeff_cuenta_mapper`) vive en `config/`, NO en
+`dashboards/` — no se tocó. Conservados por seguir en uso: `streamlit` como librería
+(`memory_tools` lee `st.session_state`), `pandas` (`excel_tools`), `tools/ask_tools.py`
+íntegro (`registry` usa `preguntar_usuario`; `set_streamlit_mode` queda vestigial a
+propósito). Verificación: suite idéntica antes/después (**286 passed, 3 failed
+preexistentes, 5 skipped**), `factsheet.html` regenerado **byte-idéntico**,
+`ingesta_server` (25 rutas) / `registry` (102 tools) / `agent` / `db_chat` OK.
+
+Hallazgo colateral: el entorno de tests no era reproducible — `pytest` no estaba declarado
+ni instalado, y faltaban `holidays` (dep real de `ingest_parking_pt_mensual`, no declarada),
+`flask`, `pyyaml`, `groq`. Agregado `holidays` a `requirements.txt` y creado
+`requirements-dev.txt` con pytest. Los 3 fallos preexistentes son tests desactualizados:
+`test_estado_ingesta` espera 3 tipos y `CONFIG` ya tiene 5; `test_ingest_er_inmosa` espera
+`INGRESOS_OPERACION` donde el parser da `GASTOS_OPERACION`.
+
+## [2026-07-24] análisis | Claves ambiguas de Apoquindo en derived_kpi resueltas
+
+`docs/matriz-claves-ambiguas-apoquindo.md`. Verificado numéricamente contra la DB:
+`Apoquindo` (178 filas: noi_mensual + ingresos_mensual, receta `raw_er_*_v1`, 2019-01→
+2026-05, UF) = **agregado exacto de Apo4501+Apo4700** desde `raw_er_activo_line`; lo genera
+el mapa explícito `"Apoquindo": ["Apo4501","Apo4700"]` de `consolidate_noi_tri.py:37`.
+`Fondo Apoquindo` (91 filas: solo m2_vacantes, receta `cdg_vacancia_v1`) = **también el
+agregado 4501+4700**, coincidencia exacta y excluyendo correctamente a Apo3001; su nombre
+sale de un mapa de números de fila del CDG (`backfill.py:370`). **Corrección a un supuesto
+previo: ninguna de las dos es el look-through de TRI** — ese está bien resuelto en
+`v_activo_fondo_efectivo` (Apo4501/4700 → TRI 0,3). Ambas están mal etiquetadas como
+`entidad_tipo='activo'` siendo datos de nivel fondo. Verificado también que **no hay
+solapamiento ni doble conteo** entre las convenciones `Apo4501` y `Apoquindo 4501`: cada KPI
+existe bajo una sola. ⚠️ `Apoquindo` es clave viva del Asistente (`db_chat.py:247,252`) y de
+`noi_query.py:24` — cambiarla sin actualizarlos rompe el Asistente. Decisión de modelado
+(fondo vs `dim_grupo_activo`) pendiente del usuario; ejecución junto al pipeline canónico.
+
 ## [2026-07-24] doc | Decisiones del usuario incorporadas al roadmap (v2.1) + análisis Apoquindo y cuotas
 
 El usuario resolvió 6 decisiones del roadmap: (1) claves Apoquindo con protocolo de

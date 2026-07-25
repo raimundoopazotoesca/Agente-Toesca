@@ -52,8 +52,8 @@ Existe además la serie única del fondo: `dim_serie.nemotecnico = 'Apo'` (mismo
 | `Apoquindo 4501` (derived_kpi) | activo | `Apo4501` | `Apoquindo 4501` |
 | `Apoquindo 4700` (derived_kpi) | activo | `Apo4700` | `Apoquindo 4700` |
 | `Apoquindo 3001` (derived_kpi) | activo | `Apo3001` | `Apoquindo 3001` |
-| `Apoquindo` (derived_kpi) | ¿agregado 4501+4700? | **DETENIDO — validar con usuario** | — |
-| `Fondo Apoquindo` (derived_kpi) | ¿look-through TRI→Apo? | **DETENIDO — validar con usuario** | — |
+| `Apoquindo` (derived_kpi) | agregado 4501+4700 (**confirmado numéricamente**) | fuera de esta etapa → ver `matriz-claves-ambiguas-apoquindo.md` | — |
+| `Fondo Apoquindo` (derived_kpi) | agregado 4501+4700 (**confirmado**; NO es look-through de TRI) | fuera de esta etapa → ídem | — |
 
 **Etapa B (posterior, opcional — IDs técnicos):** introducir identificadores técnicos estables separando fondo de activos, según el esquema propuesto por el usuario: fondo `FTRI_APO`, activos `ACT_APOQUINDO_4501`, `ACT_APOQUINDO_4700`, `ACT_APOQUINDO_3001`; `APO` queda como `codigo_visible` del fondo y `Apo` como alias histórico. Implementación recomendada: columnas `id_tecnico` + tabla `dim_alias(entidad_tipo, alias, clave_canonica)` en `dim_fondo`/`dim_activo`, migrando consumidores gradualmente **sin** renombrar las PKs de golpe (33 tablas dependen de ellas). Solo se ejecuta si la plataforma multi-usuario lo justifica; no bloquea F0–F2.
 
@@ -76,8 +76,12 @@ Existe además la serie única del fondo: `dim_serie.nemotecnico = 'Apo'` (mismo
 7. Rollback: restaurar el backup; la migración no borra filas, solo re-etiqueta, así que también es reversible por UPDATE inverso mientras no se recalculen derivados encima.
 8. **Condición de término:** tests verdes + conteos cuadrados + factsheet/asistente sin cambios inesperados + las dos ambigüedades de §3 resueltas por el usuario.
 
-## 6. Ambigüedades que detienen la ejecución (requieren respuesta humana)
+## 6. Estado de las ambigüedades (resueltas por análisis, 2026-07-24)
 
-1. ¿Qué representa exactamente `derived_kpi.entidad_key='Apoquindo'` (178 filas) y cuál es su clave destino? (¿agregado de edificios → mantener como entidad propia con clave `ApoEdificios`/similar, o re-etiquetar?)
-2. ¿Qué representa `'Fondo Apoquindo'` (91 filas) como `entidad_tipo='activo'`? (¿participación de TRI en Apo → debería modelarse como look-through vía `v_activo_fondo_efectivo` en vez de entidad ad-hoc?)
-3. Para `derived_kpi` con claves duplicadas (`Apo4501` vs `Apoquindo 4501`): ¿re-etiquetar filas históricas o marcarlas obsoletas y recalcular con el pipeline nuevo (F1.1)?
+Las tres se investigaron y están documentadas en **`docs/matriz-claves-ambiguas-apoquindo.md`**:
+
+1. `'Apoquindo'` (178 filas) = agregado Apo4501+Apo4700 de NOI/ingresos desde ER raw — coincidencia exacta verificada; generado por el mapa explícito `"Apoquindo": ["Apo4501","Apo4700"]` de `consolidate_noi_tri.py:37`. **No es un activo.**
+2. `'Fondo Apoquindo'` (91 filas) = agregado Apo4501+Apo4700 de vacancia desde el CDG — coincidencia exacta, excluye correctamente a Apo3001. **No es el look-through de TRI** (ese ya vive bien en `v_activo_fondo_efectivo`).
+3. Claves `Apo4501` vs `Apoquindo 4501`: **no hay solapamiento** — ningún KPI existe bajo ambas convenciones para el mismo activo+período, así que no hay doble conteo ni necesidad de dedup. Criterio del usuario aplicado: preservar histórico, marcar legacy, no mezclar, recalcular desde raw con el pipeline canónico.
+
+**Consecuencia para este plan:** la Etapa A se ejecuta **solo sobre `fondo_key`** (`APO`→`Apo` en `raw_eeff_line` y `raw_valor_cuota_contable`). `derived_kpi` se aborda por separado en ROADMAP F1.9, junto con el pipeline canónico, porque implica recalcular y actualizar el catálogo del Asistente en el mismo movimiento.

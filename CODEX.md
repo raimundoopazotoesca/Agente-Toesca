@@ -49,12 +49,10 @@ Nota importante: `AGENTS.md` antiguo decia que Apo tenia `raw_eeff_line=0`; eso 
 ## Arquitectura
 
 - `agent.py`: runner conversacional Gemini, prompt base y seleccion dinamica de tools.
-- `app.py`: app Streamlit con auth, UI de chat y runner del agente.
 - `tools/registry.py`: define tools, imports y dispatch.
 - `tools/db/connection.py`: `DEFAULT_DB_PATH` apunta a `memory/agente_toesca_v2.db`; aplica migraciones.
 - `tools/db/backfill.py`: orquestador de backfills.
 - `scripts/build_factsheet.py`: genera `factsheet.html` desde SQLite.
-- `dashboards/`: Streamlit dashboards de KPIs.
 - `wiki/`: memoria acumulativa del proyecto. `wiki/log.md` es muy importante.
 - `docs/`: guias y planes; algunos documentos antiguos usan nombres de tablas viejos.
 - Skill externo: `C:\Users\raimundo.opazo\.claude\skills\real-estate-finance-expert`.
@@ -215,10 +213,9 @@ Leverage:
 
 ## UI Y Entregables
 
-- `app.py`: Streamlit chat del agente con autenticacion en `config.yaml`.
+- Asistente Virtual Inmobiliario Toesca: `tools/db_chat.py` (text-to-SQL solo lectura) servido por `scripts/ingesta_server.py` en `POST /api/chat`, UI en `web/chat_bubble.js` (inlineada en el factsheet).
 - `factsheet.html`: generado por `scripts/build_factsheet.py`.
 - `scripts/build_factsheet.py` lee SQLite y arma datos por fondo/periodo; no editar `factsheet.html` manualmente si el cambio corresponde al generador.
-- `dashboards/tir_tri.py`: dashboard TIR historica TRI, depende del skill externo.
 - Assets en `assets/`, configs en `config/`.
 
 ## Verificacion Recomendada
@@ -226,7 +223,7 @@ Leverage:
 Compilacion rapida:
 
 ```bash
-python -X utf8 -m py_compile agent.py app.py tools/registry.py tools/db/backfill.py scripts/ingest_eeff.py scripts/ingest_from_json.py scripts/build_factsheet.py
+python -X utf8 -m py_compile agent.py tools/registry.py tools/db/backfill.py scripts/ingest_eeff.py scripts/ingest_from_json.py scripts/build_factsheet.py
 ```
 
 Tests focales:

@@ -44,9 +44,6 @@ Editar `.env` con los valores correctos para Mac:
 ```env
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 
-# Requerido solo para la interfaz Streamlit (mínimo 32 caracteres)
-AUTH_COOKIE_KEY=un_secreto_aleatorio_largo_y_unico
-
 # Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
 AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
 
@@ -96,9 +93,6 @@ Editar `.env`:
 ```env
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
 
-# Requerido solo para la interfaz Streamlit (mínimo 32 caracteres)
-AUTH_COOKIE_KEY=un_secreto_aleatorio_largo_y_unico
-
 # Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
 AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
 
@@ -127,8 +121,7 @@ Content-Type: application/json
 ```
 
 No expongas `AGENT_SERVER_HOST=0.0.0.0` sin firewall, TLS mediante un proxy y
-control de acceso de red. `AUTH_COOKIE_KEY` y `AGENT_SERVER_API_TOKEN` deben ser
-secretos distintos y nunca deben guardarse en Git.
+control de acceso de red. `AGENT_SERVER_API_TOKEN` nunca debe guardarse en Git.
 
 ---
 
