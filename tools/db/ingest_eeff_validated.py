@@ -35,6 +35,19 @@ from tools.db.eeff_cuenta_mapper import get_canonical_code  # noqa: E402
 PROMPT_VERSIONS_CONOCIDAS = {"eeff-v1"}
 FONDOS_VALIDOS = {"TRI", "PT", "APO"}
 
+# El prompt, la UI y el payload de ChatGPT usan "APO", pero la clave canónica del
+# fondo en dim_fondo es "Apo": insertar "APO" viola la FK raw_eeff_line.fondo_key
+# -> dim_fondo(fondo_key). Las 18.009 filas históricas con "APO" entraron por
+# scripts/ingest_eeff.py, que abre la conexión con sqlite3.connect() sin
+# PRAGMA foreign_keys=ON. Aceptamos "APO" como alias de entrada y persistimos
+# siempre el canónico. Las lecturas usan UPPER() para seguir viendo el histórico
+# mientras la consolidación de datos (ROADMAP F0.3) no se haya ejecutado.
+FONDO_CANONICO = {"TRI": "TRI", "PT": "PT", "APO": "Apo"}
+
+
+def fondo_canonico(fondo: str) -> str:
+    return FONDO_CANONICO.get(fondo.upper(), fondo)
+
 COMPONENTES_GASTOS = (
     "ER.depreciaciones",
     "ER.remun_comite",
@@ -137,12 +150,26 @@ def _periodos_existentes(fondo: str, periodos: list[str]) -> dict[str, int]:
         for periodo in periodos:
             n = con.execute(
                 "SELECT COUNT(*) FROM raw_eeff_line "
-                "WHERE fondo_key=? AND periodo=? AND superseded_at IS NULL",
+                "WHERE UPPER(fondo_key)=UPPER(?) AND periodo=? AND superseded_at IS NULL",
                 (fondo, periodo),
             ).fetchone()[0]
             if n:
                 out[periodo] = n
         return out
+    finally:
+        con.close()
+
+
+def _hash_ya_ingestado(fhash: str) -> bool:
+    """True si este file_hash ya está en la DB. Mismo criterio que el corte
+    `skipped_duplicate` de commit(), para que el preview lo anticipe."""
+    con = get_conn_for(str(DB_PATH))
+    try:
+        return bool(
+            con.execute(
+                "SELECT COUNT(*) FROM raw_eeff_line WHERE file_hash=?", (fhash,)
+            ).fetchone()[0]
+        )
     finally:
         con.close()
 
@@ -154,7 +181,7 @@ def _valor_cuota_deltas(fondo: str, vc_norm: list[dict]) -> list[dict]:
         for vc in vc_norm:
             prev = con.execute(
                 "SELECT precio_clp, precio_uf FROM raw_valor_cuota_contable "
-                "WHERE fondo_key=? AND nemotecnico=? AND fecha < ? "
+                "WHERE UPPER(fondo_key)=UPPER(?) AND nemotecnico=? AND fecha < ? "
                 "ORDER BY fecha DESC LIMIT 1",
                 (fondo, vc["nemotecnico"], vc["fecha"]),
             ).fetchone()
@@ -314,7 +341,7 @@ def validate(
         "dividendos": div_norm,
         "periodos_existentes": periodos_existentes,
         "file_hash": fhash,
-        "ya_ingestado": bool(existing_hash),
+        "ya_ingestado": _hash_ya_ingestado(fhash),
     }
     return result
 
@@ -342,6 +369,8 @@ def commit(
 
     fhash = result.data["file_hash"]
     source_file = f"chatgpt_manual_{fondo_expected}"
+    # Se persiste la clave canónica del fondo (APO -> Apo), nunca el alias de entrada.
+    fondo_db = fondo_canonico(fondo_expected)
 
     con = get_conn_for(str(DB_PATH))
     try:
@@ -362,7 +391,7 @@ def commit(
 
         rows_eeff = [
             (
-                fondo_expected, L["periodo"], L["cuenta_codigo"], L["cuenta_nombre"],
+                fondo_db, L["periodo"], L["cuenta_codigo"], L["cuenta_nombre"],
                 (L["monto_clp"] * factor) if L["monto_clp"] is not None else None,
                 L["monto_uf"], source_file, L["section"], None, fhash, run_id,
                 L["cuenta_codigo_canonical"],
@@ -385,7 +414,7 @@ def commit(
                    (fondo_key, nemotecnico, fecha, precio_clp, precio_uf,
                     uf_dia, cuotas, periodo, source_file, file_hash)
                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (fondo_expected, vc["nemotecnico"], vc["fecha"], vc["precio_clp"], vc["precio_uf"],
+                (fondo_db, vc["nemotecnico"], vc["fecha"], vc["precio_clp"], vc["precio_uf"],
                  vc["uf_dia"], vc["cuotas"], vc["periodo"], source_file, fhash),
             )
             rows_vc += con.execute("SELECT changes()").fetchone()[0]
@@ -402,9 +431,9 @@ def commit(
                        WHERE fondo_key=? AND nemotecnico=? AND fecha_pago=? AND tipo='dividendo'
                          AND source_file=? AND file_hash=? AND superseded_at IS NULL
                    )""",
-                (fondo_expected, div["nemotecnico"], div["fecha_pago"], div["monto_uf_cuota"],
+                (fondo_db, div["nemotecnico"], div["fecha_pago"], div["monto_uf_cuota"],
                  div["monto_clp_cuota"], div["periodo"], source_file, fhash,
-                 fondo_expected, div["nemotecnico"], div["fecha_pago"], source_file, fhash),
+                 fondo_db, div["nemotecnico"], div["fecha_pago"], source_file, fhash),
             )
             rows_div += con.execute("SELECT changes()").fetchone()[0]
 

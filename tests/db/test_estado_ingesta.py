@@ -92,9 +92,15 @@ def _insert_mercado(con, periodo):
     con.commit()
 
 
-def test_config_tiene_los_3_tipos_del_menu():
+# Tipos que la pantalla de Inicio debe mostrar. Si agregas una fuente nueva a
+# CONFIG, actualiza este set a propósito: la card y su timeline son parte del
+# contrato de la UI, no un detalle interno.
+TIPOS_ESPERADOS = {"eeff", "rentroll", "mercado", "balance", "parking_pt"}
+
+
+def test_config_tiene_los_tipos_del_menu():
     ids = {c["id"] for c in CONFIG}
-    assert ids == {"eeff", "rentroll", "mercado"}
+    assert ids == TIPOS_ESPERADOS
 
 
 def test_estado_tipo_eeff_completo_y_al_dia(con):
@@ -156,10 +162,10 @@ def test_estado_tipo_mercado_timeline_ultimo_slot_en_curso(con):
     assert [t["estado"] for t in timeline] == ["ok", "ok", "ok", "na"]
 
 
-def test_estado_ingesta_devuelve_los_3_tipos(con):
+def test_estado_ingesta_devuelve_todos_los_tipos(con):
     resultado = estado_ingesta(con, hoy=date(2026, 7, 23))
     ids = {t["id"] for t in resultado["tipos"]}
-    assert ids == {"eeff", "rentroll", "mercado"}
+    assert ids == TIPOS_ESPERADOS
 
 
 def test_eeff_sub_ingestas_por_fondo(con):

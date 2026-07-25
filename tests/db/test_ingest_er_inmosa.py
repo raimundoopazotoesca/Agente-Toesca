@@ -149,8 +149,12 @@ def test_parse_valores_reales_ingresos(fixture_xlsx):
 
 
 def test_parse_contribuciones_puede_ser_negativa(tmp_path):
-    """Contribuciones con valor negativo se clasifica igual como INGRESOS_OPERACION
-    (la seccion no depende del signo del valor, solo del prefijo de la fuente)."""
+    """Contribuciones es GASTOS_OPERACION: la sección la fija el catálogo
+    _CATEGORIAS, no el signo del valor de la celda.
+
+    Reclasificado en 6d08f4b (antes INGRESOS_OPERACION, que era un error:
+    contribuciones siempre viene negativo porque es un gasto); ese commit
+    corrigió también las 99 filas ya cargadas, pero no actualizó este test."""
     path = _build_fixture_xlsx(str(tmp_path))
     wb = openpyxl.load_workbook(path)
     ws = wb["Hoja1"]
@@ -163,7 +167,7 @@ def test_parse_contribuciones_puede_ser_negativa(tmp_path):
     contrib = [r for r in rows if r["cuenta_codigo"] == "INMOSA_CONTRIB" and r["periodo"] == "2018-01"]
     assert len(contrib) == 1
     assert contrib[0]["monto_clp"] == -1381.0
-    assert contrib[0]["seccion"] == "INGRESOS_OPERACION"
+    assert contrib[0]["seccion"] == "GASTOS_OPERACION"
 
 
 def test_parse_categoria_desconocida_falla(tmp_path):
