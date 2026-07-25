@@ -1,7 +1,9 @@
 # Arquitectura del Sistema — Estado Real Verificado
 
-**Fecha de verificación:** 2026-07-24
+**Fecha de verificación:** 2026-07-24 (diagnóstico) · **Actualizado:** 2026-07-24 tras ejecutar la Fase 0
 **Método:** inspección directa de código y de la DB productiva (`memory/agente_toesca_v2.db`), no de la documentación. Donde la documentación diverge del código real, manda el código; las divergencias están listadas en §10.
+
+> **Cambios ya aplicados** (ver `ROADMAP.md` F0): ingesta EEFF reparada, servidor con token obligatorio, `fondo_key` de Apoquindo consolidado (migración 058), cluster Streamlit y artefactos muertos eliminados, suite en verde con invariantes sobre la DB real. Las secciones siguientes marcan qué queda abierto.
 
 Este documento es el diagnóstico "as-is". El plan de evolución está en `ROADMAP.md`. Los principios que gobiernan el uso de IA están en `ai_principles.md`.
 
@@ -105,9 +107,10 @@ Estado (decisión 2026-07-24): este fallback es **configuración de desarrollo c
 
 Hallazgos verificados contra la DB productiva:
 
-1. **La DB no fue construida por las migraciones.** Fue bootstrapeada desde `schema_v2.sql` (2026-06-01) y las versiones 2–22 se marcaron aplicadas en lote (timestamp idéntico) sin ejecutarse. Consecuencia: faltan en producción los `UNIQUE(file_hash, source_row)` de las tablas raw, 8 índices de performance, `dim_cuenta` y `publish_run`. **Los tests corren contra un schema (migraciones desde cero) distinto al de producción.**
+1. **La DB no fue construida por las migraciones.** Fue bootstrapeada desde `schema_v2.sql` (2026-06-01) y las versiones 2–22 se marcaron aplicadas en lote (timestamp idéntico) sin ejecutarse. Consecuencia: faltan en producción los `UNIQUE(file_hash, source_row)` de las tablas raw, 8 índices de performance, `dim_cuenta` y `publish_run`. **Los tests corren contra un schema (migraciones desde cero) distinto al de producción.** *(abierto — F0.2)*
+   Impacto concreto medido al escribir los tests de EEFF: el schema migrado declara `raw_eeff_line.cuenta_codigo → dim_cuenta(codigo)` con `dim_cuenta` **vacía**, así que cualquier ingesta con `cuenta_codigo` falla; producción no tiene esa FK. Los tests deben sembrar `dim_cuenta` para poder ejercitar el path real.
 2. **Duplicados reales por falta de UNIQUE:** ~12.300 filas vivas duplicadas en `raw_eeff_line` (33%), ~2.000 en `raw_er_activo_line`. El `INSERT OR IGNORE` de los repos es un no-op. Existen scripts de dedup ad-hoc que compensan.
-3. **20.487 violaciones de FK** (invisibles porque `PRAGMA foreign_keys` solo valida escrituras nuevas): 18.009 por `fondo_key='APO'` vs `dim_fondo.fondo_key='Apo'` (toda la historia EEFF de Apoquindo, conviviendo con 3 filas `'Apo'` nuevas en 2026-03); 2.478 por `ingest_run_id` inválido, de las cuales **2.378 contienen file-hashes de texto en una columna INTEGER**.
+3. ~~**20.487 violaciones de FK**~~ → **2.478 tras la migración 058** (2026-07-24). Las 18.009 de `fondo_key='APO'` vs `dim_fondo.fondo_key='Apo'` se consolidaron. Mecanismo por el que entraron: `scripts/ingest_eeff.py:268` abre la conexión con `sqlite3.connect()` **sin** `PRAGMA foreign_keys=ON`, así que nadie las rechazó; con la conexión de `tools/db/connection.py` cualquier INSERT con `APO` falla — por eso la ingesta EEFF de Apoquindo por web era imposible incluso tras arreglar el `NameError`. Quedan 2.478 por `ingest_run_id` inválido, de las cuales **2.378 contienen file-hashes de texto en una columna INTEGER** *(abierto — F0.4, con tope protegido por invariante)*.
 4. **`derived_kpi` es casi no-trazable:** 99,8% de filas con `ingest_run_id` NULL; el upsert pisa valores sin historial; no hay invalidación al re-ingerir raw (flaw 3 de `docs/analisis-flaws-nuevo-enfoque.md`, abierto). Además conviven **dos convenciones de nombres de entidad** de generaciones distintas de recetas (`Apo4501` vs `Apoquindo 4501`) y dos agregados mal etiquetados como activo (`Apoquindo`, `Fondo Apoquindo`). Verificado 2026-07-24: **no hay solapamiento ni doble conteo** entre convenciones — cada KPI existe bajo una sola de ellas; el problema es de identidad, no de duplicación. Análisis completo en `docs/matriz-claves-ambiguas-apoquindo.md`.
 5. **`file_hash` NULL en 6,8% de `raw_eeff_line`** → esas filas son inalcanzables por `mark_superseded`.
 6. `schema_v2.sql` está obsoleto y no es referenciado por nada; el registro `schema_version` 34–45 tiene timestamps manipulados a mano.
@@ -117,8 +120,8 @@ Hallazgos verificados contra la DB productiva:
 
 | Control | Estado |
 |---|---|
-| `ingesta_server.py` (Flask :8765) | **Sin autenticación**, `debug=True` (consola Werkzeug), CORS acepta `Origin: null` y cualquier localhost, sin `MAX_CONTENT_LENGTH`, sin CSRF. Cualquier proceso local o página abierta en el navegador puede leer la DB vía `/api/chat` **y escribir vía `/api/*/commit`** |
-| `POST /api/chat` | sin auth; `history` 100% controlado por el cliente (vector de prompt injection al generador SQL); sin cláusula anti-injection en los prompts de `db_chat`; **cero logging** de preguntas/SQL/respuestas |
+| `ingesta_server.py` (Flask :8765) | ✅ **Resuelto 2026-07-24**: token obligatorio (`X-Ingesta-Token`) en todo `/api/*`, `debug=False`, CORS restringido a localhost:8765 (ya no refleja `Origin` arbitrario ni `null`), `MAX_CONTENT_LENGTH` 32 MB. El token se inyecta en las páginas servidas. Consecuencia de flujo: el factsheet debe abrirse desde `/factsheet`, no como `file://` |
+| `POST /api/chat` | Auth ✅ resuelta. **Abierto**: `history` sigue 100% controlado por el cliente (vector de prompt injection al generador SQL); sin cláusula anti-injection en los prompts de `db_chat`; **cero logging** de preguntas/SQL/respuestas → F2.1/F2.2 |
 | `agent.py --server` | bien: bearer token ≥32 chars obligatorio, `hmac.compare_digest`, loopback, límites de tamaño. Hoy no arranca (falta `AGENT_SERVER_API_TOKEN` en `.env`) |
 | ~~`app.py` Streamlit~~ | **eliminado 2026-07-24** junto con `config.yaml` (hashes bcrypt de 4 usuarios). Ya no hay superficie autenticada de usuario en el sistema: es una brecha abierta para el Asistente (F2.1) |
 | Path traversal | bien: `tools/path_security.py` + 8 tests |
@@ -136,10 +139,10 @@ Hallazgos verificados contra la DB productiva:
 3. ~~**`app.py` reimplementa el loop de `agent.py`**~~ — **resuelto 2026-07-24** al eliminar `app.py`. Persiste `BASE_PROMPT` duplicado en `patch_prompts.py` obsoleto (F0.8).
 4. **`gestion_renta_tools.py`** hardcodea `sheet15/16/17.xml`: reordenar una hoja del CDG corrompe datos en silencio. Único camino de escritura al CDG.
 5. **Skill financiera externa ausente** — TIR, LTV, duration (la mitad del factsheet) se calculan con código fuera del repo, no versionado, con rutas absolutas de Windows en 4 scripts.
-6. **Tab EEFF de la web roto** desde 2026-07-20: `NameError` en `ingest_eeff_validated.py:317` (`existing_hash` no definido); sin tests para ese path ni para rent roll.
+6. ~~**Tab EEFF de la web roto**~~ — ✅ **resuelto 2026-07-24**. Eran dos bugs: el `NameError` de `existing_hash` (rompía todos los fondos) y una violación de FK que impedía persistir Apoquindo. Ahora con 16 tests. Rent roll sigue sin cobertura propia *(abierto)*.
 7. Sin orquestación de KPIs: orden de ejecución tácito; el rebuild post-commit refresca el HTML **sin** recalcular derivados.
-8. ~1,5 MB de artefactos muertos commiteados en la raíz (`patch_*.py`, `script_test.js`, `test_funds.js`, `factsheet_debug.html`, `CUsers...noi_tools_old.py`, `fondo_diagrama.html` huérfano); `factsheet.html` (5,2 MB regenerable) versionado.
-9. `.claude/settings.json` con rutas Windows de otra máquina y referencia a la DB v1.
+8. ~~~1,5 MB de artefactos muertos commiteados en la raíz~~ — ✅ **resuelto 2026-07-24**: 13 archivos eliminados (~1,7 MB) y `factsheet.html` ya no se versiona. Conservados a propósito `migrate_to_sqlite.py` y `fondo_diagrama.html` (documento del usuario).
+9. ~~`.claude/settings.json` con rutas Windows de otra máquina y referencia a la DB v1~~ — ✅ **resuelto 2026-07-24**.
 10. Exportación **DB→Excel no existe** (grep `to_excel|Workbook()|xlsxwriter` = 0) siendo Excel el medio de trabajo del equipo.
 
 ## 10. Divergencias documentación ↔ código ↔ DB (las que inducen a error)
@@ -168,8 +171,8 @@ Hallazgos verificados contra la DB productiva:
 
 | Fase de la visión | Estado real |
 |---|---|
-| **F1 — DB fuente de verdad + ingesta web + factsheets template** | ~70%. La DB y la ingesta existen y el diseño validate/commit es sólido, pero: integridad con deudas serias (§6), EEFF web roto, factsheet con páginas placeholder y sin parametrización por fecha de cierre, presentación mensual **inexistente**, PPTX cliente fuera de la DB |
-| **F2 — Asistente IA financiero** | ~40% ya construido (adelantado a la visión): el chat text-to-SQL existe y es read-only, pero sin auth, sin logging/trazabilidad (viola el Principio 3), sin gráficos, sin export Excel, sin permisos |
+| **F1 — DB fuente de verdad + ingesta web + factsheets template** | ~80% tras la Fase 0. La DB y la ingesta existen, el diseño validate/commit es sólido y la ingesta EEFF volvió a funcionar; falta: saneamiento restante (§6 puntos 1-2, 4-5), factsheet con páginas placeholder y sin parametrización por fecha de cierre, export DB→Excel, backfill de rent roll, decomiso del CDG y del PPTX |
+| **F2 — Asistente IA financiero** | ~45% ya construido (adelantado a la visión): el chat text-to-SQL existe, es read-only y **ya está autenticado**; falta logging/trazabilidad (viola el Principio 3), allowlist, historial server-side, gráficos, export Excel y permisos |
 | **F3 — Capa de conocimiento organizacional** | 0%. No hay tablas de eventos/observaciones/explicaciones, ni detección de anomalías, ni flujo de validación de comentarios |
 | **F4 — Copilot** | 0%. Depende de F2+F3 |
 

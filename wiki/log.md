@@ -3,6 +3,67 @@
 > Log cronológico append-only. Una entrada por operación.
 > Parsear últimas entradas: `grep "^## \[" wiki/log.md | tail -10`
 
+## [2026-07-24] fase0 | Fase 0 ejecutada: EEFF reparado, servidor seguro, APO→Apo, repo limpio
+
+Cuatro bloques, cada uno con su commit y verificación.
+
+**1. Ingesta EEFF reparada (F0.1).** Eran DOS bugs, no uno:
+(a) `NameError: existing_hash` en `ingest_eeff_validated.py:317` → rompía
+`/api/validate` e `/api/ingest` con 500 para los 3 fondos. Reemplazado por
+`_hash_ya_ingestado(fhash)`, mismo criterio que el corte `skipped_duplicate` de
+`commit()` (no duplica `periodos_existentes`, que ya es su propia clave).
+(b) **Descubierto al escribir los tests**: persistir Apoquindo fallaba con
+`FOREIGN KEY constraint failed` porque el prompt/UI usan `APO` y `dim_fondo`
+tiene `Apo`. Verificado contra copia de producción. O sea: aun arreglando el
+NameError, Apoquindo no se podía ingerir.
+Nuevo `tests/test_ingesta_server_eeff.py` (16 casos). Al escribirlos apareció
+otra cara de la divergencia de schema: el schema migrado tiene FK
+`raw_eeff_line.cuenta_codigo → dim_cuenta` con `dim_cuenta` vacía (producción no
+tiene esa FK), así que los tests deben sembrarla para ejercitar el path real.
+
+**2. Suite 100% verde (F0.1b).** Los 3 fallos preexistentes eran tests
+desactualizados, no bugs: `test_estado_ingesta` esperaba 3 tipos y `CONFIG` ya
+tiene 5 (balance, parking_pt); `test_ingest_er_inmosa` esperaba
+`INGRESOS_OPERACION` para contribuciones, que `6d08f4b` reclasificó a
+`GASTOS_OPERACION` a propósito ("siempre negativo, es un gasto") corrigiendo
+también las 99 filas cargadas, sin actualizar el test.
+También: `pytest` no estaba declarado ni instalado y faltaba `holidays`
+(dependencia REAL de `ingest_parking_pt_mensual`, nunca declarada) → agregado a
+`requirements.txt` + nuevo `requirements-dev.txt`.
+
+**3. Servidor endurecido (F0.5).** Token obligatorio en todo `/api/*`
+(`X-Ingesta-Token`, `hmac.compare_digest`), inyectado en las páginas que sirve el
+servidor. CORS ya no refleja `Origin` arbitrario ni `null`. `debug=False`
+(el debugger de Werkzeug expone consola interactiva). `MAX_CONTENT_LENGTH` 32 MB.
+xlsx corrupto → error legible; error inesperado → sigue siendo 500 a propósito,
+para que un bug real se vea como bug. 20 tests + verificación contra el servidor
+real. **Cambio de flujo**: el factsheet abierto con doble clic (`file://`) ya no
+puede usar el Asistente; hay que abrirlo desde `http://127.0.0.1:8765/factsheet`.
+
+**4. Consolidación APO→Apo (F0.3, migración 058).** Solo `fondo_key`: 18.009
+filas de `raw_eeff_line` + 15 de `raw_valor_cuota_contable`. Protocolo completo:
+backup, dry-run sobre copia con conteos antes/después (total de filas, filas
+vivas, suma de montos y nº de períodos SIN CAMBIO), y factsheet regenerado desde
+la copia migrada con **0 diferencias en el JSON de datos** (los 463 bytes de
+delta eran el cambio previo de `chat_bubble.js`, que se inlinea).
+Violaciones de FK: **20.487 → 2.478**. Mecanismo por el que entraron las malas:
+`scripts/ingest_eeff.py:268` usa `sqlite3.connect()` sin `PRAGMA foreign_keys=ON`.
+Código coordinado en el mismo commit porque había lecturas con `'APO'` exacto que
+habrían devuelto cero filas: nuevo `tools/db/fondo_keys.py` (fuente única),
+`build_factsheet.py` (usaba `fondo_key.upper()`), `estado_ingesta.CONFIG` (la card
+EEFF habría dicho "nunca ingestado"), y los 2 CLI de ingesta.
+`derived_kpi` quedó FUERA a propósito (ver F1.9).
+Nuevo `tests/db/test_invariantes.py` (22 casos sobre la DB real).
+
+**5. Higiene (F0.8).** 13 archivos muertos (~1,7 MB), `factsheet.html`
+desversionado, `.claude/settings.json` limpio. Conservados a propósito
+`migrate_to_sqlite.py` y `fondo_diagrama.html`.
+
+Suite final: **347 passed, 5 skipped, 0 failed** (partió en 286 passed/3 failed).
+Deuda registrada: `memory_tools.py` sigue importando `streamlit` solo para
+`st.session_state`; sin app, la memoria es global bajo `"general"`. Hay que
+desacoplar `_get_user()` antes de habilitar múltiples usuarios.
+
 ## [2026-07-24] limpieza | Cluster Streamlit eliminado (app.py + dashboards) — F0.7 completado
 
 Autorizado por el usuario. Eliminados con `git rm`: `app.py`, `config.yaml`,

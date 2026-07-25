@@ -63,6 +63,40 @@ Antes de cada tarea, elegir el recurso más barato capaz de resolverla:
   - `dim_serie.transa_bolsa`: `0` | `1`
 - Filtrar siempre `WHERE superseded_at IS NULL` en tablas raw versionadas.
 
+### Claves de fondo — usar siempre la canónica
+
+`dim_fondo` usa **`TRI`, `PT`, `Apo`**. `APO` en mayúsculas es solo un **alias de
+entrada** (lo usan el prompt de EEFF, la UI y los CLI): convertir con
+`tools.db.fondo_keys.fondo_canonico()` antes de persistir. Escribir `APO` viola la
+FK `raw_eeff_line.fondo_key → dim_fondo(fondo_key)`; el histórico que la violaba
+se consolidó en la migración 058. Hay un invariante que lo protege
+(`tests/db/test_invariantes.py`).
+
+**Cuatro entidades distintas de Apoquindo** — nunca inferir la relación por el
+nombre, va por `fondo_key`:
+
+| Clave | Tipo | Fondo |
+|---|---|---|
+| `Apo` | fondo | — |
+| `Apo4501` | activo | Apo |
+| `Apo4700` | activo | Apo |
+| `Apo3001` | activo | **TRI** (no Apo) |
+
+En `derived_kpi` conviven además dos entidades legacy mal etiquetadas como
+`activo` que en realidad son el agregado `Apo4501+Apo4700` a nivel fondo:
+`Apoquindo` (NOI/ingresos) y `Fondo Apoquindo` (vacancia). **No renombrarlas sin
+actualizar `noi_query.py` y `db_chat.py` en el mismo commit** — el Asistente las
+expone como claves válidas. Ver `docs/matriz-claves-ambiguas-apoquindo.md`.
+
+## Servidor de ingesta — autenticación
+
+Todo `/api/*` de `scripts/ingesta_server.py` exige el header `X-Ingesta-Token`.
+El token sale de `INGESTA_TOKEN` (`.env`) o se genera por sesión y se imprime al
+arrancar; se inyecta automáticamente en las páginas que sirve el servidor. Por
+eso **el factsheet debe abrirse desde `http://127.0.0.1:8765/factsheet`**, no con
+doble clic sobre el archivo: como `file://` no recibe el token y el Asistente
+responde 401.
+
 ## Stack
 
 - Python + Gemini 2.5 Flash vía API compatible con OpenAI (`generativelanguage.googleapis.com/v1beta/openai/`)
