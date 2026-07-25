@@ -69,6 +69,9 @@ def client(tmp_db_path, monkeypatch):
     monkeypatch.setattr(ingesta_server, "_rebuild_factsheet", lambda: None)
     ingesta_server.app.config["TESTING"] = True
     with ingesta_server.app.test_client() as c:
+        # Todo /api/* exige el token; el servidor lo inyecta en las páginas que
+        # sirve. Aquí se manda en todas las requests del cliente de prueba.
+        c.environ_base["HTTP_X_INGESTA_TOKEN"] = ingesta_server.API_TOKEN
         yield c
 
 

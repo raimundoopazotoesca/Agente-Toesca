@@ -1,21 +1,34 @@
-"""Servidor local para la pantalla de ingesta EEFF vía ChatGPT (copy/paste).
+"""Servidor local de la plataforma: ingesta de datos + factsheet + Asistente.
 
 Uso:
     python -m scripts.ingesta_server
-    → abre http://localhost:8765/ingesta
+    → http://127.0.0.1:8765/ingesta   (ingesta)
+    → http://127.0.0.1:8765/factsheet (factsheet + Asistente)
 
-No requiere API keys propias: el usuario copia un prompt, lo corre en su
-ChatGPT junto al PDF del EEFF, y pega la respuesta de vuelta en la página.
-El servidor solo valida y persiste; nunca llama a ningún LLM.
+La ingesta EEFF no requiere API keys propias: el usuario copia un prompt, lo
+corre en su ChatGPT junto al PDF del EEFF, y pega la respuesta de vuelta en la
+página. El servidor solo valida y persiste; nunca llama a ningún LLM (la única
+llamada a LLM es /api/chat, que es el Asistente, no ingesta).
+
+Seguridad: todo /api/* exige el header X-Ingesta-Token. El token se inyecta
+automáticamente en las páginas que sirve este servidor, así que el flujo por
+navegador no cambia. Consecuencia: abrir factsheet.html como file:// (doble
+clic) ya no permite usar el Asistente — hay que abrirlo desde /factsheet.
 """
 from __future__ import annotations
 
+import hmac
+import os
 import re
+import secrets
 import sys
+import zipfile
 from datetime import date
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory
+from openpyxl.utils.exceptions import InvalidFileException
+from werkzeug.exceptions import HTTPException
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -40,22 +53,119 @@ def _rebuild_factsheet() -> None:
 
 app = Flask(__name__, static_folder=None)
 
+# Tope de subida: los .xlsx de proveedores son de pocos MB; el RR JLL es el mayor.
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
+
+# ── Autenticación ────────────────────────────────────────────────────────────
+# El servidor expone la DB completa (lectura vía /api/chat y escritura vía
+# /api/*/commit) y escucha en loopback, donde cualquier proceso local —o una
+# página web abierta en el mismo navegador— puede alcanzarlo. Se exige un token
+# en todo /api/*. Las páginas que sirve el propio servidor lo reciben inyectado,
+# así que el flujo normal por navegador no cambia.
+TOKEN_HEADER = "X-Ingesta-Token"
+_TOKEN_PLACEHOLDER = "__INGESTA_TOKEN__"
+
+# Fijar INGESTA_TOKEN da un valor estable entre reinicios; si no, se genera uno
+# por sesión y se imprime al arrancar.
+API_TOKEN = os.environ.get("INGESTA_TOKEN") or secrets.token_urlsafe(32)
+
+# Orígenes permitidos para CORS. No se refleja un Origin arbitrario y "null"
+# (factsheet abierto como file://) ya no se acepta: abrir el factsheet desde
+# http://127.0.0.1:8765/factsheet lo deja con el token inyectado.
+_CORS_ORIGINS = frozenset(
+    f"http://{host}:8765" for host in ("127.0.0.1", "localhost", "[::1]")
+)
+
+
+def _token_ok() -> bool:
+    supplied = request.headers.get(TOKEN_HEADER, "")
+    return bool(supplied) and hmac.compare_digest(supplied, API_TOKEN)
+
+
+@app.before_request
+def _require_token():
+    if not request.path.startswith("/api/"):
+        return None
+    if request.method == "OPTIONS":  # preflight: la validación va en la real
+        return None
+    if not _token_ok():
+        return jsonify({
+            "ok": False,
+            "error": (
+                "No autorizado. Abre la interfaz desde "
+                "http://127.0.0.1:8765/ingesta (o /factsheet) para que el token "
+                "se inyecte automáticamente."
+            ),
+        }), 401
+    return None
+
 
 @app.after_request
 def _add_cors_headers(response):
-    # factsheet.html suele abrirse como file:// (origen "null"), que necesita
-    # CORS explicito para poder llamar a /api/chat en localhost.
     origin = request.headers.get("Origin", "")
-    if origin in ("null", "") or origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost"):
-        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+    if origin in _CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Headers"] = f"Content-Type, {TOKEN_HEADER}"
+    response.headers["Vary"] = "Origin"
     return response
 
 
 @app.route("/api/chat", methods=["OPTIONS"])
 def _api_chat_preflight():
     return "", 204
+
+
+@app.errorhandler(413)
+def _too_large(_exc):
+    limite_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return jsonify({"ok": False, "error": f"El archivo supera el límite de {limite_mb} MB."}), 413
+
+
+# Excepciones típicas de un .xlsx corrupto o de otro formato: son error del
+# archivo del proveedor, no un bug. Se traducen a 400 con mensaje legible en vez
+# de un 500. Cualquier otra excepción sigue siendo 500 a propósito, para que un
+# bug real (como el NameError que rompió la ingesta EEFF) se vea como tal.
+_ERRORES_DE_ARCHIVO = (zipfile.BadZipFile, KeyError, InvalidFileException)
+
+
+def _con_archivo_legible(fn, *args, **kwargs):
+    """Ejecuta un validate/commit de archivo traduciendo fallos de lectura."""
+    try:
+        return fn(*args, **kwargs)
+    except _ERRORES_DE_ARCHIVO as exc:
+        raise ValueError(
+            f"No se pudo leer el archivo: {type(exc).__name__}: {exc}. "
+            "Verifica que sea el .xlsx correcto y que no esté corrupto."
+        ) from exc
+
+
+@app.errorhandler(Exception)
+def _api_error_json(exc):
+    """El front espera JSON; sin esto un fallo inesperado devuelve HTML de Flask."""
+    if isinstance(exc, HTTPException):
+        return exc
+    if request.path.startswith("/api/"):
+        app.logger.exception("Error no manejado en %s", request.path)
+        return jsonify({
+            "ok": False,
+            "error": f"Error inesperado del servidor ({type(exc).__name__}: {exc})",
+            "errors": [f"Error inesperado del servidor ({type(exc).__name__}: {exc})"],
+            "warnings": [],
+        }), 500
+    raise exc
+
+
+def _serve_html_con_token(directory: str | Path, filename: str) -> Response:
+    """Sirve un HTML inyectando el token, para que su JS pueda llamar a /api/*."""
+    html = (Path(directory) / filename).read_text(encoding="utf-8")
+    if _TOKEN_PLACEHOLDER in html:
+        html = html.replace(_TOKEN_PLACEHOLDER, API_TOKEN)
+    else:
+        html = html.replace(
+            "<head>", f'<head><script>window.INGESTA_TOKEN="{API_TOKEN}";</script>', 1
+        )
+    return Response(html, mimetype="text/html")
 
 
 PROMPTS_DIR = ROOT / "prompts"
@@ -83,7 +193,7 @@ def index():
 
 @app.get("/ingesta")
 def serve_page():
-    return send_from_directory(WEB_DIR, "ingesta.html")
+    return _serve_html_con_token(WEB_DIR, "ingesta.html")
 
 
 @app.get("/db-diagrama")
@@ -93,7 +203,7 @@ def serve_db_diagram():
 
 @app.get("/factsheet")
 def serve_factsheet():
-    return send_from_directory(str(ROOT), "factsheet.html")
+    return _serve_html_con_token(ROOT, "factsheet.html")
 
 
 @app.get("/chat_bubble.js")
@@ -231,7 +341,10 @@ def api_rentroll_validate():
     if not periodo:
         return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
     file_bytes = file.read()
-    result = rr_core.validate(file_bytes, file.filename, periodo)
+    try:
+        result = _con_archivo_legible(rr_core.validate, file_bytes, file.filename, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
     return jsonify(result.to_dict())
 
 
@@ -328,7 +441,10 @@ def api_parking_validate():
         return jsonify({"ok": False, "errors": ["Sube el archivo .xlsx de la liquidación."], "warnings": []})
     if not periodo:
         return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
-    result = parking_core.validate(file.read(), file.filename, periodo)
+    try:
+        result = _con_archivo_legible(parking_core.validate, file.read(), file.filename, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
     return jsonify(result.to_dict())
 
 
@@ -375,7 +491,10 @@ def api_balance_validate():
         return jsonify({"ok": False, "errors": ["Sube la planilla .xlsx de balances consolidados."], "warnings": []})
     if not periodo:
         return jsonify({"ok": False, "errors": ["Falta el periodo (YYYY-MM)."], "warnings": []})
-    result = balance_core.validate(file.read(), file.filename, periodo, unidad)
+    try:
+        result = _con_archivo_legible(balance_core.validate, file.read(), file.filename, periodo, unidad)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
     return jsonify(result.to_dict())
 
 
@@ -397,5 +516,14 @@ def api_balance_commit():
 
 
 if __name__ == "__main__":
-    print("Ingesta EEFF: http://localhost:8765/ingesta")
-    app.run(host="127.0.0.1", port=8765, debug=True, use_reloader=True)
+    print("Ingesta EEFF: http://127.0.0.1:8765/ingesta")
+    print("Factsheet:    http://127.0.0.1:8765/factsheet")
+    if not os.environ.get("INGESTA_TOKEN"):
+        print(
+            f"\nToken de esta sesión: {API_TOKEN}\n"
+            "  (se inyecta solo en las páginas que sirve este servidor; fija\n"
+            "   INGESTA_TOKEN en el .env si quieres uno estable entre reinicios)"
+        )
+    # debug=False: el debugger de Werkzeug expone una consola interactiva a
+    # cualquier proceso local que alcance el puerto.
+    app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)

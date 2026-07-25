@@ -238,11 +238,20 @@
     const typing = addTyping();
 
     try {
+      // El servidor exige X-Ingesta-Token; lo inyecta al servir la pagina. Si el
+      // factsheet se abrio como file:// no hay token y la respuesta es 401.
+      const headers = { "Content-Type": "application/json" };
+      if (window.INGESTA_TOKEN) headers["X-Ingesta-Token"] = window.INGESTA_TOKEN;
       const r = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ question: q, history }),
       });
+      if (r.status === 401) {
+        typing.remove();
+        addMsg("bot", "⚠️ Abre el factsheet desde <b>http://127.0.0.1:8765/factsheet</b> para usar el asistente.");
+        return;
+      }
       const data = await r.json();
       typing.remove();
 

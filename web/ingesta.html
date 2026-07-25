@@ -693,6 +693,25 @@
 </main>
 
 <script>
+// ── Token de API ─────────────────────────────────────────────────────────
+// El servidor exige X-Ingesta-Token en todo /api/* e inyecta window.INGESTA_TOKEN
+// al servir esta página. Se envuelve fetch una vez en lugar de repetir el header
+// en cada llamada. Si la página se abre como file://, no hay token y las
+// llamadas responden 401 con instrucciones.
+(function () {
+  const _fetch = window.fetch;
+  window.fetch = function (input, init) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.includes('/api/') && window.INGESTA_TOKEN) {
+      init = init || {};
+      const headers = new Headers(init.headers || {});
+      headers.set('X-Ingesta-Token', window.INGESTA_TOKEN);
+      init.headers = headers;
+    }
+    return _fetch(input, init);
+  };
+})();
+
 // ── Tabs ─────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
