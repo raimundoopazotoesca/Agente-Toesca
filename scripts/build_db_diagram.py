@@ -1012,11 +1012,12 @@ FS_HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_db_diagram.py
     font-size: 12px;
   }
   .page {
-    max-width: 1360px;
-    margin: 12px auto;
+    max-width: none;
+    width: 100%;
+    margin: 0 auto;
     background: var(--page);
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    min-height: calc(100vh - 24px);
+    min-height: 100vh;
   }
   header {
     background: linear-gradient(180deg,var(--dark-a),var(--dark-b));
@@ -1147,7 +1148,8 @@ FS_HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_db_diagram.py
   .panel-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .panel-actions button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
   .canvas-wrap {
-    height: 620px;
+    height: calc(100vh - 260px);
+    min-height: 620px;
     position: relative;
     overflow: hidden;
     background:
@@ -1228,7 +1230,9 @@ FS_HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_db_diagram.py
   tbody tr:nth-child(even) { background: #FAFBFA; }
   tbody tr:hover { background: #EAF7F0; }
   tr.selected-row, tr.selected-row:nth-child(even) { background: var(--green-soft); color: #0d3a29; font-weight: 700; }
-  .object-table-wrap, .matrix-wrap { max-height: 620px; overflow: auto; }
+  .object-table-wrap, .matrix-wrap { max-height: calc(100vh - 260px); overflow: auto; }
+  .canvas-wrap:fullscreen { height: 100vh; background: #fff; }
+  .canvas-wrap:fullscreen svg { height: 100%; }
   .object-table td:first-child { cursor: pointer; font-weight: 600; color: #1e5f47; }
   .view { display: none; }
   .view.active { display: block; }
@@ -1410,9 +1414,10 @@ FS_HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_db_diagram.py
                 <button id="center-map" type="button">Centrar</button>
                 <button id="focus-upstream" type="button">Upstream</button>
                 <button id="focus-downstream" type="button">Downstream</button>
+                <button id="fullscreen-map" type="button">Pantalla completa</button>
               </div>
             </div>
-            <div class="canvas-wrap">
+            <div class="canvas-wrap" id="canvas-wrap">
               <svg id="diagram" role="img" aria-label="Mapa de tablas y vistas de SQLite"></svg>
               <div class="hint">Click en cualquier nodo para ver detalle. Doble click enfoca sus vecinos.</div>
             </div>
@@ -2049,6 +2054,11 @@ function initControls() {
   document.getElementById("zoom-out").addEventListener("click", () => { transform.scale = Math.max(.4, transform.scale / 1.12); applyTransform(); });
   document.getElementById("focus-upstream").addEventListener("click", () => applyFocus("upstream"));
   document.getElementById("focus-downstream").addEventListener("click", () => applyFocus("downstream"));
+  document.getElementById("fullscreen-map").addEventListener("click", () => {
+    const el = document.getElementById("canvas-wrap");
+    if (!document.fullscreenElement) el.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
   document.getElementById("detail-focus").addEventListener("click", () => { activeFocus = { mode: "neighbors", names: new Set([selectedName, ...incoming(selectedName), ...outgoing(selectedName)]) }; edgeFilter.value = "selected"; updateVisibility(); });
   document.getElementById("detail-neighbors").addEventListener("click", () => { edgeFilter.value = "selected"; updateVisibility(); });
   document.getElementById("path-find").addEventListener("click", () => {
