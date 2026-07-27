@@ -387,6 +387,7 @@
     <button class="tab-btn" data-tab="balance">Balance Consolidado</button>
     <button class="tab-btn" data-tab="parking">Parking PT</button>
     <button class="tab-btn" data-tab="er-activos">Ingresos/NOI Activos</button>
+    <button class="tab-btn" data-tab="amort-extra">Amort. Extraordinaria</button>
   </div>
 </header>
 
@@ -945,6 +946,46 @@
         <span id="er-sucden-ingest-status" class="muted"></span>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ TAB AMORTIZACIÓN EXTRAORDINARIA ══════════════════════════ -->
+<div id="tab-amort-extra" class="tab-panel">
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Pago extraordinario</div>
+    <p class="muted" style="margin:0 0 10px;">
+      Registra un prepago/bullet puntual sobre un crédito vigente (ej. la
+      amortización extra de nov-2026 en Torre A). Ajusta hacia adelante el
+      saldo proyectado de ese crédito — no toca el cronograma histórico.
+    </p>
+    <div class="row">
+      <label class="muted" for="ae-credito">Crédito:</label>
+      <select id="ae-credito"></select>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label class="muted" for="ae-fecha">Fecha del pago:</label>
+      <input type="date" id="ae-fecha">
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label class="muted" for="ae-monto">Monto (UF):</label>
+      <input type="number" step="0.01" id="ae-monto">
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label class="muted" for="ae-nota">Nota (opcional):</label>
+      <input type="text" id="ae-nota" style="flex:1;">
+    </div>
+    <div class="row" style="margin-top:18px;">
+      <button id="btn-ae-registrar">Registrar</button>
+      <span id="ae-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="step" style="margin-top:20px;">
+    <div class="step-title">Historial del crédito seleccionado</div>
+    <table>
+      <thead><tr><th>Fecha</th><th class="num">Monto UF</th><th>Nota</th></tr></thead>
+      <tbody id="ae-historial-body"></tbody>
+    </table>
   </div>
 </div>
 
@@ -2997,6 +3038,73 @@ function initErSucdenFijo() {
   });
 }
 initErSucdenFijo();
+
+async function initAmortExtra() {
+  const select = document.getElementById('ae-credito');
+  const fechaInput = document.getElementById('ae-fecha');
+  const montoInput = document.getElementById('ae-monto');
+  const notaInput = document.getElementById('ae-nota');
+  const btnRegistrar = document.getElementById('btn-ae-registrar');
+  const status = document.getElementById('ae-status');
+  const historialBody = document.getElementById('ae-historial-body');
+
+  async function cargarCreditos() {
+    try {
+      const res = await fetch('/api/amort_extra/creditos');
+      const data = await res.json();
+      select.innerHTML = (data.creditos || [])
+        .map(c => `<option value="${c.credito_key}">${c.acreedor} — ${c.activo_key} (${c.fondo_key})</option>`)
+        .join('');
+      if (select.value) cargarHistorial();
+    } catch (e) {}
+  }
+
+  async function cargarHistorial() {
+    if (!select.value) { historialBody.innerHTML = ''; return; }
+    try {
+      const res = await fetch(`/api/amort_extra/historial?credito_key=${encodeURIComponent(select.value)}`);
+      const data = await res.json();
+      historialBody.innerHTML = (data.eventos || [])
+        .map(e => `<tr><td>${e.fecha}</td><td class="num">${e.monto_uf}</td><td>${e.nota || ''}</td></tr>`)
+        .join('') || '<tr><td colspan="3" class="muted">Sin eventos registrados.</td></tr>';
+    } catch (e) {}
+  }
+
+  select.addEventListener('change', cargarHistorial);
+  cargarCreditos();
+
+  btnRegistrar.addEventListener('click', async () => {
+    if (!select.value || !fechaInput.value || !montoInput.value) {
+      setStatus(status, 'Completa crédito, fecha y monto.', 'error');
+      return;
+    }
+    btnRegistrar.disabled = true;
+    setStatus(status, 'Registrando...', 'loading');
+    try {
+      const res = await fetch('/api/amort_extra/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credito_key: select.value,
+          fecha: fechaInput.value,
+          monto_uf: parseFloat(montoInput.value),
+          nota: notaInput.value || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'error');
+      setStatus(status, `Registrado. ${data.periodos_ajustados} período(s) de saldo proyectado ajustados.`, 'success');
+      montoInput.value = '';
+      notaInput.value = '';
+      cargarHistorial();
+    } catch (e) {
+      setStatus(status, 'Error: ' + e.message, 'error');
+    } finally {
+      btnRegistrar.disabled = false;
+    }
+  });
+}
+initAmortExtra();
 </script>
 </body>
 </html>
