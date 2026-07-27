@@ -1675,13 +1675,13 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       <table id="tbl-balance">
         <tbody>
           <tr><td>Efectivo y Efectivo Equivalente</td><td id="bal-efectivo">—</td>
-              <td>Préstamos Bancarios</td><td id="bal-prestamos">—</td></tr>
+              <td id="bal-liab-label-0">—</td><td id="bal-liab-value-0">—</td></tr>
           <tr><td>Otros Activos Corrientes</td><td id="bal-otros-ac">—</td>
-              <td>Pasivos por Impuestos Diferidos</td><td id="bal-imp-dif">—</td></tr>
+              <td id="bal-liab-label-1">—</td><td id="bal-liab-value-1">—</td></tr>
           <tr><td>Propiedades de Inversión</td><td id="bal-pi">—</td>
-              <td>Otros Pasivos</td><td id="bal-otros-p">—</td></tr>
+              <td id="bal-liab-label-2">—</td><td id="bal-liab-value-2">—</td></tr>
           <tr><td>Otros Activos No Corrientes</td><td id="bal-otros-anc">—</td>
-              <td>Patrimonio</td><td id="bal-patrimonio">—</td></tr>
+              <td id="bal-liab-label-3">—</td><td id="bal-liab-value-3">—</td></tr>
           <tr class="row-total">
               <td>Total Activos</td><td id="bal-total-a">—</td>
               <td>Total Pasivos + Patrimonio</td><td id="bal-total-pp">—</td></tr>
@@ -3174,10 +3174,29 @@ function render(){
   setBal("bal-pi","ESF.propiedades_inversion");
   setBal("bal-otros-anc","ESF.otros_activos_no_corrientes");
   setBal("bal-total-a","ESF.total_activo");
-  setBal("bal-prestamos","ESF.prestamos");
-  setBal("bal-imp-dif","ESF.pasivos_impuestos_diferidos");
-  setBal("bal-otros-p","ESF.otros_pasivos");
-  setBal("bal-patrimonio","ESF.patrimonio_neto");
+  const liabItems = [
+    {label: "Préstamos Bancarios", key: "ESF.prestamos"},
+    {label: "Pasivos por Impuestos Diferidos", key: "ESF.pasivos_impuestos_diferidos"},
+    {label: "Otros Pasivos", key: "ESF.otros_pasivos"},
+    {label: "Patrimonio", key: "ESF.patrimonio_neto"},
+  ].filter(it => bal[it.key]);
+  for (let i=0; i<4; i++){
+    const labelEl = document.getElementById("bal-liab-label-"+i);
+    const valueEl = document.getElementById("bal-liab-value-"+i);
+    const it = liabItems[i];
+    if (it){
+      labelEl.style.visibility = "";
+      valueEl.style.visibility = "";
+      labelEl.textContent = it.label;
+      valueEl.textContent = fmtMontoClp(bal[it.key], pc, F, "balance");
+      attachTrace(valueEl, it.key, {fondo: currentFund, periodo: pc, raw_value: bal[it.key]});
+    } else {
+      labelEl.style.visibility = "hidden";
+      valueEl.style.visibility = "hidden";
+      labelEl.textContent = "—";
+      valueEl.textContent = "—";
+    }
+  }
   setBal("bal-total-pp","ESF.total_pasivo_patrimonio");
 
   document.getElementById("gastos-fecha").textContent = "al " + (pc?mesEspanol(pc):"—") + " (en " + unitLabel("gastos") + ")";
