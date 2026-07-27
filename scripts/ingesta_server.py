@@ -38,14 +38,27 @@ from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
 from tools.db import ingest_balance_consolidado as balance_core  # noqa: E402
+from tools.db import ingest_er_activo_web as er_activo_core  # noqa: E402
+from tools.db import ingest_er_sucden_fijo as sucden_fijo_core  # noqa: E402
+from tools.db import ingest_amortizacion_extra as amort_extra_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
 from tools import db_chat  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
+from scripts import recompute_derived_kpis  # noqa: E402
 
 
 def _rebuild_factsheet() -> None:
-    """Regenera factsheet.html para que toda ingesta se refleje de inmediato."""
+    """Recalcula KPIs derivados y regenera factsheet.html tras cada ingesta.
+
+    Sin este paso, derived_kpi (ingresos/NOI/tasa arriendo/cap rate) queda
+    congelado en el último período en que alguien corrió el script
+    consolidate_* a mano — ver scripts/recompute_derived_kpis.py.
+    """
+    try:
+        recompute_derived_kpis.main()
+    except Exception as exc:  # no debe romper la respuesta de ingesta
+        print(f"WARN: no se pudieron recalcular los KPIs derivados: {exc}")
     try:
         build_factsheet.main()
     except Exception as exc:  # no debe romper la respuesta de ingesta
@@ -513,6 +526,178 @@ def api_balance_commit():
         return jsonify({"ok": False, "error": str(exc)}), 400
     _rebuild_factsheet()
     return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/er_activo/periodo_check")
+def api_er_activo_periodo_check():
+    activo = request.args.get("activo", "")
+    try:
+        return jsonify(er_activo_core.periodo_status(activo))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/er_activo/validate")
+def api_er_activo_validate():
+    activo = request.form.get("activo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube el archivo .xlsx de ingresos/NOI."], "warnings": []})
+    try:
+        result = _con_archivo_legible(er_activo_core.validate, activo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
+    return jsonify(result)
+
+
+@app.post("/api/er_activo/commit")
+def api_er_activo_commit():
+    activo = request.form.get("activo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube el archivo .xlsx de ingresos/NOI."}), 400
+    try:
+        summary = er_activo_core.commit(activo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    if not summary.get("ok", True):
+        return jsonify(summary), 400
+    _rebuild_factsheet()
+    return jsonify(summary)
+
+
+@app.get("/api/er_fijo/periodo_check")
+def api_er_fijo_periodo_check():
+    from tools.db.connection import get_conn
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT MAX(periodo) AS m, COUNT(*) AS n FROM raw_er_activo_line "
+            "WHERE activo_key='Sucden' AND superseded_at IS NULL",
+        ).fetchone()
+        return jsonify({"ultimo_periodo": row["m"], "n_filas": row["n"]})
+    finally:
+        conn.close()
+
+
+def _json_body() -> dict:
+    return request.get_json(silent=True) or {}
+
+
+@app.get("/api/er_fijo/valores")
+def api_er_fijo_valores():
+    return jsonify(sucden_fijo_core.valores_vigentes())
+
+
+@app.post("/api/er_fijo/validate")
+def api_er_fijo_validate():
+    data = _json_body()
+    periodo = data.get("periodo") or request.form.get("periodo", "")
+    overrides = data.get("overrides") or {}
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
+    return jsonify(sucden_fijo_core.validate_periodo(periodo, overrides=overrides))
+
+
+@app.post("/api/er_fijo/commit")
+def api_er_fijo_commit():
+    data = _json_body()
+    periodo = data.get("periodo") or request.form.get("periodo", "")
+    overrides = data.get("overrides") or {}
+    permanentes = data.get("permanentes") or []
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
+    try:
+        summary = sucden_fijo_core.persist_periodo(periodo, overrides=overrides, permanentes=permanentes)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
+    return jsonify({"ok": True, "activo": "Sucden", "periodo": periodo, **summary})
+
+
+@app.get("/api/er_mensual/periodo_check")
+def api_er_mensual_periodo_check():
+    activo = request.args.get("activo", "")
+    try:
+        return jsonify(er_activo_core.periodo_status_mensual(activo))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/er_mensual/validate")
+def api_er_mensual_validate():
+    activo = request.form.get("activo", "")
+    periodo = request.form.get("periodo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube la planilla EEFF del mes."], "warnings": []})
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
+    try:
+        result = _con_archivo_legible(er_activo_core.validate_mensual, activo, periodo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
+    return jsonify(result)
+
+
+@app.post("/api/er_mensual/commit")
+def api_er_mensual_commit():
+    activo = request.form.get("activo", "")
+    periodo = request.form.get("periodo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube la planilla EEFF del mes."}), 400
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
+    try:
+        summary = er_activo_core.commit_mensual(activo, periodo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    if not summary.get("ok", True):
+        return jsonify(summary), 400
+    _rebuild_factsheet()
+    return jsonify(summary)
+
+
+@app.get("/api/amort_extra/creditos")
+def api_amort_extra_creditos():
+    con = get_conn_for(str(amort_extra_core.DB_PATH))
+    try:
+        return jsonify({"creditos": amort_extra_core.listar_creditos(con)})
+    finally:
+        con.close()
+
+
+@app.get("/api/amort_extra/historial")
+def api_amort_extra_historial():
+    credito_key = request.args.get("credito_key", "")
+    if not credito_key:
+        return jsonify({"eventos": []})
+    con = get_conn_for(str(amort_extra_core.DB_PATH))
+    try:
+        return jsonify({"eventos": amort_extra_core.historial(con, credito_key)})
+    finally:
+        con.close()
+
+
+@app.post("/api/amort_extra/commit")
+def api_amort_extra_commit():
+    data = _json_body()
+    credito_key = data.get("credito_key", "")
+    fecha = data.get("fecha", "")
+    monto_uf = data.get("monto_uf")
+    nota = data.get("nota") or None
+    if not credito_key or not fecha or monto_uf is None:
+        return jsonify({"ok": False, "error": "Faltan credito_key, fecha o monto_uf."}), 400
+    con = get_conn_for(str(amort_extra_core.DB_PATH))
+    try:
+        result = amort_extra_core.commit(con, credito_key, fecha, float(monto_uf), nota)
+    except (ValueError, TypeError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        con.close()
+    _rebuild_factsheet()
+    return jsonify({"ok": True, **result})
 
 
 if __name__ == "__main__":

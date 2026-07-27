@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- BASELINE del esquema — equivale a aplicar las migraciones 001..070.
+-- BASELINE del esquema — equivale a aplicar las migraciones 001..072.
 --
 -- GENERADO POR scripts/regenerar_baseline.py — no editar a mano.
 --
@@ -12,7 +12,7 @@
 -- producción, y los tests validaban un esquema que producción no tenía.
 --
 -- Este archivo es el esquema real de producción. El runner lo aplica a una DB
--- vacía y registra 1..70 como aplicadas — ahora sí de forma veraz, porque el
+-- vacía y registra 1..72 como aplicadas — ahora sí de forma veraz, porque el
 -- baseline incorpora sus efectos. Las migraciones históricas se conservan como
 -- referencia pero ya no se ejecutan sobre DBs nuevas.
 --
@@ -189,6 +189,20 @@ CREATE TABLE "raw_amortizacion" (
     intereses_uf REAL,
     saldo_uf     REAL,
     PRIMARY KEY (credito_key, periodo)
+);
+
+CREATE TABLE raw_amortizacion_extraordinaria (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    credito_key     TEXT NOT NULL REFERENCES dim_credito(credito_key),
+    fecha           TEXT NOT NULL,        -- 'YYYY-MM-DD'
+    periodo         TEXT NOT NULL,        -- 'YYYY-MM', derivado de fecha
+    monto_uf        REAL NOT NULL,
+    nota            TEXT,
+    source_file     TEXT,
+    file_hash       TEXT,
+    ingest_run_id   INTEGER REFERENCES ingest_run(id),
+    loaded_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    superseded_at   TEXT
 );
 
 CREATE TABLE "raw_ar_event" (
@@ -471,6 +485,12 @@ CREATE TABLE "raw_valor_cuota_contable" (
     loaded_at     TEXT DEFAULT (datetime('now')),
     superseded_at TEXT,
     UNIQUE(nemotecnico, fecha, source_file)
+);
+
+CREATE TABLE sucden_valores_fijos (
+    cuenta_codigo   TEXT PRIMARY KEY,
+    monto_uf        REAL NOT NULL,
+    actualizado_at  TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX idx_amort_credito  ON "raw_amortizacion" (credito_key);
@@ -908,7 +928,7 @@ INSERT OR IGNORE INTO dim_sociedad (sociedad_key, nombre, fondo_key, participaci
     ('MachaliSpA', 'Strip Machalí (liquidado sept-2025)', 'TRI', 1.0);
 
 
--- dim_activo (19 filas)
+-- dim_activo (17 filas)
 INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre, tipo, participacion_fondo_activo, categoria, sociedad, sociedad_key, participacion_en_sociedad, vigente_hasta) VALUES
     ('INMOSA', 'TRI', 'INMOSA', 'inmobiliario', 0.43, 'Residencias', 'Inmobiliaria e Inversiones Senior Assist Chile S.A.', 'SeniorAssist', 1.0, NULL),
     ('Viña Centro', 'TRI', 'Viña Centro', 'retail', 1.0, 'Centros Comerciales', 'Inmobiliaria Viña Centro SpA', 'VCSpA', 1.0, NULL),
@@ -925,8 +945,6 @@ INSERT OR IGNORE INTO dim_activo (activo_key, fondo_key, nombre, tipo, participa
     ('Residencia Coventry', 'TRI', 'Residencia Coventry', 'residencia', 0.43, 'Residencias', 'Inmobiliaria e Inversiones Senior Assist Chile S.A.', NULL, NULL, NULL),
     ('Residencia Domingo Calderón', 'TRI', 'Residencia Domingo Calderón', 'residencia', 0.43, 'Residencias', 'Inmobiliaria e Inversiones Senior Assist Chile S.A.', NULL, NULL, NULL),
     ('Residencia Padre Errázuriz', 'TRI', 'Residencia Padre Errázuriz / Leonardo Da Vinci', 'residencia', 0.43, 'Residencias', 'Inmobiliaria e Inversiones Senior Assist Chile S.A.', NULL, NULL, NULL),
-    ('Ed. Guardiamarina', 'TRI', 'Edificio Guardiamarina', 'residencial', 1.0, 'Residencias', 'Ed. Guardiamarina', NULL, NULL, NULL),
-    ('Ed. Placilla', 'TRI', 'Edificio Placilla', 'residencial', 1.0, 'Residencias', 'Ed. Placilla', NULL, NULL, NULL),
     ('Strip Machalí', 'TRI', 'Strip Machalí', 'retail', NULL, 'Comercial', 'Strip Machalí (liquidado sept-2025)', 'MachaliSpA', 1.0, '2025-08'),
     ('Parking PT', 'PT', 'Parking Parque Titanium (SABA)', 'parking', 1.0, 'Parking', NULL, NULL, NULL, NULL);
 
