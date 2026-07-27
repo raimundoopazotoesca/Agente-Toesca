@@ -100,7 +100,7 @@ def _insert_mercado(con, periodo):
 # Tipos que la pantalla de Inicio debe mostrar. Si agregas una fuente nueva a
 # CONFIG, actualiza este set a propósito: la card y su timeline son parte del
 # contrato de la UI, no un detalle interno.
-TIPOS_ESPERADOS = {"eeff", "rentroll", "mercado", "balance", "parking_pt"}
+TIPOS_ESPERADOS = {"eeff", "rentroll", "mercado", "balance", "parking_pt", "er_activos"}
 
 
 def test_config_tiene_los_tipos_del_menu():
