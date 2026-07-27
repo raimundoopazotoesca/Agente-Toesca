@@ -1,6 +1,37 @@
 # Skill: real-estate-finance-expert
 
-**Status**: ✅ Production-ready (completado 2026-05-27)
+**Status**: 🔶 Auditada y parcialmente corregida (2026-07-27). El "✅ Production-ready
+2026-05-27" de más abajo era aspiracional — `cap_rate_implicito` y el mapeo de
+nombres/claves nunca se habían probado contra la DB real. Ver auditoría abajo.
+
+## Auditoría 2026-07-27 (contra golden congelado, `scripts/congelar_golden_kpis.py`)
+
+- **`dividend_yield`**: ✅ coincide exacto (16 decimales) con `dy`/bursátil de
+  producción. Fórmula correcta desde el principio.
+- **`cap_rate_implicito` a nivel fondo**: ❌→✅ corregido. `_get_market_cap` era un
+  stub que siempre devolvía `None` (TODO nunca implementado) — la skill nunca pudo
+  calcular este KPI para `entidad_tipo='fondo'`. La fórmula canónica real (ver
+  `scripts/consolidate_kpis_bursatil_pt.py` del proyecto) es
+  `noi_u12m / (market_cap_uf + deuda_financiera_neta_uf + caja_minima_uf)`, no
+  `noi_anual / market_cap` como documentaba este archivo. Reescrito en
+  `scripts/cap_rate.py` (`_get_market_cap_fondo`, `_get_caja_minima_uf`,
+  `_get_derived`); validado exacto contra el golden para PT 2026-05.
+  De paso se corrigió `_common.get_uf()`, que apuntaba a una columna inexistente
+  (`fact_uf.valor_clp` en vez de `fact_uf.valor`) y siempre fallaba.
+- **`cap_rate_implicito` para TRI**: producción lo calcula a **nivel serie**
+  (`CFITOERI1A/C/I`), no a nivel fondo agregado como PT — es una variante distinta
+  de la fórmula, no implementada aquí. Limitación conocida, no bloquea el resto.
+- **`cap_rate_implicito` a nivel activo**: sigue sin implementar a propósito — los
+  activos individuales no cotizan en bolsa, solo el fondo. El mensaje de error ahora
+  lo explica en vez de fallar en silencio.
+- **Desalineación de vocabulario**: nombres de KPI (`dividend_yield` vs `dy` en
+  `derived_kpi`) y claves de entidad (`TRI-A` vs nemotécnico real `CFITOERI1A`,
+  `Parque Titanium` vs `PT`) no eran 1:1. Se agregó una capa de alias en
+  `_common.py` (`resolve_entidad_key`, `canonical_kpi_cache_name`) usada por
+  `compute_or_fetch.obtener()` antes de leer/escribir caché — no exhaustiva, pero
+  cubre los casos documentados en este archivo y los ejemplos del `SKILL.md`.
+
+---
 
 **Ubicación**: `C:\Users\raimundo.opazo\.claude\skills\real-estate-finance-expert\`
 

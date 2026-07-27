@@ -1,3 +1,25 @@
+## [2026-07-27] fase0 | F0.6 cerrado: skill real-estate-finance-expert auditada y corregida
+
+Bloqueo original resuelto: `~/.claude/skills/real-estate-finance-expert/` si existe en
+esta maquina. Auditoria contra el golden congelado (7.226 valores): `dividend_yield`
+coincidia exacto desde el principio; `cap_rate_implicito` a nivel fondo estaba roto
+(stub `_get_market_cap` nunca implementado, devolvia `None` siempre). Corregido en
+`scripts/cap_rate.py` con la formula canonica real (replicada de
+`scripts/consolidate_kpis_bursatil_pt.py` del proyecto):
+`noi_u12m / (market_cap_uf + deuda_financiera_neta_uf + caja_minima_uf)` — no
+`noi_anual / market_cap` como decia la doc vieja de la skill. Validado exacto contra
+el golden de PT 2026-05. De paso se arreglo `_common.get_uf()` (referenciaba
+`fact_uf.valor_clp`, columna inexistente; la real es `fact_uf.valor`).
+
+Tambien se agrego capa de alias (`resolve_entidad_key`, `canonical_kpi_cache_name`
+en `_common.py`) porque los nombres de KPI y claves de entidad de la skill no eran
+1:1 con el vocabulario real de `derived_kpi` (`dividend_yield` vs `dy`, `TRI-A` vs
+nemotecnico `CFITOERI1A`, `Parque Titanium` vs `PT`).
+
+Deuda menor no bloqueante: TRI calcula `cap_rate_implicito` a nivel serie (no
+fondo agregado como PT) — variante distinta, no implementada. Detalle completo en
+`wiki/skills/real-estate-finance-expert.md`.
+
 ## [2026-07-24] fase0 | Cierre de F0: FK en cero, Etapa 1 cumplida, catalogo de KPIs
 
 **Indices unicos parciales (067-068).** Correccion de la propuesta anterior:
