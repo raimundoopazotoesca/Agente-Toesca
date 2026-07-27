@@ -16,10 +16,27 @@ from typing import Any
 DB_PATH = Path(__file__).resolve().parents[2] / "memory" / "agente_toesca_v2.db"
 
 
-def listar_creditos(con: sqlite3.Connection) -> list[dict[str, Any]]:
+def listar_creditos(con: sqlite3.Connection, hoy: date | None = None) -> list[dict[str, Any]]:
+    """Créditos vigentes con su saldo insoluto más reciente conocido a la fecha.
+
+    raw_saldo_deuda trae el cronograma proyectado completo hasta el
+    vencimiento del crédito, así que un MAX(periodo) sin acotar devolvería el
+    saldo (casi cero) del último período proyectado, no el saldo actual.
+    """
+    periodo_actual = (hoy or date.today()).strftime("%Y-%m")
     rows = con.execute(
-        "SELECT credito_key, acreedor, activo_key, fondo_key "
-        "FROM dim_credito WHERE estado='VIGENTE' ORDER BY fondo_key, activo_key"
+        """SELECT c.credito_key, c.acreedor, c.activo_key, c.fondo_key,
+                  s.saldo_uf, s.periodo AS saldo_periodo
+           FROM dim_credito c
+           LEFT JOIN raw_saldo_deuda s
+             ON s.credito_key = c.credito_key
+            AND s.periodo = (
+                  SELECT MAX(periodo) FROM raw_saldo_deuda
+                  WHERE credito_key = c.credito_key AND periodo <= ?
+                )
+           WHERE c.estado='VIGENTE'
+           ORDER BY c.fondo_key, c.activo_key""",
+        (periodo_actual,),
     ).fetchall()
     return [
         {
@@ -27,6 +44,8 @@ def listar_creditos(con: sqlite3.Connection) -> list[dict[str, Any]]:
             "acreedor": r["acreedor"],
             "activo_key": r["activo_key"],
             "fondo_key": r["fondo_key"],
+            "saldo_uf": r["saldo_uf"],
+            "saldo_periodo": r["saldo_periodo"],
         }
         for r in rows
     ]

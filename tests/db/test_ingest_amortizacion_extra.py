@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from tools.db import ingest_amortizacion_extra as amort
@@ -115,3 +117,27 @@ def test_listar_creditos_solo_vigentes(tmp_db):
     keys = {c["credito_key"] for c in creditos}
     assert "V1" in keys
     assert "P1" not in keys
+
+
+def test_listar_creditos_usa_saldo_a_la_fecha_no_el_ultimo_proyectado(tmp_db):
+    _seed_credito(tmp_db, credito_key="TEST_CRED")
+    _seed_saldo(
+        tmp_db, "TEST_CRED",
+        proyectados=[("2026-09", 850.0), ("2040-12", 0.0)],
+        historicos=[("2026-07", 1050.0), ("2026-08", 950.0)],
+    )
+
+    creditos = amort.listar_creditos(tmp_db, hoy=date(2026, 8, 20))
+
+    cred = next(c for c in creditos if c["credito_key"] == "TEST_CRED")
+    assert cred["saldo_uf"] == 950.0
+    assert cred["saldo_periodo"] == "2026-08"
+
+
+def test_listar_creditos_sin_saldo_devuelve_none(tmp_db):
+    _seed_credito(tmp_db, credito_key="SIN_SALDO")
+
+    creditos = amort.listar_creditos(tmp_db)
+
+    cred = next(c for c in creditos if c["credito_key"] == "SIN_SALDO")
+    assert cred["saldo_uf"] is None

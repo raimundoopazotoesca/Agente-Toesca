@@ -3048,12 +3048,17 @@ async function initAmortExtra() {
   const status = document.getElementById('ae-status');
   const historialBody = document.getElementById('ae-historial-body');
 
+  function fmtSaldoUf(saldo_uf) {
+    if (saldo_uf == null) return 'saldo desconocido';
+    return `saldo ${Number(saldo_uf).toLocaleString('es-CL', {maximumFractionDigits: 2})} UF`;
+  }
+
   async function cargarCreditos() {
     try {
       const res = await fetch('/api/amort_extra/creditos');
       const data = await res.json();
       select.innerHTML = (data.creditos || [])
-        .map(c => `<option value="${c.credito_key}">${c.acreedor} — ${c.activo_key} (${c.fondo_key})</option>`)
+        .map(c => `<option value="${c.credito_key}">${c.acreedor} — ${c.activo_key} (${c.fondo_key}) · ${fmtSaldoUf(c.saldo_uf)}</option>`)
         .join('');
       if (select.value) cargarHistorial();
     } catch (e) {}
