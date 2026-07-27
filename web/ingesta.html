@@ -32,13 +32,26 @@
   }
   .tab-btn:hover { color: #fff; }
   .tab-btn.active { color: #fff; border-bottom-color: var(--green); }
+  .er-subtab-btn {
+    background: transparent; border: none; border-bottom: 3px solid transparent;
+    color: #8a8a8a; font-family: inherit; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; cursor: pointer; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .er-subtab-btn:hover { color: #2b2b2b; }
+  .er-subtab-btn.active { color: #2b2b2b; border-bottom-color: var(--green); }
   main {
-    width: min(100%, 1440px); margin: 12px auto 40px;
+    width: min(100%, 1760px); margin: 12px auto 40px;
     padding: 0 clamp(16px, 2.5vw, 32px);
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
-  .tab-panel:not(#tab-inicio) { max-width: 880px; margin: 0 auto; }
+  .tab-panel:not(#tab-inicio):not(#tab-er-activos) { max-width: 880px; margin: 0 auto; }
+  #tab-er-activos .er-activo-panel {
+    display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 20px; align-items: start;
+  }
+  @media (max-width: 1000px) {
+    #tab-er-activos .er-activo-panel { grid-template-columns: 1fr; }
+  }
   .step {
     background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
@@ -333,6 +346,33 @@
   .mini-fecha { font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
   .mini-bursatil-headrow .mini-fecha { text-align: right; }
   .mini-precio { font-size: 15px; font-weight: 700; color: #2b2b2b; text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
+
+  .fijo-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px; margin-top: 16px;
+  }
+  .fijo-field label {
+    display: block; font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+  }
+  .fijo-field .fijo-input-wrap {
+    position: relative; display: flex; align-items: center;
+  }
+  .fijo-field input[type=number] {
+    width: 100%; padding: 9px 40px 9px 12px; font-size: 14px; font-weight: 600;
+    font-variant-numeric: tabular-nums; color: #2b2b2b; transition: border-color .15s, box-shadow .15s;
+  }
+  .fijo-field input[type=number]:focus {
+    outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft);
+  }
+  .fijo-field .fijo-suffix {
+    position: absolute; right: 12px; font-size: 11px; font-weight: 700;
+    color: #a0a0a0; pointer-events: none;
+  }
+  .fijo-field .fijo-dirty-flag { display: none; font-size: 10.5px; color: var(--warn); font-weight: 700; margin-top: 4px; }
+  .fijo-field.is-dirty input[type=number] { border-color: var(--warn); background: #FFFBF0; }
+  .fijo-field.is-dirty .fijo-suffix { color: var(--warn); }
+  .fijo-field.is-dirty .fijo-dirty-flag { display: block; }
 </style>
 </head>
 <body>
@@ -346,6 +386,7 @@
     <button class="tab-btn" data-tab="mercado">Mercado Oficinas</button>
     <button class="tab-btn" data-tab="balance">Balance Consolidado</button>
     <button class="tab-btn" data-tab="parking">Parking PT</button>
+    <button class="tab-btn" data-tab="er-activos">Ingresos/NOI Activos</button>
   </div>
 </header>
 
@@ -690,6 +731,223 @@
 
 </div>
 
+<!-- ══════════════════════════ TAB INGRESOS/NOI ACTIVOS ══════════════════════════ -->
+<div id="tab-er-activos" class="tab-panel">
+  <div class="inicio-actions" style="margin-bottom:18px;">
+    <div>
+      <div class="inicio-actions-title">Ingresos / NOI por activo</div>
+      <div class="inicio-actions-copy">Estado de la ingesta mensual (hoja Estado de Resultado) por activo.</div>
+    </div>
+  </div>
+  <div id="er-resumen-cards" class="inicio-cards" style="margin-bottom:24px;"></div>
+
+  <div class="row" style="margin-bottom:14px;">
+    <div class="tabs" id="er-subtabs">
+      <button class="er-subtab-btn active" data-eractivo="vina">Viña Centro</button>
+      <button class="er-subtab-btn" data-eractivo="curico">Mall Curicó</button>
+      <button class="er-subtab-btn" data-eractivo="inmosa">INMOSA</button>
+      <button class="er-subtab-btn" data-eractivo="sucden">Sucden</button>
+    </div>
+  </div>
+
+  <div id="er-panel-vina" class="er-activo-panel">
+    <div class="step">
+      <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+      <p class="muted" style="margin:0 0 10px;">
+        Sube la planilla EEFF del mes (<code>MM-YYYY INFORME EEFF VIÑA CENTRO SPA.xlsx</code>)
+        desde <code>NUEVO ORDEN &gt; Renta Comercial &gt; Ingresos Activos &gt; Viña Centro</code>.<br>
+        Se ingesta solo el mes elegido, leído desde la hoja <code>ESTADO DE RESULTADO</code>.
+        Lo envía Valentina Bravo por mail.
+      </p>
+      <div class="row">
+        <label class="muted" for="er-vina-periodo">Período a ingestar:</label>
+        <input type="month" id="er-vina-periodo">
+      </div>
+      <div id="er-vina-status-row" class="row" style="margin-top:6px"></div>
+      <div class="row">
+        <div id="er-vina-dropzone" class="dropzone" style="flex:1">
+          Arrastra aquí la planilla EEFF del mes o haz click para elegirla.
+          <input type="file" id="er-vina-file" accept=".xlsx" class="hidden">
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-er-vina-validate">Validar y previsualizar</button>
+        <span id="er-vina-validate-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="er-vina-preview" class="step preview hidden">
+      <ul id="er-vina-errors" class="msg-list err"></ul>
+      <ul id="er-vina-warnings" class="msg-list warn"></ul>
+      <div id="er-vina-section" class="hidden">
+        <h3>Resumen del período</h3>
+        <table>
+          <tbody id="er-vina-resumen-body"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:20px;">
+        <button id="btn-er-vina-confirm" disabled>Confirmar e ingestar</button>
+        <span id="er-vina-ingest-status" class="muted"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="er-panel-curico" class="er-activo-panel hidden">
+    <div class="step">
+      <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+      <p class="muted" style="margin:0 0 10px;">
+        Sube la planilla EEFF del mes (<code>MM-YYYY INFORME POWER CENTER CURICÓ.xlsx</code>)
+        desde <code>NUEVO ORDEN &gt; Renta Comercial &gt; Ingresos Activos &gt; Power Center Curicó</code>.<br>
+        Se ingesta solo el mes elegido, leído desde la hoja <code>ESTADO DE RESULTADO</code>.
+        Lo envía Valentina Bravo por mail.
+      </p>
+      <div class="row">
+        <label class="muted" for="er-curico-periodo">Período a ingestar:</label>
+        <input type="month" id="er-curico-periodo">
+      </div>
+      <div id="er-curico-status-row" class="row" style="margin-top:6px"></div>
+      <div class="row">
+        <div id="er-curico-dropzone" class="dropzone" style="flex:1">
+          Arrastra aquí la planilla EEFF del mes o haz click para elegirla.
+          <input type="file" id="er-curico-file" accept=".xlsx" class="hidden">
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-er-curico-validate">Validar y previsualizar</button>
+        <span id="er-curico-validate-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="er-curico-preview" class="step preview hidden">
+      <ul id="er-curico-errors" class="msg-list err"></ul>
+      <ul id="er-curico-warnings" class="msg-list warn"></ul>
+      <div id="er-curico-section" class="hidden">
+        <h3>Resumen del período</h3>
+        <table>
+          <tbody id="er-curico-resumen-body"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:20px;">
+        <button id="btn-er-curico-confirm" disabled>Confirmar e ingestar</button>
+        <span id="er-curico-ingest-status" class="muted"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="er-panel-inmosa" class="er-activo-panel hidden">
+    <div class="step">
+      <div class="step-title"><span class="step-num">1</span> Período y archivo</div>
+      <p class="muted" style="margin:0 0 10px;">
+        Sube la planilla de flujo de caja del mes (<code>Flujo Caja MM.YY Senior Assist.xlsx</code>)
+        desde <code>NUEVO ORDEN &gt; Renta Comercial &gt; Ingresos Activos &gt; inmosa</code>.<br>
+        Se ingesta solo el mes elegido, leído desde la hoja única de flujo de caja
+        (montos en UF).
+      </p>
+      <div class="row">
+        <label class="muted" for="er-inmosa-periodo">Período a ingestar:</label>
+        <input type="month" id="er-inmosa-periodo">
+      </div>
+      <div id="er-inmosa-status-row" class="row" style="margin-top:6px"></div>
+      <div class="row">
+        <div id="er-inmosa-dropzone" class="dropzone" style="flex:1">
+          Arrastra aquí la planilla de flujo de caja del mes o haz click para elegirla.
+          <input type="file" id="er-inmosa-file" accept=".xlsx" class="hidden">
+        </div>
+      </div>
+      <div class="row">
+        <button id="btn-er-inmosa-validate">Validar y previsualizar</button>
+        <span id="er-inmosa-validate-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="er-inmosa-preview" class="step preview hidden">
+      <ul id="er-inmosa-errors" class="msg-list err"></ul>
+      <ul id="er-inmosa-warnings" class="msg-list warn"></ul>
+      <div id="er-inmosa-section" class="hidden">
+        <h3>Resumen del período</h3>
+        <table>
+          <tbody id="er-inmosa-resumen-body"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:20px;">
+        <button id="btn-er-inmosa-confirm" disabled>Confirmar e ingestar</button>
+        <span id="er-inmosa-ingest-status" class="muted"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="er-panel-sucden" class="er-activo-panel hidden">
+    <div class="step">
+      <div class="step-title"><span class="step-num">1</span> Período y montos</div>
+      <p class="muted" style="margin:0 0 10px;">
+        Sucden es un contrato fijo — no hay planilla que subir. Elige el mes;
+        los montos vienen precargados con el valor vigente, pero puedes
+        editarlos si hubo un cambio (te preguntará si es permanente o solo
+        para este período).<br>
+        Solo permite ingestar meses que aún no están en la DB — no toca el histórico.
+      </p>
+      <div class="row">
+        <label class="muted" for="er-sucden-periodo">Período a ingestar:</label>
+        <input type="month" id="er-sucden-periodo">
+      </div>
+      <div id="er-sucden-status-row" class="row" style="margin-top:6px"></div>
+      <div class="fijo-grid">
+        <div class="fijo-field">
+          <label for="er-sucden-input-SUCDEN_ING_ARR">Ingresos por Arriendos</label>
+          <div class="fijo-input-wrap">
+            <input type="number" step="0.0001" id="er-sucden-input-SUCDEN_ING_ARR">
+            <span class="fijo-suffix">UF</span>
+          </div>
+          <div class="fijo-dirty-flag">✎ editado — se te preguntará al confirmar</div>
+        </div>
+        <div class="fijo-field">
+          <label for="er-sucden-input-SUCDEN_CONTRIB">Contribuciones</label>
+          <div class="fijo-input-wrap">
+            <input type="number" step="0.0001" id="er-sucden-input-SUCDEN_CONTRIB">
+            <span class="fijo-suffix">UF</span>
+          </div>
+          <div class="fijo-dirty-flag">✎ editado — se te preguntará al confirmar</div>
+        </div>
+        <div class="fijo-field">
+          <label for="er-sucden-input-SUCDEN_SOBRETASA">Sobretasa</label>
+          <div class="fijo-input-wrap">
+            <input type="number" step="0.0001" id="er-sucden-input-SUCDEN_SOBRETASA">
+            <span class="fijo-suffix">UF</span>
+          </div>
+          <div class="fijo-dirty-flag">✎ editado — se te preguntará al confirmar</div>
+        </div>
+        <div class="fijo-field">
+          <label for="er-sucden-input-SUCDEN_SEG">Seguros</label>
+          <div class="fijo-input-wrap">
+            <input type="number" step="0.0001" id="er-sucden-input-SUCDEN_SEG">
+            <span class="fijo-suffix">UF</span>
+          </div>
+          <div class="fijo-dirty-flag">✎ editado — se te preguntará al confirmar</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:18px;">
+        <button id="btn-er-sucden-validate">Verificar</button>
+        <span id="er-sucden-validate-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div id="er-sucden-preview" class="step preview hidden">
+      <ul id="er-sucden-errors" class="msg-list err"></ul>
+      <ul id="er-sucden-warnings" class="msg-list warn"></ul>
+      <div id="er-sucden-section" class="hidden">
+        <h3>Resumen</h3>
+        <table>
+          <tbody id="er-sucden-resumen-body"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:20px;">
+        <button id="btn-er-sucden-confirm" disabled>Confirmar e ingestar</button>
+        <span id="er-sucden-ingest-status" class="muted"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 </main>
 
 <script>
@@ -727,7 +985,18 @@ if (location.hash === '#rentroll') {
   document.querySelector('[data-tab="mercado"]').click();
 } else if (location.hash === '#balance') {
   document.querySelector('[data-tab="balance"]').click();
+} else if (location.hash === '#er-activos') {
+  document.querySelector('[data-tab="er-activos"]').click();
 }
+
+document.querySelectorAll('#er-subtabs .er-subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#er-subtabs .er-subtab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.er-activo-panel').forEach(p => p.classList.add('hidden'));
+    btn.classList.add('active');
+    document.getElementById('er-panel-' + btn.dataset.eractivo).classList.remove('hidden');
+  });
+});
 
 function fmt(n) {
   if (n === null || n === undefined) return '—';
@@ -2348,6 +2617,386 @@ btnPkConfirm.addEventListener('click', async () => {
     btnPkConfirm.disabled = false;
   }
 });
+
+// ── TAB INGRESOS/NOI ACTIVOS (Viña, Curicó, ...) ─────────────────────────
+// Resumen de estado por activo, mismo lenguaje visual que las mini-cards de
+// Inicio (.inicio-card / .value.ok / .value.miss), pero alimentado por
+// /api/er_mensual/periodo_check en vez de /api/estado_ingesta.
+const ER_ACTIVOS_RESUMEN = [
+  { key: 'vina', label: 'Viña Centro' },
+  { key: 'curico', label: 'Mall Curicó' },
+  { key: 'inmosa', label: 'INMOSA' },
+];
+const ER_ACTIVOS_FIJOS_RESUMEN = [
+  { key: 'sucden', label: 'Sucden', endpoint: '/api/er_fijo/periodo_check' },
+];
+
+function _mesAnteriorYYYYMM() {
+  const n = new Date();
+  const prev = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function renderErResumenCards() {
+  const container = document.getElementById('er-resumen-cards');
+  const mesEsperado = _mesAnteriorYYYYMM();
+  const cardsMensuales = await Promise.all(ER_ACTIVOS_RESUMEN.map(async ({ key, label }) => {
+    let data = {};
+    try {
+      const res = await fetch(`/api/er_mensual/periodo_check?activo=${key}`);
+      data = await res.json();
+    } catch (e) {}
+    const ultimo = data.ultimo_periodo || null;
+    const alDia = !!ultimo && ultimo >= mesEsperado;
+    return { key, label, ultimo, alDia, nFilas: data.n_filas || 0 };
+  }));
+  const cardsFijos = await Promise.all(ER_ACTIVOS_FIJOS_RESUMEN.map(async ({ key, label, endpoint }) => {
+    let data = {};
+    try {
+      const res = await fetch(endpoint);
+      data = await res.json();
+    } catch (e) {}
+    const ultimo = data.ultimo_periodo || null;
+    const alDia = !!ultimo && ultimo >= mesEsperado;
+    return { key, label, ultimo, alDia, nFilas: data.n_filas || 0 };
+  }));
+  const cards = [...cardsMensuales, ...cardsFijos];
+
+  container.innerHTML = cards.map(c => `
+    <div class="inicio-card">
+      <h3>${c.label}</h3>
+      <div class="inicio-subtitle">Ingresos / NOI mensual</div>
+      <div class="inicio-stat-row">
+        <span class="label">Último período ingestado</span>
+        <span class="value ${c.ultimo ? 'ok' : 'miss'}">${c.ultimo || '—'}</span>
+      </div>
+      <div class="inicio-stat-row">
+        <span class="label">Estado</span>
+        <span class="value ${c.alDia ? 'ok' : 'miss'}">${c.alDia ? 'Al día' : 'Atrasado'}</span>
+      </div>
+      <button class="ingestar-btn" data-goto-eractivo="${c.key}" style="margin-top:10px">Ingestar →</button>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('[data-goto-eractivo]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelector(`#er-subtabs [data-eractivo="${btn.dataset.gotoEractivo}"]`).click();
+    });
+  });
+}
+
+renderErResumenCards();
+
+// ── Ingesta mensual: un mes por corrida, elegido en el selector de período,
+// leído desde la hoja ESTADO DE RESULTADO de la planilla EEFF del activo.
+function initErActivo(activo) {
+  const periodoInput = document.getElementById(`er-${activo}-periodo`);
+  const dropzone = document.getElementById(`er-${activo}-dropzone`);
+  const fileInput = document.getElementById(`er-${activo}-file`);
+  const btnValidate = document.getElementById(`btn-er-${activo}-validate`);
+  const validateStatus = document.getElementById(`er-${activo}-validate-status`);
+  const preview = document.getElementById(`er-${activo}-preview`);
+  const btnConfirm = document.getElementById(`btn-er-${activo}-confirm`);
+  const ingestStatus = document.getElementById(`er-${activo}-ingest-status`);
+  const statusRow = document.getElementById(`er-${activo}-status-row`);
+  const dropzoneTextDefault = dropzone.textContent.trim();
+
+  (function initPeriodo() {
+    const n = new Date();
+    const prev = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+    periodoInput.value = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    selectedFile = file;
+    dropzone.textContent = file ? `Archivo seleccionado: ${file.name}` : dropzoneTextDefault;
+    dropzone.classList.toggle('has-file', !!file);
+    dropzone.appendChild(fileInput);
+    resetPreview();
+  }
+
+  function resetPreview() {
+    preview.classList.add('hidden');
+    btnConfirm.disabled = true;
+    setStatus(validateStatus);
+    setStatus(ingestStatus);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0] || null));
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  periodoInput.addEventListener('change', resetPreview);
+
+  async function checkStatus() {
+    statusRow.innerHTML = '';
+    try {
+      const res = await fetch(`/api/er_mensual/periodo_check?activo=${activo}`);
+      const data = await res.json();
+      if (data.ultimo_periodo) {
+        const el = document.createElement('span');
+        el.className = 'badge';
+        el.innerHTML = `<span class="dot"></span>Última data en DB: <strong>${data.ultimo_periodo}</strong> (${data.n_filas} filas)`;
+        statusRow.appendChild(el);
+      }
+    } catch (e) {}
+  }
+  checkStatus();
+
+  function renderPreview(data) {
+    preview.classList.remove('hidden');
+    const errUl = document.getElementById(`er-${activo}-errors`);
+    const warnUl = document.getElementById(`er-${activo}-warnings`);
+    errUl.innerHTML = ''; warnUl.innerHTML = '';
+    (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+    (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+    const section = document.getElementById(`er-${activo}-section`);
+    if (data.ok) {
+      section.classList.remove('hidden');
+      const fmtUf = v => v == null ? '—' : Number(v).toLocaleString('es-CL', {maximumFractionDigits: 1});
+      document.getElementById(`er-${activo}-resumen-body`).innerHTML = [
+        ['Activo', data.activo],
+        ['Período', data.periodo],
+        ['Filas parseadas', data.n_filas],
+        ['NOI (UF)', fmtUf(data.noi_uf)],
+        ['Ingresos (UF)', fmtUf(data.ingresos_uf)],
+        ['Último período disponible en el archivo', data.ultimo_periodo_disponible ?? '—'],
+      ].map(([k, v]) => `<tr><td>${k}</td><td class="num"><strong>${v ?? '—'}</strong></td></tr>`).join('');
+    } else {
+      section.classList.add('hidden');
+    }
+    btnConfirm.disabled = !data.ok;
+  }
+
+  btnValidate.addEventListener('click', async () => {
+    if (!selectedFile) { validateStatus.textContent = 'Elige un archivo primero.'; return; }
+    if (!periodoInput.value) { validateStatus.textContent = 'Elige el período primero.'; return; }
+    setStatus(validateStatus, 'Validando y preparando previsualización...', 'loading');
+    btnValidate.disabled = true;
+    btnConfirm.disabled = true;
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('activo', activo);
+    fd.append('periodo', periodoInput.value);
+    try {
+      const res = await fetch('/api/er_mensual/validate', { method: 'POST', body: fd });
+      const data = await res.json();
+      setStatus(validateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores.', data.ok ? 'success' : 'error');
+      renderPreview(data);
+    } catch (e) {
+      setStatus(validateStatus, 'Error: ' + e.message, 'error');
+    } finally {
+      btnValidate.disabled = false;
+    }
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    if (!selectedFile || !periodoInput.value) return;
+    btnConfirm.disabled = true;
+    setStatus(ingestStatus, 'Ingestando en la base de datos y recalculando KPIs...', 'loading');
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('activo', activo);
+    fd.append('periodo', periodoInput.value);
+    try {
+      const res = await fetch('/api/er_mensual/commit', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.ok) {
+        setStatus(ingestStatus, 'Error: ' + (data.error || 'desconocido'), 'error');
+        btnConfirm.disabled = false;
+        return;
+      }
+      setStatus(ingestStatus, `✓ Ingesta OK. Estado: ${data.status}. ${data.rows} filas cargadas.`, 'success');
+      checkStatus();
+      renderErResumenCards();
+    } catch (e) {
+      setStatus(ingestStatus, 'Error: ' + e.message, 'error');
+      btnConfirm.disabled = false;
+    }
+  });
+}
+
+initErActivo('vina');
+initErActivo('curico');
+initErActivo('inmosa');
+
+// ── Sucden: contrato fijo, sin archivo — inputs precargados y editables ───
+const SUCDEN_CODIGOS = ['SUCDEN_ING_ARR', 'SUCDEN_CONTRIB', 'SUCDEN_SOBRETASA', 'SUCDEN_SEG'];
+const SUCDEN_NOMBRES = {
+  SUCDEN_ING_ARR: 'Ingresos por Arriendos',
+  SUCDEN_CONTRIB: 'Contribuciones',
+  SUCDEN_SOBRETASA: 'Sobretasa',
+  SUCDEN_SEG: 'Seguros',
+};
+
+function initErSucdenFijo() {
+  const periodoInput = document.getElementById('er-sucden-periodo');
+  const btnValidate = document.getElementById('btn-er-sucden-validate');
+  const validateStatus = document.getElementById('er-sucden-validate-status');
+  const preview = document.getElementById('er-sucden-preview');
+  const btnConfirm = document.getElementById('btn-er-sucden-confirm');
+  const ingestStatus = document.getElementById('er-sucden-ingest-status');
+  const statusRow = document.getElementById('er-sucden-status-row');
+  const inputs = {};
+  SUCDEN_CODIGOS.forEach(c => { inputs[c] = document.getElementById(`er-sucden-input-${c}`); });
+
+  (function initPeriodo() {
+    const n = new Date();
+    periodoInput.value = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
+  let valoresVigentes = {};
+  let lastValidatedPeriodo = null;
+  let lastValidationOk = false;
+
+  async function cargarValoresVigentes() {
+    try {
+      const res = await fetch('/api/er_fijo/valores');
+      valoresVigentes = await res.json();
+      SUCDEN_CODIGOS.forEach(c => {
+        if (valoresVigentes[c] !== undefined) inputs[c].value = valoresVigentes[c];
+        inputs[c].closest('.fijo-field').classList.remove('is-dirty');
+      });
+    } catch (e) {}
+  }
+  cargarValoresVigentes();
+
+  function resetPreview() {
+    preview.classList.add('hidden');
+    btnConfirm.disabled = true;
+    lastValidationOk = false;
+    setStatus(validateStatus);
+    setStatus(ingestStatus);
+  }
+  function marcarDirty(codigo) {
+    const val = parseFloat(inputs[codigo].value);
+    const vigente = Number(valoresVigentes[codigo]);
+    const dirty = Number.isFinite(val) && Number.isFinite(vigente) && Math.abs(val - vigente) > 1e-6;
+    inputs[codigo].closest('.fijo-field').classList.toggle('is-dirty', dirty);
+  }
+
+  periodoInput.addEventListener('change', resetPreview);
+  SUCDEN_CODIGOS.forEach(c => inputs[c].addEventListener('input', () => { marcarDirty(c); resetPreview(); }));
+
+  async function checkStatus() {
+    statusRow.innerHTML = '';
+    try {
+      const res = await fetch('/api/er_fijo/periodo_check');
+      const data = await res.json();
+      if (data.ultimo_periodo) {
+        const el = document.createElement('span');
+        el.className = 'badge';
+        el.innerHTML = `<span class="dot"></span>Última data en DB: <strong>${data.ultimo_periodo}</strong> (${data.n_filas} filas)`;
+        statusRow.appendChild(el);
+      }
+    } catch (e) {}
+  }
+  checkStatus();
+
+  function calcularOverrides() {
+    const overrides = {};
+    SUCDEN_CODIGOS.forEach(c => {
+      const val = parseFloat(inputs[c].value);
+      if (!Number.isFinite(val)) return;
+      const vigente = Number(valoresVigentes[c]);
+      if (!Number.isFinite(vigente) || Math.abs(val - vigente) > 1e-6) overrides[c] = val;
+    });
+    return overrides;
+  }
+
+  function renderPreview(data) {
+    preview.classList.remove('hidden');
+    const errUl = document.getElementById('er-sucden-errors');
+    const warnUl = document.getElementById('er-sucden-warnings');
+    errUl.innerHTML = ''; warnUl.innerHTML = '';
+    (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+    (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+    const section = document.getElementById('er-sucden-section');
+    if (data.ok) {
+      section.classList.remove('hidden');
+      const fmtUf = v => v == null ? '—' : Number(v).toLocaleString('es-CL', {maximumFractionDigits: 4});
+      const filas = SUCDEN_CODIGOS
+        .filter(c => data.valores && data.valores[c])
+        .map(c => [data.valores[c].nombre, fmtUf(data.valores[c].monto_uf)]);
+      document.getElementById('er-sucden-resumen-body').innerHTML = [
+        ['Período', data.periodo],
+        ...filas,
+        ['NOI (UF)', fmtUf(data.noi_uf)],
+        ['Ingresos (UF)', fmtUf(data.ingresos_uf)],
+      ].map(([k, v]) => `<tr><td>${k}</td><td class="num"><strong>${v ?? '—'}</strong></td></tr>`).join('');
+    } else {
+      section.classList.add('hidden');
+    }
+    lastValidationOk = !!data.ok;
+    lastValidatedPeriodo = periodoInput.value;
+    btnConfirm.disabled = !lastValidationOk;
+  }
+
+  btnValidate.addEventListener('click', async () => {
+    if (!periodoInput.value) { validateStatus.textContent = 'Elige el período primero.'; return; }
+    setStatus(validateStatus, 'Verificando...', 'loading');
+    btnValidate.disabled = true;
+    btnConfirm.disabled = true;
+    try {
+      const overrides = calcularOverrides();
+      const res = await fetch('/api/er_fijo/validate', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ periodo: periodoInput.value, overrides }),
+      });
+      const data = await res.json();
+      setStatus(validateStatus, data.ok ? 'Listo para confirmar.' : 'Revisa los errores.', data.ok ? 'success' : 'error');
+      renderPreview(data);
+    } catch (e) {
+      setStatus(validateStatus, 'Error: ' + e.message, 'error');
+    } finally {
+      btnValidate.disabled = false;
+    }
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    if (!lastValidationOk || lastValidatedPeriodo !== periodoInput.value) {
+      ingestStatus.textContent = 'Algo cambió desde la última verificación — vuelve a verificar.';
+      return;
+    }
+    const overrides = calcularOverrides();
+    let permanentes = [];
+    if (Object.keys(overrides).length > 0) {
+      const nombres = Object.keys(overrides).map(c => SUCDEN_NOMBRES[c]).join(', ');
+      const esPermanente = window.confirm(
+        `Cambiaste: ${nombres}.\n\n¿El cambio es PERMANENTE (aplica desde este período en adelante)?\n\nAceptar = permanente · Cancelar = solo este período (${periodoInput.value}).`
+      );
+      if (esPermanente) permanentes = Object.keys(overrides);
+    }
+    btnConfirm.disabled = true;
+    setStatus(ingestStatus, 'Ingestando en la base de datos...', 'loading');
+    try {
+      const res = await fetch('/api/er_fijo/commit', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ periodo: periodoInput.value, overrides, permanentes }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'error');
+      setStatus(ingestStatus, `Ingesta completa: ${data.rows} filas.`, 'success');
+      resetPreview();
+      checkStatus();
+      cargarValoresVigentes();
+    } catch (e) {
+      setStatus(ingestStatus, 'Error: ' + e.message, 'error');
+      btnConfirm.disabled = false;
+    }
+  });
+}
+initErSucdenFijo();
 </script>
 </body>
 </html>
