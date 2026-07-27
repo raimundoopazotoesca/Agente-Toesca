@@ -100,7 +100,7 @@ def _try_parse_filas_planas(lines: list[str]) -> list[dict] | None:
     """
     filas = []
     for line in lines:
-        tokens = line.split()
+        tokens = [t for t in line.split() if t != "%"]
         if len(tokens) < 11:
             continue
         valores_raw = tokens[-9:]

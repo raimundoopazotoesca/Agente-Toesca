@@ -288,6 +288,41 @@ def test_parse_tabla_jll_formato_plano_negativo():
     assert f["absorcion_trim_m2"] == -774.0
 
 
+TEXTO_JLL_FLAT_PORCENTAJE_CON_ESPACIO = """Submercado Clase Inventario (m²) Absorción neta trimestral (m²) Absorción neta últimos 12 meses (m²) Vacancia (%) Renta pedida promedio (UF/m²/mes) Renta pedida promedio (USD/m²/mes) Producción trimestral (m²) Producción últimos 12 meses (m²) En construcción [2026-2029] (m²)
+Las Condes (CBD) Total 1.733.422 6.947 42.531 5,2 % 0,58 25,51 0 36.704 109.335
+Providencia Total 552.223 4.874 27.534 9,8 % 0,48 21,39 0 0 17.218
+Santiago Centro Total 373.249 -9.177 -13.346 13,1 % 0,33 14,50 0 0 0
+Vitacura Total 173.394 3.166 11.068 8,2 % 0,48 21,19 0 0 0
+Ciudad empresarial Total 260.433 28 8.990 6,7 % 0,24 10,80 0 0 0
+Estoril Total 69.242 2.154 3.519 15,4 % 0,42 18,55 0 0 0
+Santiago Total 3.161.963 7.992 80.297 7,4 % 0,47 20,62 0 36.704 126.553
+Las Condes (CBD) A 1.076.580 -186 25.042 5,4 % 0,62 27,48 0 29.691 104.548
+Providencia A 156.895 5.439 23.082 20,1 % 0,51 22,62 0 0 10.800
+Santiago Centro A 81.180 -71 -3.812 17,9 % 0,34 15,22 0 0 0
+Santiago A 1.314.655 5.182 44.311 7,9 % 0,55 24,29 0 29.691 115.348
+Las Condes (CBD) B 656.842 7.133 17.490 4,9 % 0,50 21,99 0 7.013 4.787
+Providencia B 395.328 -565 4.453 5,7 % 0,44 19,66 0 0 6.418
+Santiago Centro B 292.069 -9.106 -9.534 11,7 % 0,32 14,20 0 0 0
+Vitacura B 173.394 3.166 11.068 8,2 % 0,48 21,19 0 0 0
+Ciudad empresarial B 260.433 28 8.990 6,7 % 0,24 10,80 0 0 0
+Estoril B 69.242 2.154 3.519 15,4 % 0,42 18,55 0 0 0
+Santiago B 1.847.308 2.810 35.985 7,1 % 0,40 17,71 0 7.013 11.205
+"""
+
+
+def test_parse_tabla_jll_formato_plano_porcentaje_con_espacio_18_filas():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_PORCENTAJE_CON_ESPACIO)
+    assert len(filas) == 18
+    pares = {(f["submercado"], f["clase"]) for f in filas}
+    assert pares == mod.EXPECTED_PARES
+
+
+def test_parse_tabla_jll_formato_plano_porcentaje_con_espacio_valor_vacancia():
+    filas = mod.parse_tabla_jll(TEXTO_JLL_FLAT_PORCENTAJE_CON_ESPACIO)
+    f = [f for f in filas if f["submercado"] == "Las Condes (CBD)" and f["clase"] == "Total"][0]
+    assert f["vacancia_pct"] == 5.2
+
+
 def test_parse_num_cl_miles():
     assert mod._parse_num_cl("1.733.422") == 1733422.0
 
