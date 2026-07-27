@@ -1,3 +1,32 @@
+## [2026-07-27] ingesta | INMOSA agregado al menú de ingesta Ingresos/NOI Activos
+
+Tercer activo del tab "Ingresos/NOI Activos" (después de Viña Centro y Mall
+Curicó). A diferencia de esos dos (hoja `ESTADO DE RESULTADO`, cuenta_codigo
+tipo `4-1-01-100`, CLP+UF), INMOSA usa una fuente distinta: `NUEVO ORDEN >
+Renta Comercial > Ingresos Activos > inmosa > <año> > Flujo Caja MM.YY Senior
+Assist.xlsx` — un Flujo de Caja mensual en UF pura (sin CLP), sin código de
+cuenta, hoja única (ej. `FC 06.2026`). Nuevo parser
+`tools/db/ingest_er_inmosa_mensual.py`: ancla `Ingresos operacionales`, 7
+filas de gasto operacional (Remuneraciones/Adm, Aseo, Seguros,
+Contribuciones, Oficina Central, Otros gastos, IVA), valida contra
+`Costos Operacionales` y `Flujo operativo (antes de Leasing e Hipotecas)`,
+corta en la fila `Leasing` (todo lo financiero/deuda queda fuera). Por
+convención con el parser histórico `ingest_er_inmosa.py` (mismo
+`activo_key='INMOSA'`), el valor UF se guarda en `monto_clp` y `monto_uf`
+queda `None` — `ingest_er_activo_web.validate_mensual` tuvo que generalizarse
+para tolerar ese caso (antes asumía `monto_uf` siempre poblado).
+
+`ingest_er_activo_web.py` se generalizó: cada entrada de `_ACTIVOS` ahora
+declara `modulo_mensual` (antes `ingest_er_mensual` estaba hardcodeado en
+`validate_mensual`/`commit_mensual`), así cada activo puede traer su propio
+parser mensual sin tocar el dispatcher. HTML/JS del tab ya eran genéricos
+por `activo` key (`initErActivo('inmosa')`, ids `er-inmosa-*`) — no hizo
+falta lógica nueva ahí, solo el bloque de markup y sumar `'inmosa'` a
+`ER_ACTIVOS_RESUMEN`. Validado end-to-end (parse + validate_mensual) contra
+`Flujo Caja Jun.26 Senior Assist.xlsx`, 2026-06: 8 filas, ingresos_uf=9013.2,
+noi_uf=7216.4, integridad ok. No se corrió el commit real (no se ingestó en
+la DB) — decisión de dejarlo para cuando el usuario confirme por la UI.
+
 ## [2026-07-27] fase0 | F0.6 cerrado: skill real-estate-finance-expert auditada y corregida
 
 Bloqueo original resuelto: `~/.claude/skills/real-estate-finance-expert/` si existe en
