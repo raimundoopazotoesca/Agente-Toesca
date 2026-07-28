@@ -92,6 +92,28 @@ def _es_vacante(arrendatario) -> bool:
     return not arrendatario or "vacante" in str(arrendatario).lower()
 
 
+# "Tipo Activo 2 (no va vacante)" viene en singular y SIEMPRE trae el tipo real
+# (a diferencia de "Tipo Activo 3", que en unidades vacantes puede venir pisado
+# con el literal "Vacante"/"vacante" y perder la clasificación real). Se prioriza
+# sobre "Tipo Activo 3" para clasificar oficinas/locales/bodegas/estacionamientos.
+_TIPO_ACTIVO_2_MAP = {
+    "Oficina": "Oficinas",
+    "Local": "Locales Comerciales",
+    "Bodega": "Bodegas",
+    "Estacionamiento": "Estacionamientos",
+}
+
+# Tipos que cuentan para la vacancia "de edificio" (excluye bodegas/estacionamientos,
+# que tienen dinámica de ocupación distinta y distorsionan el % si se mezclan).
+_TIPOS_VACANCIA_EDIFICIO = ("Oficinas", "Locales Comerciales")
+
+
+def _tipo_real(tipo_activo_2, tipo_activo_3) -> str | None:
+    if tipo_activo_2:
+        return _TIPO_ACTIVO_2_MAP.get(tipo_activo_2, tipo_activo_2)
+    return tipo_activo_3
+
+
 def _monto_mensual_uf(rec: dict) -> float:
     """raw_rent_roll_line.renta_uf es una TASA (UF/m²/mes), no un monto total.
     El monto mensual de una unidad = tasa * m2."""
@@ -118,6 +140,7 @@ def _snapshot_from_db(activo_key: str, periodo: str) -> dict:
                 "m2": r["m2"],
                 "renta_uf": r["renta_uf"],
                 "vencimiento": r["vencimiento"],
+                "tipo": _tipo_real(extra.get("tipo_activo_2"), extra.get("tipo_activo_3")),
             }
         return out
     finally:
@@ -136,6 +159,9 @@ def _snapshot_from_source(activo_key: str, source_data: dict) -> dict:
             "m2": _rr_num(rec.get("Area Arrendable (m2)")),
             "renta_uf": _rr_num(rec.get("Renta Fija (UF/m2 /mes)")),
             "vencimiento": _rr_date_str(rec.get("Término del Contrato")),
+            "tipo": _tipo_real(
+                rec.get("Tipo Activo 2 (no va vacante)"), rec.get("Tipo Activo 3")
+            ),
         }
     return out
 
@@ -209,6 +235,27 @@ def _totales_activo(snapshot: dict) -> dict:
     }
 
 
+def _detalle_vacancia_por_edificio(snapshot: dict) -> dict:
+    """{edificio: {"Oficinas": totales, "Locales Comerciales": totales, "Total": totales}}.
+
+    "Total" = Oficinas + Locales Comerciales únicamente (excluye bodegas y
+    estacionamientos, que no cuentan para la vacancia de edificio)."""
+    edificios = sorted({k[0] for k in snapshot.keys() if k[0]})
+    out = {}
+    for edificio in edificios:
+        recs_edificio = [v for k, v in snapshot.items() if k[0] == edificio]
+        por_tipo = {
+            tipo: _totales_activo({("_", str(i)): r for i, r in enumerate(
+                [rec for rec in recs_edificio if rec.get("tipo") == tipo]
+            )})
+            for tipo in _TIPOS_VACANCIA_EDIFICIO
+        }
+        recs_total = [rec for rec in recs_edificio if rec.get("tipo") in _TIPOS_VACANCIA_EDIFICIO]
+        por_tipo["Total"] = _totales_activo({("_", str(i)): r for i, r in enumerate(recs_total)})
+        out[edificio] = por_tipo
+    return out
+
+
 def diff_absorcion(activo_key: str, periodo: str, source_data: dict) -> dict:
     """Compara el snapshot nuevo (del archivo) vs el vigente en DB para
     (activo_key, periodo_anterior). Devuelve eventos + totales + casos raros.
@@ -234,6 +281,10 @@ def diff_absorcion(activo_key: str, periodo: str, source_data: dict) -> dict:
             "totales": {
                 "periodo_anterior": _totales_activo(snap_prev),
                 "periodo_actual": _totales_activo(snap_nuevo),
+            },
+            "detalle_vacancia": {
+                "periodo_anterior": _detalle_vacancia_por_edificio(snap_prev),
+                "periodo_actual": _detalle_vacancia_por_edificio(snap_nuevo),
             },
             "absorcion": {"bruta_m2": 0.0, "bruta_uf": 0.0, "neta_m2": 0.0, "neta_uf": 0.0},
         }
@@ -327,6 +378,10 @@ def diff_absorcion(activo_key: str, periodo: str, source_data: dict) -> dict:
         "totales": {
             "periodo_anterior": _totales_activo(snap_prev),
             "periodo_actual": _totales_activo(snap_nuevo),
+        },
+        "detalle_vacancia": {
+            "periodo_anterior": _detalle_vacancia_por_edificio(snap_prev),
+            "periodo_actual": _detalle_vacancia_por_edificio(snap_nuevo),
         },
         "absorcion": {
             "bruta_m2": round(absorcion_bruta_m2, 2),
@@ -557,6 +612,7 @@ def commit(file_bytes: bytes, filename: str, periodo: str) -> dict:
                     "activo1": activo1,
                     "activo2": activo2,
                     "tipo_activo_1": rec.get("Tipo Activo 1"),
+                    "tipo_activo_2": rec.get("Tipo Activo 2 (no va vacante)"),
                     "tipo_activo_3": rec.get("Tipo Activo 3"),
                     "tipo_arrendatario": rec.get("Tipo Arrendatario"),
                     "rol": rec.get("Rol"),

@@ -322,6 +322,35 @@ def estado_uf(con, hoy: date) -> dict:
     }
 
 
+def estado_dolar(con, hoy: date) -> dict:
+    """Estado de la ingesta diaria de dólar observado (raw_dolar_diaria).
+
+    A diferencia de la UF, el dólar del día NO se publica de antemano, por lo
+    que "al día" se mide en días de atraso respecto de hoy (mismo criterio
+    laxo que una ingesta diaria: se tolera fin de semana/feriado reciente).
+    """
+    row = con.execute(
+        "SELECT fecha, valor, fuente FROM raw_dolar_diaria ORDER BY fecha DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return {
+            "id": "dolar", "label": "Dólar (USD)", "ultima_fecha": None, "ultimo_valor": None,
+            "dias_atraso": None, "estado": "miss", "fuente": None,
+        }
+    ultima_fecha, ultimo_valor, fuente = row
+    dias_atraso = (hoy - date.fromisoformat(ultima_fecha)).days
+    if dias_atraso <= 3:
+        estado = "ok"
+    elif dias_atraso <= 7:
+        estado = "warn"
+    else:
+        estado = "miss"
+    return {
+        "id": "dolar", "label": "Dólar (USD)", "ultima_fecha": ultima_fecha, "ultimo_valor": ultimo_valor,
+        "dias_atraso": dias_atraso, "estado": estado, "fuente": fuente,
+    }
+
+
 def estado_bursatil(con, hoy: date) -> dict:
     """Estado de la ingesta mensual de valor cuota bursátil (mercado en línea)."""
     en_curso = _periodo_en_curso(hoy, "mensual")
@@ -363,6 +392,7 @@ def estado_ingesta(con, hoy: date | None = None) -> dict:
     return {
         "tipos": [estado_tipo(con, cfg, hoy) for cfg in CONFIG],
         "uf": estado_uf(con, hoy),
+        "dolar": estado_dolar(con, hoy),
         "bursatil": estado_bursatil(con, hoy),
     }
 

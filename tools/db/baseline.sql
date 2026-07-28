@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- BASELINE del esquema — equivale a aplicar las migraciones 001..072.
+-- BASELINE del esquema — equivale a aplicar las migraciones 001..073.
 --
 -- GENERADO POR scripts/regenerar_baseline.py — no editar a mano.
 --
@@ -12,7 +12,7 @@
 -- producción, y los tests validaban un esquema que producción no tenía.
 --
 -- Este archivo es el esquema real de producción. El runner lo aplica a una DB
--- vacía y registra 1..72 como aplicadas — ahora sí de forma veraz, porque el
+-- vacía y registra 1..73 como aplicadas — ahora sí de forma veraz, porque el
 -- baseline incorpora sus efectos. Las migraciones históricas se conservan como
 -- referencia pero ya no se ejecutan sobre DBs nuevas.
 --
@@ -282,6 +282,13 @@ CREATE TABLE "raw_dividendo" (
     loaded_at      TEXT DEFAULT (datetime('now')),
     superseded_at  TEXT
 , tipo TEXT NOT NULL DEFAULT 'dividendo');
+
+CREATE TABLE raw_dolar_diaria (
+    fecha     TEXT PRIMARY KEY,        -- ISO YYYY-MM-DD
+    valor     REAL NOT NULL,           -- CLP por USD
+    fuente    TEXT NOT NULL,           -- 'mindicador' | ...
+    loaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE raw_eeff_line (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -573,6 +580,8 @@ CREATE INDEX idx_tasacion_activo_periodo
 CREATE INDEX ix_raw_balance_consolidado_line_fondo_periodo
     ON raw_balance_consolidado_line(fondo_key, periodo);
 
+CREATE INDEX ix_raw_dolar_diaria_fecha ON raw_dolar_diaria(fecha);
+
 CREATE INDEX ix_raw_uf_diaria_fecha ON raw_uf_diaria(fecha);
 
 CREATE UNIQUE INDEX uq_derived_kpi_logical
@@ -623,6 +632,11 @@ SELECT
 FROM "raw_dividendo"
 WHERE superseded_at IS NULL
   AND tipo = 'dividendo';
+
+CREATE VIEW fact_dolar AS
+SELECT fecha, valor
+FROM raw_dolar_diaria
+ORDER BY fecha;
 
 CREATE VIEW fact_precio_cuota AS
 SELECT

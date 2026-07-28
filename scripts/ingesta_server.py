@@ -14,6 +14,11 @@ Seguridad: todo /api/* exige el header X-Ingesta-Token. El token se inyecta
 automáticamente en las páginas que sirve este servidor, así que el flujo por
 navegador no cambia. Consecuencia: abrir factsheet.html como file:// (doble
 clic) ya no permite usar el Asistente — hay que abrirlo desde /factsheet.
+
+El servidor escucha en 0.0.0.0: además de 127.0.0.1, queda accesible desde
+cualquier equipo de la misma red local (LAN de oficina) vía la IP de esta
+máquina, puerto 8765. Cualquiera en esa red que llegue a la URL recibe el
+token inyectado igual que en localhost — asumir que la LAN es de confianza.
 """
 from __future__ import annotations
 
@@ -41,6 +46,7 @@ from tools.db import ingest_balance_consolidado as balance_core  # noqa: E402
 from tools.db import ingest_er_activo_web as er_activo_core  # noqa: E402
 from tools.db import ingest_er_sucden_fijo as sucden_fijo_core  # noqa: E402
 from tools.db import ingest_amortizacion_extra as amort_extra_core  # noqa: E402
+from tools.db import ingest_caja_web as caja_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
 from tools import db_chat  # noqa: E402
@@ -84,10 +90,25 @@ API_TOKEN = os.environ.get("INGESTA_TOKEN") or secrets.token_urlsafe(32)
 
 # Orígenes permitidos para CORS. No se refleja un Origin arbitrario y "null"
 # (factsheet abierto como file://) ya no se acepta: abrir el factsheet desde
-# http://127.0.0.1:8765/factsheet lo deja con el token inyectado.
-_CORS_ORIGINS = frozenset(
-    f"http://{host}:8765" for host in ("127.0.0.1", "localhost", "[::1]")
-)
+# http://127.0.0.1:8765/factsheet (o la IP de la red local) lo deja con el
+# token inyectado.
+def _lan_ip() -> str | None:
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return None
+
+
+_LAN_HOSTS = ["127.0.0.1", "localhost", "[::1]"]
+_lan_ip_addr = _lan_ip()
+if _lan_ip_addr:
+    _LAN_HOSTS.append(_lan_ip_addr)
+
+_CORS_ORIGINS = frozenset(f"http://{host}:8765" for host in _LAN_HOSTS)
 
 
 def _token_ok() -> bool:
@@ -700,15 +721,60 @@ def api_amort_extra_commit():
     return jsonify({"ok": True, **result})
 
 
+@app.get("/api/caja/periodo_check")
+def api_caja_periodo_check():
+    return jsonify(caja_core.periodo_status())
+
+
+@app.post("/api/caja/validate")
+def api_caja_validate():
+    periodo = request.form.get("periodo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube la planilla Saldo Caja + FFMM Inmobiliario."], "warnings": []})
+    if not periodo:
+        return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
+    try:
+        result = _con_archivo_legible(caja_core.validate, periodo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
+    return jsonify(result)
+
+
+@app.post("/api/caja/commit")
+def api_caja_commit():
+    periodo = request.form.get("periodo", "")
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube la planilla Saldo Caja + FFMM Inmobiliario."}), 400
+    if not periodo:
+        return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
+    try:
+        summary = _con_archivo_legible(caja_core.commit, periodo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    if not summary.get("ok", True):
+        return jsonify(summary), 400
+    _rebuild_factsheet()
+    return jsonify(summary)
+
+
 if __name__ == "__main__":
     print("Ingesta EEFF: http://127.0.0.1:8765/ingesta")
     print("Factsheet:    http://127.0.0.1:8765/factsheet")
+    if _lan_ip_addr:
+        print(f"\nAcceso desde la red local (mismo IP/red de la oficina):")
+        print(f"  Ingesta:   http://{_lan_ip_addr}:8765/ingesta")
+        print(f"  Factsheet: http://{_lan_ip_addr}:8765/factsheet")
+        print(f"  DB diagrama: http://{_lan_ip_addr}:8765/db-diagrama")
     if not os.environ.get("INGESTA_TOKEN"):
         print(
             f"\nToken de esta sesión: {API_TOKEN}\n"
             "  (se inyecta solo en las páginas que sirve este servidor; fija\n"
             "   INGESTA_TOKEN en el .env si quieres uno estable entre reinicios)"
         )
-    # debug=False: el debugger de Werkzeug expone una consola interactiva a
-    # cualquier proceso local que alcance el puerto.
-    app.run(host="127.0.0.1", port=8765, debug=False, use_reloader=False)
+    # host=0.0.0.0: escucha en todas las interfaces, no solo loopback, para
+    # que el resto del equipo entre desde su propio navegador en la misma
+    # red. debug=False: el debugger de Werkzeug expone una consola
+    # interactiva a cualquier proceso que alcance el puerto.
+    app.run(host="0.0.0.0", port=8765, debug=False, use_reloader=False)

@@ -46,3 +46,32 @@ def test_upsert_dividendo_es_idempotente(tmp_db):
     rows = repo_fact.list_dividendos(tmp_db, "CFITOERI1A")
     assert len(rows) == 1
     assert rows[0]["monto"] == 50.0
+
+
+def test_upsert_dolar(tmp_db):
+    repo_fact.upsert_dolar(tmp_db, fecha="2026-04-27", valor_clp=950.0)
+    assert repo_fact.get_dolar(tmp_db, "2026-04-27") == 950.0
+
+
+def test_get_dolar_usa_fecha_anterior_mas_cercana(tmp_db):
+    repo_fact.upsert_dolar(tmp_db, fecha="2026-04-20", valor_clp=940.0)
+    assert repo_fact.get_dolar(tmp_db, "2026-04-27") == 940.0
+
+
+def test_get_dolar_not_found(tmp_db):
+    with pytest.raises(NotFoundError):
+        repo_fact.get_dolar(tmp_db, "1999-01-01")
+
+
+def test_upsert_caja(tmp_db):
+    repo_fact.upsert_caja(tmp_db, fondo_key="TRI", fecha="2026-04-30", saldo_clp=1_000_000.0, source_file="x.xlsx")
+    row = tmp_db.execute("SELECT saldo_clp, source_file FROM raw_caja WHERE fondo_key='TRI' AND fecha='2026-04-30'").fetchone()
+    assert row["saldo_clp"] == 1_000_000.0
+    assert row["source_file"] == "x.xlsx"
+
+
+def test_upsert_caja_sobrescribe(tmp_db):
+    repo_fact.upsert_caja(tmp_db, "TRI", "2026-04-30", 100.0)
+    repo_fact.upsert_caja(tmp_db, "TRI", "2026-04-30", 200.0)
+    row = tmp_db.execute("SELECT saldo_clp FROM raw_caja WHERE fondo_key='TRI' AND fecha='2026-04-30'").fetchone()
+    assert row["saldo_clp"] == 200.0

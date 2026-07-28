@@ -45,7 +45,7 @@
   }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
-  .tab-panel:not(#tab-inicio):not(#tab-er-activos) { max-width: 880px; margin: 0 auto; }
+  .tab-panel:not(#tab-inicio):not(#tab-er-activos):not(#tab-rentroll) { max-width: 880px; margin: 0 auto; }
   #tab-er-activos .er-activo-panel {
     display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 20px; align-items: start;
   }
@@ -188,6 +188,93 @@
     background: #FFF9EC; border: 1px solid #f0d9a0; border-radius: 3px; font-size: 12.5px;
   }
   .raro-item input[type=checkbox] { margin-top: 2px; flex-shrink: 0; }
+
+  /* ── Resumen de vacancia (rent roll) ─────────────────────────────── */
+  .grade-ok   { color: #0d8a5f; }
+  .grade-warn { color: #a06a00; }
+  .grade-err  { color: var(--err); }
+  .grade-chip {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px;
+  }
+  .grade-chip.grade-ok   { background: #dff5ea; color: #0d8a5f; }
+  .grade-chip.grade-warn { background: #fdf0d5; color: #a06a00; }
+  .grade-chip.grade-err  { background: #fbe3e0; color: var(--err); }
+  .grade-chip svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+  .vac-activos-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px;
+  }
+  .vac-activo-card {
+    border: 1px solid #e2e2e2; border-radius: 8px; background: #fff; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .vac-activo-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 12px 16px; background: #FAFAFA; border-bottom: 1px solid #eee;
+  }
+  .vac-activo-name { font-size: 14px; font-weight: 700; color: #202020; }
+  .vac-activo-body { padding: 14px 16px 16px; }
+
+  .vac-hero { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 4px; }
+  .vac-hero-pct { font-size: 34px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .vac-hero-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 700; margin-bottom: 5px; }
+  .vac-hero-delta { font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; margin-bottom: 6px; }
+  .vac-hero-delta svg { width: 11px; height: 11px; }
+  .vac-hero-delta.up { color: var(--err); } .vac-hero-delta.down { color: #0d8a5f; } .vac-hero-delta.flat { color: var(--muted); }
+
+  .vac-bar-track { height: 8px; border-radius: 4px; background: #eee; overflow: hidden; margin: 10px 0 12px; }
+  .vac-bar-fill { height: 100%; border-radius: 4px; transition: width .25s ease; }
+  .vac-bar-fill.grade-ok   { background: #16a672; }
+  .vac-bar-fill.grade-warn { background: #d99b1c; }
+  .vac-bar-fill.grade-err  { background: var(--err); }
+
+  .vac-metrics-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px;
+  }
+  .vac-metric { text-align: left; }
+  .vac-metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+  .vac-metric-value { font-size: 13.5px; font-weight: 700; color: #202020; font-variant-numeric: tabular-nums; }
+
+  .vac-absorcion-line {
+    display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted);
+    padding: 8px 10px; background: #F7F7F7; border-radius: 4px; margin-top: 2px;
+  }
+  .vac-absorcion-line strong { color: #202020; font-variant-numeric: tabular-nums; }
+
+  .vac-nosnap-note {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: #8a6d1e;
+    background: #FFF9EC; border: 1px solid #f0d9a0; border-radius: 4px; padding: 8px 10px; margin-bottom: 10px;
+  }
+  .vac-nosnap-note svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  .vac-edificios-toggle {
+    margin-top: 12px; border-top: 1px solid #eee; padding-top: 10px;
+  }
+  .vac-edificios-toggle summary {
+    cursor: pointer; font-size: 11.5px; font-weight: 700; color: #33413b;
+    text-transform: uppercase; letter-spacing: .03em; list-style: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .vac-edificios-toggle summary::-webkit-details-marker { display: none; }
+  .vac-edificios-toggle summary svg { width: 10px; height: 10px; transition: transform .15s ease; }
+  .vac-edificios-toggle[open] summary svg { transform: rotate(90deg); }
+  .vac-edificio-block { margin-top: 12px; }
+  .vac-edificio-name { font-size: 12px; font-weight: 700; color: #2b2b2b; margin: 0 0 6px; }
+  .vac-tipo-row {
+    display: grid; grid-template-columns: 90px 1fr 60px 46px; align-items: center; gap: 10px;
+    padding: 4px 0; font-size: 12px;
+  }
+  .vac-tipo-row.is-total { font-weight: 700; border-top: 1px dashed #ddd; margin-top: 2px; padding-top: 6px; }
+  .vac-tipo-name { color: #444; }
+  .vac-tipo-bar-track { height: 6px; border-radius: 3px; background: #eee; overflow: hidden; }
+  .vac-tipo-bar-fill { height: 100%; border-radius: 3px; }
+  .vac-tipo-pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .vac-tipo-prev { text-align: right; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) {
+    .vac-metrics-row { grid-template-columns: repeat(2, 1fr); }
+    .vac-tipo-row { grid-template-columns: 78px 1fr 50px 40px; }
+  }
 
   .inicio-cards {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -388,6 +475,7 @@
     <button class="tab-btn" data-tab="parking">Parking PT</button>
     <button class="tab-btn" data-tab="er-activos">Ingresos/NOI Activos</button>
     <button class="tab-btn" data-tab="amort-extra">Amort. Extraordinaria</button>
+    <button class="tab-btn" data-tab="caja">Saldo Caja</button>
   </div>
 </header>
 
@@ -989,6 +1077,50 @@
   </div>
 </div>
 
+<div id="tab-caja" class="tab-panel">
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Archivo</div>
+    <p class="muted" style="margin:0 0 10px;">
+      Sube la planilla <code>Saldo Caja + FFMM Inmobiliario (final).xlsx</code>
+      desde <code>NUEVO ORDEN &gt; Saldo Caja</code> y elige el mes a recalcular —
+      se usa la hoja de esa planilla más cercana al cierre del mes elegido.
+      Se consolida el saldo caja de TRI/PT/Apo sumando las sociedades ponderadas
+      de cada fondo; los saldos en USD se convierten con el dólar del día
+      (o dólar fijo=900 si no hay uno más cercano a la fecha).
+    </p>
+    <div class="row">
+      <label class="muted" for="caja-periodo">Período a recalcular:</label>
+      <input type="month" id="caja-periodo">
+    </div>
+    <div id="caja-status-row" class="row" style="margin-top:6px"></div>
+    <div class="row">
+      <div id="caja-dropzone" class="dropzone" style="flex:1">
+        Arrastra aquí la planilla Saldo Caja + FFMM o haz click para elegirla.
+        <input type="file" id="caja-file" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <button id="btn-caja-validate">Validar y previsualizar</button>
+      <span id="caja-validate-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="caja-preview" class="step preview hidden">
+    <ul id="caja-errors" class="msg-list err"></ul>
+    <ul id="caja-warnings" class="msg-list warn"></ul>
+    <div id="caja-section" class="hidden">
+      <h3>Resumen del período</h3>
+      <table>
+        <tbody id="caja-resumen-body"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-caja-confirm" disabled>Confirmar e ingestar</button>
+      <span id="caja-ingest-status" class="muted"></span>
+    </div>
+  </div>
+</div>
+
 </main>
 
 <script>
@@ -1450,6 +1582,65 @@ function renderEventoLine(e, evento) {
   return `<li>${evTag(evento)}<span style="flex:1">${detail}</span></li>`;
 }
 
+/* Umbrales de vacancia para oficinas/locales comerciales en Chile: bajo <5%,
+   medio 5-15%, alto >15%. Ver también rent_roll_stats.py::_VACANCIA_TIPOS_EDIFICIO. */
+function vacGrade(pct) {
+  if (pct === null || pct === undefined) return {cls: '', label: 'S/D'};
+  if (pct < 5) return {cls: 'grade-ok', label: 'Bajo'};
+  if (pct < 15) return {cls: 'grade-warn', label: 'Medio'};
+  return {cls: 'grade-err', label: 'Alto'};
+}
+
+const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function pctText(p) { return (p === null || p === undefined) ? '—' : p + '%'; }
+
+function renderVacHeroDelta(actual, anterior) {
+  if (actual === null || actual === undefined || anterior === null || anterior === undefined) return '';
+  const delta = Math.round((actual - anterior) * 100) / 100;
+  if (Math.abs(delta) < 0.01) return `<span class="vac-hero-delta flat">— vs. mes anterior</span>`;
+  const up = delta > 0;
+  return `<span class="vac-hero-delta ${up ? 'up' : 'down'}">${up ? ICON_UP : ICON_DOWN} ${up ? '+' : ''}${delta} pp vs. mes anterior</span>`;
+}
+
+function renderVacTipoRow(label, actual, anterior, isTotal) {
+  const grade = vacGrade(actual && actual.pct_vacancia);
+  const width = Math.min(100, actual && actual.pct_vacancia || 0);
+  return `<div class="vac-tipo-row${isTotal ? ' is-total' : ''}">
+    <span class="vac-tipo-name">${label}</span>
+    <span class="vac-tipo-bar-track"><span class="vac-tipo-bar-fill ${grade.cls}" style="width:${width}%"></span></span>
+    <span class="vac-tipo-pct ${grade.cls}">${pctText(actual && actual.pct_vacancia)}</span>
+    <span class="vac-tipo-prev">${pctText(anterior && anterior.pct_vacancia)}</span>
+  </div>`;
+}
+
+function renderDetalleVacancia(detalle) {
+  if (!detalle) return '';
+  const edificiosActual = Object.keys(detalle.periodo_actual || {});
+  if (!edificiosActual.length) return '';
+  let html = `<details class="vac-edificios-toggle" open>
+    <summary>${ICON_CHEVRON} Detalle por edificio y tipo (${edificiosActual.length})</summary>`;
+  edificiosActual.forEach(edificio => {
+    const actual = (detalle.periodo_actual || {})[edificio] || {};
+    const anterior = (detalle.periodo_anterior || {})[edificio] || {};
+    html += `<div class="vac-edificio-block">
+      <div class="vac-edificio-name">${edificio}</div>
+      <div class="vac-tipo-row" style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.03em">
+        <span></span><span></span><span style="text-align:right">Actual</span><span style="text-align:right">Mes ant.</span>
+      </div>
+      ${renderVacTipoRow('Oficinas', actual['Oficinas'], anterior['Oficinas'], false)}
+      ${renderVacTipoRow('Locales', actual['Locales Comerciales'], anterior['Locales Comerciales'], false)}
+      ${renderVacTipoRow('Total', actual['Total'], anterior['Total'], true)}
+    </div>`;
+  });
+  html += `<div class="muted" style="margin-top:8px;font-size:11px">Total = Oficinas + Locales Comerciales (excluye bodegas y estacionamientos).</div></details>`;
+  return html;
+}
+
 function updateRrConfirmState() {
   btnRrConfirm.disabled = !rrLastValidationOk || rrCasosRarosPendientes > 0;
 }
@@ -1500,31 +1691,43 @@ function renderRrPreview(data) {
   const totalesContainer = document.getElementById('rr-totales-container');
   totalesContainer.innerHTML = '';
   secTotales.classList.remove('hidden');
+  const grid = document.createElement('div');
+  grid.className = 'vac-activos-grid';
   (data.activos || []).forEach(activo => {
     const d = data.diffs[activo];
     const t = d.totales.periodo_actual;
     const tPrev = d.totales.periodo_anterior;
-    const wrap = document.createElement('div');
-    wrap.className = 'activo-block';
-    wrap.innerHTML = `
-      <h4>${activo}</h4>
-      <table><thead><tr>
-        <th></th><th class="num">m² total</th><th class="num">m² vacante</th><th class="num">% vacancia</th>
-        <th class="num">Renta UF total</th><th class="num">Renta UF vacante</th>
-      </tr></thead><tbody>
-        <tr><td>${d.periodo_anterior}</td><td class="num">${fmt(tPrev.m2_total)}</td><td class="num">${fmt(tPrev.m2_vacante)}</td>
-            <td class="num">${tPrev.pct_vacancia !== null ? tPrev.pct_vacancia + '%' : '—'}</td>
-            <td class="num">${fmt(tPrev.renta_uf_total)}</td><td class="num">${fmt(tPrev.renta_uf_vacante)}</td></tr>
-        <tr><td>${d.periodo} (nuevo)</td><td class="num">${fmt(t.m2_total)}</td><td class="num">${fmt(t.m2_vacante)}</td>
-            <td class="num">${t.pct_vacancia !== null ? t.pct_vacancia + '%' : '—'}</td>
-            <td class="num">${fmt(t.renta_uf_total)}</td><td class="num">${fmt(t.renta_uf_vacante)}</td></tr>
-      </tbody></table>
-      <div class="summary-line" style="margin-top:4px">
-        Absorción bruta: ${fmt(d.absorcion.bruta_m2)} m² / ${fmt(d.absorcion.bruta_uf)} UF ·
-        Absorción neta: ${fmt(d.absorcion.neta_m2)} m² / ${fmt(d.absorcion.neta_uf)} UF
+    const grade = vacGrade(t.pct_vacancia);
+    const card = document.createElement('div');
+    card.className = 'vac-activo-card';
+    card.innerHTML = `
+      <div class="vac-activo-head">
+        <span class="vac-activo-name">${activo}</span>
+        <span class="grade-chip ${grade.cls}">${grade.cls === 'grade-err' ? ICON_WARN : (grade.cls === 'grade-ok' ? ICON_OK : '')} ${grade.label}</span>
+      </div>
+      <div class="vac-activo-body">
+        ${!d.tiene_snapshot_anterior ? `<div class="vac-nosnap-note">${ICON_WARN}<span>Sin rent roll de ${d.periodo_anterior} en la base — no se puede calcular absorción vs. el mes anterior. Esta ingesta quedará como línea base.</span></div>` : ''}
+        <div class="vac-hero-label">% Vacancia — ${d.periodo}</div>
+        <div class="vac-hero">
+          <span class="vac-hero-pct ${grade.cls}">${pctText(t.pct_vacancia)}</span>
+          ${renderVacHeroDelta(t.pct_vacancia, tPrev.pct_vacancia)}
+        </div>
+        <div class="vac-bar-track"><div class="vac-bar-fill ${grade.cls}" style="width:${Math.min(100, t.pct_vacancia || 0)}%"></div></div>
+        <div class="vac-metrics-row">
+          <div class="vac-metric"><div class="vac-metric-label">m² total</div><div class="vac-metric-value">${fmt(t.m2_total)}</div></div>
+          <div class="vac-metric"><div class="vac-metric-label">m² vacante</div><div class="vac-metric-value">${fmt(t.m2_vacante)}</div></div>
+          <div class="vac-metric"><div class="vac-metric-label">Renta UF total</div><div class="vac-metric-value">${fmt(t.renta_uf_total)}</div></div>
+          <div class="vac-metric"><div class="vac-metric-label">Renta UF vacante</div><div class="vac-metric-value">${fmt(t.renta_uf_vacante)}</div></div>
+        </div>
+        <div class="vac-absorcion-line">
+          <span>Absorción bruta: <strong>${fmt(d.absorcion.bruta_m2)} m²</strong> / <strong>${fmt(d.absorcion.bruta_uf)} UF</strong></span>
+          <span>Absorción neta: <strong>${fmt(d.absorcion.neta_m2)} m²</strong> / <strong>${fmt(d.absorcion.neta_uf)} UF</strong></span>
+        </div>
+        ${renderDetalleVacancia(d.detalle_vacancia)}
       </div>`;
-    totalesContainer.appendChild(wrap);
+    grid.appendChild(card);
   });
+  totalesContainer.appendChild(grid);
 
   // Diff de eventos
   const diffContainer = document.getElementById('rr-diff-container');
@@ -2175,6 +2378,26 @@ function renderMiniCards(data) {
         <div class="mini-stat-row"><span class="mini-stat-label">Actualizado</span><span class="mini-stat-value">${ufActualizado}</span></div>
       </div>
       <div class="mini-fuente">Fuente: ${uf.fuente || '—'}</div>
+    </div>
+  `);
+
+  const dolar = data.dolar;
+  const dolarActualizado = dolar.dias_atraso == null ? '—'
+    : dolar.dias_atraso <= 0 ? 'Hoy'
+    : dolar.dias_atraso === 1 ? 'Ayer'
+    : `Hace ${dolar.dias_atraso} días`;
+  container.insertAdjacentHTML('beforeend', `
+    <div class="inicio-mini-card">
+      <div class="mini-head">
+        <span class="mini-title">USD</span>
+        <span class="mini-pill ${dolar.estado}">${_MINI_PILL_LABEL[dolar.estado] || dolar.estado}</span>
+      </div>
+      <div class="mini-value">${_fmtCLP(dolar.ultimo_valor)}</div>
+      <div class="mini-stats">
+        <div class="mini-stat-row"><span class="mini-stat-label">Última fecha</span><span class="mini-stat-value">${dolar.ultima_fecha || '—'}</span></div>
+        <div class="mini-stat-row"><span class="mini-stat-label">Actualizado</span><span class="mini-stat-value">${dolarActualizado}</span></div>
+      </div>
+      <div class="mini-fuente">Fuente: ${dolar.fuente || '—'}</div>
     </div>
   `);
 
@@ -3110,6 +3333,148 @@ async function initAmortExtra() {
   });
 }
 initAmortExtra();
+
+// ── Saldo Caja: sube la planilla completa, sin selector de período ────────
+function initCaja() {
+  const periodoInput = document.getElementById('caja-periodo');
+  const dropzone = document.getElementById('caja-dropzone');
+  const fileInput = document.getElementById('caja-file');
+  const btnValidate = document.getElementById('btn-caja-validate');
+  const validateStatus = document.getElementById('caja-validate-status');
+  const preview = document.getElementById('caja-preview');
+  const btnConfirm = document.getElementById('btn-caja-confirm');
+  const ingestStatus = document.getElementById('caja-ingest-status');
+  const statusRow = document.getElementById('caja-status-row');
+  const dropzoneTextDefault = dropzone.textContent.trim();
+
+  (function initPeriodo() {
+    const n = new Date();
+    const prev = new Date(n.getFullYear(), n.getMonth() - 1, 1);
+    periodoInput.value = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+  })();
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    selectedFile = file;
+    dropzone.textContent = file ? `Archivo seleccionado: ${file.name}` : dropzoneTextDefault;
+    dropzone.classList.toggle('has-file', !!file);
+    dropzone.appendChild(fileInput);
+    resetPreview();
+  }
+
+  function resetPreview() {
+    preview.classList.add('hidden');
+    btnConfirm.disabled = true;
+    setStatus(validateStatus);
+    setStatus(ingestStatus);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0] || null));
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  periodoInput.addEventListener('change', resetPreview);
+
+  async function checkStatus() {
+    statusRow.innerHTML = '';
+    try {
+      const res = await fetch('/api/caja/periodo_check');
+      const data = await res.json();
+      (data.fondos || []).forEach(f => {
+        const el = document.createElement('span');
+        el.className = 'badge';
+        el.innerHTML = `<span class="dot"></span>${f.fondo_key}: última fecha en DB <strong>${f.ultima_fecha ?? '—'}</strong> (${f.n_meses} meses)`;
+        statusRow.appendChild(el);
+      });
+    } catch (e) {}
+  }
+  checkStatus();
+
+  const fmtClp = v => v == null ? '—' : Number(v).toLocaleString('es-CL', {maximumFractionDigits: 0});
+
+  function renderResumen(r) {
+    if (!r) { document.getElementById('caja-resumen-body').innerHTML = ''; return; }
+    document.getElementById('caja-resumen-body').innerHTML = [
+      ['Período', r.periodo],
+      ['Fecha de cierre', r.fecha_cierre],
+      ['Hoja usada (fecha más cercana al cierre)', r.fecha_hoja],
+      ['TRI', fmtClp(r.tri_clp)],
+      ['PT', fmtClp(r.pt_clp)],
+      ['Apo', fmtClp(r.apo_clp)],
+    ].map(([k, v]) => `<tr><td>${k}</td><td class="num"><strong>${v ?? '—'}</strong></td></tr>`).join('');
+  }
+
+  function renderPreview(data) {
+    preview.classList.remove('hidden');
+    const errUl = document.getElementById('caja-errors');
+    const warnUl = document.getElementById('caja-warnings');
+    errUl.innerHTML = ''; warnUl.innerHTML = '';
+    (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+    (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+    const section = document.getElementById('caja-section');
+    if (data.ok) {
+      section.classList.remove('hidden');
+      renderResumen(data.resumen);
+    } else {
+      section.classList.add('hidden');
+    }
+    btnConfirm.disabled = !data.ok;
+  }
+
+  btnValidate.addEventListener('click', async () => {
+    if (!selectedFile) { validateStatus.textContent = 'Elige un archivo primero.'; return; }
+    if (!periodoInput.value) { validateStatus.textContent = 'Elige el período primero.'; return; }
+    setStatus(validateStatus, 'Validando y preparando previsualización...', 'loading');
+    btnValidate.disabled = true;
+    btnConfirm.disabled = true;
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('periodo', periodoInput.value);
+    try {
+      const res = await fetch('/api/caja/validate', { method: 'POST', body: fd });
+      const data = await res.json();
+      setStatus(validateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores.', data.ok ? 'success' : 'error');
+      renderPreview(data);
+    } catch (e) {
+      setStatus(validateStatus, 'Error: ' + e.message, 'error');
+    } finally {
+      btnValidate.disabled = false;
+    }
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    if (!selectedFile || !periodoInput.value) return;
+    btnConfirm.disabled = true;
+    setStatus(ingestStatus, 'Ingestando en la base de datos...', 'loading');
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('periodo', periodoInput.value);
+    try {
+      const res = await fetch('/api/caja/commit', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.ok) {
+        setStatus(ingestStatus, 'Error: ' + (data.error || 'desconocido'), 'error');
+        btnConfirm.disabled = false;
+        return;
+      }
+      setStatus(ingestStatus, `✓ Ingesta OK. ${data.filas_upsert} fila(s) escritas.`, 'success');
+      renderResumen(data.resumen);
+      checkStatus();
+    } catch (e) {
+      setStatus(ingestStatus, 'Error: ' + e.message, 'error');
+      btnConfirm.disabled = false;
+    }
+  });
+}
+initCaja();
 </script>
 </body>
 </html>

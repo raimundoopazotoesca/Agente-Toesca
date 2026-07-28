@@ -17,12 +17,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DB_PATH = ROOT / "memory" / "agente_toesca_v2.db"
 
-from tools.db.connection import get_conn_for  # noqa: E402
-from tools.db import repo_rent_roll  # noqa: E402
+from tools.db import rent_roll_source  # noqa: E402
 from tools.db.ingest_rent_roll_validated import (  # noqa: E402
     _monto_mensual_uf,
     _es_vacante,
     _clasificar_evento,
+    _tipo_real,
 )
 
 _ACTIVO2_LABEL = {
@@ -30,42 +30,39 @@ _ACTIVO2_LABEL = {
     "Inmob. CdC": "Inmob. Boulevard PT SpA",
 }
 
+
 def _snapshot(activo_key: str, periodo: str) -> dict:
-    """{(activo2, unidad): {arrendatario, m2, renta_uf, vencimiento, tipo_activo_3}}"""
-    conn = get_conn_for(str(DB_PATH))
-    try:
-        rows = repo_rent_roll.list_by_periodo(conn, activo_key, periodo)
-        out = {}
-        for r in rows:
-            try:
-                extra = json.loads(r["extra_json"] or "{}")
-            except (TypeError, ValueError):
-                extra = {}
-            tipo = extra.get("tipo_activo_3")
-            key = (extra.get("activo2") or "", r["unidad"])
-            out[key] = {
-                "arrendatario": r["arrendatario"],
-                "m2": r["m2"] or 0.0,
-                "renta_uf": r["renta_uf"] or 0.0,
-                "vencimiento": r["vencimiento"],
-                "tipo_activo_3": tipo,
-            }
-        return out
-    finally:
-        conn.close()
+    """{(activo2, unidad): {arrendatario, m2, renta_uf, vencimiento, tipo_activo_3}}
+
+    Fuente: rent_roll_source.get_rent_roll_rows — DB si el período ya fue
+    ingestado por el pipeline validado, o el Excel borrador (no verificado)
+    como fallback mientras tanto. Al ingestar el rent roll bueno, esta función
+    empieza a leer de DB automáticamente, sin cambios.
+
+    tipo_activo_3 acá siempre refleja el tipo real de la unidad: se prioriza
+    "Tipo Activo 2 (no va vacante)" (nunca se pisa con "Vacante") y se cae a
+    "Tipo Activo 3" solo si esa columna no vino en el archivo."""
+    rows = rent_roll_source.get_rent_roll_rows(activo_key, periodo)
+    out = {}
+    for r in rows:
+        try:
+            extra = json.loads(r["extra_json"] or "{}")
+        except (TypeError, ValueError):
+            extra = {}
+        tipo = _tipo_real(extra.get("tipo_activo_2"), extra.get("tipo_activo_3"))
+        key = (extra.get("activo2") or "", r["unidad"])
+        out[key] = {
+            "arrendatario": r["arrendatario"],
+            "m2": r["m2"] or 0.0,
+            "renta_uf": r["renta_uf"] or 0.0,
+            "vencimiento": r["vencimiento"],
+            "tipo_activo_3": tipo,
+        }
+    return out
 
 
 def _periodos_disponibles(activo_key: str) -> list[str]:
-    conn = get_conn_for(str(DB_PATH))
-    try:
-        rows = conn.execute(
-            "SELECT DISTINCT periodo FROM raw_rent_roll_line "
-            "WHERE activo_key=? AND superseded_at IS NULL ORDER BY periodo",
-            (activo_key,),
-        ).fetchall()
-        return [r[0] for r in rows]
-    finally:
-        conn.close()
+    return rent_roll_source.periodos_disponibles(activo_key)
 
 
 def _meses_atras(periodo: str, n: int) -> str:
@@ -134,6 +131,60 @@ def _suma_celdas(celdas: list) -> dict:
         "m2_utiles": round(m2_utiles, 1), "m2_vacantes": round(m2_vacantes, 1),
         "pct_vacancia_m2": pct_vac, "renta_mensual_uf": round(renta, 1),
     }
+
+
+_VACANCIA_TIPOS_EDIFICIO = {"Oficinas", "Locales Comerciales"}  # excluye Bodegas/Estacionamientos
+
+_VACANCIA_TIPO_ROW = {
+    "Locales": {"Locales Comerciales"},
+    "Oficinas": {"Oficinas"},
+    "Edificio": _VACANCIA_TIPOS_EDIFICIO,
+}
+
+
+def _pct_vacancia_edificio(snapshot: dict, edificio: str, fila: str) -> float | None:
+    tipos = _VACANCIA_TIPO_ROW[fila]
+    filtradas = {
+        k: v for k, v in snapshot.items()
+        if k[0] == edificio and v["tipo_activo_3"] in tipos
+    }
+    if not filtradas:
+        return None
+    m2_total = sum(v["m2"] for v in filtradas.values())
+    m2_vac = sum(v["m2"] for v in filtradas.values() if _es_vacante(v["arrendatario"]))
+    return round(m2_vac / m2_total * 100, 2) if m2_total else None
+
+
+def get_vacancia_edificios(activo_key: str, periodo: str, edificios_filas: dict) -> dict | None:
+    """% vacancia (m²) por edificio y fila (Locales/Oficinas/Edificio), mes
+    actual vs mes anterior. `edificios_filas` = {edificio: [filas]} (ver
+    FONDOS_CFG[fondo]["page3"]["vacancia_edificios"]). None si no hay rent
+    roll para (activo_key, periodo)."""
+    snapshot_actual = _snapshot(activo_key, periodo)
+    if not snapshot_actual:
+        return None
+
+    periodo_anterior = _meses_atras(periodo, 1)
+    snapshot_anterior = _snapshot(activo_key, periodo_anterior)
+
+    out = {}
+    for edificio, filas in edificios_filas.items():
+        for fila in filas:
+            actual = _pct_vacancia_edificio(snapshot_actual, edificio, fila)
+            anterior = (
+                _pct_vacancia_edificio(snapshot_anterior, edificio, fila)
+                if snapshot_anterior else None
+            )
+            variacion = (
+                round(actual - anterior, 2)
+                if actual is not None and anterior is not None else None
+            )
+            out[(edificio, fila)] = {
+                "pct_actual": actual,
+                "pct_anterior": anterior,
+                "variacion": variacion,
+            }
+    return out
 
 
 def get_perf_table(activo_key: str, periodo: str) -> dict | None:

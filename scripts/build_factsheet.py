@@ -804,7 +804,30 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "tasaciones": tasaciones_data,
         "parking": parking_data,
         "perf_data": _fetch_perf_data(fondo_key),
+        "vacancia_apo": _fetch_vacancia_apo(fondo_key),
     }
+
+
+def _fetch_vacancia_apo(fondo_key: str) -> dict:
+    """{periodo: {"Edificio|||Fila": {pct_actual, pct_anterior, variacion}}}
+    para el grid de vacancia por edificio de la página 3 de Apo (ver
+    FONDOS_CFG["Apo"]["page3"]["vacancia_edificios"]). Ver
+    tools/db/rent_roll_stats.py::get_vacancia_edificios."""
+    if fondo_key != "Apo":
+        return {}
+    from tools.db.rent_roll_stats import get_vacancia_edificios, _periodos_disponibles
+
+    edificios_filas = {
+        ed["nombre"]: ed["rows"]
+        for ed in FONDOS_CFG["Apo"]["page3"]["vacancia_edificios"]
+    }
+    out = {}
+    for periodo in _periodos_disponibles("Apoquindo"):
+        tabla = get_vacancia_edificios("Apoquindo", periodo, edificios_filas)
+        if tabla is None:
+            continue
+        out[periodo] = {f"{ed}|||{fila}": val for (ed, fila), val in tabla.items()}
+    return out
 
 
 def _fetch_perf_data(fondo_key: str) -> dict:
@@ -2715,6 +2738,9 @@ function switchFund(f){
 
       const [pAnt, pAct] = p3.vacancia_periodo;
       document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
+      // Datos reales (por período operacional) se rellenan en render(), ver
+      // bloque "Página 3 Apo: tabla de vacancia por edificio" más abajo —
+      // acá solo dejamos la estructura con placeholders para el primer paint.
       const vacanciaBox = (ed) => `
         <div class="subtable-box">
           <div class="subtable-title">${ed.nombre}</div>
@@ -3373,6 +3399,42 @@ function render(){
       document.getElementById("donut-ingresos").innerHTML =
         `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     }
+  }
+
+  // Página 3 Apo: tabla de vacancia por edificio (Locales/Oficinas/Edificio) —
+  // depende del período operacional (usadoOp). F.vacancia_apo viene de
+  // tools/db/rent_roll_stats.py::get_vacancia_edificios vía
+  // scripts/build_factsheet.py::_fetch_vacancia_apo, que usa
+  // tools/db/rent_roll_source.py (DB si el rent roll fue ingestado y
+  // validado; si no, el Excel borrador no verificado como fallback — mismos
+  // datos, cero cambios acá cuando se ingeste el rent roll bueno).
+  if (S.page3 && S.page3.vacancia_edificios) {
+    const vacPorPeriodo = F.vacancia_apo || {};
+    const vacData = usadoOp ? vacPorPeriodo[usadoOp] : null;
+    document.getElementById("vacancia-periodo-label").textContent = vacData
+      ? `(al ${mesEspanol(usadoOp)})`
+      : `(sin rent roll para ${mesEspanol(usadoOp)})`;
+    const fmtPP = (v) => v == null ? null : (v > 0 ? "+" : "") + v.toLocaleString("es-CL", {maximumFractionDigits: 2}) + " pp";
+    const fmtPctVac = (v) => v == null ? null : v.toLocaleString("es-CL", {maximumFractionDigits: 2}) + "%";
+    const celdaVac = (texto) => texto == null
+      ? '<td class="placeholder">—</td>'
+      : `<td>${texto}</td>`;
+    const vacanciaBox = (ed) => `
+      <div class="subtable-box">
+        <div class="subtable-title">${ed.nombre}</div>
+        <table>
+          <thead><tr><th></th><th>Mes anterior</th><th>Mes actual</th><th>Variación</th></tr></thead>
+          <tbody>${ed.rows.map(r => {
+            const d = vacData ? vacData[`${ed.nombre}|||${r}`] : null;
+            return `<tr><td>${r}</td>` +
+              celdaVac(d ? fmtPctVac(d.pct_anterior) : null) +
+              celdaVac(d ? fmtPctVac(d.pct_actual) : null) +
+              celdaVac(d ? fmtPP(d.variacion) : null) +
+              `</tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>`;
+    document.getElementById("grid-vacancia").innerHTML = S.page3.vacancia_edificios.map(vacanciaBox).join("");
   }
 
   // Página 3 Apo/PT: tabla de Tasaciones — depende del período seleccionado

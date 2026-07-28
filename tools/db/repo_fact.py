@@ -113,6 +113,49 @@ def upsert_dividendo(
     conn.commit()
 
 
+def upsert_dolar(conn: sqlite3.Connection, fecha: str, valor_clp: float, fuente: str = "mindicador") -> None:
+    conn.execute(
+        """INSERT INTO raw_dolar_diaria (fecha, valor, fuente)
+           VALUES (?, ?, ?)
+           ON CONFLICT(fecha) DO UPDATE SET
+             valor = excluded.valor,
+             fuente = excluded.fuente,
+             loaded_at = datetime('now')""",
+        (fecha, valor_clp, fuente),
+    )
+    conn.commit()
+
+
+def get_dolar(conn: sqlite3.Connection, fecha: str) -> float:
+    """Dólar observado más reciente con fecha <= `fecha` (no exige fecha exacta)."""
+    cur = conn.execute(
+        "SELECT valor FROM fact_dolar WHERE fecha<=? ORDER BY fecha DESC LIMIT 1", (fecha,)
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise NotFoundError(f"Dólar no encontrado para fecha<={fecha}")
+    return row["valor"] if isinstance(row, sqlite3.Row) else row[0]
+
+
+def upsert_caja(
+    conn: sqlite3.Connection,
+    fondo_key: str,
+    fecha: str,
+    saldo_clp: float,
+    source_file: str | None = None,
+) -> None:
+    conn.execute(
+        """INSERT INTO raw_caja (fondo_key, fecha, saldo_clp, source_file)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(fondo_key, fecha) DO UPDATE SET
+             saldo_clp = excluded.saldo_clp,
+             source_file = excluded.source_file,
+             loaded_at = datetime('now')""",
+        (fondo_key, fecha, saldo_clp, source_file),
+    )
+    conn.commit()
+
+
 def list_dividendos(conn: sqlite3.Connection, nemotecnico: str) -> list[sqlite3.Row]:
     cur = conn.execute(
         "SELECT * FROM fact_dividendo WHERE nemotecnico=? ORDER BY fecha_pago",

@@ -715,6 +715,43 @@ def backfill_ar_pt(verbose: bool = True) -> dict:
     return {"archivos": 1, "filas": total, "sin_datos": [], "detalle": [str(result)]}
 
 
+def backfill_dolar(verbose: bool = True) -> dict:
+    """Cotización de hoy del dólar observado (dolarapi.com) -> fact_dolar.
+
+    Sin serie histórica: solo sirve para convertir USD de meses actuales o
+    cercanos en backfill_caja, no para el histórico ya cargado sin convertir.
+    """
+    from tools.db.ingest_dolar import backfill_dolar_hoy
+    return backfill_dolar_hoy(verbose=verbose)
+
+
+def backfill_caja(verbose: bool = True) -> dict:
+    """Backfill de saldo caja consolidado por fondo (Apo/PT/TRI) desde
+    'NUEVO ORDEN/Saldo Caja/Saldo Caja + FFMM Inmobiliario (final).xlsx'."""
+    from tools.db.ingest_caja import ingestar
+
+    try:
+        result = ingestar()
+    except (FileNotFoundError, ValueError) as e:
+        return {"archivos": 0, "filas": 0, "sin_datos": [str(e)]}
+
+    sin_datos = []
+    for periodo, faltantes in result["sociedades_faltantes"].items():
+        sin_datos.append(f"{periodo}: fondos incompletos {sorted(faltantes)}")
+    if result["usd_convertido_con_fallback"]:
+        sin_datos.append(
+            f"{len(result['usd_convertido_con_fallback'])} meses con USD convertido a "
+            "dólar fijo=900 (sin fact_dolar real para esa fecha) — ver "
+            "result['usd_convertido_con_fallback']"
+        )
+    if verbose:
+        print(f"  [caja] meses procesados={len(result['meses_procesados'])} | "
+              f"filas upsert={result['filas_upsert']} | "
+              f"meses con fondo incompleto={len(result['sociedades_faltantes'])} | "
+              f"meses con USD a dólar fijo=900: {len(result['usd_convertido_con_fallback'])}")
+    return {"archivos": 1, "filas": result["filas_upsert"], "sin_datos": sin_datos}
+
+
 def _print_reporte(nombre: str, rep: dict) -> None:
     print(f"\n=== Backfill {nombre} ===")
     print(f"Archivos ingestados: {rep['archivos']}  |  Filas insertadas: {rep['filas']}")
@@ -763,6 +800,10 @@ def main(argv: list[str]) -> None:
         _print_reporte("ar_pt", backfill_ar_pt(verbose=True))
     if "eeff_pt" in dominios:
         _print_reporte("eeff_pt", backfill_eeff_pt(verbose=True))
+    if "dolar" in dominios:
+        _print_reporte("dolar", backfill_dolar(verbose=True))
+    if "caja" in dominios:
+        _print_reporte("caja", backfill_caja(verbose=True))
 
 
 if __name__ == "__main__":
