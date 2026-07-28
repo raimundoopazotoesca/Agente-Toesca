@@ -98,7 +98,7 @@ test("renders the verified executive snapshot in thirteen slides", async () => {
 
 - [ ] **Step 2: Ejecutar el test y confirmar que falla**
 
-Run: `npm run build && node --test tests/content-contract.test.mjs`  
+Run: `npm run build && node --test tests/content-contract.test.mjs`
 Expected: FAIL porque el HTML aún no expone `dateTime="2026-07-28"`.
 
 - [ ] **Step 3: Crear el módulo de contenido**
@@ -184,12 +184,12 @@ helper duplicado.
 
 - [ ] **Step 5: Ejecutar el test del contrato**
 
-Run: `npm run build && node --test tests/content-contract.test.mjs`  
+Run: `npm run build && node --test tests/content-contract.test.mjs`
 Expected: PASS.
 
 - [ ] **Step 6: Confirmar que el render previo no retrocede**
 
-Run: `node --test tests/rendered-html.test.mjs`  
+Run: `node --test tests/rendered-html.test.mjs`
 Expected: PASS en los 2 tests existentes.
 
 - [ ] **Step 7: Commit**
