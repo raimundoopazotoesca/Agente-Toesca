@@ -33,7 +33,8 @@
 - `project-presentation/app/globals.css` — sistema visual, responsive, accesibilidad, animación e impresión.
 - `project-presentation/app/layout.tsx` — metadatos del sitio y social preview.
 - `project-presentation/public/og.png` — tarjeta social específica del proyecto, solo si la imagen generada supera validación visual.
-- `project-presentation/tests/content-contract.test.mjs` — contrato de contenido y fuentes.
+- `project-presentation/tests/render-site.mjs` — helper que ejecuta el Worker compilado y devuelve el HTML real.
+- `project-presentation/tests/content-contract.test.mjs` — contrato observable de contenido y fuentes en el HTML renderizado.
 - `project-presentation/tests/navigation.test.mjs` — comportamiento puro de navegación.
 - `project-presentation/tests/rendered-html.test.mjs` — render SSR, semántica y ausencia del starter.
 
@@ -42,46 +43,63 @@
 ### Task 1: Congelar el contrato de contenido verificable
 
 **Files:**
+- Create: `project-presentation/tests/render-site.mjs`
 - Create: `project-presentation/tests/content-contract.test.mjs`
 - Create: `project-presentation/app/presentation-data.ts`
 - Modify: `project-presentation/app/page.tsx`
+- Modify: `project-presentation/tests/rendered-html.test.mjs`
 
 **Interfaces:**
 - Consumes: cifras verificadas contra SQLite y estados de `ROADMAP.md`.
-- Produces: `SLIDES`, `ARCHITECTURE`, `SURFACES`, `PHASES` y `VERIFIED_METRICS` importables por `page.tsx`.
+- Produces: `SLIDES`, `ARCHITECTURE`, `SURFACES`, `PHASES` y `VERIFIED_METRICS` importables por `page.tsx`; `renderHtml()` para tests de comportamiento.
 
 - [ ] **Step 1: Escribir el test fallido del contrato**
 
+Crear primero `tests/render-site.mjs` extrayendo el render real que hoy vive en
+`rendered-html.test.mjs`:
+
 ```js
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+
+export async function renderHtml() {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+  assert.equal(response.status, 200);
+  return response.text();
+}
+```
+
+Luego escribir `content-contract.test.mjs` contra el HTML ejecutado:
+
+```js
+import assert from "node:assert/strict";
 import test from "node:test";
+import { renderHtml } from "./render-site.mjs";
 
-const dataUrl = new URL("../app/presentation-data.ts", import.meta.url);
-
-test("locks the verified executive content snapshot", async () => {
-  const source = await readFile(dataUrl, "utf8");
-  const slidesBlock = source.match(
-    /export const SLIDES = \[([\s\S]*?)\] as const;/,
-  )?.[1];
-  assert.match(source, /asOf: "2026-07-28"/);
-  assert.match(source, /schemaVersion: 73/);
-  assert.match(source, /eeffLines: 36_793/);
-  assert.match(source, /derivedKpis: 12_782/);
-  assert.match(source, /tables: 37/);
-  assert.match(source, /views: 23/);
-  assert.match(source, /foreignKeyViolations: 0/);
-  assert.ok(slidesBlock);
-  assert.equal((slidesBlock.match(/\{ label:/g) ?? []).length, 13);
-  assert.match(source, /id: "factsheet"[\s\S]*id: "ingesta"[\s\S]*id: "assistant"/);
-  assert.doesNotMatch(source, /Machalí.*activo vigente/);
+test("renders the verified executive snapshot in thirteen slides", async () => {
+  const html = await renderHtml();
+  assert.equal((html.match(/<section\b/g) ?? []).length, 13);
+  assert.match(html, /dateTime="2026-07-28"/i);
+  assert.match(html, /schema v73/i);
+  assert.match(html, /36\.793/);
+  assert.match(html, /12\.782/);
+  assert.match(html, /37 tablas/i);
+  assert.match(html, /23 vistas/i);
+  assert.match(html, />0<[\s\S]*violaciones FK/i);
+  assert.match(html, /Machalí está fuera del portfolio vigente/i);
 });
 ```
 
 - [ ] **Step 2: Ejecutar el test y confirmar que falla**
 
-Run: `node --test tests/content-contract.test.mjs`  
-Expected: FAIL con `ENOENT` para `app/presentation-data.ts`.
+Run: `npm run build && node --test tests/content-contract.test.mjs`  
+Expected: FAIL porque el HTML aún no expone `dateTime="2026-07-28"`.
 
 - [ ] **Step 3: Crear el módulo de contenido**
 
@@ -155,22 +173,29 @@ import {
 ```
 
 Eliminar las definiciones duplicadas del componente y sustituir las cifras
-literales de portada por `VERIFIED_METRICS`.
+literales de portada por `VERIFIED_METRICS`. Renderizar la fecha con:
+
+```tsx
+<time dateTime={VERIFIED_METRICS.asOf}>Actualizado 28.07.2026</time>
+```
+
+Actualizar `rendered-html.test.mjs` para importar `renderHtml()` y eliminar su
+helper duplicado.
 
 - [ ] **Step 5: Ejecutar el test del contrato**
 
-Run: `node --test tests/content-contract.test.mjs`  
+Run: `npm run build && node --test tests/content-contract.test.mjs`  
 Expected: PASS.
 
 - [ ] **Step 6: Confirmar que el render previo no retrocede**
 
-Run: `npm run build && node --test tests/rendered-html.test.mjs`  
+Run: `node --test tests/rendered-html.test.mjs`  
 Expected: PASS en los 2 tests existentes.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add app/presentation-data.ts app/page.tsx tests/content-contract.test.mjs
+git add app/presentation-data.ts app/page.tsx tests/render-site.mjs tests/content-contract.test.mjs tests/rendered-html.test.mjs
 git commit -m "refactor(presentation): centralize verified executive content"
 ```
 
@@ -190,7 +215,6 @@ git commit -m "refactor(presentation): centralize verified executive content"
 - [ ] **Step 1: Agregar assertions fallidas al render**
 
 ```js
-assert.match(html, /Actualizado 28\.07\.2026/);
 assert.match(html, /Tres productos\. Una sola fuente de información\./);
 assert.match(html, /Momento de demostración en vivo/);
 assert.match(html, /Factsheet HTML[\s\S]*Centro de ingesta[\s\S]*Asistente inmobiliario/);
@@ -201,7 +225,7 @@ assert.doesNotMatch(html, /Una plataforma, cuatro puntos de contacto/);
 - [ ] **Step 2: Ejecutar el test y confirmar que falla**
 
 Run: `npm run build && node --test tests/rendered-html.test.mjs`  
-Expected: FAIL porque el borrador aún muestra fecha 27.07.2026 y cuatro superficies.
+Expected: FAIL porque el borrador aún muestra cuatro superficies.
 
 - [ ] **Step 3: Actualizar la pantalla de productos**
 
