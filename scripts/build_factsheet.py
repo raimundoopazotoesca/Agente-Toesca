@@ -250,6 +250,7 @@ FONDOS_CFG = {
             ],
             "rubro_arrendatario": ["Banco", "Deporte", "Padel", "Seguros", "Construcción", "Otro"],
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
+            "perfil_vencimiento_edificios": ["Torre A S.A.", "Inmob. Boulevard PT SpA"],
         },
         # Página 3 — "Torre A S.A. / Inmobiliaria Boulevard PT SpA" (fact sheet PT
         # julio 2025, PDF de referencia). A diferencia de Apo, PT NO desglosa por
@@ -365,6 +366,7 @@ FONDOS_CFG = {
                 "Instituto profesional", "Infraestructura",
             ],
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
+            "perfil_vencimiento_edificios": ["Apoquindo 4501", "Apoquindo 4700"],
         },
         # Página 3 — "Detalle de Activos" (fact sheet Apo octubre 2025).
         # Solo ESTRUCTURA (secciones, orden, filas/columnas de cada tabla, edificios) — sin
@@ -807,6 +809,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "vacancia_apo": _fetch_vacancia_apo(fondo_key),
         "rubro_arrendatario": _fetch_rubro_arrendatario(fondo_key),
         "tipo_activo": _fetch_tipo_activo(fondo_key),
+        "perfil_vencimiento": _fetch_perfil_vencimiento(fondo_key),
     }
 
 
@@ -873,6 +876,28 @@ def _fetch_rubro_arrendatario(fondo_key: str) -> dict:
     out = {}
     for periodo in _periodos_disponibles(activo_key_logico):
         tabla = get_rubro_arrendatario(activo_key_logico, periodo, categorias)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_perfil_vencimiento(fondo_key: str) -> dict:
+    """{periodo: {"por_anio": {edificio: {anio: uf}}, "anios": [...],
+    "plazo_medio_anios": float}} para el gráfico "Perfil de Vencimiento de
+    Contratos" de la página 2 — ver
+    tools/db/rent_roll_stats.py::get_perfil_vencimiento. Apo y PT (los dos
+    fondos con layout "por edificio/sociedad" en página 2; TRI aún no tiene
+    perf_data). activo_key lógico igual al usado por _fetch_tipo_activo."""
+    activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
+    edificios = (FONDOS_CFG.get(fondo_key, {}).get("page2") or {}).get("perfil_vencimiento_edificios")
+    if not activo_key_logico or not edificios:
+        return {}
+    from tools.db.rent_roll_stats import get_perfil_vencimiento, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_perfil_vencimiento(activo_key_logico, periodo, edificios)
         if tabla is None:
             continue
         out[periodo] = tabla
@@ -1616,6 +1641,10 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .parking-tooltip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
   .parking-tooltip .value { font-weight: 700; color: #25342F; }
 
+  /* Barras del gráfico "Perfil de Vencimiento de Contratos" */
+  .vc-bar-seg { transition: filter 120ms ease; }
+  .vc-col.is-active .vc-bar-seg { filter: brightness(0.88); }
+
   /* Barra de ocupación (reemplaza el treemap de la referencia — mismo dato, layout simplificado) */
   .occ-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 8px 6px; }
   .occ-bar { background: #EDEDED; border-radius: 4px; height: 14px; overflow: hidden; }
@@ -1908,7 +1937,9 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         <div class="chart-title">Perfil de Vencimiento de Contratos (UF/mes)
           <span class="small" style="float:right;font-weight:400;text-transform:none">Plazo medio contratos: <b id="fld-plazo-medio">—</b></span>
         </div>
-        <div class="chart-placeholder" data-chart="perfil-vencimiento-contratos">Pendiente de datos</div>
+        <div id="chart-perfil-vencimiento" data-chart="perfil-vencimiento-contratos">
+          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+        </div>
       </div>
       <div class="chart-box">
         <div class="chart-title">Recaudación Consolidada U12M
@@ -3081,6 +3112,130 @@ function renderTipoActivoDonut(containerId, counts, order){
   renderDonut(containerId, data, { tooltipTitle: "Renta mensual por tipo de activo" });
 }
 
+// "Perfil de Vencimiento de Contratos" (UF/mes) - barras verticales apiladas
+// por edificio, una barra por año de vencimiento. data: {por_anio, anios}
+// (ver tools/db/rent_roll_stats.py::get_perfil_vencimiento). Colores fijos
+// por edificio (mismos que el resto de las páginas Apo: verde = 4501, gris
+// oscuro = 4700), no por posición/rank.
+const PERFIL_VENC_COLORS = {
+  "Apoquindo 4501": "#05A978", "Apoquindo 4700": "#46504D",
+  "Torre A S.A.": "#05A978", "Inmob. Boulevard PT SpA": "#46504D",
+};
+function renderStackedBarChart(containerId, data, edificios){
+  const el = document.getElementById(containerId);
+  if (!data){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const { por_anio, anios } = data;
+  const totales = anios.map(a => edificios.reduce((s, ed) => s + ((por_anio[ed] || {})[a] || 0), 0));
+  const max = Math.max(1, ...totales);
+  const W = 900, H = 280, padL = 78, padR = 16, padT = 18, padB = 46;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = anios.length;
+  const bw = Math.max(6, (plotW / n) * 0.55);
+  const x = i => padL + (i + 0.5) * (plotW / n);
+  const yMax = Math.ceil(max / 500) * 500 || max;
+  const y = v => padT + plotH - (v / yMax) * plotH;
+
+  const nGrid = 5;
+  let gridLines = "", yLabels = "";
+  for (let g = 0; g <= nGrid; g++){
+    const v = yMax * g / nGrid;
+    const yy = padT + plotH - plotH * g / nGrid;
+    gridLines += `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="${g===0?'#AEBBB5':'#E8EEEB'}" stroke-width="${g===0?1.2:1}"/>`;
+    yLabels += `<text x="${padL-8}" y="${yy+5}" font-size="20" text-anchor="end" fill="#6D7C75">${Math.round(v).toLocaleString('es-CL')}</text>`;
+  }
+
+  const RX = Math.min(4, bw / 4);
+  const bars = anios.map((a, i) => {
+    let acc = 0;
+    const xb = x(i) - bw / 2;
+    const presentes = edificios.filter(ed => ((por_anio[ed] || {})[a] || 0) > 0);
+    const segs = edificios.map(ed => {
+      const v = (por_anio[ed] || {})[a] || 0;
+      if (!v) return "";
+      const yTop = y(acc + v), yBot = y(acc);
+      const esUltimo = ed === presentes[presentes.length - 1];
+      acc += v;
+      // Solo el segmento superior de la pila lleva esquinas redondeadas —
+      // simulado con dos rects (uno recto detrás, uno redondeado encima)
+      // porque SVG <rect> no soporta radios "solo arriba".
+      if (esUltimo && (yBot - yTop) > RX) {
+        const hFlat = (yBot - yTop) - RX;
+        return `<rect class="vc-bar-seg" x="${xb.toFixed(1)}" y="${(yTop+RX).toFixed(1)}" width="${bw.toFixed(1)}" height="${hFlat.toFixed(1)}" fill="${PERFIL_VENC_COLORS[ed] || '#999'}"/>` +
+               `<rect class="vc-bar-seg" x="${xb.toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${(RX*2).toFixed(1)}" rx="${RX}" fill="${PERFIL_VENC_COLORS[ed] || '#999'}"/>`;
+      }
+      return `<rect class="vc-bar-seg" x="${xb.toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,yBot-yTop).toFixed(1)}" fill="${PERFIL_VENC_COLORS[ed] || '#999'}"/>`;
+    }).join("");
+    return `<g class="vc-col" data-i="${i}">${segs}</g>`;
+  }).join("");
+
+  const xLabels = anios.map((a, i) =>
+    `<text x="${x(i).toFixed(1)}" y="${H-8}" font-size="20" text-anchor="middle" fill="#6D7C75">${a}</text>`
+  ).join("");
+
+  const hoverRects = anios.map((a, i) =>
+    `<rect class="vc-hit" data-i="${i}" x="${(x(i)-(plotW/n)/2).toFixed(1)}" y="${padT}" width="${(plotW/n).toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  const legend = edificios.map(ed =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 10px;font-size:11px;color:#6D7C75">` +
+    `<span style="width:10px;height:10px;border-radius:2px;display:inline-block;background:${PERFIL_VENC_COLORS[ed] || '#999'}"></span>${ed}</span>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Perfil de vencimiento de contratos por edificio">
+        ${gridLines}
+        ${bars}
+        ${yLabels}${xLabels}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+      <div class="chart-legend" style="text-align:center;margin-top:4px">${legend}</div>
+    </div>`;
+
+  const wrap = el.querySelector(".parking-chart");
+  const svg = el.querySelector("svg");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const cols = el.querySelectorAll(".vc-col");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const a = anios[i];
+    const lines = edificios
+      .map(ed => [ed, (por_anio[ed] || {})[a] || 0])
+      .filter(([, v]) => v > 0)
+      .map(([ed, v]) => htmlLine(ed, `${Math.round(v).toLocaleString('es-CL')} UF`, PERFIL_VENC_COLORS[ed] || '#999'))
+      .join("");
+    if (!lines) { tooltip.classList.remove("on"); return; }
+    tooltip.innerHTML = `<div class="title">${a}</div>${lines}`;
+    const p = toPx(x(i), y(totales[i]));
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(74, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    cols.forEach(c => c.classList.toggle("is-active", Number(c.dataset.i) === i));
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    cols.forEach(c => c.classList.remove("is-active"));
+  };
+  el.querySelectorAll(".vc-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
 // "Resultados Parking (UF)" - barras apiladas + lineas de resultado y ocupación.
 function renderParkingChart(containerId, rows){
   const el = document.getElementById(containerId);
@@ -3545,6 +3700,20 @@ function render(){
     renderBarChartHorizontal("chart-rubro", rubroPeriodo ? F.rubro_arrendatario[rubroPeriodo] : null);
     const tipoPeriodo = (F.tipo_activo || {})[usadoOp] ? usadoOp : null;
     renderTipoActivoDonut("donut-tipo-activo", tipoPeriodo ? F.tipo_activo[tipoPeriodo] : null, S.page2.tipo_activo);
+    if (S.page2.perfil_vencimiento_edificios) {
+      const vencPeriodo = (F.perfil_vencimiento || {})[usadoOp] ? usadoOp : null;
+      const vencData = vencPeriodo ? F.perfil_vencimiento[vencPeriodo] : null;
+      renderStackedBarChart("chart-perfil-vencimiento", vencData, S.page2.perfil_vencimiento_edificios);
+      document.getElementById("fld-plazo-medio").textContent =
+        vencData && vencData.plazo_medio_anios != null ? fmtNum(vencData.plazo_medio_anios, 1) + " años" : "—";
+    } else {
+      // Fondos sin desglose por edificio (PT, TRI): este gráfico es Apo-specific.
+      // Resetear a placeholder explícitamente — si no, al cambiar de fondo en el
+      // selector (SPA sin reload) queda pegado el último SVG renderizado para Apo.
+      document.getElementById("chart-perfil-vencimiento").innerHTML =
+        `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+      document.getElementById("fld-plazo-medio").textContent = "—";
+    }
   }
 
   // Página 3 / 4 — mismo mes de referencia que página 2 (no tienen datos por período aún)

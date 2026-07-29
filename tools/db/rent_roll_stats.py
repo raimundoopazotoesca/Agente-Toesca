@@ -377,6 +377,69 @@ def get_rubro_arrendatario(activo_key: str, periodo: str, categorias: list[str])
     return {k: round(v, 1) for k, v in agg.items() if v}
 
 
+def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) -> dict | None:
+    """Renta mensual ocupada (UF), agrupada por año de vencimiento de contrato
+    y edificio, para el gráfico "Perfil de Vencimiento de Contratos" de la
+    página 2 (ver FONDOS_CFG["Apo"/"PT"]["page2"]). El agrupador "edificio" usa
+    _ACTIVO2_LABEL para traducir el activo2 crudo del rent roll al label del
+    grupo (necesario para PT: "Torre A"->"Torre A S.A.", "Inmob. CdC"->
+    "Inmob. Boulevard PT SpA"; para Apo el activo2 ya coincide 1:1). Los años
+    se acotan a una
+    ventana de 9 buckets partiendo del año del período (report_year..
+    report_year+8); todo vencimiento posterior cae en el último bucket
+    "{report_year+8}+". Vacantes se excluyen, igual que get_rubro_arrendatario
+    / get_tipo_activo.
+
+    También calcula el plazo medio de los contratos vigentes (años restantes
+    desde `periodo` hasta `vencimiento`), ponderado por renta mensual UF
+    (mismo criterio de ponderación usado en el resto del módulo, ver
+    _monto_mensual_uf).
+
+    Devuelve {"por_anio": {edificio: {anio_bucket: uf}}, "anios": [buckets en
+    orden], "plazo_medio_anios": float | None}. None si no hay rent roll
+    ingestado para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+
+    report_year = int(periodo.split("-")[0])
+    report_date = f"{periodo}-01"
+    anio_max = report_year + 8
+    anios = [str(a) for a in range(report_year, anio_max)] + [f"{anio_max}+"]
+
+    por_anio: dict[str, dict[str, float]] = {ed: {a: 0.0 for a in anios} for ed in edificios}
+    peso_total = 0.0
+    plazo_ponderado = 0.0
+
+    for k, v in snapshot.items():
+        if _es_vacante(v["arrendatario"]):
+            continue
+        edificio = _ACTIVO2_LABEL.get(k[0], k[0])
+        if edificio not in por_anio:
+            continue
+        venc = v.get("vencimiento")
+        if not venc:
+            continue
+        monto = _monto_mensual_uf(v)
+        anio_venc = int(str(venc)[:4])
+        bucket = str(anio_venc) if anio_venc < anio_max else f"{anio_max}+"
+        por_anio[edificio][bucket] = round(por_anio[edificio].get(bucket, 0.0) + monto, 1)
+
+        if venc > report_date and monto:
+            dias = (_fecha(venc) - _fecha(report_date)).days
+            plazo_ponderado += (dias / 365.0) * monto
+            peso_total += monto
+
+    plazo_medio = round(plazo_ponderado / peso_total, 2) if peso_total else None
+    return {"por_anio": por_anio, "anios": anios, "plazo_medio_anios": plazo_medio}
+
+
+def _fecha(s: str):
+    from datetime import date
+    y, m, d = (int(x) for x in s[:10].split("-"))
+    return date(y, m, d)
+
+
 def get_tipo_activo(activo_key: str, periodo: str) -> dict | None:
     """Renta mensual ocupada (UF), agrupada por tipo de activo (Oficinas,
     Locales Comerciales, Estacionamientos, Bodegas — ver v["tipo_activo_3"] en
