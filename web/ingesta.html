@@ -366,13 +366,13 @@
   .inicio-expand-toggle:hover { color: var(--green); }
   .inicio-expand-toggle:focus { outline: none; color: var(--green); }
   .inicio-expand-toggle:focus-visible { outline: 2px solid var(--green-soft); outline-offset: 2px; }
-  .inicio-expand-body { display: none; margin-top: 10px; overflow-x: auto; }
+  .inicio-expand-body { display: none; margin-top: 10px; overflow-x: hidden; }
   .inicio-card.open .inicio-expand-body { display: block; }
   .inicio-card.open .inicio-chev { transform: rotate(180deg); }
   .inicio-chev { transition: transform .15s; display: inline-block; }
   .inicio-matrix {
-    display: grid; grid-template-columns: 62px repeat(var(--cols, 4), minmax(34px, 1fr));
-    gap: 4px 6px; font-size: 11px; align-items: center; min-width: max-content;
+    display: grid; grid-template-columns: minmax(62px, 1.05fr) repeat(var(--cols, 4), minmax(0, 1fr));
+    gap: 4px 6px; font-size: 11px; align-items: center; min-width: 0; width: 100%;
   }
   .inicio-matrix .head {
     color: var(--muted); font-variant-numeric: tabular-nums; text-align: center; font-size: 9.5px;
@@ -2484,6 +2484,58 @@ function _inicioOrdenarTipos(tipos) {
   });
 }
 
+function _inicioTimelineHtml(periodos, frecuencia) {
+  return periodos.map(t => `
+    <div class="inicio-tl-item" data-periodo="${t.periodo}">
+      <div class="inicio-tl-dot ${t.estado}"></div>
+      <span class="inicio-tl-label">${_inicioPeriodoLabel(t.periodo, frecuencia)}</span>
+    </div>
+  `).join('');
+}
+
+function _inicioNormalizarSubIngestas(subIngestas) {
+  return (subIngestas || []).map(sub => ({
+    ...sub,
+    periodos: sub.periodos || sub.timeline || [],
+  }));
+}
+
+function _inicioDetalleHtml(subIngestas, frecuencia, offsetMin, offset, n) {
+  const subs = _inicioNormalizarSubIngestas(subIngestas);
+  if (!subs.length) return '';
+  const start = offset - offsetMin;
+  const ventana = subs[0].periodos.slice(start, start + n);
+  const headHtml = ventana.map(t =>
+    `<div class="head">${_inicioPeriodoLabel(t.periodo, frecuencia)}</div>`
+  ).join('');
+
+  const rowsHtml = subs.map(sub => {
+    const ventana = sub.periodos.slice(start, start + n);
+    const cellsHtml = ventana.map(t => `
+      <div class="cell" data-sub-key="${sub.key}" data-periodo="${t.periodo}" data-estado="${t.estado}"
+           title="${sub.label} Â· ${_inicioPeriodoLabel(t.periodo, frecuencia)}">
+        <span class="dot ${t.estado}"></span>
+      </div>
+    `).join('');
+    return `<div class="rowname" title="${sub.label}">${sub.label}</div>${cellsHtml}`;
+  }).join('');
+
+  return `<div></div>${headHtml}${rowsHtml}`;
+}
+
+function _inicioRenderDetalle(card, cache, offset) {
+  const matrix = card.querySelector('.inicio-matrix');
+  if (!matrix || !cache.sub_ingestas || !cache.sub_ingestas.length) return;
+  matrix.style.setProperty('--cols', String(cache.n));
+  matrix.innerHTML = _inicioDetalleHtml(
+    cache.sub_ingestas,
+    card.dataset.frecuencia,
+    cache.offset_min,
+    offset,
+    cache.n
+  );
+}
+
 function renderEstadoIngesta(data) {
   _inicioEstadoData = data;
   renderMiniCards(data);
@@ -2517,12 +2569,7 @@ function renderEstadoIngesta(data) {
     card.dataset.frecuencia = tipo.frecuencia;
     card.dataset.offset = '0';
 
-    const timelineHtml = tipo.timeline.map(t => `
-      <div class="inicio-tl-item">
-        <div class="inicio-tl-dot ${t.estado}"></div>
-        <span class="inicio-tl-label">${_inicioPeriodoLabel(t.periodo, tipo.frecuencia)}</span>
-      </div>
-    `).join('');
+    const timelineHtml = _inicioTimelineHtml(tipo.timeline, tipo.frecuencia);
 
     const tieneSubs = tipo.sub_ingestas && tipo.sub_ingestas.length > 0;
 
@@ -2562,6 +2609,7 @@ function renderEstadoIngesta(data) {
         `).join('');
         return `<div class="rowname" title="${sub.label}">${sub.label}</div>${cellsHtml}`;
       }).join('');
+      const detalleHtml = _inicioDetalleHtml(tipo.sub_ingestas, tipo.frecuencia, 0, 0, cols);
       expandHtml = `
         <button class="inicio-expand-toggle" data-toggle-expand>
           <span>Ver detalle</span>
@@ -2569,8 +2617,7 @@ function renderEstadoIngesta(data) {
         </button>
         <div class="inicio-expand-body">
           <div class="inicio-matrix" style="--cols:${cols}">
-            <div></div>${headHtml}
-            ${rowsHtml}
+            ${detalleHtml}
           </div>
         </div>
       `;
@@ -2602,13 +2649,16 @@ function renderEstadoIngesta(data) {
     btn.addEventListener('click', () => btn.closest('.inicio-card').classList.toggle('open'));
   });
 
-  container.querySelectorAll('.inicio-matrix .cell[data-estado="miss"]').forEach(cell => {
-    cell.addEventListener('click', () => {
+  if (!container.dataset.detalleClickBound) {
+    container.addEventListener('click', (event) => {
+      const cell = event.target.closest('.inicio-matrix .cell[data-estado="miss"]');
+      if (!cell || !container.contains(cell)) return;
       const card = cell.closest('.inicio-card');
       const tabDestino = card.querySelector('button[data-tab-destino]').dataset.tabDestino;
       _irAIngestar(tabDestino, cell.dataset.periodo, cell.dataset.subKey);
     });
-  });
+    container.dataset.detalleClickBound = '1';
+  }
 
   container.querySelectorAll('button[data-tab-destino]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2664,12 +2714,9 @@ function navegarTimeline(card, delta) {
   const frecuencia = card.dataset.frecuencia;
   const start = nuevoOffset - cache.offset_min;
   const ventana = cache.periodos.slice(start, start + cache.n);
-  card.querySelector('.inicio-timeline').innerHTML = ventana.map(t => `
-    <div class="inicio-tl-item">
-      <div class="inicio-tl-dot ${t.estado}"></div>
-      <span class="inicio-tl-label">${_inicioPeriodoLabel(t.periodo, frecuencia)}</span>
-    </div>
-  `).join('');
+  const timeline = card.querySelector('.inicio-timeline');
+  timeline.innerHTML = _inicioTimelineHtml(ventana, frecuencia);
+  _inicioRenderDetalle(card, cache, nuevoOffset);
 
   actualizarBotonesNav(card);
 }
