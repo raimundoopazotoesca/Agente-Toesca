@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -28,3 +29,14 @@ def test_detalle_usa_misma_ventana_y_celdas_regeneradas_siguen_clickables():
     assert 'data-sub-key="${sub.key}"' in HTML
     assert "container.addEventListener('click', (event) => {" in HTML
     assert "event.target.closest('.inicio-matrix .cell[data-estado=\"miss\"]')" in HTML
+
+
+def test_detalle_headers_usan_label_compacto_sin_solaparse():
+    assert "function _inicioDetallePeriodoLabel(periodo, frecuencia)" in HTML
+    assert "const headHtml = ventana.map(t => _inicioDetallePeriodoLabel(t.periodo, frecuencia)).join('');" in HTML
+
+    head_rule = re.search(r"\.inicio-matrix \.head \{(?P<body>.*?)\n  \}", HTML, re.S)
+    assert head_rule is not None
+    assert "white-space: nowrap" not in head_rule.group("body")
+    assert "display: flex" in head_rule.group("body")
+    assert "line-height" in head_rule.group("body")
