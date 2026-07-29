@@ -201,7 +201,7 @@ Alias comunes → activo_key:
   "Boulevard", "CDC", "Centro Convenciones", "PT Comercial"  → 'Boulevard' (activo) o 'PT Boulevard' (split NOI)
   "PT" a secas cuando el contexto es un dato de activo consolidado (NOI, ingresos) → 'PT' (union Torre A+Boulevard, ya consolidado en derived_kpi)
   "Apoquindo" a secas cuando pregunta NOI/ingresos/vacancia               → 'Apoquindo' (union Apo4501+Apo4700 en derived_kpi)
-  "Fondo Apoquindo" en vacancia/m2                                       → 'Fondo Apoquindo' (entidad especial en m2_vacantes)
+  "Fondo Apoquindo"/"Apoquindo" en vacancia/m2                           → activo_key 'Apo4501'+'Apo4700' en raw_rent_roll_line (ver seccion 4, Vacancia)
 
 Categorias de activo (dim_activo.categoria):
   'Oficinas'            Torre A, Boulevard, Apo3001, Apo4501, Apo4700
@@ -278,11 +278,21 @@ Deuda/leverage (entidad_tipo='fondo' o 'activo'):
   caja_minima         caja_minima_v1          fondo Apo|PT|TRI       CLP
 
 Vacancia:
-  kpi='m2_vacantes' AND formula='cdg_vacancia_v1' AND entidad_tipo='activo'  (unidad=m2)
-  entidad_key VALIDAS (etiquetas CDG, no activo_key): 'Apoquindo 3001', 'Apoquindo 4501',
-  'Apoquindo 4700', 'Curicó', 'Fondo Apoquindo', 'INMOSA', 'PT Bodegas', 'PT Locales',
-  'PT Oficinas', 'SUCDEN', 'Viña Centro'. NO usar activo_key aqui.
-  ATENCION: el kpi es 'm2_vacantes' (NUNCA 'cdg_vacancia_v1' — eso es la formula).
+  NUNCA usar derived_kpi con formula='cdg_vacancia_v1' (ni ningun kpi/formula que
+  empiece con 'cdg_') — es el Control de Gestion antiguo, prohibido como fuente.
+  La vacancia SIEMPRE se calcula en vivo desde raw_rent_roll_line (superseded_at
+  IS NULL), filtrando por activo_key y periodo:
+    m2_vacantes = SUM(m2) WHERE arrendatario IS NULL OR LOWER(arrendatario) LIKE '%vacante%'
+    m2_total    = SUM(m2) sin ese filtro
+    % vacancia  = m2_vacantes / m2_total * 100
+  Si (activo_key, periodo) no tiene filas en raw_rent_roll_line → NO hay dato,
+  no inventar ni caer a otro periodo. Hoy (ver tabla en seccion 5) solo 'Viña
+  Centro' y 'Mall Curicó' tienen rent roll ingestado — Torre A/Boulevard (PT) y
+  Apo4501/Apo4700 (Apo) NO tienen ningun periodo ingestado todavia; si preguntan
+  su vacancia, responder que no hay rent roll ingestado, no usar el CDG.
+  Para desglose por edificio/tipo (Locales/Oficinas/Bodegas/Estacionamientos) ver
+  tools/db/rent_roll_stats.py (get_vacancia_edificios/get_perf_table), que ya
+  implementa esta misma logica sobre raw_rent_roll_line.
 
 Valor cuota libro (valor_cuota_libro | eeff_pdf_v1, unidad=CLP):
   fondo=Apo|PT / serie=CFITOERI1A|CFITOERI1C
@@ -457,8 +467,9 @@ Paso D. Considera si necesita CONVERSION (UF↔CLP, ratio→%). Si la respuesta 
 Paso E. Construye el SQL. Usa comillas simples y respeta case (activo_key='Viña Centro'
         con la ñ; entidad_key 'CFITOERI1A' en mayuscula; 'PT' vs 'Torre A').
         REGLA CRITICA: en derived_kpi, `kpi` y `formula` son columnas DISTINTAS.
-        Ejemplo: kpi='m2_vacantes' formula='cdg_vacancia_v1' — NUNCA metas
-        'cdg_vacancia_v1' en el filtro de kpi. Igual con noi/tir/dy/etc.
+        Ejemplo: kpi='dy' formula='dy_v2' — NUNCA metas el nombre de la formula
+        en el filtro de kpi. Excepcion: vacancia NUNCA sale de derived_kpi (ver
+        seccion 4) — siempre se calcula desde raw_rent_roll_line.
 
 REGLAS ABSOLUTAS:
 1. Solo emites SELECT o WITH ... SELECT. Nunca DDL/DML/PRAGMA/ATTACH.
@@ -495,8 +506,8 @@ _FEW_SHOT_EXAMPLES = [
      '{"sql": "SELECT periodo, valor FROM derived_kpi WHERE kpi=\'ltv\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
     ("cuales son los creditos vigentes de Viña Centro?",
      '{"sql": "SELECT credito_key, acreedor, tipo_deuda, deuda_inicial_uf, tasa_anual, fecha_vencimiento FROM dim_credito WHERE activo_key=\'Viña Centro\' AND estado=\'VIGENTE\'"}'),
-    ("vacancia PT oficinas ultimos 6 meses",
-     '{"sql": "SELECT periodo, valor FROM derived_kpi WHERE kpi=\'m2_vacantes\' AND entidad_tipo=\'activo\' AND entidad_key=\'PT Oficinas\' ORDER BY periodo DESC LIMIT 6"}'),
+    ("vacancia Viña Centro ultimos periodos",
+     '{"sql": "SELECT periodo, SUM(CASE WHEN arrendatario IS NULL OR LOWER(arrendatario) LIKE \'%vacante%\' THEN m2 ELSE 0 END) * 100.0 / SUM(m2) AS pct_vacancia FROM raw_rent_roll_line WHERE activo_key=\'Viña Centro\' AND superseded_at IS NULL GROUP BY periodo ORDER BY periodo DESC"}'),
     ("precio bursatil serie A al cierre marzo 2026",
      '{"sql": "SELECT fecha, precio FROM fact_precio_cuota WHERE nemotecnico=\'CFITOERI1A\' AND fecha LIKE \'2026-03%\' ORDER BY fecha DESC LIMIT 1"}'),
     ("cuando fueron los ultimos 5 dividendos de la serie A?",

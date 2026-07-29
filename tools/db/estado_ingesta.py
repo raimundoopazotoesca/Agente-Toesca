@@ -72,16 +72,20 @@ CONFIG: list[dict] = [
         "tabla": "raw_rent_roll_line",
         "columna_periodo": "periodo",
         # completo == los 3 proveedores completos (unión de sus activo_key);
-        # si falta uno solo (p.ej. JLL) el período entero queda "pendiente"
-        "fondos": ["PT", "Apoquindo", "Apo3001", "Viña Centro", "Mall Curicó"],
+        # si falta uno solo (p.ej. JLL) el período entero queda "pendiente".
+        # JLL entrega PT (Torre A + Boulevard) y Apoquindo (Apo4501 + Apo4700)
+        # por edificio real desde el fix de 2026-07-29 (antes se guardaba por
+        # fondo agregado 'PT'/'Apoquindo', que no existían en dim_activo).
+        "fondos": ["Torre A", "Boulevard", "Apo4501", "Apo4700", "Apo3001", "Viña Centro", "Mall Curicó"],
         "columna_fondo": "activo_key",
-        # sub-ingestas: agrupan activo_key por proveedor (JLL entrega 3 activos
+        # sub-ingestas: agrupan activo_key por proveedor (JLL entrega 5 activos
         # en un solo archivo; Tres Asociados entrega Viña y Curicó por separado)
         "columna_sub_ingesta": "activo_key",
         "n_timeline": 6,
         "tab_destino": "rentroll",
         "sub_ingestas": [
-            {"key": "jll", "label": "JLL (PT, Apo, Apo3001)", "valores": ["PT", "Apoquindo", "Apo3001"]},
+            {"key": "jll", "label": "JLL (PT, Apo, Apo3001)",
+             "valores": ["Torre A", "Boulevard", "Apo4501", "Apo4700", "Apo3001"]},
             {"key": "tresa_vina", "label": "Tres A · Viña", "valores": ["Viña Centro"]},
             {"key": "tresa_curico", "label": "Tres A · Curicó", "valores": ["Mall Curicó"]},
         ],

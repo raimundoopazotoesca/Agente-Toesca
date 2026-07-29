@@ -37,13 +37,34 @@ from tools.db.connection import get_conn as _db_get_conn
 from tools.db import repo_audit, repo_rent_roll
 
 # Activo1 del rent roll (proveedor) → activo_key en dim_activo.
+# Válido solo para fondos de un solo edificio (Apo3001, Viña Centro, Mall Curicó).
+# PT y Apoquindo agrupan varios edificios bajo el mismo Activo1 — para esos se
+# resuelve por (Activo1, Activo2) via _RR_EDIFICIO_ACTIVO_KEY, ver _resolve_rr_activo_key.
 _RR_ACTIVO_KEY = {
-    "Fondo Rentas PT": "PT",
-    "Fondo Rentas Apoquindo": "Apoquindo",
     "Apoquindo 3001": "Apo3001",
     "Paseo Viña Centro": "Viña Centro",
     "Mall Curicó": "Mall Curicó",
 }
+
+# (Activo1, Activo2 del rent roll) → activo_key real en dim_activo, para fondos
+# con más de un edificio. "Inmob. CdC" = Boulevard (confirmado con el usuario
+# 2026-07-29 — no inferir por nombre, el rent roll usa una etiqueta distinta).
+_RR_EDIFICIO_ACTIVO_KEY = {
+    ("Fondo Rentas Apoquindo", "Apoquindo 4501"): "Apo4501",
+    ("Fondo Rentas Apoquindo", "Apoquindo 4700"): "Apo4700",
+    ("Fondo Rentas PT", "Torre A"): "Torre A",
+    ("Fondo Rentas PT", "Inmob. CdC"): "Boulevard",
+}
+
+
+def resolve_rr_activo_key(activo1: str, activo2: str) -> str | None:
+    """Resuelve el activo_key real (dim_activo) de una fila del rent roll.
+    Prioriza el mapeo por edificio (fondos multi-edificio); si no aplica,
+    cae al mapeo directo por Activo1 (fondos de un solo edificio)."""
+    por_edificio = _RR_EDIFICIO_ACTIVO_KEY.get((activo1, activo2))
+    if por_edificio:
+        return por_edificio
+    return _RR_ACTIVO_KEY.get(activo1)
 
 # ── Rutas SharePoint Rent Rolls ──────────────────────────────────────────────
 _RR_JLL_DIR = os.path.join(SHAREPOINT_DIR, "Rent Rolls", "JLL")
@@ -359,6 +380,37 @@ def _val4_terminos(rows, col_map, data_start, cierre_date):
     return errors
 
 
+# ── Validación 5: Renta esperada en celdas vacantes ─────────────────────────
+# "Renta Fija (UF/m2 /mes)" es la que usamos para calcular "Renta vacante
+# (UF)" en el fact sheet (ver tools/db/rent_roll_stats.py::_celda), incluidas
+# Bodegas/Estacionamientos (Torre A S.A. las calcula con normalidad; Boulevard
+# PT queda RENTA_PENDIENTE por facturación real, pero igual se valida acá
+# porque el dato de renta esperada debe existir en el rent roll en ambos
+# casos). Si una celda vacante viene sin ese valor, la renta vacante queda
+# subestimada a 0 en vez del monto esperado — se exige explícitamente, sin
+# excepción de tipo (confirmado con el usuario 2026-07-29: si calculamos
+# renta vacante para un tipo, ese tipo se valida).
+
+def _val5_renta_vacante(rows, col_map, data_start):
+    errors = []
+    arr_col = col_map.get("Arrendatario")
+    renta_col = col_map.get("Renta Fija (UF/m2 /mes)")
+    if arr_col is None or renta_col is None:
+        return errors
+    for row_idx in range(data_start, len(rows)):
+        row = rows[row_idx]
+        arr = str(row[arr_col] or "").strip()
+        if not arr or "vacante" not in arr.lower():
+            continue
+        renta = row[renta_col]
+        if renta is None or _rr_num(renta) in (None, 0):
+            errors.append({
+                "fila": row_idx + 1,
+                "arrendatario": arr,
+            })
+    return errors
+
+
 # ── Función principal: validar un archivo ───────────────────────────────────
 
 def _validar_archivo(filepath: str, cierre_date: date,
@@ -415,6 +467,11 @@ def _validar_archivo(filepath: str, cierre_date: date,
     v4 = _val4_terminos(rows, col_map, data_start, cierre_date)
     if v4:
         result["errores"]["val4_terminos"] = v4
+
+    # Val 5
+    v5 = _val5_renta_vacante(rows, col_map, data_start)
+    if v5:
+        result["errores"]["val5_renta_vacante"] = v5
 
     return result
 
@@ -511,6 +568,11 @@ def revisar_rent_rolls(año: int, mes: int) -> str:
                 lines.append(f"  VAL4 — Contratos vencidos: {len(errores['val4_terminos'])} error(es)")
                 for e in errores["val4_terminos"]:
                     lines.append(f"    Fila {e['fila']} [{e['arrendatario']}]: venció el {e['fecha_termino']}")
+
+            if "val5_renta_vacante" in errores:
+                lines.append(f"  VAL5 — Renta esperada en vacantes: {len(errores['val5_renta_vacante'])} error(es)")
+                for e in errores["val5_renta_vacante"]:
+                    lines.append(f"    Fila {e['fila']} [{e['arrendatario']}]: falta Renta Fija (UF/m2/mes)")
         lines.append("")
 
     lines.append("Cuando confirmes los errores usa 'enviar_emails_rent_roll' para enviar los correos.")
@@ -610,6 +672,15 @@ def revisar_rent_roll_jll(año: int, mes: int) -> str:
                 lines.append(
                     f"| {e['fila']} | {_md_cell(e['arrendatario'])} | {_md_cell(e['fecha_termino'])} |"
                 )
+            lines.append("")
+
+        if "val5_renta_vacante" in errores:
+            lines.append(f"- **VAL5 - Renta esperada en vacantes:** {len(errores['val5_renta_vacante'])} error(es)")
+            lines.append("")
+            lines.append("| Fila | Arrendatario |")
+            lines.append("|---:|---|")
+            for e in errores["val5_renta_vacante"]:
+                lines.append(f"| {e['fila']} | {_md_cell(e['arrendatario'])} |")
             lines.append("")
 
     lines.append("")
@@ -1055,6 +1126,8 @@ _COLS_COPY = [
     "Arrendatario", "Tipo Arrendatario", "Rol", "Ex Arrendatario",
     "Detalle Activo", "Area Arrendable (m2)",
     "Renta Fija (UF/m2 /mes)",
+    "Renta Esperada Total(UF/mes)", "Renta Esperada Ponderada (UF/mes)",
+    "Renta Vacante (UF)", "Renta en gracia (UF)", "Renta real (UF/mes)",
     "IVA",                              # opcional; se omite si no existe
     "Inicio Pago Renta",
     "Fecha Inicio", "Término del Contrato",
@@ -1106,13 +1179,29 @@ def _read_source_data(filepath: str) -> dict:
     if activo2_col is None or detalle_col is None:
         return {}
 
-    for row in rows[h + 1:]:
+    for row_idx, row in enumerate(rows[h + 1:], start=h + 1):
         activo2 = str(row[activo2_col] or "").strip()
         detalle = str(row[detalle_col] or "").strip()
-        if not activo2 or not detalle:
+        if not activo2:
             continue
+        if not detalle:
+            # Sin "Detalle Activo" (ej. estacionamientos sin número asignado
+            # en el rent roll JLL) — antes se descartaba la fila entera y
+            # subestimaba el conteo del edificio (confirmado: 2 estacionamientos
+            # de Apo 4501 desaparecían así). Se usa un label sintético único
+            # por fila para no perderla.
+            detalle = f"(sin detalle, fila {row_idx + 1})"
 
         key = (activo2, detalle)
+        if key in source:
+            # Un mismo piso/zona puede estar subdividido en varias unidades con
+            # la misma "Detalle Activo" (ej. Piso 6 con 2 arrendatarios, Zócalo
+            # con 3 espacios). Sin desambiguar, sobreescribir por key perdía
+            # filas silenciosamente y subestimaba m2 total y vacancia.
+            sufijo = 2
+            while (activo2, f"{detalle} #{sufijo}") in source:
+                sufijo += 1
+            key = (activo2, f"{detalle} #{sufijo}")
         record = {}
 
         # Columnas simples
@@ -1177,7 +1266,7 @@ def _persist_rent_roll(src_path: str, periodo: str, source_data: dict, proveedor
             lines = []
             for i, ((activo2, detalle), rec) in enumerate(source_data.items()):
                 activo1 = str(rec.get("Activo1") or "").strip()
-                activo_key = _RR_ACTIVO_KEY.get(activo1)
+                activo_key = resolve_rr_activo_key(activo1, activo2)
                 if activo_key is None:
                     continue
                 extra = {

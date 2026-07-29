@@ -38,6 +38,7 @@ BORRADOR_DIR = Path(os.environ.get("WORK_DIR", str(ROOT / "work"))) / "rentroll_
 
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import repo_rent_roll  # noqa: E402
+from tools.db.ingest_rent_roll_validated import _renta_gracia_calculada  # noqa: E402
 from tools.rentroll_tools import (  # noqa: E402
     _read_source_data,
     _RR_ACTIVO_KEY,
@@ -80,6 +81,7 @@ def _rows_from_borrador(activo_key: str, periodo: str, excel_path: str) -> list[
             "tipo_activo_3": rec.get("Tipo Activo 3"),
             "tipo_activo_2": rec.get("Tipo Activo 2 (no va vacante)"),
             "tipo_arrendatario": rec.get("Tipo Arrendatario"),
+            "renta_gracia": _renta_gracia_calculada(rec, periodo),
         }
         rows.append({
             "activo_key": activo_key,

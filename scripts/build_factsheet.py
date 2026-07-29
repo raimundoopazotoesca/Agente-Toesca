@@ -249,7 +249,7 @@ FONDOS_CFG = {
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
             ],
             "rubro_arrendatario": ["Banco", "Deporte", "Padel", "Seguros", "Construcción", "Otro"],
-            "tipo_activo": ["Oficina", "Locales Comerciales", "Estacionamiento", "Bodega"],
+            "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
         },
         # Página 3 — "Torre A S.A. / Inmobiliaria Boulevard PT SpA" (fact sheet PT
         # julio 2025, PDF de referencia). A diferencia de Apo, PT NO desglosa por
@@ -805,6 +805,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "parking": parking_data,
         "perf_data": _fetch_perf_data(fondo_key),
         "vacancia_apo": _fetch_vacancia_apo(fondo_key),
+        "rubro_arrendatario": _fetch_rubro_arrendatario(fondo_key),
+        "tipo_activo": _fetch_tipo_activo(fondo_key),
     }
 
 
@@ -832,19 +834,19 @@ def _fetch_vacancia_apo(fondo_key: str) -> dict:
 
 def _fetch_perf_data(fondo_key: str) -> dict:
     """Tabla "Resumen Performance Activos" de la página 2 (rent roll), por
-    período. Solo implementada para PT hoy — ver tools/db/rent_roll_stats.py.
-    Apo y TRI ya tienen su layout de page2 definido en FONDOS_CFG pero sin
-    fuente de datos wired aún (Apo: agrupar raw_rent_roll_line por edificio
-    Apoquindo 4501/4700; TRI: consolidar a nivel fondo paraguas por
-    activo/subfondo). Ambos quedan en placeholder hasta esa implementación.
+    período — ver tools/db/rent_roll_stats.py. PT y Apo ya están wired
+    (agrupados por sociedad/edificio, ver _GRUPOS_TIPOS_POR_FONDO). TRI queda
+    en placeholder: falta consolidar a nivel fondo paraguas por
+    activo/subfondo.
     """
-    if fondo_key != "PT":
+    activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
+    if activo_key_logico is None:
         return {}
     from tools.db.rent_roll_stats import get_perf_table, _periodos_disponibles
 
     out = {}
-    for periodo in _periodos_disponibles("PT"):
-        tabla = get_perf_table("PT", periodo)
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_perf_table(activo_key_logico, periodo)
         if tabla is None:
             continue
         celdas = {}
@@ -855,6 +857,43 @@ def _fetch_perf_data(fondo_key: str) -> dict:
         celdas["_absorcion_3m"] = tabla["_absorcion_3m"]
         celdas["_absorcion_12m"] = tabla["_absorcion_12m"]
         out[periodo] = celdas
+    return out
+
+
+def _fetch_rubro_arrendatario(fondo_key: str) -> dict:
+    """{periodo: {rubro: renta_uf}} para el gráfico "Composición por Rubro del
+    Arrendatario" de la página 2 — ver tools/db/rent_roll_stats.py::get_rubro_arrendatario.
+    Mismo alcance que _fetch_perf_data (PT y Apo; TRI en placeholder)."""
+    activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
+    if activo_key_logico is None:
+        return {}
+    categorias = FONDOS_CFG[fondo_key]["page2"]["rubro_arrendatario"]
+    from tools.db.rent_roll_stats import get_rubro_arrendatario, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_rubro_arrendatario(activo_key_logico, periodo, categorias)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_tipo_activo(fondo_key: str) -> dict:
+    """{periodo: {tipo: renta_uf}} para el donut "Composición por Tipo de
+    Activo" de la página 2 — ver tools/db/rent_roll_stats.py::get_tipo_activo.
+    Mismo alcance que _fetch_perf_data (PT y Apo; TRI en placeholder)."""
+    activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
+    if activo_key_logico is None:
+        return {}
+    from tools.db.rent_roll_stats import get_tipo_activo, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_tipo_activo(activo_key_logico, periodo)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
     return out
 
 
@@ -1461,6 +1500,35 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     font-weight: 700; font-size: 11px; text-transform: uppercase;
     letter-spacing: 0.5px; color: #33413b; margin-bottom: 8px;
   }
+  .chart-box > div[data-chart] { flex: 1; position: relative; }
+  .hbar-chart { height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 4px; position: relative; }
+  .hbar-row { display: flex; align-items: center; gap: 8px; }
+  .hbar-row .hbar-label {
+    flex: 0 0 108px; font-size: 10px; color: #46504D; text-align: right;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hbar-row .hbar-track {
+    flex: 1 1 auto; background: #EDF2EF; border-radius: 3px; height: 12px;
+    overflow: hidden; cursor: default;
+  }
+  .hbar-row .hbar-fill { display: block; background: #05A978; height: 100%; border-radius: 0 3px 3px 0; transition: filter .1s; }
+  .hbar-row.is-active .hbar-fill { filter: brightness(0.9); }
+  .hbar-row.is-active .hbar-track { background: #E0E9E4; }
+  .hbar-row .hbar-pct {
+    flex: 0 0 34px; font-size: 10px; color: #33413b; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .hbar-tooltip {
+    position: absolute; z-index: 5; background: #263029; color: #fff;
+    border-radius: 6px; padding: 6px 10px; font-size: 10px; line-height: 1.5;
+    pointer-events: none; opacity: 0; transition: opacity .08s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18); white-space: nowrap;
+    transform: translate(-50%, calc(-100% - 10px));
+  }
+  .hbar-tooltip.on { opacity: 1; }
+  .hbar-tooltip .t-title { font-weight: 700; margin-bottom: 2px; }
+  .hbar-tooltip .t-line { display: flex; justify-content: space-between; gap: 12px; color: #C9D3CD; }
+  .hbar-tooltip .t-line b { color: #fff; font-weight: 600; margin-left: 8px; }
   .chart-placeholder {
     flex: 1; display: flex; align-items: center; justify-content: center;
     color: #999; font-style: italic; font-size: 11px; text-align: center;
@@ -1491,6 +1559,8 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .donut-legend { font-size: 13px; }
   .donut-legend .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
   .donut-legend .dot { width: 12px; height: 12px; border-radius: 2px; display: inline-block; flex: none; }
+  .donut-legend .row .lbl { color: var(--text); }
+  .donut-legend .row .pct { color: #7a8a83; font-weight: 600; font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 10px; }
   .donut-pct {
     position: absolute; transform: translate(-50%, -50%); font-size: 12px;
     font-weight: 700; white-space: nowrap; pointer-events: none; z-index: 3;
@@ -1810,11 +1880,15 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     <div class="charts-grid-2">
       <div class="chart-box">
         <div class="chart-title" id="chart-title-rubro">Composición por Rubro del Arrendatario (UF/mes)</div>
-        <div class="chart-placeholder" data-chart="rubro-arrendatario">Pendiente de datos</div>
+        <div id="chart-rubro" data-chart="rubro-arrendatario">
+          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+        </div>
       </div>
       <div class="chart-box">
         <div class="chart-title" id="chart-title-tipo">Composición por Tipo de Activo (UF/mes)</div>
-        <div class="chart-placeholder" data-chart="tipo-activo">Pendiente de datos</div>
+        <div class="donut-wrap" id="donut-tipo-activo" data-chart="tipo-activo">
+          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+        </div>
       </div>
     </div>
 
@@ -2807,23 +2881,33 @@ function switchFund(f){
 // / perf_rows. perfData (si no es null) viene de F.perf_data[periodo] —
 // tools/db/rent_roll_stats.py vía scripts/build_factsheet.py::_fetch_perf_data,
 // una fila {grupo}|||{col} -> {m2_utiles, m2_vacantes, pct_vacancia_m2,
-// renta_mensual_uf} más "__grand_total__|||Total" para la columna Total final.
-// Renta vacante/gracia/descuento y absorción por columna no están en el
-// schema hoy (raw_rent_roll_line no captura esos campos del RR) — quedan en
-// placeholder; solo la absorción a nivel fondo (_absorcion_3m/12m) se llena
-// en la columna Total final.
+// renta_mensual_uf, renta_uf_vacante, renta_uf_gracia, pct_vacancia_uf,
+// absorcion_3m, absorcion_12m} más "__grand_total__|||Total" para la columna
+// Total final. Renta en gracia se calcula en _renta_gracia_calculada (ver
+// tools/db/ingest_rent_roll_validated.py): Renta Esperada Ponderada si el
+// contrato aún no empieza a pagar, si no 0 (no es la columna JLL cruda).
+// % vacancia (UF) = renta vacante / (renta mensual + vacante + en gracia).
+// Renta en descuento queda en placeholder: no hay columna equivalente en el
+// rent roll. Renta mensual/vacante de Bodegas y Estacionamientos de Inmob.
+// Boulevard PT SpA llega como el string RENTA_PENDIENTE (tools/db/
+// rent_roll_stats.py) porque depende de facturación real, no de la tasa del
+// rent roll; % vacancia (UF) se propaga como PENDIENTE en ese caso.
 const PERF_ROW_METRIC = {
   "m² útiles": "m2_utiles", "m² vacantes": "m2_vacantes",
   "% vacancia (m²)": "pct_vacancia_m2", "Renta mensual (UF)": "renta_mensual_uf",
+  "Renta vacante (UF)": "renta_uf_vacante", "Renta en gracia (UF)": "renta_uf_gracia",
+  "% vacancia (UF)": "pct_vacancia_uf",
 };
+const PERF_ROW_PCT = new Set(["% vacancia (m²)", "% vacancia (UF)"]);
 const PERF_ROW_ABSORCION = {
-  "Absorción bruta m² 3M": ["_absorcion_3m", "bruta_m2"], "Absorción bruta UF 3M": ["_absorcion_3m", "bruta_uf"],
-  "Absorción neta m² 3M": ["_absorcion_3m", "neta_m2"], "Absorción neta UF 3M": ["_absorcion_3m", "neta_uf"],
-  "Absorción bruta m² 12M": ["_absorcion_12m", "bruta_m2"], "Absorción bruta UF 12M": ["_absorcion_12m", "bruta_uf"],
-  "Absorción neta m² 12M": ["_absorcion_12m", "neta_m2"], "Absorción neta UF 12M": ["_absorcion_12m", "neta_uf"],
+  "Absorción bruta m² 3M": ["absorcion_3m", "bruta_m2"], "Absorción bruta UF 3M": ["absorcion_3m", "bruta_uf"],
+  "Absorción neta m² 3M": ["absorcion_3m", "neta_m2"], "Absorción neta UF 3M": ["absorcion_3m", "neta_uf"],
+  "Absorción bruta m² 12M": ["absorcion_12m", "bruta_m2"], "Absorción bruta UF 12M": ["absorcion_12m", "bruta_uf"],
+  "Absorción neta m² 12M": ["absorcion_12m", "neta_m2"], "Absorción neta UF 12M": ["absorcion_12m", "neta_uf"],
 };
 
 function fmtPerfCell(v, esPct){
+  if (v === "PENDIENTE") return "Pendiente";
   if (v === null || v === undefined) return "—";
   const s = Number(v).toLocaleString('es-CL', {maximumFractionDigits: 1});
   return esPct ? s + "%" : s;
@@ -2842,8 +2926,13 @@ function renderDonut(containerId, data, options = {}){
   // 39px) para que el texto no toque ni el hueco central ni el borde exterior.
   let accLabel = 0;
   const R = 75, RING_R = 60;
+  // Etiquetas selectivas: bajo ~6% el arco es demasiado angosto para un
+  // número sin chocar con el vecino — esos segmentos quedan solo en la
+  // leyenda + tooltip (ver dataviz: "selective direct labels").
+  const LABEL_MIN_PCT = 6;
   const labels = data.map(([, pct], i) => {
     const mid = accLabel + pct / 2; accLabel += pct;
+    if (pct < LABEL_MIN_PCT) return "";
     const angle = (mid / 100) * 2 * Math.PI;
     const x = R + RING_R * Math.sin(angle);
     const y = R - RING_R * Math.cos(angle);
@@ -2867,8 +2956,9 @@ function renderDonut(containerId, data, options = {}){
     const large = pct > 50 ? 1 : 0;
     return `<path class="donut-hit" data-i="${i}" d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${outerR} ${outerR} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${innerR} ${innerR} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z" fill="transparent" pointer-events="all"/>`;
   }).join("");
-  const legend = data.map(([label], i) =>
-    `<div class="row" data-i="${i}"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>${label}</div>`
+  const legend = data.map(([label, pct], i) =>
+    `<div class="row" data-i="${i}"><span class="dot" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>` +
+    `<span class="lbl">${label}</span><span class="pct">${pct}%</span></div>`
   ).join("");
   document.getElementById(containerId).innerHTML =
     `<div class="donut" style="background:conic-gradient(${stops})">${labels}<svg class="donut-hit-layer" viewBox="0 0 150 150" aria-hidden="true">${hitPaths}</svg></div><div class="donut-legend">${legend}</div><div class="donut-tooltip" aria-hidden="true"></div>`;
@@ -2918,6 +3008,77 @@ function renderDonut(containerId, data, options = {}){
     row.addEventListener("mousemove", (event) => showTooltip(i, event));
     row.addEventListener("mouseleave", hideTooltip);
   });
+}
+
+// "Composición por Rubro del Arrendatario" / "por Tipo de Activo" - barras
+// horizontales de una sola serie, ordenadas ascendente (mayor abajo, como el
+// fact sheet de referencia). data: {categoria: valor_uf}.
+function renderBarChartHorizontal(containerId, data){
+  const el = document.getElementById(containerId);
+  const entries = Object.entries(data || {}).filter(([, v]) => v > 0);
+  if (!entries.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  entries.sort((a, b) => a[1] - b[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const max = Math.max(...entries.map(([, v]) => v));
+  const rows = entries.map(([label, v], i) => {
+    const pct = total ? Math.round(v / total * 1000) / 10 : 0;
+    const width = max ? Math.max(2, v / max * 100) : 0;
+    return `<div class="hbar-row" data-i="${i}">` +
+      `<span class="hbar-label">${label}</span>` +
+      `<span class="hbar-track"><span class="hbar-fill" style="width:${width.toFixed(1)}%"></span></span>` +
+      `<span class="hbar-pct">${pct}%</span>` +
+      `</div>`;
+  }).join("");
+  el.innerHTML = `<div class="hbar-chart">${rows}</div><div class="hbar-tooltip" aria-hidden="true"></div>`;
+
+  const tooltip = el.querySelector(".hbar-tooltip");
+  const rowEls = el.querySelectorAll(".hbar-row");
+  const showTooltip = (i, event) => {
+    const [label, v] = entries[i];
+    const pct = total ? Math.round(v / total * 1000) / 10 : 0;
+    tooltip.innerHTML =
+      `<div class="t-title">${label}</div>` +
+      `<div class="t-line">Renta mensual<b>${fmtEnteroMiles(v)} UF</b></div>` +
+      `<div class="t-line">Participación<b>${pct}%</b></div>`;
+    const r = el.getBoundingClientRect();
+    tooltip.style.left = `${event.clientX - r.left}px`;
+    tooltip.style.top = `${event.clientY - r.top}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    rowEls.forEach((row, idx) => row.classList.toggle("is-active", idx === i));
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    rowEls.forEach(row => row.classList.remove("is-active"));
+  };
+  rowEls.forEach(row => {
+    const i = Number(row.dataset.i);
+    row.addEventListener("mouseenter", (event) => showTooltip(i, event));
+    row.addEventListener("mousemove", (event) => showTooltip(i, event));
+    row.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
+// Donut "Composición por Tipo de Activo" (UF/mes) - reusa renderDonut con un
+// orden de categorías fijo (`order`, ver FONDOS_CFG[fondo]["page2"]["tipo_activo"])
+// para que el color siga siempre a la misma categoría, nunca a su posición/rank.
+function renderTipoActivoDonut(containerId, counts, order){
+  const el = document.getElementById(containerId);
+  if (!counts){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const total = order.reduce((s, k) => s + (counts[k] || 0), 0);
+  const data = order.map(k => {
+    const v = counts[k] || 0;
+    const pct = total ? Math.round(v / total * 1000) / 10 : 0;
+    return [k, pct, { value: v, unit: "UF" }];
+  });
+  renderDonut(containerId, data, { tooltipTitle: "Renta mensual por tipo de activo" });
 }
 
 // "Resultados Parking (UF)" - barras apiladas + lineas de resultado y ocupación.
@@ -3083,25 +3244,32 @@ function renderPerfActivosHeader(p2, perfData){
   document.getElementById("tbl-perf-activos-thead2").innerHTML =
     "<th></th>" + groups.map(g => g.cols.map(c => `<th>${c}</th>`).join("")).join("") + "<th></th>";
 
+  const perfTd = (v, esPct) => `<td${v === "PENDIENTE" ? ' class="placeholder"' : ""}>${fmtPerfCell(v, esPct)}</td>`;
+
   const tbody = document.getElementById("tbl-perf-activos-tbody");
   tbody.innerHTML = p2.perf_rows.map(row => {
     const metric = PERF_ROW_METRIC[row];
-    const esPct = row === "% vacancia (m²)";
+    const esPct = PERF_ROW_PCT.has(row);
     let cells = "";
     if (metric && perfData) {
       groups.forEach(g => {
         g.cols.forEach(col => {
           const d = perfData[`${g.label}|||${col}`];
-          cells += `<td>${fmtPerfCell(d ? d[metric] : null, esPct)}</td>`;
+          cells += perfTd(d ? d[metric] : null, esPct);
         });
       });
       const gt = perfData["__grand_total__|||Total"];
-      cells += `<td>${fmtPerfCell(gt ? gt[metric] : null, esPct)}</td>`;
+      cells += perfTd(gt ? gt[metric] : null, esPct);
     } else if (PERF_ROW_ABSORCION[row] && perfData) {
       const [bucket, key] = PERF_ROW_ABSORCION[row];
-      cells = "<td class=\"placeholder\">—</td>".repeat(totalCols);
-      const d = perfData[bucket];
-      cells += `<td>${fmtPerfCell(d ? d[key] : null, false)}</td>`;
+      groups.forEach(g => {
+        g.cols.forEach(col => {
+          const d = perfData[`${g.label}|||${col}`];
+          cells += perfTd(d && d[bucket] ? d[bucket][key] : null, false);
+        });
+      });
+      const gt = perfData["__grand_total__|||Total"];
+      cells += perfTd(gt && gt[bucket] ? gt[bucket][key] : null, false);
     } else {
       cells = "<td class=\"placeholder\">—</td>".repeat(totalCols + 1);
     }
@@ -3373,6 +3541,10 @@ function render(){
       ? "(al " + mesEspanol(perfPeriodo) + ")"
       : "(sin rent roll para " + mesEspanol(usadoOp) + ")";
     renderPerfActivosHeader(S.page2, perfPeriodo ? F.perf_data[perfPeriodo] : null);
+    const rubroPeriodo = (F.rubro_arrendatario || {})[usadoOp] ? usadoOp : null;
+    renderBarChartHorizontal("chart-rubro", rubroPeriodo ? F.rubro_arrendatario[rubroPeriodo] : null);
+    const tipoPeriodo = (F.tipo_activo || {})[usadoOp] ? usadoOp : null;
+    renderTipoActivoDonut("donut-tipo-activo", tipoPeriodo ? F.tipo_activo[tipoPeriodo] : null, S.page2.tipo_activo);
   }
 
   // Página 3 / 4 — mismo mes de referencia que página 2 (no tienen datos por período aún)

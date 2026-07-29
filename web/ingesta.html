@@ -1623,8 +1623,7 @@ function renderDetalleVacancia(detalle) {
   if (!detalle) return '';
   const edificiosActual = Object.keys(detalle.periodo_actual || {});
   if (!edificiosActual.length) return '';
-  let html = `<details class="vac-edificios-toggle" open>
-    <summary>${ICON_CHEVRON} Detalle por edificio y tipo (${edificiosActual.length})</summary>`;
+  let html = `<div class="vac-edificios-toggle">`;
   edificiosActual.forEach(edificio => {
     const actual = (detalle.periodo_actual || {})[edificio] || {};
     const anterior = (detalle.periodo_anterior || {})[edificio] || {};
@@ -1638,7 +1637,7 @@ function renderDetalleVacancia(detalle) {
       ${renderVacTipoRow('Total', actual['Total'], anterior['Total'], true)}
     </div>`;
   });
-  html += `<div class="muted" style="margin-top:8px;font-size:11px">Total = Oficinas + Locales Comerciales (excluye bodegas y estacionamientos).</div></details>`;
+  html += `<div class="muted" style="margin-top:8px;font-size:11px">Total = Oficinas + Locales Comerciales (excluye bodegas y estacionamientos).</div></div>`;
   return html;
 }
 
@@ -1688,27 +1687,35 @@ function renderRrPreview(data) {
   }
   secErrdetalle.classList.add('hidden');
 
-  // Resumen por activo
+  // Resumen consolidado por fondo (Apoquindo = Apo4501+Apo4700, PT = Torre A+Boulevard,
+  // Apo3001 queda solo porque es el único activo de TRI en este archivo), con
+  // detalle de cada activo anidado adentro.
   const totalesContainer = document.getElementById('rr-totales-container');
   totalesContainer.innerHTML = '';
   secTotales.classList.remove('hidden');
   const grid = document.createElement('div');
   grid.className = 'vac-activos-grid';
-  (data.activos || []).forEach(activo => {
-    const d = data.diffs[activo];
-    const t = d.totales.periodo_actual;
-    const tPrev = d.totales.periodo_anterior;
+  const grupos = data.grupos_preview || (data.activos || []).map(a => ({label: a, activos: [a], totales: data.diffs[a].totales}));
+  grupos.forEach(grupo => {
+    const t = grupo.totales.periodo_actual;
+    const tPrev = grupo.totales.periodo_anterior;
     const grade = vacGrade(t.pct_vacancia);
+    const activosDelGrupo = grupo.activos.map(a => data.diffs[a]);
+    const absBrutaM2 = activosDelGrupo.reduce((s, d) => s + (d.absorcion.bruta_m2 || 0), 0);
+    const absBrutaUf = activosDelGrupo.reduce((s, d) => s + (d.absorcion.bruta_uf || 0), 0);
+    const absNetaM2 = activosDelGrupo.reduce((s, d) => s + (d.absorcion.neta_m2 || 0), 0);
+    const absNetaUf = activosDelGrupo.reduce((s, d) => s + (d.absorcion.neta_uf || 0), 0);
+    const sinSnapshot = activosDelGrupo.filter(d => !d.tiene_snapshot_anterior);
     const card = document.createElement('div');
     card.className = 'vac-activo-card';
     card.innerHTML = `
       <div class="vac-activo-head">
-        <span class="vac-activo-name">${activo}</span>
+        <span class="vac-activo-name">${grupo.label}</span>
         <span class="grade-chip ${grade.cls}">${grade.cls === 'grade-err' ? ICON_WARN : (grade.cls === 'grade-ok' ? ICON_OK : '')} ${grade.label}</span>
       </div>
       <div class="vac-activo-body">
-        ${!d.tiene_snapshot_anterior ? `<div class="vac-nosnap-note">${ICON_WARN}<span>Sin rent roll de ${d.periodo_anterior} en la base — no se puede calcular absorción vs. el mes anterior. Esta ingesta quedará como línea base.</span></div>` : ''}
-        <div class="vac-hero-label">% Vacancia — ${d.periodo}</div>
+        ${sinSnapshot.length ? `<div class="vac-nosnap-note">${ICON_WARN}<span>Sin rent roll de ${sinSnapshot[0].periodo_anterior} en la base para ${sinSnapshot.map(d => grupo.activos[activosDelGrupo.indexOf(d)]).join(', ')} — no se puede calcular absorción vs. el mes anterior para ese(esos) activo(s).</span></div>` : ''}
+        <div class="vac-hero-label">% Vacancia — ${data.periodo}</div>
         <div class="vac-hero">
           <span class="vac-hero-pct ${grade.cls}">${pctText(t.pct_vacancia)}</span>
           ${renderVacHeroDelta(t.pct_vacancia, tPrev.pct_vacancia)}
@@ -1721,10 +1728,21 @@ function renderRrPreview(data) {
           <div class="vac-metric"><div class="vac-metric-label">Renta UF vacante</div><div class="vac-metric-value">${fmt(t.renta_uf_vacante)}</div></div>
         </div>
         <div class="vac-absorcion-line">
-          <span>Absorción bruta: <strong>${fmt(d.absorcion.bruta_m2)} m²</strong> / <strong>${fmt(d.absorcion.bruta_uf)} UF</strong></span>
-          <span>Absorción neta: <strong>${fmt(d.absorcion.neta_m2)} m²</strong> / <strong>${fmt(d.absorcion.neta_uf)} UF</strong></span>
+          <span>Absorción bruta: <strong>${fmt(absBrutaM2)} m²</strong> / <strong>${fmt(absBrutaUf)} UF</strong></span>
+          <span>Absorción neta: <strong>${fmt(absNetaM2)} m²</strong> / <strong>${fmt(absNetaUf)} UF</strong></span>
         </div>
-        ${renderDetalleVacancia(d.detalle_vacancia)}
+        ${grupo.activos.length > 1 ? `<div class="vac-edificios-toggle">
+          ${grupo.activos.map(activo => {
+            const d = data.diffs[activo];
+            const ta = d.totales.periodo_actual;
+            const taPrev = d.totales.periodo_anterior;
+            const gradeA = vacGrade(ta.pct_vacancia);
+            return `<div class="vac-edificio-block">
+              <div class="vac-edificio-name">${activo} — <span class="${gradeA.cls}">${pctText(ta.pct_vacancia)}</span> (${fmt(ta.m2_total)} m² total, ${fmt(ta.m2_vacante)} m² vacantes)</div>
+              ${renderDetalleVacancia(d.detalle_vacancia)}
+            </div>`;
+          }).join('')}
+        </div>` : renderDetalleVacancia(data.diffs[grupo.activos[0]].detalle_vacancia)}
       </div>`;
     grid.appendChild(card);
   });

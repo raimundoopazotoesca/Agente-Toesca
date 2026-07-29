@@ -22,7 +22,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +34,7 @@ from tools.rentroll_tools import (  # noqa: E402
     _cierre_mes,
     _validar_archivo,
     _read_source_data,
-    _RR_ACTIVO_KEY,
+    resolve_rr_activo_key,
     _rr_num,
     _rr_date_str,
     _tabla_val3,
@@ -59,6 +61,24 @@ def _periodo_anterior(periodo: str) -> str:
 def _cierre_from_periodo(periodo: str):
     y, m = periodo.split("-")
     return _cierre_mes(int(y), int(m))
+
+
+def _renta_gracia_calculada(rec: dict, periodo: str) -> float:
+    """Renta en gracia real del mes: si 'Inicio Pago Renta' del contrato es
+    posterior al cierre del período reportado, el arrendatario todavía no
+    empieza a pagar (sigue en gracia) y la renta esperada ponderada de ese mes
+    completo está en gracia. Si ya empezó a pagar (fecha pasada o del mismo
+    mes), no hay gracia — no se usa la columna "Renta en gracia (UF)" de JLL
+    tal cual porque no refleja esta regla (confirmado con el usuario
+    2026-07-29)."""
+    inicio_pago = rec.get("Inicio Pago Renta")
+    if isinstance(inicio_pago, datetime):
+        inicio_pago = inicio_pago.date()
+    if not isinstance(inicio_pago, date):
+        return 0.0
+    if inicio_pago > _cierre_from_periodo(periodo):
+        return _rr_num(rec.get("Renta Esperada Ponderada (UF/mes)")) or 0.0
+    return 0.0
 
 
 # ── Similaridad de strings (para detectar renombres de arrendatario) ────────
@@ -151,7 +171,7 @@ def _snapshot_from_source(activo_key: str, source_data: dict) -> dict:
     out = {}
     for (activo2, detalle), rec in source_data.items():
         activo1 = str(rec.get("Activo1") or "").strip()
-        if _RR_ACTIVO_KEY.get(activo1) != activo_key:
+        if resolve_rr_activo_key(activo1, activo2) != activo_key:
             continue
         arr = rec.get("Arrendatario")
         out[(activo2, detalle)] = {
@@ -254,6 +274,144 @@ def _detalle_vacancia_por_edificio(snapshot: dict) -> dict:
         por_tipo["Total"] = _totales_activo({("_", str(i)): r for i, r in enumerate(recs_total)})
         out[edificio] = por_tipo
     return out
+
+
+_SUFIJO_DUPLICADO = re.compile(r" #\d+$")
+
+
+def _piso_base(detalle: str) -> str:
+    """'Piso 6 #2' -> 'Piso 6' (agrupa unidades subdivididas del mismo piso/zona,
+    ver sufijo agregado en tools.rentroll_tools._read_source_data)."""
+    return _SUFIJO_DUPLICADO.sub("", detalle or "")
+
+
+def _vacancia_por_piso(activo_key: str, source_data: dict) -> dict:
+    """{(edificio, piso_base): totales} restringido a Oficinas+Locales Comerciales
+    (misma regla de negocio que _detalle_vacancia_por_edificio)."""
+    snap = _snapshot_from_source(activo_key, source_data)
+    por_piso: dict[tuple[str, str], list] = {}
+    for (edificio, detalle), rec in snap.items():
+        if rec.get("tipo") not in _TIPOS_VACANCIA_EDIFICIO:
+            continue
+        por_piso.setdefault((edificio, _piso_base(detalle)), []).append(rec)
+    return {
+        key: _totales_activo({("_", str(i)): r for i, r in enumerate(recs)})
+        for key, recs in por_piso.items()
+    }
+
+
+def _persistir_vacancia_por_piso(conn, activo_key: str, periodo: str, source_data: dict, run_id: int) -> None:
+    """Guarda el % de vacancia por piso en derived_kpi (entidad_tipo='activo').
+    No se muestra en el preview de ingesta; lo consume el fact sheet."""
+    totales = _vacancia_por_piso(activo_key, source_data)
+    for (edificio, piso), t in totales.items():
+        entidad_key = f"{activo_key}::{edificio}::{piso}"
+        conn.execute(
+            "INSERT INTO derived_kpi "
+            "(entidad_tipo, entidad_key, periodo, kpi, valor, unidad, formula, ingest_run_id) "
+            "VALUES ('activo', ?, ?, 'vacancia_pct_piso', ?, '%', 'rent_roll_piso', ?) "
+            "ON CONFLICT(entidad_tipo, entidad_key, periodo, kpi, variante) DO UPDATE SET "
+            "valor=excluded.valor, ingest_run_id=excluded.ingest_run_id, computed_at=datetime('now')",
+            (entidad_key, periodo, t["pct_vacancia"], run_id),
+        )
+        conn.execute(
+            "INSERT INTO derived_kpi "
+            "(entidad_tipo, entidad_key, periodo, kpi, valor, unidad, formula, ingest_run_id) "
+            "VALUES ('activo', ?, ?, 'vacancia_m2_piso', ?, 'm2', 'rent_roll_piso', ?) "
+            "ON CONFLICT(entidad_tipo, entidad_key, periodo, kpi, variante) DO UPDATE SET "
+            "valor=excluded.valor, ingest_run_id=excluded.ingest_run_id, computed_at=datetime('now')",
+            (entidad_key, periodo, t["m2_vacante"], run_id),
+        )
+
+
+def vacancia_consolidada_fondo(fondo_key: str, periodo: str) -> dict:
+    """Vacancia de Oficinas+Locales Comerciales consolidada a nivel fondo,
+    sumando los activos (edificios) de raw_rent_roll_line que pertenecen a
+    ese fondo en dim_activo. Cálculo al vuelo, no se persiste (barato y no
+    vale la pena cachear vs. el riesgo de quedar desincronizado)."""
+    conn = get_conn_for(str(DB_PATH))
+    try:
+        activo_keys = [
+            r[0] for r in conn.execute(
+                "SELECT activo_key FROM dim_activo WHERE fondo_key=?", (fondo_key,)
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+
+    recs = []
+    for activo_key in activo_keys:
+        snap = _snapshot_from_db(activo_key, periodo)
+        recs.extend(v for v in snap.values() if v.get("tipo") in _TIPOS_VACANCIA_EDIFICIO)
+
+    totales = _totales_activo({("_", str(i)): r for i, r in enumerate(recs)})
+    return {"fondo_key": fondo_key, "periodo": periodo, "activos": activo_keys, **totales}
+
+
+# Label de grupo para activos que se muestran consolidados en el preview
+# (varios edificios del mismo fondo). Fondos con un solo activo en el archivo
+# (ej. TRI con solo Apo3001) se muestran con el nombre del activo mismo.
+_GRUPO_PREVIEW_LABEL = {"Apo": "Apoquindo", "PT": "PT"}
+
+
+def _sumar_totales(lista: list[dict]) -> dict:
+    m2_total = sum(t["m2_total"] for t in lista)
+    m2_ocupado = sum(t["m2_ocupado"] for t in lista)
+    m2_vacante = sum(t["m2_vacante"] for t in lista)
+    renta_total = sum(t["renta_uf_total"] for t in lista)
+    renta_vacante = sum(t["renta_uf_vacante"] for t in lista)
+    pct_vacancia = (m2_vacante / m2_total * 100) if m2_total else None
+    return {
+        "m2_total": round(m2_total, 2),
+        "m2_ocupado": round(m2_ocupado, 2),
+        "m2_vacante": round(m2_vacante, 2),
+        "pct_vacancia": round(pct_vacancia, 2) if pct_vacancia is not None else None,
+        "renta_uf_total": round(renta_total, 2),
+        "renta_uf_vacante": round(renta_vacante, 2),
+    }
+
+
+def _grupos_preview(activos: list[str], diffs: dict) -> list[dict]:
+    """Agrupa los activos por fondo para el preview (ej. Apo4501+Apo4700 →
+    'Apoquindo', Torre A+Boulevard → 'PT'), con el detalle de cada activo
+    anidado y los totales consolidados (Oficinas+Locales) sumados."""
+    conn = get_conn_for(str(DB_PATH))
+    try:
+        fondo_de = {}
+        for a in activos:
+            row = conn.execute("SELECT fondo_key FROM dim_activo WHERE activo_key=?", (a,)).fetchone()
+            fondo_de[a] = row[0] if row else None
+    finally:
+        conn.close()
+
+    por_fondo: dict[str | None, list[str]] = {}
+    for a, f in fondo_de.items():
+        por_fondo.setdefault(f, []).append(a)
+
+    def _total_oficinas_locales(d: dict, periodo_key: str) -> dict:
+        # Cada activo (post-refactor) es un solo edificio, pero se itera por
+        # si acaso para no asumir cardinalidad.
+        edificios = d["detalle_vacancia"][periodo_key]
+        return _sumar_totales([tipos["Total"] for tipos in edificios.values()]) if edificios \
+            else _sumar_totales([])
+
+    grupos = []
+    for fondo, acts in por_fondo.items():
+        acts = sorted(acts)
+        label = acts[0] if len(acts) == 1 else _GRUPO_PREVIEW_LABEL.get(fondo, fondo or "Otros")
+        grupos.append({
+            "label": label,
+            "activos": acts,
+            "totales": {
+                "periodo_actual": _sumar_totales(
+                    [_total_oficinas_locales(diffs[a], "periodo_actual") for a in acts]
+                ),
+                "periodo_anterior": _sumar_totales(
+                    [_total_oficinas_locales(diffs[a], "periodo_anterior") for a in acts]
+                ),
+            },
+        })
+    return sorted(grupos, key=lambda g: g["label"])
 
 
 def diff_absorcion(activo_key: str, periodo: str, source_data: dict) -> dict:
@@ -415,6 +573,7 @@ _ERROR_LABELS = {
     "val2_absorcion": "VAL2 — Movimientos sin registro en Absorción",
     "val3_escalonada": "VAL3 — Renta escalonada no coincide",
     "val4_terminos": "VAL4 — Contratos con fecha de término vencida",
+    "val5_renta_vacante": "VAL5 — Celda vacante sin Renta Fija (UF/m2/mes)",
 }
 
 
@@ -424,7 +583,7 @@ def _flatten_validator_errors(errores: dict) -> list[str]:
     if "lectura" in errores:
         out.append(f"{_ERROR_LABELS['lectura']}: {errores['lectura']}")
         return out
-    for key in ("val1_vacantes", "val2_absorcion", "val3_escalonada", "val4_terminos"):
+    for key in ("val1_vacantes", "val2_absorcion", "val3_escalonada", "val4_terminos", "val5_renta_vacante"):
         rows = errores.get(key)
         if not rows:
             continue
@@ -471,6 +630,12 @@ def _format_errores_detalle(errores: dict) -> str:
         for e in errores["val4_terminos"]:
             parts.append(f"  Fila {e['fila']} [{e['arrendatario']}]: venció el {e['fecha_termino']}.")
         parts.append("  → ¿Estos contratos están renovados y pendiente de actualizar, o ya terminaron?")
+        parts.append("")
+    if "val5_renta_vacante" in errores:
+        parts.append("Celdas vacantes sin Renta Fija (UF/m2/mes):")
+        for e in errores["val5_renta_vacante"]:
+            parts.append(f"  Fila {e['fila']} [{e['arrendatario']}]: falta la renta esperada.")
+        parts.append("  → Sin este dato no se puede calcular la renta vacante del fact sheet; completar con la renta de mercado esperada para ese espacio.")
         parts.append("")
     return "\n".join(parts).strip()
 
@@ -520,9 +685,9 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
             return result
 
         activos_presentes = sorted({
-            _RR_ACTIVO_KEY[str(rec.get("Activo1") or "").strip()]
-            for rec in source_data.values()
-            if str(rec.get("Activo1") or "").strip() in _RR_ACTIVO_KEY
+            resolve_rr_activo_key(str(rec.get("Activo1") or "").strip(), activo2)
+            for (activo2, _detalle), rec in source_data.items()
+            if resolve_rr_activo_key(str(rec.get("Activo1") or "").strip(), activo2)
         })
         if not activos_presentes:
             result.add_error("No se reconoció ningún activo mapeable (Activo1) en el archivo.")
@@ -570,6 +735,7 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
             "filename": val.get("archivo"),
             "activos": activos_presentes,
             "diffs": diffs,
+            "grupos_preview": _grupos_preview(activos_presentes, diffs),
             "n_filas_fuente": len(source_data),
             "file_hash": fh,
             "ya_ingestado": bool(periodos_ocupados),
@@ -605,7 +771,7 @@ def commit(file_bytes: bytes, filename: str, periodo: str) -> dict:
             lines = []
             for i, ((activo2, detalle), rec) in enumerate(source_data.items()):
                 activo1 = str(rec.get("Activo1") or "").strip()
-                activo_key = _RR_ACTIVO_KEY.get(activo1)
+                activo_key = resolve_rr_activo_key(activo1, activo2)
                 if activo_key is None:
                     continue
                 extra = {
@@ -617,6 +783,16 @@ def commit(file_bytes: bytes, filename: str, periodo: str) -> dict:
                     "tipo_arrendatario": rec.get("Tipo Arrendatario"),
                     "rol": rec.get("Rol"),
                     "fecha_inicio": _rr_date_str(rec.get("Fecha Inicio")),
+                    "inicio_pago_renta": _rr_date_str(rec.get("Inicio Pago Renta")),
+                    # Montos totales (UF/mes) ya calculados por JLL en el rent
+                    # roll. renta_gracia es calculada por nosotros (ver
+                    # _renta_gracia_calculada), no una copia de la columna JLL.
+                    "renta_esperada_total": _rr_num(rec.get("Renta Esperada Total(UF/mes)")),
+                    "renta_esperada_ponderada": _rr_num(rec.get("Renta Esperada Ponderada (UF/mes)")),
+                    "renta_vacante_jll": _rr_num(rec.get("Renta Vacante (UF)")),
+                    "renta_gracia_jll": _rr_num(rec.get("Renta en gracia (UF)")),
+                    "renta_gracia": _renta_gracia_calculada(rec, periodo),
+                    "renta_real": _rr_num(rec.get("Renta real (UF/mes)")),
                 }
                 lines.append({
                     "activo_key": activo_key,
@@ -635,6 +811,9 @@ def commit(file_bytes: bytes, filename: str, periodo: str) -> dict:
                 })
 
             n = repo_rent_roll.insert_lines(conn, lines, run_id)
+            for activo_key in result.data["activos"]:
+                _persistir_vacancia_por_piso(conn, activo_key, periodo, source_data, run_id)
+            conn.commit()
             repo_audit.finish_ingest_run(conn, run_id, rows_in=len(lines), rows_loaded=n, status="ok")
             return {
                 "status": "ok",
