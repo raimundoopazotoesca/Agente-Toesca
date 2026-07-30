@@ -1,3 +1,18 @@
+## [2026-07-30] fix | Aspectos del mes (PT): guardado requiere click en "Confirmar", no basta con blur
+
+El guardado on-blur (commit anterior del mismo día) no era confiable: cualquier re-render
+disparado por otra causa (cambio de período/fondo, etc.) podía pisar el texto tipeado antes de
+que el blur alcanzara a persistirlo en localStorage.
+
+- `updateAspectosMesTexts` ahora inserta un botón "Confirmar" junto a cada `<span>` editable
+  (visible solo en modo admin). El guardado solo ocurre al hacer click ahí — ya no hay listener
+  de `blur`.
+- Mientras el `<span>` tiene el foco (`document.activeElement === span`), la función ya no
+  sobreescribe su `textContent` en re-renders — evita perder lo tipeado a mitad de edición.
+- Feedback visual: el botón muestra "✓ Guardado" 1.2s tras confirmar.
+- Verificado: `python scripts/build_factsheet.py` build OK, `node --check` sobre el JS embebido
+  sin errores.
+
 ## [2026-07-30] feat | Aspectos del mes (PT) editables en modo admin, con override sobre el texto autogenerado
 
 Las 4 filas de `aspectos_mes` (Vacancia del Fondo, Parking, Resultados, Otros Locales) ahora son

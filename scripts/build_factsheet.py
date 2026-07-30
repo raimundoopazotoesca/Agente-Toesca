@@ -2914,7 +2914,11 @@ function getAspectosMesOverride(fondo, periodo, slug){
 }
 // autoTexts: {slug: textoAutogenerado|null}. Actualiza cada <span> de
 // txt-aspectos-mes-t con override > autogenerado > "Pendiente.", y habilita
-// edición libre cuando body.admin está activo.
+// edición libre cuando body.admin está activo. El guardado NO es automático
+// al perder foco (blur no es confiable acá: cualquier re-render — cambio de
+// período/fondo, resize, etc. — puede pisar el texto tipeado antes de que el
+// blur alcance a persistirlo) — requiere click explícito en el botón
+// "Confirmar" que aparece junto al texto en modo admin.
 function updateAspectosMesTexts(containerId, fondo, periodo, autoTexts){
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -2924,22 +2928,38 @@ function updateAspectosMesTexts(containerId, fondo, periodo, autoTexts){
     const override = periodo ? getAspectosMesOverride(fondo, periodo, slug) : null;
     const auto = autoTexts ? autoTexts[slug] : null;
     const final = override != null ? override : auto;
-    span.textContent = final != null ? final : "Pendiente.";
-    span.classList.toggle("placeholder", final == null);
-    span.contentEditable = isAdmin && periodo ? "true" : "false";
-    if (!span.dataset.wired){
-      span.dataset.wired = "1";
-      span.addEventListener("blur", () => {
+
+    let btn = span.nextElementSibling;
+    if (!btn || !btn.classList || !btn.classList.contains("aspecto-mes-confirm")){
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "aspecto-mes-confirm";
+      btn.textContent = "Confirmar";
+      btn.style.cssText = "margin-left:6px;font-size:10px;padding:1px 6px;cursor:pointer;vertical-align:middle;display:none;";
+      span.insertAdjacentElement("afterend", btn);
+      btn.addEventListener("click", () => {
         const p = span.dataset.periodo;
         const f = span.dataset.fondo;
         if (!p || !f) return;
         saveAspectosMesOverride(f, p, slug, span.textContent);
-        updateAspectosMesTexts(containerId, f, p, span.dataset.autoCache ? JSON.parse(span.dataset.autoCache) : null);
+        const original = btn.textContent;
+        btn.textContent = "✓ Guardado";
+        setTimeout(() => { btn.textContent = original; }, 1200);
+        span.classList.remove("placeholder");
       });
     }
+
+    // Solo pisar el texto en pantalla si el span no está siendo editado ahora
+    // mismo (evita que un re-render por otro motivo borre lo que el usuario
+    // está tipeando antes de que alcance a apretar "Confirmar").
+    if (document.activeElement !== span) {
+      span.textContent = final != null ? final : "Pendiente.";
+      span.classList.toggle("placeholder", final == null);
+    }
+    span.contentEditable = isAdmin && periodo ? "true" : "false";
+    btn.style.display = isAdmin && periodo ? "inline-block" : "none";
     span.dataset.periodo = periodo || "";
     span.dataset.fondo = fondo || "";
-    span.dataset.autoCache = JSON.stringify(autoTexts || {});
   });
 }
 
