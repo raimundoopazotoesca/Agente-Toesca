@@ -1,3 +1,23 @@
+## [2026-07-30] feat | Aspectos del mes (PT) editables en modo admin, con override sobre el texto autogenerado
+
+Las 4 filas de `aspectos_mes` (Vacancia del Fondo, Parking, Resultados, Otros Locales) ahora son
+libremente editables con el botón "✎ Admin" (contentEditable en los `<span>`, guardado en
+localStorage al perder foco). "Otros Locales" no tiene fuente automática — queda 100% a edición
+manual; las otras 3 muestran su narrativa autogenerada ([[project_factsheet_html_entregable]] —
+sesiones previas del mismo día) salvo que el usuario la sobreescriba.
+
+- `ASPECTOS_MES_STORE_KEY = "factsheet_aspectos_mes_overrides"` — localStorage, estructura
+  `{fondo: {periodo: {slug: texto}}}`. Mismo patrón que `NOTICIAS_STORE_KEY` (fechas editables).
+- `updateAspectosMesTexts(containerId, fondo, periodo, autoTexts)` — nueva función central: por cada
+  `<span>` de la fila calcula `override ?? auto ?? "Pendiente."`, alterna `contentEditable` según
+  `body.admin`, y guarda al hacer blur. Reemplaza los 3 bloques sueltos que llenaban
+  `txt-aspectos-mes-t-*` directamente (ahora todos alimentan un dict `autoTexts` y llaman una sola
+  vez a esta función).
+- Override vacío (string vacío o solo espacios) borra la entrada y vuelve a mostrar el texto
+  autogenerado — no hay forma de "forzar Pendiente." explícitamente, borrar el texto basta.
+- Verificado: `python scripts/build_factsheet.py` build OK; `node --check` sobre el JS embebido
+  sin errores de sintaxis.
+
 ## [2026-07-30] feat | Narrativa "Resultados" autogenerada en Aspectos del mes (PT)
 
 Fila "Resultados" de `aspectos_mes` (página 3 PT): antes placeholder fijo. Ahora genera

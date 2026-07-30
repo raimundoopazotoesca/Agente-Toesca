@@ -2891,6 +2891,58 @@ function toggleUnit(tabla){
   if (typeof currentFund !== "undefined" && currentFund) render();
 }
 
+// ---- Aspectos del mes (PT, página 3): texto libre editable por admin,
+// persistido en localStorage por fondo+período+fila. Si no hay override, se
+// usa el texto autogenerado (Vacancia del Fondo / Parking / Resultados) o
+// "Pendiente." (ej. Otros Locales, que no tiene fuente automática). ----
+const ASPECTOS_MES_STORE_KEY = "factsheet_aspectos_mes_overrides";
+function loadAspectosMesOverrides(){
+  try { return JSON.parse(localStorage.getItem(ASPECTOS_MES_STORE_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveAspectosMesOverride(fondo, periodo, slug, value){
+  const store = loadAspectosMesOverrides();
+  store[fondo] = store[fondo] || {};
+  store[fondo][periodo] = store[fondo][periodo] || {};
+  if (value && value.trim() !== "") store[fondo][periodo][slug] = value.trim();
+  else delete store[fondo][periodo][slug];
+  localStorage.setItem(ASPECTOS_MES_STORE_KEY, JSON.stringify(store));
+}
+function getAspectosMesOverride(fondo, periodo, slug){
+  const store = loadAspectosMesOverrides();
+  return (store[fondo] && store[fondo][periodo] && store[fondo][periodo][slug]) || null;
+}
+// autoTexts: {slug: textoAutogenerado|null}. Actualiza cada <span> de
+// txt-aspectos-mes-t con override > autogenerado > "Pendiente.", y habilita
+// edición libre cuando body.admin está activo.
+function updateAspectosMesTexts(containerId, fondo, periodo, autoTexts){
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const isAdmin = document.body.classList.contains("admin");
+  container.querySelectorAll("span[id]").forEach(span => {
+    const slug = span.id.slice(containerId.length + 1);
+    const override = periodo ? getAspectosMesOverride(fondo, periodo, slug) : null;
+    const auto = autoTexts ? autoTexts[slug] : null;
+    const final = override != null ? override : auto;
+    span.textContent = final != null ? final : "Pendiente.";
+    span.classList.toggle("placeholder", final == null);
+    span.contentEditable = isAdmin && periodo ? "true" : "false";
+    if (!span.dataset.wired){
+      span.dataset.wired = "1";
+      span.addEventListener("blur", () => {
+        const p = span.dataset.periodo;
+        const f = span.dataset.fondo;
+        if (!p || !f) return;
+        saveAspectosMesOverride(f, p, slug, span.textContent);
+        updateAspectosMesTexts(containerId, f, p, span.dataset.autoCache ? JSON.parse(span.dataset.autoCache) : null);
+      });
+    }
+    span.dataset.periodo = periodo || "";
+    span.dataset.fondo = fondo || "";
+    span.dataset.autoCache = JSON.stringify(autoTexts || {});
+  });
+}
+
 // ---- Noticias: fechas editables por admin, persistidas en localStorage ----
 const NOTICIAS_STORE_KEY = "factsheet_noticias_overrides";
 function loadNoticiasOverrides(){
@@ -4443,13 +4495,17 @@ function render(){
     if (elVacT) elVacT.textContent = gtAsp && gtAsp.pct_vacancia_m2 != null
       ? gtAsp.pct_vacancia_m2.toLocaleString("es-CL", {maximumFractionDigits: 2}) + "%" : "—";
 
-    // "Aspectos del mes" -> "Vacancia del Fondo": narrativa autogenerada a
-    // partir de F.vacancia_pt_tipo (mes actual vs mes anterior, por tipo de
-    // activo). Solo la parte cuantitativa (%, oficinas, locales comerciales);
-    // eventos cualitativos (nuevos contratos, colocaciones) no están en la DB
-    // y deben agregarse a mano en el mes correspondiente.
-    const elVacFondoTxt = document.getElementById("txt-aspectos-mes-t-vacancia-del-fondo");
-    if (elVacFondoTxt) {
+    // "Aspectos del mes" (fila "Vacancia del Fondo" / "Parking" / "Resultados"):
+    // texto autogenerado por fila, con override editable en modo admin (ver
+    // updateAspectosMesTexts / ASPECTOS_MES_STORE_KEY). "Otros Locales" (y
+    // cualquier fila sin lógica acá) queda sin auto: solo override manual.
+    const autoTexts = {};
+
+    // Vacancia del Fondo — a partir de F.vacancia_pt_tipo (mes actual vs mes
+    // anterior, por tipo de activo). Solo la parte cuantitativa (%, oficinas,
+    // locales comerciales); eventos cualitativos (nuevos contratos,
+    // colocaciones) no están en la DB — se agregan a mano vía override.
+    {
       const vacTipo = usadoOp && F.vacancia_pt_tipo ? F.vacancia_pt_tipo[usadoOp] : null;
       const oficinas = vacTipo ? vacTipo["Oficinas"] : null;
       const locales = vacTipo ? vacTipo["Locales Comerciales"] : null;
@@ -4473,51 +4529,38 @@ function render(){
         } else {
           evolucion = `se ubicó en ${fmtPct(pctFondo)}%`;
         }
-        elVacFondoTxt.textContent = `Durante ${mesEspanol(usadoOp)}, la vacancia del Fondo ${evolucion}, ` +
+        autoTexts["vacancia-del-fondo"] = `Durante ${mesEspanol(usadoOp)}, la vacancia del Fondo ${evolucion}, ` +
           `compuesta por ${fmtPct(oficinas.pct_actual)}% en oficinas y ${fmtPct(locales.pct_actual)}% en locales comerciales.`;
-        elVacFondoTxt.classList.remove("placeholder");
-      } else {
-        elVacFondoTxt.textContent = "Pendiente.";
-        elVacFondoTxt.classList.add("placeholder");
       }
     }
 
-    // "Aspectos del mes" -> "Parking": variación acumulada (ene->mes actual)
-    // del resultado neto UF y del total de tickets vs. mismo rango 2024. Ver
-    // F.parking_desempeno / _fetch_parking_desempeno en build_factsheet.py.
-    const elParkingTxt = document.getElementById("txt-aspectos-mes-t-parking");
-    if (elParkingTxt) {
+    // Parking — variación acumulada (ene->mes actual) del resultado neto UF y
+    // del total de tickets vs. mismo rango 2024. Ver F.parking_desempeno /
+    // _fetch_parking_desempeno en build_factsheet.py.
+    {
       const pd = usadoOp && F.parking_desempeno ? F.parking_desempeno[usadoOp] : null;
       if (pd && pd.resultado_pct != null && pd.tickets_pct != null) {
         const fmtSigned = (v) => (v > 0 ? "+" : "") + v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
         const tono = (pd.resultado_pct >= 0 && pd.tickets_pct >= 0) ? "muy positivo"
           : (pd.resultado_pct < 0 && pd.tickets_pct < 0) ? "negativo" : "mixto";
-        elParkingTxt.textContent = `El desempeño de los estacionamientos ha sido ${tono}: variación acumulada vs 2024 ` +
+        autoTexts["parking"] = `El desempeño de los estacionamientos ha sido ${tono}: variación acumulada vs 2024 ` +
           `${fmtSigned(pd.resultado_pct)} en resultados y ${fmtSigned(pd.tickets_pct)} en tickets.`;
-        elParkingTxt.classList.remove("placeholder");
-      } else {
-        elParkingTxt.textContent = "Pendiente.";
-        elParkingTxt.classList.add("placeholder");
       }
     }
 
-    // "Aspectos del mes" -> "Resultados": variación % del NOI U12M vs U12M
-    // del mismo mes del año anterior. Ver F.noi_u12m_yoy / _fetch_noi_u12m_yoy_pt.
-    const elResultadosTxt = document.getElementById("txt-aspectos-mes-t-resultados");
-    if (elResultadosTxt) {
+    // Resultados — variación % del NOI U12M vs U12M del mismo mes del año
+    // anterior. Ver F.noi_u12m_yoy / _fetch_noi_u12m_yoy_pt.
+    {
       const pct = usadoOp && F.noi_u12m_yoy ? F.noi_u12m_yoy[usadoOp] : null;
       if (pct != null) {
         const [yy, mm] = usadoOp.split("-");
         const mesAbrevLabel = `${MESES_ABR[parseInt(mm, 10) - 1]}-${yy.slice(2)}`;
-        const fmtSigned = (v) => (v > 0 ? "+" : "") + v.toLocaleString("es-CL", {maximumFractionDigits: 1});
-        elResultadosTxt.textContent = `El NOI de los U12M de ${mesAbrevLabel} vs ${parseInt(yy, 10) - 1} fue un ` +
+        autoTexts["resultados"] = `El NOI de los U12M de ${mesAbrevLabel} vs ${parseInt(yy, 10) - 1} fue un ` +
           `${Math.abs(pct).toLocaleString("es-CL", {maximumFractionDigits: 1})}% ${pct >= 0 ? "mayor" : "menor"}.`;
-        elResultadosTxt.classList.remove("placeholder");
-      } else {
-        elResultadosTxt.textContent = "Pendiente.";
-        elResultadosTxt.classList.add("placeholder");
       }
     }
+
+    updateAspectosMesTexts("txt-aspectos-mes-t", currentFund, usadoOp, autoTexts);
   }
 
   // Página 3 Apo: tabla de vacancia por edificio (Locales/Oficinas/Edificio) —
