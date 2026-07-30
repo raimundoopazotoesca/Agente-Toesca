@@ -49,19 +49,16 @@ Section 2 no tiene fórmulas (a diferencia de Curicó): debe actualizarse manual
 
 ## Vacancia (rent roll)
 
-Fuente: `raw_rent_roll_line`, `activo_key='Viña Centro'`. Vacancia por `extra_json.tipo_arrendatario='Vacante'`.
+Fuente: `raw_rent_roll_line`, `activo_key='Viña Centro'`. Vacancia por
+`extra_json.tipo_arrendatario='Vacante'`.
 
-**Regla de cálculo**: solo se considera vacancia en unidades de tipo **Locales**
-(`tipo_activo_1` = Locales Comerciales/Food Court/Comercial/Walmart/Tienda
-Ancla), **excluyendo Módulos y Parking** tanto del numerador como del
-denominador. Ojo: filas vacantes tienen `tipo_activo_1='Vacante'` (se pierde
-la categoría original) — para saber si una unidad vacante es módulo hay que
-mirar el `unidad`/contexto, no confiar en `tipo_activo_1`.
+**Regla de cálculo (confirmada 2026-07-30)**: se cuentan **todas** las
+unidades vacantes, incluidos módulos y parking, tanto en numerador como
+denominador (sin filtrar por `tipo_activo_1`). La corrección previa de
+"solo locales, excluye módulos/parking" fue un error del usuario — revertida.
 
-Ejemplo validado periodo 2026-05: vacantes = unidad 2096 (42 m²) + unidad
-3004 (81 m²) = **123 m²**; unidad M1 (7.5 m²) es un módulo → se excluye.
-Denominador (locales, sin módulos/parking) = **25.227,7 m²**. Vacancia =
-**0,49%**.
+Periodo 2026-05: vacante = 130,5 m² (unidades 2096, 3004, M1) / total
+25.579,55 m² = **0,51%**.
 
 ## Vínculos
 

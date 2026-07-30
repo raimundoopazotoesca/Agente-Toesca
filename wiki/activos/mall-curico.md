@@ -48,14 +48,11 @@ A diferencia de [[activos/vina-centro]], la Section 2 de Curicó tiene fórmulas
 ## Vacancia (rent roll)
 
 Fuente: `raw_rent_roll_line`, `activo_key='Mall Curicó'`. Misma regla que
-[[activos/vina-centro]]: solo unidades tipo Locales, excluyendo Módulos (no
-hay categoría Parking en este rent roll). Ojo: filas vacantes pierden su
-categoría original (`tipo_activo_1='Vacante'`) — la unidad `M2` (15 m²) es
-un módulo vacante, hay que excluirla a mano.
+[[activos/vina-centro]] (confirmada 2026-07-30): se cuentan **todas** las
+unidades vacantes, incluidos módulos, tanto en numerador como denominador.
 
-Periodo 2026-05: vacantes locales = 26 unidades, **3.002,87 m²** (excluye
-módulo M2 de 15 m²). Denominador (locales, sin módulos) = **10.792,47 m²**.
-Vacancia = **27,8%**.
+Periodo 2026-05: vacante = 3.017,87 m² (27 unidades) / total 10.811,47 m² =
+**27,91%**.
 
 ## Vínculos
 

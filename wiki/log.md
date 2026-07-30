@@ -1,14 +1,10 @@
-## [2026-07-30] doc | Vacancia Mall Curicó — misma regla que Viña (solo locales, excluye módulos)
+## [2026-07-30] doc | Vacancia Viña/Curicó — corrección: cuenta TODO (incluye módulos/parking)
 
-Periodo 2026-05: 3.002,87 m² (26 locales, excluye módulo M2) / 10.792,47 m²
-= 27,8%. Detalle en [[activos/mall-curico]].
-
-## [2026-07-30] doc | Vacancia Viña Centro — regla de cálculo (solo locales, excluye módulos/parking)
-
-Cálculo inicial (todas las unidades vacantes / GLA total) daba 0,51%. Usuario
-corrigió: vacancia se calcula solo sobre unidades tipo Locales, excluyendo
-Módulos y Parking tanto del numerador como denominador. Validado periodo
-2026-05: 123 m² / 25.227,7 m² = 0,49%. Detalle en [[activos/vina-centro]].
+Usuario había corregido a "solo locales, excluye módulos/parking" y luego se
+retractó ("me confundí"): la regla correcta es contar todas las unidades
+vacantes sin excluir nada. Viña 130,5/25.579,55 m² = 0,51%. Curicó
+3.017,87/10.811,47 m² = 27,91%. Detalle en [[activos/vina-centro]] y
+[[activos/mall-curico]].
 
 ## [2026-07-30] fix | ingest_er_pt.py — filtro de vigencia bloqueaba meses nuevos anteriores a RULES_EFFECTIVE_PERIOD
 
