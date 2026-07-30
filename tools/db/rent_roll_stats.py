@@ -300,6 +300,70 @@ def get_vacancia_edificios(activo_key: str, periodo: str, edificios_filas: dict)
     return out
 
 
+def get_vacancia_fondo(activo_key: str, periodo: str) -> dict | None:
+    """% vacancia (m²) del fondo completo (todos los edificios agregados,
+    Oficinas + Locales Comerciales), mes actual vs mes anterior. Mismo
+    criterio que la fila "Edificio" de get_vacancia_edificios pero sin
+    filtrar por edificio individual. None si no hay rent roll para
+    (activo_key, periodo)."""
+    snapshot_actual = _snapshot(activo_key, periodo)
+    if not snapshot_actual:
+        return None
+
+    periodo_anterior = _meses_atras(periodo, 1)
+    snapshot_anterior = _snapshot(activo_key, periodo_anterior)
+
+    def _pct(snapshot):
+        filtradas = {k: v for k, v in snapshot.items() if v["tipo_activo_3"] in _VACANCIA_TIPOS_EDIFICIO}
+        if not filtradas:
+            return None
+        m2_total = sum(v["m2"] for v in filtradas.values())
+        m2_vac = sum(v["m2"] for v in filtradas.values() if _es_vacante(v["arrendatario"]))
+        return round(m2_vac / m2_total * 100, 2) if m2_total else None
+
+    actual = _pct(snapshot_actual)
+    anterior = _pct(snapshot_anterior) if snapshot_anterior else None
+    variacion = round(actual - anterior, 2) if actual is not None and anterior is not None else None
+    return {"pct_actual": actual, "pct_anterior": anterior, "variacion": variacion}
+
+
+def get_vacancia_fondo_por_tipo(activo_key: str, periodo: str) -> dict | None:
+    """% vacancia (m²) del fondo desglosado por tipo de activo (Oficinas /
+    Locales Comerciales), mes actual vs mes anterior. Mismo criterio que
+    get_vacancia_fondo pero sin agregar los tipos. Usado para la narrativa
+    "Vacancia del Fondo" de la página 3 de PT (FONDOS_CFG["PT"]["page3"]
+    ["aspectos_mes"]). None si no hay rent roll para (activo_key, periodo)."""
+    snapshot_actual = _snapshot(activo_key, periodo)
+    if not snapshot_actual:
+        return None
+
+    periodo_anterior = _meses_atras(periodo, 1)
+    snapshot_anterior = _snapshot(activo_key, periodo_anterior)
+
+    def _pct_por_tipo(snapshot):
+        out = {}
+        for tipo in _VACANCIA_TIPOS_EDIFICIO:
+            filtradas = {k: v for k, v in snapshot.items() if v["tipo_activo_3"] == tipo}
+            if not filtradas:
+                out[tipo] = None
+                continue
+            m2_total = sum(v["m2"] for v in filtradas.values())
+            m2_vac = sum(v["m2"] for v in filtradas.values() if _es_vacante(v["arrendatario"]))
+            out[tipo] = round(m2_vac / m2_total * 100, 2) if m2_total else None
+        return out
+
+    por_tipo_actual = _pct_por_tipo(snapshot_actual)
+    por_tipo_anterior = _pct_por_tipo(snapshot_anterior) if snapshot_anterior else {t: None for t in _VACANCIA_TIPOS_EDIFICIO}
+
+    out = {}
+    for tipo in _VACANCIA_TIPOS_EDIFICIO:
+        actual = por_tipo_actual.get(tipo)
+        anterior = por_tipo_anterior.get(tipo)
+        variacion = round(actual - anterior, 2) if actual is not None and anterior is not None else None
+        out[tipo] = {"pct_actual": actual, "pct_anterior": anterior, "variacion": variacion}
+    return out
+
+
 def get_gla_edificios(activo_key: str, edificios: list[str]) -> dict | None:
     """m² totales (ocupados + vacantes, Oficinas + Locales Comerciales — mismo
     criterio de área arrendable que _VACANCIA_TIPOS_EDIFICIO, excluye

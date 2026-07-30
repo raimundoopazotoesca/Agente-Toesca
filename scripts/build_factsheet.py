@@ -441,11 +441,11 @@ FONDOS_CFG = {
             "edificios": ["Apoquindo 4501", "Apoquindo 4700"],
             "ingresos_activo_map": {"Apoquindo 4501": "Apo4501", "Apoquindo 4700": "Apo4700"},
             "aspectos": [
-                ("Dirección", None),
+                ("Dirección", "Apoquindo 4501/ Apoquindo 4700"),
                 ("Superficie Arrendable", None),
-                ("Principal Arrendatario", None),
+                ("Principal Arrendatario", "Coordinador Eléctrico Nacional"),
                 ("Financiamiento", None),
-                ("Administración", None),
+                ("Administración", "Jones Lang LaSalle (JLL)"),
                 ("Vacancia (m²)", None),
             ],
             "fotos": {
@@ -465,7 +465,7 @@ FONDOS_CFG = {
             "vacancia_periodo": ("Mes anterior", "Mes actual"),
             "vacancia_edificios": [
                 {"nombre": "Apoquindo 4501", "rows": ["Locales", "Oficinas", "Edificio"]},
-                {"nombre": "Apoquindo 4700", "rows": ["Oficinas", "Edificio", "Locales"]},
+                {"nombre": "Apoquindo 4700", "rows": ["Locales", "Oficinas", "Edificio"]},
             ],
             "resumen_anual_edificios": [
                 {"nombre": "Apoquindo 4501", "rows": [
@@ -880,7 +880,28 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "status_oficinas": _fetch_status_oficinas_apo(fondo_key),
         "status_locales": _fetch_status_locales_apo(fondo_key),
         "plano_locales": _fetch_plano_pt(fondo_key),
+        "ltv_fondo": _fetch_ltv_fondo(fondo_key),
+        "vacancia_pt_tipo": _fetch_vacancia_pt_tipo(fondo_key),
     }
+
+
+def _fetch_vacancia_pt_tipo(fondo_key: str) -> dict:
+    """{periodo: {"Oficinas": {...}, "Locales Comerciales": {...}}} — vacancia
+    del fondo desglosada por tipo de activo, mes actual vs mes anterior. Fuente
+    para la narrativa "Vacancia del Fondo" de FONDOS_CFG["PT"]["page3"]
+    ["aspectos_mes"] (texto se compone en JS, ver render() -> txt-aspectos-mes-t
+    -vacancia-del-fondo). Ver tools/db/rent_roll_stats.py::get_vacancia_fondo_por_tipo."""
+    if fondo_key != "PT":
+        return {}
+    from tools.db.rent_roll_stats import get_vacancia_fondo_por_tipo, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles("PT"):
+        tabla = get_vacancia_fondo_por_tipo("PT", periodo)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
 
 
 def _fetch_plano_pt(fondo_key: str) -> dict:
@@ -925,7 +946,7 @@ def _fetch_vacancia_apo(fondo_key: str) -> dict:
     tools/db/rent_roll_stats.py::get_vacancia_edificios."""
     if fondo_key != "Apo":
         return {}
-    from tools.db.rent_roll_stats import get_vacancia_edificios, _periodos_disponibles
+    from tools.db.rent_roll_stats import get_vacancia_edificios, get_vacancia_fondo, _periodos_disponibles
 
     edificios_filas = {
         ed["nombre"]: ed["rows"]
@@ -936,8 +957,26 @@ def _fetch_vacancia_apo(fondo_key: str) -> dict:
         tabla = get_vacancia_edificios("Apoquindo", periodo, edificios_filas)
         if tabla is None:
             continue
-        out[periodo] = {f"{ed}|||{fila}": val for (ed, fila), val in tabla.items()}
+        fila = {f"{ed}|||{r}": val for (ed, r), val in tabla.items()}
+        fondo = get_vacancia_fondo("Apoquindo", periodo)
+        if fondo is not None:
+            fila["Fondo"] = fondo
+        out[periodo] = fila
     return out
+
+
+def _fetch_ltv_fondo(fondo_key: str) -> float | None:
+    """Último LTV del fondo (derived_kpi, entidad_tipo='fondo'), para la fila
+    "Financiamiento" de Aspectos Relevantes (página 3 de Apo)."""
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT valor FROM derived_kpi WHERE entidad_tipo='fondo' AND entidad_key=? "
+        "AND kpi='ltv' ORDER BY periodo DESC LIMIT 1",
+        (fondo_key,),
+    ).fetchone()
+    return row["valor"] if row else None
 
 
 def _fetch_status_oficinas_apo(fondo_key: str) -> dict:
@@ -2696,7 +2735,12 @@ function fillTasaciones(F, p3, usadoOp, tbodyId, deudaTheadId, compTheadPrevId, 
     const a = perEdificio[nombre].actual, p = perEdificio[nombre].prev;
     if (!a) return placeholderRow3(nombre);
     const prevVal = p ? fmtEnteroMiles(p.valor_uf) : "—";
-    const varPct = a.variacion_pct;
+    // fact_tasacion.variacion_pct viene del archivo fuente y a veces no está
+    // informado (ver Boulevard 2025) aunque sí tengamos valor_uf de ambos
+    // años — se recalcula acá como fallback en vez de dejarlo en "—".
+    const varPct = a.variacion_pct != null
+      ? a.variacion_pct
+      : (p && p.valor_uf ? (a.valor_uf - p.valor_uf) / p.valor_uf : null);
     return `<tr><td>${nombre}</td><td>${prevVal}</td><td>${fmtEnteroMiles(a.valor_uf)}</td><td>${varPct != null ? fmtPct(varPct) : "—"}</td></tr>`;
   };
   const totalComp = anyActual
@@ -3072,16 +3116,20 @@ function switchFund(f){
           return `<div class="${cls.trim()}"><div class="foto-box">${body}</div><div class="foto-caption">${caption}</div></div>`;
         }).join("");
     };
+    const _aspSlug = (k) => k.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const fillAspectos = (containerId) => {
       document.getElementById(containerId).innerHTML =
         p3.aspectos.map(([k,v]) => v == null
-          ? `<tr><td>${k}</td><td class="placeholder">—</td></tr>`
+          ? `<tr><td>${k}</td><td class="placeholder" id="${containerId}-${_aspSlug(k)}">—</td></tr>`
           : `<tr><td>${k}</td><td>${v}</td></tr>`
         ).join("");
     };
     const fillAspectosMes = (containerId) => {
       document.getElementById(containerId).innerHTML =
-        p3.aspectos_mes.map(([k]) => `<p><b>${k}:</b> <span class="placeholder">Pendiente.</span></p>`).join("");
+        p3.aspectos_mes.map(([k]) =>
+          `<p><b>${k}:</b> <span class="placeholder" id="${containerId}-${_aspSlug(k)}">Pendiente.</span></p>`
+        ).join("");
     };
     // Tasaciones (valores reales, dependientes del período) se llenan en
     // render(), que corre justo después y sí tiene acceso al período
@@ -4282,6 +4330,58 @@ function render(){
   if (S.page3 && S.page3.donut_arrendatario) {
     donutArrendatario("donut-ingresos-t", F.ingresos_arrendatario, { label: "Ingresos", unit: "UF" });
     donutArrendatario("donut-gla-t", F.gla_arrendatario, { label: "GLA", unit: "m²" });
+
+    // Aspectos Relevantes (tabla tenant, ver tbl-aspectos-t): Superficie
+    // Arrendable y Vacancia (m²) del fondo completo, misma fuente que la
+    // tabla "Resumen Performance Activos" (F.perf_data, columna
+    // "__grand_total__|||Total" de get_perf_table).
+    const gtAsp = usadoOp && F.perf_data && F.perf_data[usadoOp]
+      ? F.perf_data[usadoOp]["__grand_total__|||Total"] : null;
+    const elSupT = document.getElementById("tbl-aspectos-t-superficie-arrendable");
+    if (elSupT) elSupT.textContent = gtAsp && gtAsp.m2_utiles != null
+      ? Math.round(gtAsp.m2_utiles).toLocaleString("es-CL") + " m2" : "—";
+    const elVacT = document.getElementById("tbl-aspectos-t-vacancia-m");
+    if (elVacT) elVacT.textContent = gtAsp && gtAsp.pct_vacancia_m2 != null
+      ? gtAsp.pct_vacancia_m2.toLocaleString("es-CL", {maximumFractionDigits: 2}) + "%" : "—";
+
+    // "Aspectos del mes" -> "Vacancia del Fondo": narrativa autogenerada a
+    // partir de F.vacancia_pt_tipo (mes actual vs mes anterior, por tipo de
+    // activo). Solo la parte cuantitativa (%, oficinas, locales comerciales);
+    // eventos cualitativos (nuevos contratos, colocaciones) no están en la DB
+    // y deben agregarse a mano en el mes correspondiente.
+    const elVacFondoTxt = document.getElementById("txt-aspectos-mes-t-vacancia-del-fondo");
+    if (elVacFondoTxt) {
+      const vacTipo = usadoOp && F.vacancia_pt_tipo ? F.vacancia_pt_tipo[usadoOp] : null;
+      const oficinas = vacTipo ? vacTipo["Oficinas"] : null;
+      const locales = vacTipo ? vacTipo["Locales Comerciales"] : null;
+      if (oficinas && locales && oficinas.pct_actual != null && locales.pct_actual != null && gtAsp && gtAsp.pct_vacancia_m2 != null) {
+        const pctFondo = gtAsp.pct_vacancia_m2;
+        const fmtPct = (v) => v.toLocaleString("es-CL", {maximumFractionDigits: 1});
+        // Variación del % del fondo entre mes actual y anterior (misma fuente
+        // que gtAsp, pero necesitamos el dato del período anterior — ver
+        // F.perf_data, que también trae "__grand_total__|||Total" por período).
+        const [ay, am] = usadoOp.split("-").map(Number);
+        const prevDate = new Date(ay, am - 2, 1); // am es 1-indexed; -2 => mes anterior 0-indexed
+        const periodoAnterior = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+        const gtAspAnterior = periodoAnterior && F.perf_data && F.perf_data[periodoAnterior]
+          ? F.perf_data[periodoAnterior]["__grand_total__|||Total"] : null;
+        let evolucion;
+        if (gtAspAnterior && gtAspAnterior.pct_vacancia_m2 != null) {
+          const delta = pctFondo - gtAspAnterior.pct_vacancia_m2;
+          evolucion = Math.abs(delta) < 0.05
+            ? `no presentó variaciones y se mantuvo en ${fmtPct(pctFondo)}%`
+            : `${delta > 0 ? "aumentó" : "disminuyó"} a ${fmtPct(pctFondo)}% (${delta > 0 ? "+" : ""}${fmtPct(delta)} pp)`;
+        } else {
+          evolucion = `se ubicó en ${fmtPct(pctFondo)}%`;
+        }
+        elVacFondoTxt.textContent = `Durante ${mesEspanol(usadoOp)}, la vacancia del Fondo ${evolucion}, ` +
+          `compuesta por ${fmtPct(oficinas.pct_actual)}% en oficinas y ${fmtPct(locales.pct_actual)}% en locales comerciales.`;
+        elVacFondoTxt.classList.remove("placeholder");
+      } else {
+        elVacFondoTxt.textContent = "Pendiente.";
+        elVacFondoTxt.classList.add("placeholder");
+      }
+    }
   }
 
   // Página 3 Apo: tabla de vacancia por edificio (Locales/Oficinas/Edificio) —
@@ -4318,6 +4418,24 @@ function render(){
         </table>
       </div>`;
     document.getElementById("grid-vacancia").innerHTML = S.page3.vacancia_edificios.map(vacanciaBox).join("");
+    const dFondo = vacData ? vacData["Fondo"] : null;
+    document.getElementById("txt-vacancia-fondo").textContent = dFondo && dFondo.pct_actual != null
+      ? fmtPctVac(dFondo.pct_actual)
+      : "—";
+    const elVacM2 = document.getElementById("tbl-aspectos-vacancia-m");
+    if (elVacM2) elVacM2.textContent = dFondo && dFondo.pct_actual != null ? fmtPctVac(dFondo.pct_actual) : "—";
+  }
+
+  const elSup = document.getElementById("tbl-aspectos-superficie-arrendable");
+  if (elSup && F.gla_edificios) {
+    const total = Object.values(F.gla_edificios).reduce((a, b) => a + b, 0);
+    elSup.textContent = total ? Math.round(total).toLocaleString("es-CL") + " m2" : "—";
+  }
+  const elFin = document.getElementById("tbl-aspectos-financiamiento");
+  if (elFin) {
+    elFin.textContent = F.ltv_fondo != null
+      ? "LTV de " + (F.ltv_fondo * 100).toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+      : "—";
   }
 
   // Página 3 Apo/PT: tabla de Tasaciones — depende del período seleccionado

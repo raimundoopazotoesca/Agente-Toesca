@@ -1,3 +1,14 @@
+## [2026-07-30] feat | Narrativa "Vacancia del Fondo" autogenerada en Aspectos del mes (PT)
+
+Fact sheet PT, página 3 ("Aspectos del mes"), fila "Vacancia del Fondo": antes placeholder fijo "Pendiente." para todas las filas de `aspectos_mes`. Se agregó generación automática del texto cuantitativo (% fondo, desglose oficinas/locales comerciales, variación vs mes anterior), estilo:
+"Durante {mes}, la vacancia del Fondo {no presentó variaciones y se mantuvo en / aumentó a / disminuyó a} X%, compuesta por Y% en oficinas y Z% en locales comerciales."
+
+- `tools/db/rent_roll_stats.py::get_vacancia_fondo_por_tipo` — nueva función, % vacancia por tipo de activo (Oficinas / Locales Comerciales), mes actual vs anterior.
+- `scripts/build_factsheet.py::_fetch_vacancia_pt_tipo` — alimenta `DATA["vacancia_pt_tipo"]` para PT.
+- JS en `render()`: compone el texto en runtime (`txt-aspectos-mes-t-vacancia-del-fondo`), reutilizando `F.perf_data` (grand total) para el % del fondo y su variación mes a mes.
+- Solo la parte cuantitativa: eventos cualitativos (nuevos contratos, colocaciones — ej. el ejemplo de referencia sobre Centro de Eventos en locales 100-11/100-1) no están en la DB, deben agregarse a mano cuando corresponda.
+- Requiere 2 períodos consecutivos de rent roll PT ingestados; con datos actuales (< 2 períodos) queda en "Pendiente." — verificado con `python scripts/build_factsheet.py` (build OK, sin errores).
+
 ## [2026-07-30] data | Vacancia Viña/Curicó persistida en derived_kpi (real + ponderada)
 
 Insertadas 6 filas en `derived_kpi` (`formula='rentroll_vacancia_v1'`):
