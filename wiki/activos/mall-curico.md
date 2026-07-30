@@ -58,6 +58,10 @@ vacancia no cambia (se pondera parejo numerador y denominador).
 Periodo 2026-05: vacante = 3.017,87 m² (27 unidades, ponderado: 2.414,30 m²)
 / total 10.811,47 m² (ponderado: 8.649,18 m²) = **27,91%** en ambos casos.
 
+Ambas versiones (real y ponderada al 80%) están persistidas en `derived_kpi`
+(`kpi='m2_vacantes'`/`'m2_total'`, `formula='rentroll_vacancia_v1'`;
+ponderada = `variante='ponderado_80'`, real = `variante=NULL`).
+
 ## Vínculos
 
 - [[fondos/ar-rentas]]

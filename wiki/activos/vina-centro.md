@@ -60,6 +60,12 @@ denominador (sin filtrar por `tipo_activo_1`). La corrección previa de
 Periodo 2026-05: vacante = 130,5 m² (unidades 2096, 3004, M1) / total
 25.579,55 m² = **0,51%**.
 
+Persistido en `derived_kpi` (`kpi='m2_vacantes'`/`'m2_total'`,
+`formula='rentroll_vacancia_v1'`, `variante=NULL`). Viña es 100% propiedad
+directa del fondo — no necesita variante ponderada (a diferencia de
+[[activos/mall-curico]], que tiene `participacion_fondo_en_sociedad=0.8`
+en `dim_sociedad`).
+
 ## Vínculos
 
 - [[fondos/ar-rentas]]

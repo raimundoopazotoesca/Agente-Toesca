@@ -1,3 +1,12 @@
+## [2026-07-30] data | Vacancia Viña/Curicó persistida en derived_kpi (real + ponderada)
+
+Insertadas 6 filas en `derived_kpi` (`formula='rentroll_vacancia_v1'`):
+m2_vacantes/m2_total para Viña y Curicó (variante NULL = real), más
+variante `ponderado_80` para Curicó (participación 0.8 confirmada en
+`dim_sociedad.CuricoSpA`). Así ambos valores quedan disponibles sin
+recalcular. Reemplaza en la práctica al viejo `cdg_vacancia_v1` (deprecado,
+ver [[feedback_no_usar_cdg]]).
+
 ## [2026-07-30] doc | Vacancia Curicó — ponderación 80% (participación del fondo en el activo)
 
 El fondo es dueño del 80% de Mall Curicó. Para reportar m² absolutos
