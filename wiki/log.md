@@ -1,3 +1,8 @@
+## [2026-07-30] doc | Vacancia Mall Curicó — misma regla que Viña (solo locales, excluye módulos)
+
+Periodo 2026-05: 3.002,87 m² (26 locales, excluye módulo M2) / 10.792,47 m²
+= 27,8%. Detalle en [[activos/mall-curico]].
+
 ## [2026-07-30] doc | Vacancia Viña Centro — regla de cálculo (solo locales, excluye módulos/parking)
 
 Cálculo inicial (todas las unidades vacantes / GLA total) daba 0,51%. Usuario

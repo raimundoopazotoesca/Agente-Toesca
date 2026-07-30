@@ -45,6 +45,18 @@ desde el ER embebido en el CDG) que quedó `superseded`.
 
 A diferencia de [[activos/vina-centro]], la Section 2 de Curicó tiene fórmulas — solo hay que escribir Section 1 y el resto se calcula solo.
 
+## Vacancia (rent roll)
+
+Fuente: `raw_rent_roll_line`, `activo_key='Mall Curicó'`. Misma regla que
+[[activos/vina-centro]]: solo unidades tipo Locales, excluyendo Módulos (no
+hay categoría Parking en este rent roll). Ojo: filas vacantes pierden su
+categoría original (`tipo_activo_1='Vacante'`) — la unidad `M2` (15 m²) es
+un módulo vacante, hay que excluirla a mano.
+
+Periodo 2026-05: vacantes locales = 26 unidades, **3.002,87 m²** (excluye
+módulo M2 de 15 m²). Denominador (locales, sin módulos) = **10.792,47 m²**.
+Vacancia = **27,8%**.
+
 ## Vínculos
 
 - [[fondos/ar-rentas]]
