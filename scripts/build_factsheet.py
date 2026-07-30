@@ -882,7 +882,50 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "ltv_fondo": _fetch_ltv_fondo(fondo_key),
         "vacancia_pt_tipo": _fetch_vacancia_pt_tipo(fondo_key),
         "parking_desempeno": _fetch_parking_desempeno(fondo_key),
+        "noi_u12m_yoy": _fetch_noi_u12m_yoy_pt(fondo_key),
     }
+
+
+def _fetch_noi_u12m_yoy_pt(fondo_key: str) -> dict:
+    """{periodo: pct} — variación % del NOI U12M (12 meses terminados en
+    `periodo`) vs. el U12M terminado en el mismo mes del año anterior. Fuente
+    para FONDOS_CFG["PT"]["page3"]["aspectos_mes"] fila "Resultados" — ver
+    render() -> txt-aspectos-mes-t-resultados. Serie NOI mensual 100% del
+    fondo PT: derived_kpi kpi='noi_mensual' formula='raw_er_noi_v1'
+    entidad_key='PT' (entidad_tipo queda 'activo' por un mislabeling legacy,
+    igual que 'Apoquindo'/'Fondo Apoquindo' — ver docs/matriz-claves-ambiguas-apoquindo.md,
+    no confundir con el activo 'Torre A' de dim_activo). None si falta alguno
+    de los 24 meses necesarios (evita comparar U12M parciales)."""
+    if fondo_key != "PT":
+        return {}
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT periodo, valor FROM derived_kpi WHERE kpi='noi_mensual' AND "
+        "formula='raw_er_noi_v1' AND entidad_key='PT' ORDER BY periodo"
+    ).fetchall()
+    serie = {r["periodo"]: r["valor"] for r in rows}
+
+    def _u12m(hasta: str) -> float | None:
+        y, m = int(hasta[:4]), int(hasta[5:7])
+        meses = []
+        for _ in range(12):
+            meses.append(f"{y}-{m:02d}")
+            m -= 1
+            if m == 0:
+                m, y = 12, y - 1
+        valores = [serie[p] for p in meses if p in serie]
+        return sum(valores) if len(valores) == 12 else None
+
+    out = {}
+    for periodo in serie:
+        anio, mes = periodo[:4], periodo[5:7]
+        actual = _u12m(periodo)
+        base = _u12m(f"{int(anio) - 1}-{mes}")
+        if actual is not None and base:
+            out[periodo] = round((actual / base - 1) * 100, 1)
+    return out
 
 
 def _fetch_parking_desempeno(fondo_key: str) -> dict:
@@ -2594,6 +2637,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
 const FUNDS = __DATA_JSON__;
 const KPI_META = __KPI_META_JSON__;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MESES_ABR = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
 function mesEspanol(p){ if(!p) return ""; const [y,m]=p.split("-"); return MESES[parseInt(m,10)-1]+" "+y; }
 function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-"); }
@@ -4454,6 +4498,24 @@ function render(){
       } else {
         elParkingTxt.textContent = "Pendiente.";
         elParkingTxt.classList.add("placeholder");
+      }
+    }
+
+    // "Aspectos del mes" -> "Resultados": variación % del NOI U12M vs U12M
+    // del mismo mes del año anterior. Ver F.noi_u12m_yoy / _fetch_noi_u12m_yoy_pt.
+    const elResultadosTxt = document.getElementById("txt-aspectos-mes-t-resultados");
+    if (elResultadosTxt) {
+      const pct = usadoOp && F.noi_u12m_yoy ? F.noi_u12m_yoy[usadoOp] : null;
+      if (pct != null) {
+        const [yy, mm] = usadoOp.split("-");
+        const mesAbrevLabel = `${MESES_ABR[parseInt(mm, 10) - 1]}-${yy.slice(2)}`;
+        const fmtSigned = (v) => (v > 0 ? "+" : "") + v.toLocaleString("es-CL", {maximumFractionDigits: 1});
+        elResultadosTxt.textContent = `El NOI de los U12M de ${mesAbrevLabel} vs ${parseInt(yy, 10) - 1} fue un ` +
+          `${Math.abs(pct).toLocaleString("es-CL", {maximumFractionDigits: 1})}% ${pct >= 0 ? "mayor" : "menor"}.`;
+        elResultadosTxt.classList.remove("placeholder");
+      } else {
+        elResultadosTxt.textContent = "Pendiente.";
+        elResultadosTxt.classList.add("placeholder");
       }
     }
   }

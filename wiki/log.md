@@ -1,3 +1,12 @@
+## [2026-07-30] feat | Narrativa "Resultados" autogenerada en Aspectos del mes (PT)
+
+Fila "Resultados" de `aspectos_mes` (página 3 PT): antes placeholder fijo. Ahora genera
+"El NOI de los U12M de {mes}-{aa} vs {año-1} fue un {X}% {mayor/menor}."
+
+- `scripts/build_factsheet.py::_fetch_noi_u12m_yoy_pt` — U12M (12 meses terminados en el período) del NOI mensual 100% del fondo PT vs. el U12M terminado en el mismo mes del año anterior. Fuente: `derived_kpi` kpi='noi_mensual' formula='raw_er_noi_v1' entidad_key='PT' — serie ya construida desde raw ER (no CDG, cumple [[feedback_no_usar_cdg]]). **Nota**: esta fila tiene `entidad_tipo='activo'` en DB pero es en realidad la serie NOI del fondo completo, mismo mislabeling legacy que 'Apoquindo'/'Fondo Apoquindo' (ver `docs/matriz-claves-ambiguas-apoquindo.md`) — no confundir con el activo real 'Torre A'.
+- None si falta algún mes de los 24 necesarios (evita comparar U12M parciales).
+- JS en `render()`: llena `txt-aspectos-mes-t-resultados`. Verificado con datos reales: may-2026 → NOI U12M +10.8% vs U12M terminado may-2025.
+
 ## [2026-07-30] feat | Narrativa "Parking" autogenerada en Aspectos del mes (PT)
 
 Fila "Parking" de `aspectos_mes` (página 3 PT): antes placeholder fijo. Ahora genera
