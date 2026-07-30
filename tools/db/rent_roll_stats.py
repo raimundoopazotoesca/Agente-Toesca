@@ -12,6 +12,7 @@ sheet, confirmado con el usuario 2026-07-20:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -299,6 +300,171 @@ def get_vacancia_edificios(activo_key: str, periodo: str, edificios_filas: dict)
     return out
 
 
+def get_gla_edificios(activo_key: str, edificios: list[str]) -> dict | None:
+    """m² totales (ocupados + vacantes, Oficinas + Locales Comerciales — mismo
+    criterio de área arrendable que _VACANCIA_TIPOS_EDIFICIO, excluye
+    Bodegas/Estacionamientos) por edificio, para el donut "GLA (m²)" de la
+    página 3 de Apo (layout "edificio"). A diferencia de los donuts de PT
+    (ingresos/GLA por arrendatario), este SÍ es estático: la superficie de un
+    edificio no cambia mes a mes, así que se calcula una sola vez con el
+    período más reciente disponible (no varía con el selector de período del
+    fact sheet). None si no hay rent roll ingestado para activo_key."""
+    periodos = _periodos_disponibles(activo_key)
+    if not periodos:
+        return None
+    snapshot = _snapshot(activo_key, periodos[-1])
+    if not snapshot:
+        return None
+
+    out: dict[str, float] = {}
+    for k, v in snapshot.items():
+        if k[0] not in edificios or v["tipo_activo_3"] not in _VACANCIA_TIPOS_EDIFICIO:
+            continue
+        out[k[0]] = out.get(k[0], 0.0) + (v["m2"] or 0.0)
+    return {k: round(v, 1) for k, v in out.items() if v}
+
+
+_PISO_RE = re.compile(r"^(\d+)")
+
+
+def _piso_de_unidad(unidad: str) -> str | None:
+    """Extrae el piso desde el código de unidad del rent roll (ej. "703" ->
+    "7", "1301" -> "13", "401 #2" -> "4"). Los 2 últimos dígitos son la
+    posición dentro del piso (nomenclatura JLL estándar en Apo4501/Apo4700);
+    solo se usa para los gráficos "Status Actual Oficinas" de la página 3 de
+    Apo (layout "edificio"). None si la unidad no sigue esa nomenclatura
+    (ej. locales que usan letras, "1A")."""
+    m = _PISO_RE.match(unidad.strip())
+    if not m:
+        return None
+    digitos = m.group(1)
+    return digitos[:-2] if len(digitos) > 2 else digitos
+
+
+def get_status_oficinas(activo_key: str, periodo: str, edificios: list[str]) -> dict | None:
+    """{edificio: {"pisos": [{piso, m2, ocupado_pct, unidades: [{unidad, m2,
+    vacante, arrendatario, renta_uf}]}] (ordenados de piso más alto a más
+    bajo), "ocupacion_pct": float}} para el gráfico "Status Actual Oficinas
+    por Activo" de la página 3 de Apo (layout "edificio") — la forma del
+    edificio (ancho de cada piso, proporcional a su m² real) no cambia mes a
+    mes, solo el % ocupado y el detalle de arrendatarios de cada piso.
+    "unidades" alimenta el tooltip por piso (arrendatario, UF/m²/mes, m²
+    totales de cada unidad). None si no hay rent roll para (activo_key,
+    periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+
+    out = {}
+    for ed in edificios:
+        pisos: dict[str, dict] = {}
+        for (edificio, unidad), v in snapshot.items():
+            if edificio != ed or v["tipo_activo_3"] != "Oficinas":
+                continue
+            piso = _piso_de_unidad(unidad)
+            if piso is None:
+                continue
+            d = pisos.setdefault(piso, {"m2": 0.0, "m2_vac": 0.0, "unidades": []})
+            m2 = v["m2"] or 0.0
+            vacante = _es_vacante(v["arrendatario"])
+            d["m2"] += m2
+            if vacante:
+                d["m2_vac"] += m2
+            d["unidades"].append({
+                "unidad": unidad,
+                "m2": round(m2, 1),
+                "vacante": vacante,
+                "arrendatario": v["arrendatario"] if not vacante else None,
+                "renta_uf": round(v["renta_uf"], 2) if not vacante else 0.0,
+            })
+        if not pisos:
+            continue
+        m2_total = sum(d["m2"] for d in pisos.values())
+        m2_vac_total = sum(d["m2_vac"] for d in pisos.values())
+        pisos_out = [
+            {
+                "piso": p,
+                "m2": round(d["m2"], 1),
+                "ocupado_pct": round(100 * (d["m2"] - d["m2_vac"]) / d["m2"], 1) if d["m2"] else 0.0,
+                "unidades": sorted(d["unidades"], key=lambda u: u["unidad"]),
+            }
+            for p, d in sorted(pisos.items(), key=lambda kv: int(kv[0]), reverse=True)
+        ]
+        out[ed] = {
+            "pisos": pisos_out,
+            "ocupacion_pct": round(100 * (m2_total - m2_vac_total) / m2_total, 1) if m2_total else 0.0,
+        }
+    return out or None
+
+
+def get_status_locales(activo_key: str, periodo: str, edificios: list[str]) -> dict | None:
+    """{edificio: {"locales": [{unidad, m2, vacante}] (ordenados de mayor a
+    menor m²), "ocupacion_pct": float}} para el gráfico "Status Actual
+    Locales por Activo" de la página 3 de Apo (layout "edificio") — el
+    tamaño relativo de cada local en el treemap es proporcional a su m² real
+    (no cambia mes a mes), solo el color (ocupado/vacante). None si no hay
+    rent roll para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+
+    out = {}
+    for ed in edificios:
+        locales = []
+        for (edificio, unidad), v in snapshot.items():
+            if edificio != ed or v["tipo_activo_3"] != "Locales Comerciales":
+                continue
+            m2 = v["m2"] or 0.0
+            if m2 <= 0:
+                continue
+            vacante = _es_vacante(v["arrendatario"])
+            locales.append({
+                "unidad": unidad,
+                "m2": round(m2, 1),
+                "vacante": vacante,
+                "arrendatario": v["arrendatario"] if not vacante else None,
+                "renta_uf": round(v["renta_uf"], 2) if not vacante else 0.0,
+            })
+        if not locales:
+            continue
+        locales.sort(key=lambda l: l["m2"], reverse=True)
+        m2_total = sum(l["m2"] for l in locales)
+        m2_vac = sum(l["m2"] for l in locales if l["vacante"])
+        out[ed] = {
+            "locales": locales,
+            "ocupacion_pct": round(100 * (m2_total - m2_vac) / m2_total, 1) if m2_total else 0.0,
+        }
+    return out or None
+
+
+def get_plano_locales(activo_key: str, periodo: str, edificio: str, unidades: list[str]) -> dict | None:
+    """{unidad: {vacante, arrendatario, renta_uf, m2}} para el overlay del
+    "Plano Local 100" de la página 4 de PT (ver FONDOS_CFG["PT"]["page4"]
+    ["plano"]) — a diferencia de get_status_locales, acá el layout no es un
+    treemap ni una silueta calculada: son rectángulos fijos calcados sobre
+    una imagen real del plano de arquitectura (ver PLANO_LOCALES_LAYOUT en
+    scripts/build_factsheet.py), y solo se necesita el estado de cada unidad
+    puntual por su código real (ej. "100-9"), no una lista ordenada. None si
+    no hay rent roll para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+
+    out = {}
+    for unidad in unidades:
+        v = snapshot.get((edificio, unidad))
+        if not v:
+            continue
+        vacante = _es_vacante(v["arrendatario"])
+        out[unidad] = {
+            "m2": round(v["m2"] or 0.0, 1),
+            "vacante": vacante,
+            "arrendatario": v["arrendatario"] if not vacante else None,
+            "renta_uf": round(v["renta_uf"], 2) if not vacante else 0.0,
+        }
+    return out or None
+
+
 # Grupos/tipos por fondo para la tabla de performance (ver
 # FONDOS_CFG[fondo]["page2"]["perf_groups"] en scripts/build_factsheet.py —
 # debe calzar 1:1 con los "cols" definidos ahí, sin "Total" que se calcula
@@ -350,31 +516,68 @@ def get_perf_table(activo_key: str, periodo: str) -> dict | None:
     return out
 
 
-def get_rubro_arrendatario(activo_key: str, periodo: str, categorias: list[str]) -> dict | None:
-    """Renta mensual ocupada (UF), agrupada por rubro del arrendatario
-    (extra_json.tipo_arrendatario), para el gráfico "Composición por Rubro
-    del Arrendatario" de la página 2 (ver FONDOS_CFG[fondo]["page2"]
-    ["rubro_arrendatario"]). Rubros fuera de esa lista curada (larga cola de
-    categorías poco frecuentes) se agrupan en "Otro". Vacantes se excluyen.
-    None si no hay rent roll ingestado para (activo_key, periodo)."""
-    snapshot = _snapshot(activo_key, periodo)
-    if not snapshot:
-        return None
-
+def _top_n_por_clave(snapshot: dict, clave, valor, top_n: int = 5, otros_label: str = "Otros") -> dict[str, float]:
+    """Agrega `valor(v)` de unidades ocupadas agrupando por `clave(v)`,
+    quedándose con los `top_n` de mayor valor y sumando el resto en
+    `otros_label` — sin lista curada de categorías: el top-N se calcula en
+    el momento a partir de los datos, así no queda pegado a nombres/rubros
+    de una foto de un mes puntual (arrendatarios y rubros entran/salen con
+    el tiempo). Unidades sin `clave(v)` (None/vacío) y vacantes se excluyen.
+    Compartido por get_ingresos_arrendatario, get_m2_arrendatario y
+    get_rubro_arrendatario."""
     agg: dict[str, float] = {}
     for v in snapshot.values():
         if _es_vacante(v["arrendatario"]):
             continue
-        rubro = v.get("tipo_arrendatario")
-        if not rubro or rubro.strip().lower() == "vacante":
+        k = clave(v)
+        if not k or k.strip().lower() == "vacante":
             continue
-        rubro = rubro.strip()
-        if rubro.lower() == "otro":
-            rubro = "Otro"
-        if rubro not in categorias:
-            rubro = "Otro"
-        agg[rubro] = agg.get(rubro, 0.0) + _monto_mensual_uf(v)
-    return {k: round(v, 1) for k, v in agg.items() if v}
+        k = k.strip()
+        agg[k] = agg.get(k, 0.0) + valor(v)
+    items = sorted(((k, v) for k, v in agg.items() if v), key=lambda kv: kv[1], reverse=True)
+    out = {k: round(v, 1) for k, v in items[:top_n]}
+    resto = items[top_n:]
+    if resto:
+        out[otros_label] = round(out.get(otros_label, 0.0) + sum(v for _, v in resto), 1)
+    return out
+
+
+def get_ingresos_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict | None:
+    """Renta mensual ocupada (UF), agrupada por arrendatario (top-N por
+    monto + "Otros"), para el donut "Ingresos (UF/mes)" de la página 3 de PT
+    (layout "tenant", ver FONDOS_CFG["PT"]["page3"]["donut_arrendatario"]).
+    None si no hay rent roll ingestado para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+    return _top_n_por_clave(snapshot, lambda v: v["arrendatario"], _monto_mensual_uf, top_n)
+
+
+def get_m2_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict | None:
+    """m² ocupados, agrupados por arrendatario (top-N por m² + "Otros"), para
+    el donut "GLA (m²)" de la página 3 de PT (layout "tenant", ver
+    FONDOS_CFG["PT"]["page3"]["donut_arrendatario"]) — el top-N por
+    superficie no necesariamente coincide con el de renta (arrendatarios
+    chicos en renta pueden ocupar más m², y viceversa), por eso se calcula
+    aparte. None si no hay rent roll ingestado para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+    return _top_n_por_clave(snapshot, lambda v: v["arrendatario"], lambda v: v["m2"] or 0.0, top_n)
+
+
+def get_rubro_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict | None:
+    """Renta mensual ocupada (UF), agrupada por rubro del arrendatario
+    (extra_json.tipo_arrendatario, top-N por monto + "Otro"), para el
+    gráfico "Composición por Rubro del Arrendatario" de la página 2 (ver
+    FONDOS_CFG[fondo]["page2"]). Vacantes se excluyen. None si no hay rent
+    roll ingestado para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+    return _top_n_por_clave(
+        snapshot, lambda v: v.get("tipo_arrendatario"), _monto_mensual_uf, top_n, otros_label="Otro",
+    )
 
 
 def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) -> dict | None:

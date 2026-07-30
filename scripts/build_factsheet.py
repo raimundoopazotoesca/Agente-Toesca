@@ -153,11 +153,6 @@ FONDOS_CFG = {
                 "Absorción bruta m² 3M", "Absorción bruta UF 3M", "Absorción neta m² 3M", "Absorción neta UF 3M",
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
             ],
-            "rubro_arrendatario": [
-                "Otro", "Mejoramiento del hogar", "Banco", "Supermercado", "Retail",
-                "Residencia Adulto Mayor", "Agroindustrial", "Salud", "Gastronomía",
-                "Servicios", "Financiera", "Deporte", "Inmobiliaria",
-            ],
             "tipo_activo": ["Oficinas", "Comercial", "Industrial", "Residencias"],
         },
         # Página 3 — "Análisis de Mercado" (fact sheet TRI abril 2026, PDF de
@@ -248,7 +243,6 @@ FONDOS_CFG = {
                 "Absorción bruta m² 3M", "Absorción bruta UF 3M", "Absorción neta m² 3M", "Absorción neta UF 3M",
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
             ],
-            "rubro_arrendatario": ["Banco", "Deporte", "Padel", "Seguros", "Construcción", "Otro"],
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
             "perfil_vencimiento_edificios": ["Torre A S.A.", "Inmob. Boulevard PT SpA"],
         },
@@ -263,10 +257,12 @@ FONDOS_CFG = {
         # en fact_tasacion (activo_key Torre A / Boulevard) pendiente de wire.
         "page3": {
             "titulo": "Torre A S.A. / Inmobiliaria Boulevard PT SpA",
-            "arrendatarios": [
-                "Scotiabank Azul", "Saba", "Grupo Sublime", "Smartfit", "Padel",
-                "Habana Box", "Deka Inmobiliaria Chile One SpA", "Releve", "Otros",
-            ],
+            # Activa los donuts "GLA (m²)" / "Ingresos (UF/mes)" por
+            # arrendatario en la página 3 (layout "tenant"). Sin lista curada
+            # de nombres: top-N dinámico por mes + "Otros" (ver
+            # tools/db/rent_roll_stats.py::_top_n_arrendatario) — así no queda
+            # pegado a los arrendatarios vigentes en un mes puntual.
+            "donut_arrendatario": True,
             "aspectos": [
                 ("Dirección", "Av. Costanera Sur 2710, Las Condes"),
                 ("Superficie Arrendable", None),
@@ -299,7 +295,80 @@ FONDOS_CFG = {
         # referencia: es plano de planta (Piso -1 / Piso -2) + boilerplate de notas.
         "page4": {
             "notas": _notas_template(has_bursatil=True),
-            "plano": {"titulo": "Plano Local 100", "pisos": ["Piso -1", "Piso -2"]},
+            # Overlay de estado (ocupado/vacante) sobre la imagen real del
+            # plano de arquitectura del Local 100 — a diferencia de los
+            # gráficos "Status Actual" de Apo (treemap/silueta abstracta),
+            # acá el fondo ES la foto del plano y las formas van calcadas
+            # encima con un <svg viewBox="0 0 viewbox_w viewbox_h"> (ver
+            # renderPlanoPT): la imagen se estira a llenar ese viewBox y los
+            # rect/polygon usan las coordenadas del plano ORIGINAL
+            # (viewbox_w × viewbox_h) tal cual las midió el usuario sobre esa
+            # imagen — así no hay que reescalar a mano si se reemplaza el
+            # archivo por una versión de otra resolución (basta con que la
+            # composición/encuadre sea la misma). "edificio" = clave activo2
+            # cruda del rent roll ("Inmob. CdC", ver
+            # tools/db/rent_roll_stats.py::_snapshot), no el label amigable
+            # "Inmob. Boulevard PT SpA".
+            "plano": {
+                "titulo": "Plano Local 100",
+                "edificio": "Inmob. CdC",
+                "pisos": [
+                    {
+                        "nombre": "Piso -1",
+                        "imagen": _data_uri("pt_plano_piso1.png"),
+                        # viewBox en el sistema ORIGINAL (557×395) en el que
+                        # el usuario midió estas coordenadas pixel a pixel —
+                        # el SVG escala la imagen completa (más grande en
+                        # disco) de forma uniforme para llenar ese viewBox,
+                        # así que los puntos se usan tal cual, sin
+                        # recalcular por la resolución real del archivo.
+                        "viewbox_w": 557, "viewbox_h": 395,
+                        "locales": [
+                            # Coordenadas trazadas a mano por el usuario con
+                            # el editor visual interactivo (vértices
+                            # arrastrados sobre el plano real).
+                            # label_at: el centro del bbox cae fuera del
+                            # relleno (formas cóncavas) — punto de anclaje
+                            # elegido a mano dentro de la masa ancha inferior.
+                            {"unidad": "100-1", "label_at": [495, 305],
+                             "poligono": [[437.9, 90.6], [435, 362], [551, 368], [552, 240], [473, 239], [474, 128]]},
+                            {"unidad": "100-2", "label_at": [500, 86], "label_box": [26, 58], "orientation": "v",
+                             "poligono": [[486.6, 54.4], [532.9, 60.6], [516.6, 80], [551.6, 111.9], [552.3, 152.5], [514.8, 151.3], [514.8, 116.3], [486.6, 116.9]]},
+                        ],
+                    },
+                    {
+                        "nombre": "Piso -2",
+                        "imagen": _data_uri("pt_plano_piso2.png"),
+                        # Mismo criterio que Piso -1: viewbox = resolución
+                        # real de la imagen limpia, coordenadas escaladas
+                        # 1:1 desde el sistema original (575×410) por el
+                        # factor verificado 1485/575≈2.583, 1059/410≈2.583.
+                        "viewbox_w": 1485, "viewbox_h": 1059,
+                        "locales": [
+                            # Bloque principal con un retranqueo en la
+                            # esquina superior derecha (desde el borde
+                            # superior de Relevé hasta la base, sin volver a
+                            # ancho completo) para dejarle su muesca exacta a
+                            # 100-7 (Relevé) — antes se montaban.
+                            {"unidad": "100-9",
+                             "poligono": [[194, 137], [749, 137], [749, 199], [671, 199], [671, 468], [194, 468]]},
+                            {"unidad": "100-10", "x": 191, "y": 468, "w": 682, "h": 336},
+                            {"unidad": "100-7", "x": 671, "y": 199, "w": 114, "h": 204},
+                            {"unidad": "100-5", "x": 783, "y": 176, "w": 452, "h": 227},
+                            {"unidad": "100-4", "x": 1232, "y": 178, "w": 106, "h": 225},
+                            {"unidad": "100-8", "x": 873, "y": 439, "w": 96, "h": 168},
+                            {"unidad": "100-6", "x": 999, "y": 439, "w": 142, "h": 168},
+                            {"unidad": "100-3", "x": 1191, "y": 437, "w": 186, "h": 160},
+                            # Trazado a mano por el usuario con el editor
+                            # visual (modo curva/spline) sobre el plano real.
+                            {"unidad": "100-11",
+                             "poligono": [[190.1, 803.5], [1382, 801], [1379.2, 995], [1216, 995.3], [1050.1, 989.4],
+                                          [887.8, 976.5], [712.5, 954.1], [563.1, 927.1], [391.3, 878.8], [311.3, 854.1],
+                                          [240.7, 827.1], [218.4, 818.8]]},
+                        ],
+                    },
+                ],
+            },
         },
         "comite": "Gonzalo Urzúa G.<br/>Cristóbal Kaltwasser B.<br/>José Ignacio de Almorzara V.",
         "contacto": "distribucion@toesca.com",
@@ -359,11 +428,6 @@ FONDOS_CFG = {
                 "Renta mensual (UF)", "Renta vacante (UF)", "Renta en gracia (UF)", "Renta en descuento (UF)", "% vacancia (UF)",
                 "Absorción bruta m² 3M", "Absorción bruta UF 3M", "Absorción neta m² 3M", "Absorción neta UF 3M",
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
-            ],
-            "rubro_arrendatario": [
-                "Otro", "Servicios", "Inmobiliaria", "Salud", "Minería", "Financiera",
-                "Tecnología", "Gimnasio", "Logística", "Consultoría", "Empresa Pública",
-                "Instituto profesional", "Infraestructura",
             ],
             "tipo_activo": ["Oficinas", "Locales Comerciales", "Estacionamientos", "Bodegas"],
             "perfil_vencimiento_edificios": ["Apoquindo 4501", "Apoquindo 4700"],
@@ -810,7 +874,48 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "rubro_arrendatario": _fetch_rubro_arrendatario(fondo_key),
         "tipo_activo": _fetch_tipo_activo(fondo_key),
         "perfil_vencimiento": _fetch_perfil_vencimiento(fondo_key),
+        "ingresos_arrendatario": _fetch_ingresos_arrendatario(fondo_key),
+        "gla_arrendatario": _fetch_gla_arrendatario(fondo_key),
+        "gla_edificios": _fetch_gla_apo(fondo_key),
+        "status_oficinas": _fetch_status_oficinas_apo(fondo_key),
+        "status_locales": _fetch_status_locales_apo(fondo_key),
+        "plano_locales": _fetch_plano_pt(fondo_key),
     }
+
+
+def _fetch_plano_pt(fondo_key: str) -> dict:
+    """{periodo: {unidad: {vacante, arrendatario, renta_uf, m2}}} para el
+    overlay del "Plano Local 100" de la página 4 de PT — ver
+    FONDOS_CFG["PT"]["page4"]["plano"] y
+    tools/db/rent_roll_stats.py::get_plano_locales."""
+    if fondo_key != "PT":
+        return {}
+    from tools.db.rent_roll_stats import get_plano_locales, _periodos_disponibles
+
+    plano = FONDOS_CFG["PT"]["page4"]["plano"]
+    edificio = plano["edificio"]
+    unidades = [loc["unidad"] for piso in plano["pisos"] for loc in piso["locales"]]
+    out = {}
+    for periodo in _periodos_disponibles("PT"):
+        tabla = get_plano_locales("PT", periodo, edificio, unidades)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_gla_apo(fondo_key: str) -> dict:
+    """{edificio: m2} para el donut "GLA (m²)" de la página 3 de Apo (layout
+    "edificio") — ver tools/db/rent_roll_stats.py::get_gla_edificios. Estático
+    (calculado con el rent roll más reciente disponible): la superficie de un
+    edificio no cambia mes a mes, a diferencia de ingresos_edificios que sí
+    varía por período."""
+    if fondo_key != "Apo":
+        return {}
+    from tools.db.rent_roll_stats import get_gla_edificios
+
+    edificios = FONDOS_CFG["Apo"]["page3"]["edificios"]
+    return get_gla_edificios("Apoquindo", edificios) or {}
 
 
 def _fetch_vacancia_apo(fondo_key: str) -> dict:
@@ -832,6 +937,44 @@ def _fetch_vacancia_apo(fondo_key: str) -> dict:
         if tabla is None:
             continue
         out[periodo] = {f"{ed}|||{fila}": val for (ed, fila), val in tabla.items()}
+    return out
+
+
+def _fetch_status_oficinas_apo(fondo_key: str) -> dict:
+    """{periodo: {edificio: {pisos, ocupacion_pct}}} para el gráfico "Status
+    Actual Oficinas por Activo" de la página 3 de Apo (ver
+    FONDOS_CFG["Apo"]["page3"]["status_oficinas"]). Ver
+    tools/db/rent_roll_stats.py::get_status_oficinas."""
+    if fondo_key != "Apo":
+        return {}
+    from tools.db.rent_roll_stats import get_status_oficinas, _periodos_disponibles
+
+    edificios = [n for n, _ in FONDOS_CFG["Apo"]["page3"]["status_oficinas"]]
+    out = {}
+    for periodo in _periodos_disponibles("Apoquindo"):
+        tabla = get_status_oficinas("Apoquindo", periodo, edificios)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_status_locales_apo(fondo_key: str) -> dict:
+    """{periodo: {edificio: {locales, ocupacion_pct}}} para el gráfico
+    "Status Actual Locales por Activo" de la página 3 de Apo (ver
+    FONDOS_CFG["Apo"]["page3"]["status_locales"]). Ver
+    tools/db/rent_roll_stats.py::get_status_locales."""
+    if fondo_key != "Apo":
+        return {}
+    from tools.db.rent_roll_stats import get_status_locales, _periodos_disponibles
+
+    edificios = [n for n, _ in FONDOS_CFG["Apo"]["page3"]["status_locales"]]
+    out = {}
+    for periodo in _periodos_disponibles("Apoquindo"):
+        tabla = get_status_locales("Apoquindo", periodo, edificios)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
     return out
 
 
@@ -865,17 +1008,58 @@ def _fetch_perf_data(fondo_key: str) -> dict:
 
 def _fetch_rubro_arrendatario(fondo_key: str) -> dict:
     """{periodo: {rubro: renta_uf}} para el gráfico "Composición por Rubro del
-    Arrendatario" de la página 2 — ver tools/db/rent_roll_stats.py::get_rubro_arrendatario.
-    Mismo alcance que _fetch_perf_data (PT y Apo; TRI en placeholder)."""
+    Arrendatario" de la página 2 — ver tools/db/rent_roll_stats.py::get_rubro_arrendatario
+    (top-N por monto + "Otro", sin lista curada de rubros). Mismo alcance que
+    _fetch_perf_data (PT y Apo; TRI en placeholder)."""
     activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
     if activo_key_logico is None:
         return {}
-    categorias = FONDOS_CFG[fondo_key]["page2"]["rubro_arrendatario"]
     from tools.db.rent_roll_stats import get_rubro_arrendatario, _periodos_disponibles
 
     out = {}
     for periodo in _periodos_disponibles(activo_key_logico):
-        tabla = get_rubro_arrendatario(activo_key_logico, periodo, categorias)
+        tabla = get_rubro_arrendatario(activo_key_logico, periodo)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_ingresos_arrendatario(fondo_key: str) -> dict:
+    """{periodo: {arrendatario: renta_uf}} para el donut "Ingresos (UF/mes)"
+    de la página 3 (layout "tenant") — ver
+    tools/db/rent_roll_stats.py::get_ingresos_arrendatario. Solo fondos con
+    page3.donut_arrendatario=True (hoy: PT)."""
+    if not (FONDOS_CFG.get(fondo_key, {}).get("page3") or {}).get("donut_arrendatario"):
+        return {}
+    activo_key_logico = {"PT": "PT"}.get(fondo_key)
+    if not activo_key_logico:
+        return {}
+    from tools.db.rent_roll_stats import get_ingresos_arrendatario, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_ingresos_arrendatario(activo_key_logico, periodo)
+        if tabla is None:
+            continue
+        out[periodo] = tabla
+    return out
+
+
+def _fetch_gla_arrendatario(fondo_key: str) -> dict:
+    """{periodo: {arrendatario: m2}} para el donut "GLA (m²)" de la página 3
+    (layout "tenant") — ver tools/db/rent_roll_stats.py::get_m2_arrendatario.
+    Solo fondos con page3.donut_arrendatario=True (hoy: PT)."""
+    if not (FONDOS_CFG.get(fondo_key, {}).get("page3") or {}).get("donut_arrendatario"):
+        return {}
+    activo_key_logico = {"PT": "PT"}.get(fondo_key)
+    if not activo_key_logico:
+        return {}
+    from tools.db.rent_roll_stats import get_m2_arrendatario, _periodos_disponibles
+
+    out = {}
+    for periodo in _periodos_disponibles(activo_key_logico):
+        tabla = get_m2_arrendatario(activo_key_logico, periodo)
         if tabla is None:
             continue
         out[periodo] = tabla
@@ -1392,7 +1576,14 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .cols-page3 { grid-template-columns: 1fr 34%; }
   .cols-page3-bodegas { grid-template-columns: 1fr 1.2fr; }
   .cols-page3-lower { grid-template-columns: 1fr 34%; align-items: start; }
-  .cols-page3-top { grid-template-columns: 1fr 1fr 1fr; align-items: start; }
+  /* align-items: stretch (default) para que los dos chart-box de GLA/Ingresos
+     por arrendatario (PT) siempre queden del mismo alto — el de la fila
+     (determinado por el contenido más alto de los dos, top-N dinámico, ver
+     rent_roll_stats.py::_top_n_por_clave) sin cortar contenido; el tercer
+     hijo (Aspectos Relevantes) usa align-self:start para no estirarse con
+     ellos. */
+  .cols-page3-top { grid-template-columns: 1fr 1fr 1fr; }
+  .cols-page3-top > :nth-child(3) { align-self: start; }
   .cols-page3-mid { grid-template-columns: 2fr 1fr; align-items: stretch; }
   .section-title {
     background: var(--green-header); color: #000;
@@ -1649,7 +1840,80 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .occ-box { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 8px 6px; }
   .occ-bar { background: #EDEDED; border-radius: 4px; height: 14px; overflow: hidden; }
   .occ-bar-fill { background: var(--green); height: 100%; }
-  .occ-label { font-size: 11px; text-align: center; font-weight: 600; color: #33413b; }
+  .occ-label { font-size: 11px; text-align: center; font-weight: 600; color: #33413b; margin-top: 6px; }
+  /* Caja "Ocupación: X%" con borde verde tipo pill, igual a la foto de
+     referencia (recuadro redondeado, centrado, debajo de cada gráfico). */
+  .occ-pill {
+    align-self: center; margin-top: 10px; padding: 6px 18px;
+    border: 2px solid var(--green); border-radius: 6px;
+    font-size: 13px; font-weight: 700; color: #1a1a1a; background: #fff;
+  }
+  .occ-pill.placeholder { border-color: #ccc; color: #999; font-weight: 400; }
+  /* Status Actual Oficinas (renderStatusOficinas): pisos apilados, ancho
+     proporcional al m² real de cada piso — misma idea que un perfil de
+     edificio, ver foto de referencia adjunta por el usuario. */
+  .status-viz { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px; min-height: 160px; }
+  /* Contenedor con aspect-ratio fijado inline por edificio (ver
+     APO_OFICINAS_LAYOUT en renderStatusOficinas) — la silueta (trapecio
+     4501, rectángulo 4700 con la planta baja más ancha) es un layout FIJO
+     calcado pixel a pixel de la foto de referencia del usuario, igual que
+     APO_LOCALES_LAYOUT: cada piso es un div posicionado en absoluto, no un
+     flujo de flexbox. */
+  .status-building { position: relative; width: 100%; }
+  .status-floor { position: absolute; box-sizing: border-box; border: 0.5px solid #000; display: flex; }
+  .status-floor-occ { background: var(--green); }
+  .status-floor-vac { background: #fff; }
+  /* Status Actual Locales (renderStatusLocales): treemap, área proporcional
+     al m² real de cada local. Etiqueta oculta bajo un umbral de tamaño para
+     evitar el texto cortado/apilado que se ve en celdas angostas (ej. locales
+     de 84-90 m² junto a uno de 1255 m²). */
+  /* Proporción 216:333 medida directamente sobre la foto de referencia del
+     usuario (contenedor principal del treemap de Apo4501) — las coordenadas
+     fijas de APO_LOCALES_LAYOUT (ver renderStatusLocales) están calculadas
+     sobre esa misma proporción, así que el aspect-ratio del contenedor real
+     tiene que calzar para que no se deformen. */
+  .status-treemap { position: relative; width: 100%; aspect-ratio: 216 / 333; }
+  .status-local {
+    position: absolute; box-sizing: border-box; border: 0.5px solid #000;
+    font-size: 8px; color: #1a1a1a; display: flex; align-items: flex-end;
+    justify-content: flex-start; padding: 2px; overflow: hidden;
+  }
+  .status-local-label {
+    display: block; max-width: 100%; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
+  .status-local-occ { background: var(--green); }
+  .status-local-vac { background: #fff; }
+  /* Plano Local 100 (PT, página 4, renderPlanoPT): SVG con viewBox = las
+     coordenadas ORIGINALES del plano (ver FONDOS_CFG["PT"]["page4"]
+     ["plano"]) — la imagen (<image>) se estira a llenar ese viewBox y los
+     <rect>/<polygon> de cada local usan esas mismas coordenadas tal cual,
+     sin reescalar a mano; si se reemplaza el archivo de imagen por otra
+     resolución (misma composición), sigue calzando solo. Relleno
+     semi-transparente para no tapar el plano de fondo. */
+  .plano-piso { position: relative; width: 100%; }
+  .plano-piso svg { display: block; width: 100%; height: auto; }
+  .plano-shape { stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: default; }
+  .plano-local-occ { fill: rgba(0,178,122,0.45); }
+  .plano-local-vac { fill: rgba(120,120,120,0.55); }
+  .plano-label { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16241d; text-anchor: middle; pointer-events: none; }
+  .plano-label .nombre { font-weight: 700; }
+  .plano-label .sub { font-weight: 400; }
+  /* Tooltip al pasar el cursor sobre un piso (renderStatusOficinas) o un
+     local (renderStatusLocales) — mismo lenguaje visual que .donut-tooltip. */
+  .status-tooltip {
+    position: absolute; min-width: 150px; max-width: 240px; pointer-events: none; opacity: 0;
+    transform: translate(-50%, -108%); transition: opacity 120ms ease;
+    background: rgba(255,255,255,0.97); border: 1px solid #D8E0DD;
+    border-radius: 6px; box-shadow: 0 6px 18px rgba(25,45,38,0.16);
+    padding: 8px 9px; font-size: 10px; color: #26352F; z-index: 5;
+  }
+  .status-tooltip.on { opacity: 1; }
+  .status-tooltip .title { font-weight: 700; margin-bottom: 5px; color: #15221D; }
+  .status-tooltip .line { display: flex; justify-content: space-between; gap: 16px; margin: 2px 0; }
+  .status-tooltip .label { color: #52645D; }
+  .status-tooltip .value { font-weight: 700; color: #25342F; }
+  .status-tooltip .unidad-row { border-top: 1px solid #EAEFEC; margin-top: 4px; padding-top: 4px; }
 
   /* Fotos de activos (página 3) — Apo (edificio): grilla original, sin cambios. */
   .fotos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
@@ -2031,11 +2295,12 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           </div>
         </div>
         <div>
-          <div class="section-title">Status Actual Oficinas por Activo</div>
+          <!-- Cada chart-box trae su propio título completo ("Status Actual
+               Oficinas/Locales {edificio}", ver statusBox() en fillStructure)
+               replicando el layout de la foto de referencia del usuario —
+               sin encabezado de sección compartido. -->
           <div class="charts-grid-2" id="grid-status-oficinas"></div>
-
-          <div class="section-title">Status Actual Locales por Activo</div>
-          <div class="charts-grid-2" id="grid-status-locales"></div>
+          <div class="charts-grid-2" id="grid-status-locales" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
@@ -2237,6 +2502,7 @@ const KPI_META = __KPI_META_JSON__;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 function mesEspanol(p){ if(!p) return ""; const [y,m]=p.split("-"); return MESES[parseInt(m,10)-1]+" "+y; }
+function slug(s){ return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-"); }
 function fmtQ(p){
   if(!p) return "";
   const [y,m] = p.split("-");
@@ -2828,18 +3094,20 @@ function switchFund(f){
       donutPending("donut-gla"); // donut-ingresos lo llena render() con dato real si existe
       fillAspectosMes("txt-aspectos-mes");
 
-      const occBox = (nombre) => `
+      // El contenido real (forma del edificio por piso / treemap de locales)
+      // depende del período operacional (usadoOp), así que solo se deja acá
+      // el cascarón — se rellena en render(), ver renderStatusOficinas /
+      // renderStatusLocales más abajo.
+      const statusBox = (nombre, slot, titulo) => `
         <div class="chart-box">
-          <div class="chart-title">${nombre}</div>
-          <div class="occ-box">
-            <div class="occ-bar"><div class="occ-bar-fill" style="width:0%"></div></div>
-            <div class="occ-label placeholder">Ocupación: —</div>
-          </div>
+          <div class="chart-title">${titulo} ${nombre}</div>
+          <div class="status-viz placeholder" id="status-${slot}-${slug(nombre)}">Pendiente de datos</div>
+          <div class="occ-pill placeholder" id="status-${slot}-${slug(nombre)}-label">Ocupación: —</div>
         </div>`;
       document.getElementById("grid-status-oficinas").innerHTML =
-        p3.status_oficinas.map(([n]) => occBox(n)).join("");
+        p3.status_oficinas.map(([n]) => statusBox(n, "of", "Status Actual Oficinas")).join("");
       document.getElementById("grid-status-locales").innerHTML =
-        p3.status_locales.map(([n]) => occBox(n)).join("");
+        p3.status_locales.map(([n]) => statusBox(n, "loc", "Status Actual Locales")).join("");
 
       const [pAnt, pAct] = p3.vacancia_periodo;
       document.getElementById("vacancia-periodo-label").textContent = `(${pAnt} → ${pAct})`;
@@ -3742,6 +4010,280 @@ function render(){
     }
   }
 
+  // Página 3 Apo: donut de GLA m² por edificio — a diferencia del de
+  // ingresos, la superficie de un edificio no cambia mes a mes: F.gla_edificios
+  // es un único snapshot estático (ver _fetch_gla_apo en build_factsheet.py),
+  // no depende de usadoOp.
+  if (S.page3 && S.page3.edificios) {
+    const glaData = F.gla_edificios || {};
+    const edificiosConDato = S.page3.edificios.filter(n => glaData[n] != null);
+    if (edificiosConDato.length === S.page3.edificios.length) {
+      const total = edificiosConDato.reduce((s, n) => s + glaData[n], 0);
+      const donutData = edificiosConDato.map(n => [
+        n,
+        total ? Math.round(glaData[n] / total * 1000) / 10 : 0,
+        { value: glaData[n], unit: "m²" }
+      ]);
+      renderDonut("donut-gla", donutData, { tooltipTitle: "GLA" });
+    } else {
+      document.getElementById("donut-gla").innerHTML =
+        `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
+    }
+  }
+
+  // Tooltip compartido por renderStatusOficinas/renderStatusLocales — mismo
+  // patrón que renderDonut (positionTooltip/show/hide sobre un
+  // .status-tooltip creado dentro del contenedor .status-viz, que ya es
+  // position:relative).
+  const _statusTooltip = (el) => {
+    let tt = el.querySelector(".status-tooltip");
+    if (!tt) {
+      tt = document.createElement("div");
+      tt.className = "status-tooltip";
+      tt.setAttribute("aria-hidden", "true");
+      el.appendChild(tt);
+    }
+    const position = (event) => {
+      const r = el.getBoundingClientRect();
+      const left = Math.max(80, Math.min(el.clientWidth - 80, event.clientX - r.left));
+      const top = Math.max(60, event.clientY - r.top - 8);
+      tt.style.left = `${left}px`;
+      tt.style.top = `${top}px`;
+    };
+    const show = (html, event) => {
+      tt.innerHTML = html;
+      position(event);
+      tt.classList.add("on");
+      tt.setAttribute("aria-hidden", "false");
+    };
+    const hide = () => {
+      tt.classList.remove("on");
+      tt.setAttribute("aria-hidden", "true");
+    };
+    return { show, move: position, hide };
+  };
+  // raw_rent_roll_line.renta_uf ya es una TASA (UF/m²/mes), no un monto total
+  // (ver tools/db/ingest_rent_roll_validated.py::_monto_mensual_uf) — no
+  // hay que dividir por m² de nuevo.
+  const _ufM2Mes = (rentaUf) => (rentaUf || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const _fmtM2 = (m2) => m2.toLocaleString("es-CL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  // Página 3 Apo: "Status Actual Oficinas por Activo" — silueta del edificio
+  // FIJA (posición/ancho/alto de cada piso, calcada pixel a pixel de la foto
+  // de referencia del usuario, igual que APO_LOCALES_LAYOUT), color = %
+  // ocupado del piso ese período (usadoOp). Dato viene de F.status_oficinas
+  // (tools/db/rent_roll_stats.py::get_status_oficinas). Tooltip por piso:
+  // arrendatario(s), UF/m²/mes y m² de cada unidad del piso.
+  //
+  // Cada entrada es [x%, y%, w%, h%] dentro de un contenedor con el aspect
+  // ratio del edificio (medido en la foto), indexado por posición (piso más
+  // alto primero, igual que el orden de datos.pisos) — no por número de
+  // piso, porque las filas de la foto no traen esa etiqueta. Antes el ancho
+  // se calculaba en vivo como m2_piso/max(m2); ahora es fijo (decisión
+  // explícita del usuario 2026-07-30: la forma no cambia con el rent roll).
+  const APO_OFICINAS_LAYOUT = {
+    "Apoquindo 4501": {
+      // y/h uniformes (100/18 c/u) en vez de los y medidos pixel a pixel —
+      // esos traían un jitter de redondeo de ±1px entre filas (16 vs 17px)
+      // que se notaba como pisos de alto ligeramente distinto.
+      aspecto: [235, 303],
+      filas: [
+        [0.00, 0.00, 100.00, 5.56], [1.28, 5.56, 97.45, 5.56], [2.55, 11.11, 94.89, 5.56],
+        [3.83, 16.67, 92.34, 5.56], [5.53, 22.22, 88.94, 5.56], [6.81, 27.78, 86.38, 5.56],
+        [8.09, 33.33, 83.83, 5.56], [9.36, 38.89, 81.28, 5.56], [10.64, 44.44, 78.72, 5.56],
+        [11.91, 50.00, 76.17, 5.56], [13.19, 55.56, 73.62, 5.56], [14.47, 61.11, 71.06, 5.56],
+        [15.74, 66.67, 68.51, 5.56], [17.02, 72.22, 65.96, 5.56], [18.30, 77.78, 63.40, 5.56],
+        [19.57, 83.33, 60.85, 5.56], [20.85, 88.89, 58.30, 5.56], [22.13, 94.44, 55.74, 5.56],
+      ],
+    },
+    "Apoquindo 4700": {
+      // Ancho del contenedor = ancho real de la fila más ancha (planta baja,
+      // 246px) y todo desplazado +35px respecto a la medición original del
+      // usuario — esa fila partía en x=-35 (fuera del card a la izquierda);
+      // así queda centrada y sin desbordar. Alto uniforme (100/16) en vez
+      // del 19px/20px medido (la planta baja medía 1px más) — todos los
+      // pisos deben verse del mismo alto.
+      aspecto: [246, 298],
+      filas: [
+        [14.23, 0.00, 71.14, 6.25], [14.23, 6.25, 71.14, 6.25], [14.23, 12.50, 71.14, 6.25],
+        [14.23, 18.75, 71.14, 6.25], [14.23, 25.00, 71.14, 6.25], [14.23, 31.25, 71.14, 6.25],
+        [14.23, 37.50, 71.14, 6.25], [14.23, 43.75, 71.14, 6.25], [14.23, 50.00, 71.14, 6.25],
+        [14.23, 56.25, 71.14, 6.25], [14.23, 62.50, 71.14, 6.25], [14.23, 68.75, 71.14, 6.25],
+        [14.23, 75.00, 71.14, 6.25], [14.23, 81.25, 71.14, 6.25], [14.23, 87.50, 71.14, 6.25],
+        [0.00, 93.75, 100.00, 6.25],
+      ],
+    },
+  };
+  const renderStatusOficinas = (nombre, datos) => {
+    const el = document.getElementById(`status-of-${slug(nombre)}`);
+    const label = document.getElementById(`status-of-${slug(nombre)}-label`);
+    if (!el || !label) return;
+    const layout = APO_OFICINAS_LAYOUT[nombre];
+    if (!datos || !datos.pisos || !datos.pisos.length || !layout) {
+      el.className = "status-viz placeholder";
+      el.textContent = "Pendiente de datos";
+      label.className = "occ-pill placeholder";
+      label.textContent = "Ocupación: —";
+      return;
+    }
+    const [aw, ah] = layout.aspecto;
+    el.className = "status-viz";
+    el.innerHTML = `<div class="status-building" style="aspect-ratio:${aw}/${ah}">${datos.pisos.map((p, i) => {
+      const fila = layout.filas[i];
+      if (!fila) return "";
+      const [x, y, w, h] = fila;
+      return `<div class="status-floor" data-i="${i}" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%">` +
+        `<div class="status-floor-occ" style="width:${p.ocupado_pct}%"></div>` +
+        `<div class="status-floor-vac" style="width:${100 - p.ocupado_pct}%"></div></div>`;
+    }).join("")}</div>`;
+    label.className = "occ-pill";
+    label.textContent = `Ocupación: ${datos.ocupacion_pct.toLocaleString("es-CL", {minimumFractionDigits: 1, maximumFractionDigits: 1})}%`;
+
+    const tt = _statusTooltip(el);
+    // Varias unidades del mismo piso suelen estar a nombre del mismo
+    // arrendatario (ej. 4 oficinas contiguas arrendadas como una sola) — se
+    // agrupan por arrendatario sumando m² (y ponderando la tasa UF/m²/mes
+    // por m², ya que renta_uf es una tasa, no un monto) en vez de listar
+    // cada unidad por separado.
+    const agruparPorArrendatario = (unidades) => {
+      const grupos = new Map();
+      (unidades || []).forEach(u => {
+        const key = u.vacante ? "__vacante__" : u.arrendatario;
+        if (!grupos.has(key)) grupos.set(key, { vacante: u.vacante, arrendatario: u.arrendatario, m2: 0, montoUf: 0 });
+        const g = grupos.get(key);
+        g.m2 += u.m2;
+        g.montoUf += (u.renta_uf || 0) * u.m2;
+      });
+      return [...grupos.values()];
+    };
+    const unidadLine = (u) => `<div class="line unidad-row"><span class="label">${u.vacante ? "Vacante" : "Arrendatario"}</span>` +
+        `<span class="value">${u.vacante ? "" : u.arrendatario}</span></div>` +
+      (u.vacante ? "" :
+        `<div class="line"><span class="label">UF/m²/mes</span><span class="value">${_ufM2Mes(u.m2 ? u.montoUf / u.m2 : 0)}</span></div>`) +
+      `<div class="line"><span class="label">m²</span><span class="value">${_fmtM2(u.m2)}</span></div>`;
+    el.querySelectorAll(".status-floor").forEach(floorEl => {
+      const p = datos.pisos[Number(floorEl.dataset.i)];
+      const html = `<div class="title">Piso ${p.piso} — ${p.ocupado_pct}% ocupado</div>` +
+        `<div class="line"><span class="label">m² totales</span><span class="value">${_fmtM2(p.m2)}</span></div>` +
+        agruparPorArrendatario(p.unidades).map(unidadLine).join("");
+      floorEl.addEventListener("mouseenter", (e) => tt.show(html, e));
+      floorEl.addEventListener("mousemove", (e) => tt.move(e));
+      floorEl.addEventListener("mouseleave", tt.hide);
+    });
+  };
+  if (S.page3 && S.page3.status_oficinas) {
+    const porPeriodo = usadoOp ? (F.status_oficinas || {})[usadoOp] : null;
+    S.page3.status_oficinas.forEach(([nombre]) => renderStatusOficinas(nombre, porPeriodo ? porPeriodo[nombre] : null));
+  }
+
+  // Página 3 Apo: "Status Actual Locales por Activo" — layout FIJO por
+  // edificio (calcado a mano de la foto de referencia del usuario, ver
+  // APO_LOCALES_LAYOUT), no un treemap calculado: un squarify automático
+  // arma una agrupación matemáticamente válida pero no necesariamente igual
+  // a la de la foto (qué local queda pegado a cuál). Coordenadas en % fijas
+  // por unidad — si el rent roll agrega/quita un local en estos edificios,
+  // hay que actualizar este dict a mano (decisión explícita del usuario
+  // 2026-07-30: la forma/organización de los edificios no cambia).
+  const APO_LOCALES_LAYOUT = {
+    "Apoquindo 4501": {
+      "ex bodyline (4a,4b,4c,4d y 6)": [0, 0, 66.2, 54.4],
+      "2D": [66.2, 0, 33.8, 54.4],
+      "1E": [0, 54.4, 36.6, 27.0],
+      "5": [0, 81.4, 36.6, 18.6],
+      "1B": [36.6, 54.4, 34.7, 19.5],
+      "4E": [71.3, 54.4, 28.7, 19.5],
+      "2B (ex los castaños)": [36.6, 73.9, 19.4, 26.1],
+      "2C": [56.0, 73.9, 17.6, 26.1],
+      "1C": [73.6, 73.9, 13.4, 18.6],
+      "1A": [73.6, 92.5, 13.4, 7.5],
+      "1D": [87.0, 73.9, 13.0, 18.6],
+      "2A #2": [87.0, 92.5, 13.0, 7.5],
+    },
+    "Apoquindo 4700": {
+      "3": [0, 0, 100, 52.4],
+      "1 #2": [0, 52.4, 80.3, 47.6],
+      "2 #2": [80.3, 52.4, 19.7, 47.6],
+    },
+  };
+  const renderStatusLocales = (nombre, datos) => {
+    const el = document.getElementById(`status-loc-${slug(nombre)}`);
+    const label = document.getElementById(`status-loc-${slug(nombre)}-label`);
+    if (!el || !label) return;
+    const layout = APO_LOCALES_LAYOUT[nombre];
+    if (!datos || !datos.locales || !datos.locales.length || !layout) {
+      el.className = "status-viz placeholder";
+      el.textContent = "Pendiente de datos";
+      label.className = "occ-label placeholder";
+      label.textContent = "Ocupación: —";
+      return;
+    }
+    // Locales sin coordenada en el layout fijo (unidad nueva en el rent
+    // roll, no contemplada en la foto) se listan aparte en vez de perderse
+    // silenciosamente.
+    const conLayout = datos.locales.filter(l => layout[l.unidad]);
+    const sinLayout = datos.locales.filter(l => !layout[l.unidad]);
+    el.className = "status-viz";
+    el.innerHTML = `<div class="status-treemap">${conLayout.map((l, i) => {
+      const [x, y, w, h] = layout[l.unidad];
+      const cls = l.vacante ? "status-local-vac" : "status-local-occ";
+      return `<div class="status-local ${cls}" data-i="${i}" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%">` +
+        `<span class="status-local-label">${l.m2} m²</span></div>`;
+    }).join("")}</div>${sinLayout.length ? `<p class="small placeholder">Sin layout definido: ${sinLayout.map(l => l.unidad).join(", ")}</p>` : ""}`;
+    label.className = "occ-pill";
+    label.textContent = `Ocupación: ${datos.ocupacion_pct.toLocaleString("es-CL", {minimumFractionDigits: 1, maximumFractionDigits: 1})}%`;
+
+    // Si el texto no cabe en la celda (overflow real medido en el DOM, no un
+    // umbral estimado), se oculta en vez de cortarse — pedido explícito del
+    // usuario 2026-07-30.
+    el.querySelectorAll(".status-local-label").forEach(span => {
+      if (span.scrollWidth > span.clientWidth + 0.5 || span.scrollHeight > span.clientHeight + 0.5) {
+        span.style.display = "none";
+      }
+    });
+
+    const tt = _statusTooltip(el);
+    el.querySelectorAll(".status-local").forEach(localEl => {
+      const l = conLayout[Number(localEl.dataset.i)];
+      const html = `<div class="title">${l.vacante ? "Vacante" : "Ocupado"}</div>` +
+        (l.vacante ? "" :
+          `<div class="line"><span class="label">Arrendatario</span><span class="value">${l.arrendatario}</span></div>` +
+          `<div class="line"><span class="label">UF/m²/mes</span><span class="value">${_ufM2Mes(l.renta_uf)}</span></div>`) +
+        `<div class="line"><span class="label">m² totales</span><span class="value">${_fmtM2(l.m2)}</span></div>`;
+      localEl.addEventListener("mouseenter", (e) => tt.show(html, e));
+      localEl.addEventListener("mousemove", (e) => tt.move(e));
+      localEl.addEventListener("mouseleave", tt.hide);
+    });
+  };
+  if (S.page3 && S.page3.status_locales) {
+    const porPeriodo = usadoOp ? (F.status_locales || {})[usadoOp] : null;
+    S.page3.status_locales.forEach(([nombre]) => renderStatusLocales(nombre, porPeriodo ? porPeriodo[nombre] : null));
+  }
+
+  // Página 3 PT (tenant): donuts de ingresos UF/mes y GLA m² por
+  // arrendatario, con dato real del período operacional exacto (usadoOp), si
+  // no placeholder. Top-N + "Otros" ya viene resuelto desde Python (ver
+  // tools/db/rent_roll_stats.py::_top_n_arrendatario) — acá solo se arma el
+  // donut respetando el orden (mayor a menor) que trae el dict.
+  const donutArrendatario = (containerId, porPeriodo, tooltipTitle) => {
+    const data = usadoOp ? (porPeriodo || {})[usadoOp] : null;
+    if (data && Object.keys(data).length) {
+      const total = Object.values(data).reduce((s, v) => s + v, 0);
+      const donutData = Object.entries(data).map(([n, v]) => [
+        n,
+        total ? Math.round(v / total * 1000) / 10 : 0,
+        { value: v, unit: tooltipTitle.unit },
+      ]);
+      renderDonut(containerId, donutData, { tooltipTitle: `${tooltipTitle.label} ${mesEspanol(usadoOp)}` });
+    } else {
+      document.getElementById(containerId).innerHTML =
+        `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
+    }
+  };
+  if (S.page3 && S.page3.donut_arrendatario) {
+    donutArrendatario("donut-ingresos-t", F.ingresos_arrendatario, { label: "Ingresos", unit: "UF" });
+    donutArrendatario("donut-gla-t", F.gla_arrendatario, { label: "GLA", unit: "m²" });
+  }
+
   // Página 3 Apo: tabla de vacancia por edificio (Locales/Oficinas/Edificio) —
   // depende del período operacional (usadoOp). F.vacancia_apo viene de
   // tools/db/rent_roll_stats.py::get_vacancia_edificios vía
@@ -4023,18 +4565,138 @@ function render(){
         }).join("");
     }
 
-    // Plano de planta: solo si el fondo lo define (hoy PT — Plano Local 100).
-    // Sin gráfico real disponible aún: se muestra un placeholder por piso.
+    // Plano de planta (PT, hoy Plano Local 100): SVG con viewBox = las
+    // coordenadas originales del plano (ver FONDOS_CFG["PT"]["page4"]
+    // ["plano"]) — la imagen se estira a llenar ese viewBox con <image> y
+    // cada local es un <rect>/<polygon> con esas mismas coordenadas, sin
+    // reescalar a mano (si el archivo de imagen cambia de resolución pero
+    // mantiene la misma composición, sigue calzando). Color/tooltip
+    // dependen del rent roll del período usadoOp; la silueta no.
     const hasPlano = !!S.page4.plano;
     document.getElementById("page4-plano").classList.toggle("hidden", !hasPlano);
     if (hasPlano) {
-      document.getElementById("plano-titulo").textContent = S.page4.plano.titulo;
-      document.getElementById("grid-plano").innerHTML =
-        S.page4.plano.pisos.map(piso => `
-          <div class="chart-box">
-            <div class="chart-title">${piso}</div>
-            <div class="chart-placeholder" style="height:160px">Plano pendiente</div>
-          </div>`).join("");
+      const plano = S.page4.plano;
+      document.getElementById("plano-titulo").textContent = plano.titulo;
+      const datosPeriodo = usadoOp ? (F.plano_locales || {})[usadoOp] : null;
+      const shapeSvg = (loc, i, cls) => {
+        if (loc.poligono) {
+          const pts = loc.poligono.map(([px, py]) => `${px},${py}`).join(" ");
+          return `<polygon class="plano-shape ${cls}" data-i="${i}" points="${pts}"></polygon>`;
+        }
+        return `<rect class="plano-shape ${cls}" data-i="${i}" x="${loc.x}" y="${loc.y}" width="${loc.w}" height="${loc.h}"></rect>`;
+      };
+      const planoBbox = (loc) => {
+        if (loc.poligono) {
+          const xs = loc.poligono.map(p => p[0]), ys = loc.poligono.map(p => p[1]);
+          const x = Math.min(...xs), y = Math.min(...ys);
+          return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+        }
+        return { x: loc.x, y: loc.y, w: loc.w, h: loc.h };
+      };
+      // Nombre/arrendatario/m² dentro de cada local — horizontal si entra;
+      // si no, rotado 90° (igual que "100-2 DISPONIBLE" en el plano
+      // original) para locales angostos (Relevé, Jiu Jitsu, Crossfit); si
+      // ni así entra, se omite (el tooltip sigue disponible al pasar el
+      // cursor).
+      // Parte una línea larga (típicamente el arrendatario) en 2 si no
+      // entra en maxChars, cortando en el espacio más cercano al medio —
+      // sin esto, un nombre largo ("Santiago Businnes Center SpA") hacía
+      // fallar el fit completo y se perdían arrendatario+m² igual en
+      // locales grandes como 100-1/100-2.
+      const wrapToWidth = (text, maxChars) => {
+        if (text.length <= maxChars) return [text];
+        const mid = Math.floor(text.length / 2);
+        let idx = text.lastIndexOf(" ", mid);
+        if (idx <= 0) idx = text.indexOf(" ", mid);
+        if (idx <= 0) return [text];
+        return [text.slice(0, idx), text.slice(idx + 1)];
+      };
+      const planoLabelSvg = (loc, d, vbH) => {
+        const bbox = planoBbox(loc);
+        // El centro del bounding box puede caer fuera del relleno en formas
+        // cóncavas (ej. el retranqueo/L de 100-1 y el chevron de 100-2) —
+        // loc.label_at fija un punto garantizado dentro del polígono, y
+        // loc.label_box el espacio real disponible ahí (el bbox completo del
+        // polígono puede ser mucho más grande que el hueco angosto real
+        // donde va a caer el texto) — el resto usa el bbox tal cual.
+        const [cx, cy] = loc.label_at || [bbox.x + bbox.w / 2, bbox.y + bbox.h / 2];
+        const [availW, availH] = loc.label_box || [bbox.w, bbox.h];
+        const fs = vbH * 0.019;
+        // El nombre del local es siempre su código de unidad (100-9, no
+        // "Smartfit") — el arrendatario real va en la línea de abajo y
+        // puede cambiar; el código no.
+        const nombre = loc.unidad;
+        const sub = !d ? [] : d.vacante ? ["Vacante"] : [d.arrendatario, `${_fmtM2(d.m2)} m²`];
+        const full = [nombre, ...sub];
+        const charW = fs * 0.56, lineH = fs * 1.25;
+        const wrapAll = (lines, maxChars) => lines.flatMap(l => wrapToWidth(String(l), maxChars));
+        const fitsH = (lines) => {
+          const maxChars = Math.max(4, Math.floor((availW - fs) / charW));
+          const wrapped = wrapAll(lines, maxChars);
+          return availH > lineH * wrapped.length + fs * 0.6 ? wrapped : null;
+        };
+        const fitsV = (lines) => {
+          const maxChars = Math.max(4, Math.floor((availH - fs) / charW));
+          const wrapped = wrapAll(lines, maxChars);
+          return availW > lineH * wrapped.length + fs * 0.6 ? wrapped : null;
+        };
+        let mode = null, lines = null;
+        // loc.orientation fuerza horizontal/vertical (salta la detección
+        // automática) para formas donde el auto-fit elige mal.
+        if (loc.orientation === "v") {
+          if ((lines = fitsV(full))) { mode = "v"; }
+          else if ((lines = fitsV([nombre]))) { mode = "v"; }
+          else { mode = "v"; lines = [nombre]; }
+        } else if (loc.orientation === "h") {
+          if ((lines = fitsH(full))) { mode = "h"; }
+          else if ((lines = fitsH([nombre]))) { mode = "h"; }
+          else { mode = "h"; lines = [nombre]; }
+        } else if ((lines = fitsH(full))) { mode = "h"; }
+        else if ((lines = fitsH([nombre]))) { mode = "h"; }
+        else if ((lines = fitsV(full))) { mode = "v"; }
+        else if ((lines = fitsV([nombre]))) { mode = "v"; }
+        else return "";
+        const startY = cy - (lines.length - 1) * lineH / 2;
+        const tspans = lines.map((l, li) =>
+          `<tspan x="${cx}" y="${startY + li * lineH}" class="${li === 0 ? "nombre" : "sub"}">${l}</tspan>`
+        ).join("");
+        const rotate = mode === "v" ? ` transform="rotate(-90 ${cx} ${cy})"` : "";
+        return `<text class="plano-label" font-size="${fs}"${rotate}>${tspans}</text>`;
+      };
+      document.getElementById("grid-plano").innerHTML = plano.pisos.map(piso => `
+        <div class="chart-box">
+          <div class="chart-title">${piso.nombre}</div>
+          <div class="plano-piso" id="plano-${slug(piso.nombre)}">
+            <svg viewBox="0 0 ${piso.viewbox_w} ${piso.viewbox_h}" preserveAspectRatio="xMidYMid meet">
+              <image href="${piso.imagen}" x="0" y="0" width="${piso.viewbox_w}" height="${piso.viewbox_h}" preserveAspectRatio="none"></image>
+              ${piso.locales.map((loc, i) => {
+                const d = datosPeriodo ? datosPeriodo[loc.unidad] : null;
+                const cls = !d ? "" : d.vacante ? "plano-local-vac" : "plano-local-occ";
+                return shapeSvg(loc, i, cls) + planoLabelSvg(loc, d, piso.viewbox_h);
+              }).join("")}
+            </svg>
+          </div>
+        </div>`).join("");
+
+      plano.pisos.forEach(piso => {
+        const el = document.getElementById(`plano-${slug(piso.nombre)}`);
+        if (!el) return;
+        const tt = _statusTooltip(el);
+        el.querySelectorAll(".plano-shape").forEach(shapeEl => {
+          const loc = piso.locales[Number(shapeEl.dataset.i)];
+          const d = datosPeriodo ? datosPeriodo[loc.unidad] : null;
+          const html = !d
+            ? `<div class="title">${loc.unidad}</div><div class="line"><span class="label">Sin dato</span></div>`
+            : `<div class="title">${d.vacante ? "Vacante" : "Ocupado"}</div>` +
+              (d.vacante ? "" :
+                `<div class="line"><span class="label">Arrendatario</span><span class="value">${d.arrendatario}</span></div>` +
+                `<div class="line"><span class="label">UF/m²/mes</span><span class="value">${_ufM2Mes(d.renta_uf)}</span></div>`) +
+              `<div class="line"><span class="label">m² totales</span><span class="value">${_fmtM2(d.m2)}</span></div>`;
+          shapeEl.addEventListener("mouseenter", (e) => tt.show(html, e));
+          shapeEl.addEventListener("mousemove", (e) => tt.move(e));
+          shapeEl.addEventListener("mouseleave", tt.hide);
+        });
+      });
     }
   }
 }
