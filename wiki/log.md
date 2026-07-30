@@ -1,3 +1,10 @@
+## [2026-07-30] doc | Vacancia Curicó — ponderación 80% (participación del fondo en el activo)
+
+El fondo es dueño del 80% de Mall Curicó. Para reportar m² absolutos
+(vacante/total) se multiplica por 0,8; el % de vacancia no cambia (se
+pondera parejo). Vacante ponderado 2.414,30 m² / total ponderado
+8.649,18 m². Detalle en [[activos/mall-curico]].
+
 ## [2026-07-30] doc | Vacancia Viña/Curicó — corrección: cuenta TODO (incluye módulos/parking)
 
 Usuario había corregido a "solo locales, excluye módulos/parking" y luego se

@@ -51,8 +51,12 @@ Fuente: `raw_rent_roll_line`, `activo_key='Mall Curicó'`. Misma regla que
 [[activos/vina-centro]] (confirmada 2026-07-30): se cuentan **todas** las
 unidades vacantes, incluidos módulos, tanto en numerador como denominador.
 
-Periodo 2026-05: vacante = 3.017,87 m² (27 unidades) / total 10.811,47 m² =
-**27,91%**.
+**Ponderación 80%**: el fondo es dueño del 80% del activo Curicó, así que
+para reportar m² absolutos (no el %) se multiplica por 0,8. El % de
+vacancia no cambia (se pondera parejo numerador y denominador).
+
+Periodo 2026-05: vacante = 3.017,87 m² (27 unidades, ponderado: 2.414,30 m²)
+/ total 10.811,47 m² (ponderado: 8.649,18 m²) = **27,91%** en ambos casos.
 
 ## Vínculos
 
