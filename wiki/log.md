@@ -1,3 +1,32 @@
+## [2026-07-30] fix | ingest_er_pt.py — filtro de vigencia bloqueaba meses nuevos anteriores a RULES_EFFECTIVE_PERIOD
+
+Al ingestar la corrección de `RAW/NOI PT.xlsx` (2026-06) aparecieron dos bugs:
+
+1. **Fechas fantasma**: la fila de fechas del archivo tiene fórmula arrastrada
+   hasta 2057-01, sin datos reales más allá de 2026-06. Como las cuentas fijas
+   (`PT_CONTRIB`/`PT_SEG`/`PT_GC_VAC`) se calculan sin chequear si hay datos
+   reales en esa columna, el ingest iba a insertar 30 años de costos fijos
+   ficticios. Fix: `parse_planilla` ahora acota `period_by_col` a las columnas
+   con al menos un valor fuente real (`max_data_col`).
+2. **Filtro de vigencia con constante fija**: `_has_active_history` comparaba
+   contra `RULES_EFFECTIVE_PERIOD` ("2026-07", fecha fija desde que se escribió
+   el script en julio) en vez de contra lo realmente cargado. La DB llegó a
+   mayo 2026 antes de esta corrección, así que junio (dato real nuevo) caía en
+   el hueco entre "último cargado" y la constante fija, y se descartaba.
+   Fix: nueva `_max_historic_period(conn)` calcula el máximo período < vigencia
+   ya cargado; el filtro ahora acepta líneas si `periodo >= RULES_EFFECTIVE_PERIOD
+   OR periodo > max_historic` — protege la historia congelada pre-vigencia pero
+   permite llenar huecos de meses nuevos que aún no se habían cargado.
+
+Regla de negocio confirmada por el usuario: las cuentas fijas de PT (Contrib,
+Seguros, GC Vacancia Boulevard, Admin 0,2%) **siempre priman sobre el monto
+que traiga la planilla fuente**, desde 2026-07 en adelante — no cambiar sin
+confirmación nueva.
+
+Pendiente: **Margen Energía** de PT (Torre A y Boulevard, filas idx 9/26) sigue
+sin automatizar — el usuario mencionó que junio queda pendiente de ingresar
+manualmente cuando esté disponible.
+
 ## [2026-07-27] ingesta | INMOSA agregado al menú de ingesta Ingresos/NOI Activos
 
 Tercer activo del tab "Ingresos/NOI Activos" (después de Viña Centro y Mall

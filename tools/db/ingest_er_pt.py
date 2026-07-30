@@ -148,14 +148,15 @@ def _derived_monto(
     return None
 
 
-def _has_active_history(conn) -> bool:
+def _max_historic_period(conn) -> str | None:
+    """Último período ya cargado antes de RULES_EFFECTIVE_PERIOD (historia congelada, o None)."""
     cur = conn.execute(
-        "SELECT COUNT(*) FROM raw_er_activo_line "
-        "WHERE activo_key IN ('Torre A','Boulevard') "
-        "  AND periodo < ? AND superseded_at IS NULL",
+        "SELECT MAX(periodo) FROM raw_er_activo_line "
+        "WHERE activo_key IN ('Torre A','Boulevard') AND superseded_at IS NULL "
+        "  AND periodo < ?",
         (RULES_EFFECTIVE_PERIOD,),
     )
-    return cur.fetchone()[0] > 0
+    return cur.fetchone()[0]
 
 
 def _supersede_overlapping_periods(conn, file_hash: str, periodos: list[str]) -> int:
@@ -215,6 +216,10 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
                 key = (activo_key, periodo)
                 ingresos_por_activo_periodo[key] = ingresos_por_activo_periodo.get(key, 0.0) + monto
 
+    if source_montos:
+        max_data_col = max(col_idx for _, col_idx in source_montos)
+        period_by_col = {c: p for c, p in period_by_col.items() if c <= max_data_col}
+
     for row_idx, activo_key, cuenta_codigo, seccion in _ROW_MAP:
         if row_idx >= len(rows):
             continue
@@ -257,8 +262,12 @@ def ingest(
     fhash = _versioned_file_hash(xlsx_path)
 
     lines = parse_planilla(xlsx_path)
-    if _has_active_history(conn):
-        lines = [line for line in lines if line["periodo"] >= RULES_EFFECTIVE_PERIOD]
+    max_historic = _max_historic_period(conn)
+    if max_historic is not None:
+        lines = [
+            line for line in lines
+            if line["periodo"] >= RULES_EFFECTIVE_PERIOD or line["periodo"] > max_historic
+        ]
     if not lines:
         return {
             "status": "no_data",
