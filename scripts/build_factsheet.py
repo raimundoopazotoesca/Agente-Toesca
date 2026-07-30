@@ -279,7 +279,6 @@ FONDOS_CFG = {
             "aspectos_mes": [
                 ("Vacancia del Fondo", None),
                 ("Parking", None),
-                ("Desempeño del Pádel", None),
                 ("Resultados", None),
                 ("Otros Locales", None),
             ],
