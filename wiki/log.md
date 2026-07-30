@@ -1,3 +1,10 @@
+## [2026-07-30] doc | Vacancia Viña Centro — regla de cálculo (solo locales, excluye módulos/parking)
+
+Cálculo inicial (todas las unidades vacantes / GLA total) daba 0,51%. Usuario
+corrigió: vacancia se calcula solo sobre unidades tipo Locales, excluyendo
+Módulos y Parking tanto del numerador como denominador. Validado periodo
+2026-05: 123 m² / 25.227,7 m² = 0,49%. Detalle en [[activos/vina-centro]].
+
 ## [2026-07-30] fix | ingest_er_pt.py — filtro de vigencia bloqueaba meses nuevos anteriores a RULES_EFFECTIVE_PERIOD
 
 Al ingestar la corrección de `RAW/NOI PT.xlsx` (2026-06) aparecieron dos bugs:

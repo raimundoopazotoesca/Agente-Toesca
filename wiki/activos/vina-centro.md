@@ -47,6 +47,22 @@ decidir si ese flujo se desactiva para que no vuelva a pisar la data.
 
 Section 2 no tiene fórmulas (a diferencia de Curicó): debe actualizarse manualmente o via `actualizar_er_vina`. Estado: _(pendiente)_.
 
+## Vacancia (rent roll)
+
+Fuente: `raw_rent_roll_line`, `activo_key='Viña Centro'`. Vacancia por `extra_json.tipo_arrendatario='Vacante'`.
+
+**Regla de cálculo**: solo se considera vacancia en unidades de tipo **Locales**
+(`tipo_activo_1` = Locales Comerciales/Food Court/Comercial/Walmart/Tienda
+Ancla), **excluyendo Módulos y Parking** tanto del numerador como del
+denominador. Ojo: filas vacantes tienen `tipo_activo_1='Vacante'` (se pierde
+la categoría original) — para saber si una unidad vacante es módulo hay que
+mirar el `unidad`/contexto, no confiar en `tipo_activo_1`.
+
+Ejemplo validado periodo 2026-05: vacantes = unidad 2096 (42 m²) + unidad
+3004 (81 m²) = **123 m²**; unidad M1 (7.5 m²) es un módulo → se excluye.
+Denominador (locales, sin módulos/parking) = **25.227,7 m²**. Vacancia =
+**0,49%**.
+
 ## Vínculos
 
 - [[fondos/ar-rentas]]
