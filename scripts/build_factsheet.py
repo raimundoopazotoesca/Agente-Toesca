@@ -882,7 +882,63 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "plano_locales": _fetch_plano_pt(fondo_key),
         "ltv_fondo": _fetch_ltv_fondo(fondo_key),
         "vacancia_pt_tipo": _fetch_vacancia_pt_tipo(fondo_key),
+        "parking_desempeno": _fetch_parking_desempeno(fondo_key),
     }
+
+
+def _fetch_parking_desempeno(fondo_key: str) -> dict:
+    """{periodo: {"resultado_pct": float|None, "tickets_pct": float|None}} —
+    variación acumulada (enero -> periodo) del resultado neto del parking (UF)
+    y del total de tickets, vs. el mismo rango acumulado de 2024 (año base
+    fijo, igual que la narrativa de referencia del usuario). None si el año
+    del período es 2024 o anterior (no hay base de comparación previa) o si
+    falta data en alguno de los dos rangos. Fuente para
+    FONDOS_CFG["PT"]["page3"]["aspectos_mes"] fila "Parking" — ver render()
+    -> txt-aspectos-mes-t-parking."""
+    if fondo_key != "PT":
+        return {}
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    resultado_rows = conn.execute(
+        "SELECT periodo, resultado_neto_uf FROM v_parking_resultado_uf"
+    ).fetchall()
+    resultado_por_periodo = {r["periodo"]: r["resultado_neto_uf"] for r in resultado_rows}
+
+    ticket_rows = conn.execute(
+        "SELECT substr(fecha,1,7) AS periodo, SUM(tickets) AS tickets "
+        "FROM raw_parking_ticket_line WHERE superseded_at IS NULL GROUP BY periodo"
+    ).fetchall()
+    tickets_por_periodo = {r["periodo"]: r["tickets"] for r in ticket_rows}
+
+    def _acumulado(data: dict, anio: int, hasta_mes: int) -> float | None:
+        meses = [f"{anio}-{m:02d}" for m in range(1, hasta_mes + 1)]
+        valores = [data[m] for m in meses if m in data]
+        if len(valores) != len(meses):
+            return None
+        return sum(valores)
+
+    out = {}
+    for periodo in sorted(set(resultado_por_periodo) | set(tickets_por_periodo)):
+        anio, mes = (int(x) for x in periodo.split("-"))
+        if anio <= 2024:
+            continue
+        res_actual = _acumulado(resultado_por_periodo, anio, mes)
+        res_base = _acumulado(resultado_por_periodo, 2024, mes)
+        tix_actual = _acumulado(tickets_por_periodo, anio, mes)
+        tix_base = _acumulado(tickets_por_periodo, 2024, mes)
+        resultado_pct = (
+            round((res_actual / res_base - 1) * 100, 1)
+            if res_actual is not None and res_base else None
+        )
+        tickets_pct = (
+            round((tix_actual / tix_base - 1) * 100, 1)
+            if tix_actual is not None and tix_base else None
+        )
+        if resultado_pct is None and tickets_pct is None:
+            continue
+        out[periodo] = {"resultado_pct": resultado_pct, "tickets_pct": tickets_pct}
+    return out
 
 
 def _fetch_vacancia_pt_tipo(fondo_key: str) -> dict:
@@ -4380,6 +4436,25 @@ function render(){
       } else {
         elVacFondoTxt.textContent = "Pendiente.";
         elVacFondoTxt.classList.add("placeholder");
+      }
+    }
+
+    // "Aspectos del mes" -> "Parking": variación acumulada (ene->mes actual)
+    // del resultado neto UF y del total de tickets vs. mismo rango 2024. Ver
+    // F.parking_desempeno / _fetch_parking_desempeno en build_factsheet.py.
+    const elParkingTxt = document.getElementById("txt-aspectos-mes-t-parking");
+    if (elParkingTxt) {
+      const pd = usadoOp && F.parking_desempeno ? F.parking_desempeno[usadoOp] : null;
+      if (pd && pd.resultado_pct != null && pd.tickets_pct != null) {
+        const fmtSigned = (v) => (v > 0 ? "+" : "") + v.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+        const tono = (pd.resultado_pct >= 0 && pd.tickets_pct >= 0) ? "muy positivo"
+          : (pd.resultado_pct < 0 && pd.tickets_pct < 0) ? "negativo" : "mixto";
+        elParkingTxt.textContent = `El desempeño de los estacionamientos ha sido ${tono}: variación acumulada vs 2024 ` +
+          `${fmtSigned(pd.resultado_pct)} en resultados y ${fmtSigned(pd.tickets_pct)} en tickets.`;
+        elParkingTxt.classList.remove("placeholder");
+      } else {
+        elParkingTxt.textContent = "Pendiente.";
+        elParkingTxt.classList.add("placeholder");
       }
     }
   }

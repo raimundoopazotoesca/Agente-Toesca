@@ -1,3 +1,12 @@
+## [2026-07-30] feat | Narrativa "Parking" autogenerada en Aspectos del mes (PT)
+
+Fila "Parking" de `aspectos_mes` (página 3 PT): antes placeholder fijo. Ahora genera
+"El desempeño de los estacionamientos ha sido {muy positivo/negativo/mixto}: variación acumulada vs 2024 {±X}% en resultados y {±Y}% en tickets."
+
+- `scripts/build_factsheet.py::_fetch_parking_desempeno` — variación acumulada (enero → mes seleccionado) del resultado neto UF (`v_parking_resultado_uf`) y del total de tickets (`raw_parking_ticket_line`, agregado mensual) vs. el mismo rango acumulado de **2024 fijo** (año base, igual criterio que el ejemplo de referencia del usuario — no "año anterior" rolling). None si el período es 2024 o anterior, o si falta algún mes en el rango acumulado (evita comparar acumulados parciales).
+- JS en `render()`: llena `txt-aspectos-mes-t-parking`; tono ("muy positivo"/"negativo"/"mixto") según signo de ambas variaciones.
+- Verificado con datos reales: jun-2026 → +79.9% resultados, +38.1% tickets vs acum. 2024. `python scripts/build_factsheet.py` build OK.
+
 ## [2026-07-30] feat | Narrativa "Vacancia del Fondo" autogenerada en Aspectos del mes (PT)
 
 Fact sheet PT, página 3 ("Aspectos del mes"), fila "Vacancia del Fondo": antes placeholder fijo "Pendiente." para todas las filas de `aspectos_mes`. Se agregó generación automática del texto cuantitativo (% fondo, desglose oficinas/locales comerciales, variación vs mes anterior), estilo:
