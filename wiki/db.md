@@ -378,6 +378,10 @@ el archivo manual solo cubre los períodos sin rent roll ingestado. Vistas:
   Boulevard) por tipo_unidad; para períodos sin rent roll usa directo el
   pseudo-activo `PT_consolidado` (el archivo fuente no desglosa PT por
   edificio en el histórico, solo por tipo a nivel de todo el complejo)
+- `v_vacancia_apoquindo_consolidado_tipo` — Fondo Apoquindo (Apo4501 +
+  Apo4700) por tipo_unidad; con rent roll suma ambos activos desglosados
+  (Oficinas/Locales/Bodegas/Estacionamiento), sin rent roll usa el desglose
+  manual "Fondo Apoquindo Oficinas/Locales" (solo vacancia, sin GLA por tipo)
 
 **tipo_activo_2 vs tipo_activo_1**: en `raw_rent_roll_line.extra_json`,
 `tipo_activo_1` queda como literal `"Vacante"` en las unidades vacantes (no
@@ -409,3 +413,12 @@ con explicación del usuario**:
   ~2.5% del manual (tolerable, no exacto). La GLA NO se pondera (el archivo
   manual reporta la GLA física completa).
 - Torre A/Boulevard: calzan casi exacto sin ajustes (<1% diff).
+
+**Desglose por tipo para Fondo Apoquindo (2026-08-03)**: el usuario agregó a la
+misma planilla 2 filas nuevas ("Fondo Apoquindo Oficinas"/"Locales", filas
+33-34, solo vacancia, 2019-10 a 2026-06) que reemplazan al total agregado
+(fila 26) como fuente vigente desde 2026-06 en adelante — el total agregado no
+sigue actualizándose. `v_vacancia_activo` maneja esto con `COALESCE` por
+columna (prioriza el total si tiene valor ese periodo, si no suma el
+desglose), así que sigue funcionando sin duplicar ni perder datos aunque la
+fuente cambie de "total único" a "desglosado" a mitad de historia.

@@ -1,3 +1,15 @@
+## [2026-08-03] feat | Vacancia por tipo (Oficinas/Locales) para Fondo Apoquindo
+
+El usuario agregó 2 filas nuevas a la planilla "Vacancia histórica DB.xlsx" (Fondo
+Apoquindo Oficinas/Locales, filas 33-34, vigentes desde 2026-06) que reemplazan al
+total agregado (fila 26) como fuente de vacancia — sin desglose de GLA por tipo.
+Nueva vista `v_vacancia_apoquindo_consolidado_tipo` (análoga a la de PT: suma
+Apo4501+Apo4700 desglosados vía rent roll cuando existe, si no usa el desglose
+manual). `v_vacancia_activo` se reescribió con COALESCE por columna (GLA/vacantes
+independiente) para seguir dando el total correcto aunque la fuente cambie de
+"fila total única" a "desglosada por tipo" a mitad de la serie histórica —
+antes tomaba todo-o-nada por fila y perdía la vacancia de los meses recientes.
+
 ## [2026-08-03] fix | Vacancia: excluir estacionamientos + ponderar Curicó por participación
 
 Las 2 discrepancias de la migración 074 se resolvieron con explicación del usuario:

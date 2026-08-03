@@ -43,10 +43,12 @@ VACANCIA_ROW_MAP = {
     "Fondo Apoquindo": ("Fondo Apoquindo", None),
     "Curicó": ("Mall Curicó", None),
     "Apoquindo 3001": ("Apo3001", None),
+    "Fondo Apoquindo Oficinas": ("Fondo Apoquindo", "Oficinas"),
+    "Fondo Apoquindo Locales": ("Fondo Apoquindo", "Locales Comerciales"),
 }
 
 GLA_ROWS = range(3, 13)      # filas 3..12 (13 es el total, se ignora)
-VACANCIA_ROWS = range(17, 29)  # filas 17..28 (29 es el total, se ignora)
+VACANCIA_ROWS = list(range(17, 29)) + [33, 34]  # 17..28 (29=total, ignora) + desglose Fondo Apoquindo por tipo
 
 
 def _file_hash(path: Path) -> str:
@@ -98,17 +100,21 @@ def _read_sheet(path: Path):
     return gla, vac
 
 
-def ingest(path: Path, dry_run: bool = False) -> int:
+def ingest(path: Path, dry_run: bool = False, record_path: Path | None = None) -> int:
+    """record_path: ruta a registrar como source_file (para supersede/trazabilidad)
+    cuando difiere de `path` (ej. se leyó una copia local porque el original
+    en OneDrive estaba bloqueado por Excel)."""
+    record_path = record_path or path
     file_hash = _file_hash(path)
     gla, vac = _read_sheet(path)
 
-    keys = sorted(set(gla) | set(vac))
+    keys = sorted(set(gla) | set(vac), key=lambda k: (k[0], k[1] or "", k[2]))
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute(
         "INSERT INTO ingest_run (tool, source_file, file_hash) VALUES (?, ?, ?)",
-        ("ingest_vacancia_manual", str(path), file_hash),
+        ("ingest_vacancia_manual", str(record_path), file_hash),
     )
     ingest_run_id = cur.lastrowid
 
@@ -118,7 +124,7 @@ def ingest(path: Path, dry_run: bool = False) -> int:
            SET superseded_at = datetime('now')
          WHERE source_file = ? AND superseded_at IS NULL
         """,
-        (str(path),),
+        (str(record_path),),
     )
 
     n = 0
@@ -140,7 +146,7 @@ def ingest(path: Path, dry_run: bool = False) -> int:
                 periodo,
                 m2_gla,
                 m2_vacantes,
-                str(path),
+                str(record_path),
                 "Hoja1",
                 file_hash,
                 ingest_run_id,
@@ -163,5 +169,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("path", type=Path)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--record-path", type=Path, default=None)
     args = parser.parse_args()
-    ingest(args.path, dry_run=args.dry_run)
+    ingest(args.path, dry_run=args.dry_run, record_path=args.record_path)

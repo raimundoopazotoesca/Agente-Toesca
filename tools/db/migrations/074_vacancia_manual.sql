@@ -74,15 +74,48 @@ WHERE m.superseded_at IS NULL
 -- 2026-06 GLA rent roll 4589.55 incluye 80 m2 de estacionamientos; excluyéndolos
 -- da 4509.55, que calza con el archivo manual ~4509 y con la vacancia exacta
 -- 1632.6 == manual). El parking no es parte del universo de vacancia comercial.
+--
+-- Algunos activos manuales traen tanto un total ya consolidado (tipo_unidad
+-- NULL, ej. INMOSA, Fondo Apoquindo hasta 2026-07) como un desglose por tipo
+-- (ej. Fondo Apoquindo Oficinas/Locales, que reemplaza al total como fuente
+-- vigente desde 2026-08 — el total NULL queda sin valor de vacancia en los
+-- periodos nuevos). Otros (PT_consolidado) solo traen el desglose, nunca un
+-- total. Regla por columna: usar el total NULL si tiene valor; si no, sumar
+-- el desglose (COALESCE independiente para GLA y vacantes, porque pueden
+-- venir de filas distintas del archivo fuente en periodos distintos).
 CREATE VIEW v_vacancia_activo AS
-SELECT activo_key, periodo,
-       SUM(m2_gla)      AS m2_gla,
-       SUM(m2_vacantes) AS m2_vacantes,
-       CAST(SUM(m2_vacantes) AS REAL) / NULLIF(SUM(m2_gla), 0) AS vacancia_pct,
-       fuente
-FROM v_vacancia_activo_tipo
-WHERE tipo_unidad IS NULL OR tipo_unidad != 'Estacionamiento'
-GROUP BY activo_key, periodo, fuente;
+WITH total_row AS (
+    SELECT activo_key, periodo, fuente, m2_gla AS t_gla, m2_vacantes AS t_vac
+    FROM v_vacancia_activo_tipo
+    WHERE tipo_unidad IS NULL
+),
+tipo_sum AS (
+    SELECT activo_key, periodo, fuente,
+           SUM(m2_gla) AS s_gla, SUM(m2_vacantes) AS s_vac
+    FROM v_vacancia_activo_tipo
+    WHERE tipo_unidad IS NOT NULL AND tipo_unidad != 'Estacionamiento'
+    GROUP BY activo_key, periodo, fuente
+),
+combinado AS (
+    SELECT COALESCE(tr.activo_key, ts.activo_key) AS activo_key,
+           COALESCE(tr.periodo, ts.periodo) AS periodo,
+           COALESCE(tr.fuente, ts.fuente) AS fuente,
+           tr.t_gla, tr.t_vac, ts.s_gla, ts.s_vac
+    FROM total_row tr
+    LEFT JOIN tipo_sum ts
+      ON ts.activo_key = tr.activo_key AND ts.periodo = tr.periodo AND ts.fuente = tr.fuente
+    UNION
+    SELECT COALESCE(tr.activo_key, ts.activo_key), COALESCE(tr.periodo, ts.periodo),
+           COALESCE(tr.fuente, ts.fuente), tr.t_gla, tr.t_vac, ts.s_gla, ts.s_vac
+    FROM tipo_sum ts
+    LEFT JOIN total_row tr
+      ON tr.activo_key = ts.activo_key AND tr.periodo = ts.periodo AND tr.fuente = ts.fuente
+)
+SELECT activo_key, periodo, fuente,
+       COALESCE(t_gla, s_gla) AS m2_gla,
+       COALESCE(t_vac, s_vac) AS m2_vacantes,
+       CAST(COALESCE(t_vac, s_vac) AS REAL) / NULLIF(COALESCE(t_gla, s_gla), 0) AS vacancia_pct
+FROM combinado;
 
 -- Vista fondo-efectiva: pondera m2_vacantes por participacion_fondo_activo.
 -- Confirmado por el usuario 2026-08-03 para Mall Curicó (participación 0.8):
@@ -113,3 +146,21 @@ UNION ALL
 SELECT periodo, tipo_unidad, m2_gla, m2_vacantes, fuente
 FROM v_vacancia_activo_tipo
 WHERE activo_key = 'PT_consolidado';
+
+-- Fondo Apoquindo consolidado (Apo4501 + Apo4700) por tipo_unidad.
+-- Con rent roll: suma ambos activos desglosados por tipo (Oficinas/Locales/
+-- Bodegas/Estacionamiento vía tipo_activo_2). Sin rent roll: usa el desglose
+-- manual "Fondo Apoquindo Oficinas/Locales" (solo vacancia, sin GLA por tipo
+-- — el archivo fuente no lo trae desglosado históricamente, solo el total).
+CREATE VIEW v_vacancia_apoquindo_consolidado_tipo AS
+SELECT periodo, tipo_unidad,
+       SUM(m2_gla) AS m2_gla,
+       SUM(m2_vacantes) AS m2_vacantes,
+       fuente
+FROM v_vacancia_activo_tipo
+WHERE activo_key IN ('Apo4501', 'Apo4700')
+GROUP BY periodo, tipo_unidad, fuente
+UNION ALL
+SELECT periodo, tipo_unidad, m2_gla, m2_vacantes, fuente
+FROM v_vacancia_activo_tipo
+WHERE activo_key = 'Fondo Apoquindo' AND tipo_unidad IS NOT NULL;
