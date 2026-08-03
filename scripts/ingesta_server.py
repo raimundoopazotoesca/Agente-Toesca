@@ -23,6 +23,7 @@ token inyectado igual que en localhost — asumir que la LAN es de confianza.
 from __future__ import annotations
 
 import hmac
+import io
 import os
 import re
 import secrets
@@ -31,7 +32,7 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, jsonify, redirect, request, send_file, send_from_directory
 from openpyxl.utils.exceptions import InvalidFileException
 from werkzeug.exceptions import HTTPException
 
@@ -69,6 +70,55 @@ def _rebuild_factsheet() -> None:
         build_factsheet.main()
     except Exception as exc:  # no debe romper la respuesta de ingesta
         print(f"WARN: no se pudo regenerar factsheet.html: {exc}")
+
+
+def _generar_pdfs_factsheet(
+    fondos: list[str], periodo_cb: str, periodo_op: str
+) -> tuple[dict[str, bytes], list[str]]:
+    """Genera un PDF por fondo vía Playwright headless.
+
+    Devuelve (pdfs_por_fondo, errores) — errores es una lista de mensajes
+    legibles para los fondos que no se pudieron generar (sin datos en el
+    período pedido, timeout, o excepción).
+    """
+    from playwright.sync_api import sync_playwright
+
+    pdfs: dict[str, bytes] = {}
+    errores: list[str] = []
+    base_url = "http://127.0.0.1:8765/factsheet"
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            for fondo in fondos:
+                page = browser.new_page(extra_http_headers={TOKEN_HEADER: API_TOKEN})
+                try:
+                    url = (
+                        f"{base_url}?fondo={fondo}&cb={periodo_cb}"
+                        f"&op={periodo_op}&pdfmode=1"
+                    )
+                    page.goto(url, wait_until="load")
+                    page.wait_for_function(
+                        "window.__PDF_READY__ !== undefined", timeout=15000
+                    )
+                    ready = page.evaluate("window.__PDF_READY__")
+                    if ready != True:  # noqa: E712 - distingue de "no_data"
+                        errores.append(
+                            f"{fondo}: sin datos para el período {periodo_op}/{periodo_cb}."
+                        )
+                        continue
+                    pdfs[fondo] = page.pdf(
+                        format="A4", landscape=True, print_background=True
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    errores.append(f"{fondo}: error generando PDF ({exc}).")
+                finally:
+                    page.close()
+        finally:
+            browser.close()
+
+    return pdfs, errores
+
 
 app = Flask(__name__, static_folder=None)
 
@@ -795,6 +845,42 @@ def api_caja_commit():
         return jsonify(summary), 400
     _rebuild_factsheet()
     return jsonify(summary)
+
+
+@app.post("/api/export-pdf")
+def api_export_pdf():
+    body = request.get_json(force=True, silent=True) or {}
+    fondos = body.get("fondos")
+    periodo_cb = str(body.get("periodo_cb", ""))
+    periodo_op = str(body.get("periodo_op", ""))
+
+    if not isinstance(fondos, list) or not fondos:
+        return jsonify({"ok": False, "error": "Falta seleccionar al menos un fondo."}), 400
+    if not periodo_cb or not periodo_op:
+        return jsonify({"ok": False, "error": "Faltan los períodos (operacional y EEFF)."}), 400
+
+    pdfs, errores = _generar_pdfs_factsheet(fondos, periodo_cb, periodo_op)
+
+    if not pdfs:
+        return jsonify({
+            "ok": False,
+            "error": "No se pudo generar ningún PDF. " + " ".join(errores),
+        }), 422
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fondo, pdf_bytes in pdfs.items():
+            zf.writestr(f"FS_{fondo}_{periodo_op}_{periodo_cb}.pdf", pdf_bytes)
+        if errores:
+            zf.writestr("errores.txt", "\n".join(errores))
+    buf.seek(0)
+
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="factsheets.zip",
+    )
 
 
 if __name__ == "__main__":
