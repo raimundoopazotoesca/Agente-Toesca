@@ -1780,8 +1780,16 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   body.pdf-export #sidebar,
   body.pdf-export .tc-fab,
   body.pdf-export .tc-fab-label,
-  body.pdf-export .tc-panel { display: none !important; }
+  body.pdf-export .tc-panel,
+  body.pdf-export #btn-unit-balance,
+  body.pdf-export #btn-unit-gastos,
+  body.pdf-export #btn-unit-dfn { display: none !important; }
   body.pdf-export #main-content { margin-left: 0 !important; }
+  /* Cada .page debe caber en una sola página impresa (A4 landscape) — sin
+     esto Chromium corta el contenido más alto que una página física en 2. */
+  body.pdf-export .page { page-break-after: always; break-after: page; margin: 0 auto; }
+  body.pdf-export .page:last-of-type { page-break-after: auto; break-after: auto; }
+  body.pdf-export .page-scale-inner { transform-origin: top left; }
   .selectors {
     display: flex; flex-direction: column; gap: 0;
     padding: 0; background: transparent;
@@ -2016,8 +2024,62 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .trace-modal .trace-inputs td:first-child { color: #555; }
   .trace-modal .trace-inputs td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
+  /* Modal de exportación PDF */
+  .export-modal { max-width: 420px; }
+  .export-modal h3 { display: flex; align-items: center; gap: 6px; }
+  .export-field { margin: 0 0 14px; }
+  .export-field-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+    color: #4a6b5c; margin-bottom: 6px;
+  }
+  .export-row { display: flex; gap: 12px; }
+  .export-row .export-field { flex: 1; min-width: 0; }
+  .export-fund-checks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .export-fund-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 20px;
+    font-size: 12px; font-weight: 600; cursor: pointer; user-select: none;
+    background: #fff; color: var(--text); transition: background .15s, border-color .15s, color .15s;
+  }
+  .export-fund-chip:hover { border-color: var(--green); }
+  .export-fund-chip.checked { background: var(--green); border-color: var(--green); color: #fff; }
+  .export-fund-chip input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .export-select {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 12px; font-family: inherit; color: var(--text); background: #fff;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23666'/></svg>");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 10px;
+  }
+  .export-select:focus { outline: none; border-color: var(--green); }
+  .export-status {
+    min-height: 18px; font-size: 12px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px; border-radius: 4px;
+  }
+  .export-status.ok { color: #1c7a3d; }
+  .export-status.warn { color: #9a6b00; }
+  .export-status.err { color: #b3261e; }
+  .export-download-btn {
+    width: 100%; padding: 10px; border: none; border-radius: 6px;
+    background: var(--green); color: #fff; font-size: 13px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background .15s, opacity .15s;
+  }
+  .export-download-btn:hover:not(:disabled) { background: #1c7a3d; }
+  .export-download-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .export-btn-spinner {
+    display: none; width: 13px; height: 13px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+    animation: export-spin .7s linear infinite;
+  }
+  .export-download-btn.loading .export-btn-spinner { display: inline-block; }
+  @keyframes export-spin { to { transform: rotate(360deg); } }
+
   /* Página 2: resumen de performance de activos + gráficos */
   .charts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 10px 0 16px; }
+  .chart-box-stack { display: flex; flex-direction: column; }
+  .chart-box-stack .chart-title:not(:first-child) { margin-top: 10px; }
+  .chart-box-stack > div[data-chart] { flex: 1; }
   .chart-box {
     border: 1px dashed var(--border); border-radius: 6px; padding: 12px 14px;
     min-height: 220px; display: flex; flex-direction: column;
@@ -2811,26 +2873,33 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   </div>
 </div>
 
-<div id="export-modal-bg" class="trace-modal-bg" aria-hidden="true">
-  <div class="trace-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
+<div id="export-modal-bg" class="trace-modal-bg export-modal-bg" aria-hidden="true">
+  <div class="trace-modal export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
     <button type="button" class="trace-close" id="export-close" aria-label="Cerrar">×</button>
-    <h3 id="export-title">Exportar a PDF</h3>
-    <div class="trace-sub">Elige uno o más fondos y el período a exportar.</div>
-    <div id="export-fund-checks" style="margin:12px 0;display:flex;gap:14px"></div>
-    <table class="trace-inputs" style="width:100%;margin-bottom:12px">
-      <tbody>
-        <tr>
-          <td>Período operacional</td>
-          <td><select id="export-sel-op" style="width:100%"></select></td>
-        </tr>
-        <tr>
-          <td>Período EEFF (contable/bursátil)</td>
-          <td><select id="export-sel-cb" style="width:100%"></select></td>
-        </tr>
-      </tbody>
-    </table>
-    <div id="export-status" style="min-height:16px;font-size:11px;color:#666;margin-bottom:8px"></div>
-    <button type="button" id="export-download-btn" class="fund-btn active" style="width:100%;padding:8px">Descargar</button>
+    <h3 id="export-title">⬇ Exportar a PDF</h3>
+    <div class="trace-sub">Elige uno o más fondos y el período a exportar. Se descarga un .zip con un PDF por fondo.</div>
+
+    <div class="export-field">
+      <div class="export-field-label">Fondos</div>
+      <div id="export-fund-checks" class="export-fund-checks"></div>
+    </div>
+
+    <div class="export-row">
+      <div class="export-field">
+        <div class="export-field-label">Período operacional</div>
+        <select id="export-sel-op" class="export-select"></select>
+      </div>
+      <div class="export-field">
+        <div class="export-field-label">Período EEFF</div>
+        <select id="export-sel-cb" class="export-select"></select>
+      </div>
+    </div>
+
+    <div id="export-status" class="export-status"></div>
+    <button type="button" id="export-download-btn" class="export-download-btn">
+      <span class="export-btn-spinner" aria-hidden="true"></span>
+      <span class="export-btn-label">Descargar</span>
+    </button>
   </div>
 </div>
 
@@ -2936,6 +3005,37 @@ function closeTraceModal(){
   document.getElementById("trace-modal-bg").classList.remove("open");
 }
 
+function fitPdfPages(){
+  // A4 landscape @ 96 CSS px/in, sin márgenes (Playwright page.pdf margin=0).
+  const targetW = 1120;
+  const targetH = 790;
+  document.querySelectorAll(".page").forEach(pageEl => {
+    let inner = pageEl.querySelector(":scope > .page-scale-inner");
+    if (!inner) {
+      inner = document.createElement("div");
+      inner.className = "page-scale-inner";
+      while (pageEl.firstChild) inner.appendChild(pageEl.firstChild);
+      pageEl.appendChild(inner);
+    }
+    inner.style.transform = "none";
+    inner.style.width = "auto";
+    pageEl.style.height = "auto";
+    pageEl.style.overflow = "visible";
+
+    const outerH = pageEl.getBoundingClientRect().height;
+    const innerRect = inner.getBoundingClientRect();
+    const padH = outerH - innerRect.height;
+    const s = Math.min(1, targetW / innerRect.width, targetH / innerRect.height);
+
+    if (s < 0.999) {
+      inner.style.transform = `scale(${s})`;
+      inner.style.width = (100 / s) + "%";
+      pageEl.style.height = (padH + innerRect.height * s) + "px";
+      pageEl.style.overflow = "hidden";
+    }
+  });
+}
+
 function fmtMonthLabel(p){
   const [y, m] = p.split("-");
   const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
@@ -2944,6 +3044,10 @@ function fmtMonthLabel(p){
 
 function refreshExportPeriodos(){
   const checked = Array.from(document.querySelectorAll("#export-fund-checks input:checked")).map(i => i.value);
+  document.querySelectorAll(".export-fund-chip").forEach(chip => {
+    chip.classList.toggle("checked", chip.querySelector("input").checked);
+  });
+
   const opSel = document.getElementById("export-sel-op");
   const cbSel = document.getElementById("export-sel-cb");
   const opPrev = opSel.value;
@@ -2970,16 +3074,22 @@ function refreshExportPeriodos(){
   document.getElementById("export-download-btn").disabled = checked.length === 0;
 }
 
+function setExportStatus(kind, html){
+  const status = document.getElementById("export-status");
+  status.className = "export-status" + (kind ? " " + kind : "");
+  status.innerHTML = html || "";
+}
+
 function openExportModal(){
   const wrap = document.getElementById("export-fund-checks");
   wrap.innerHTML = Object.keys(FUNDS).map(f => `
-    <label style="display:flex;align-items:center;gap:4px;font-size:12px">
+    <label class="export-fund-chip${f === currentFund ? " checked" : ""}">
       <input type="checkbox" value="${f}" ${f === currentFund ? "checked" : ""}> ${f}
     </label>
   `).join("");
   wrap.querySelectorAll("input").forEach(i => i.addEventListener("change", refreshExportPeriodos));
   refreshExportPeriodos();
-  document.getElementById("export-status").textContent = "";
+  setExportStatus(null, "");
   document.getElementById("export-modal-bg").classList.add("open");
 }
 
@@ -2993,11 +3103,14 @@ async function onDescargarPdf(){
   const periodo_op = document.getElementById("export-sel-op").value;
   const periodo_cb = document.getElementById("export-sel-cb").value;
   const btn = document.getElementById("export-download-btn");
-  const status = document.getElementById("export-status");
+  const label = btn.querySelector(".export-btn-label");
 
   btn.disabled = true;
-  btn.textContent = "Generando...";
-  status.textContent = "";
+  btn.classList.add("loading");
+  label.textContent = fondos.length > 1
+    ? `Generando ${fondos.length} PDFs… puede tardar un minuto`
+    : "Generando PDF… puede tardar un minuto";
+  setExportStatus(null, "");
 
   try {
     const headers = {"Content-Type": "application/json"};
@@ -3009,9 +3122,12 @@ async function onDescargarPdf(){
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      status.textContent = "Error: " + (err.error || resp.statusText);
+      setExportStatus("err", "✕ " + (err.error || resp.statusText));
       return;
     }
+    const okCount = parseInt(resp.headers.get("X-Export-Ok") || fondos.length, 10);
+    const errCount = parseInt(resp.headers.get("X-Export-Errors") || "0", 10);
+
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -3021,12 +3137,22 @@ async function onDescargarPdf(){
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    closeExportModal();
+
+    if (errCount > 0) {
+      setExportStatus("warn", `⚠ Descargado con ${okCount} de ${okCount + errCount} fondos (revisa errores.txt en el zip).`);
+      label.textContent = "Descargar";
+      btn.classList.remove("loading");
+      btn.disabled = fondos.length === 0;
+    } else {
+      setExportStatus("ok", `✓ Descarga lista (${okCount} PDF${okCount === 1 ? "" : "s"}).`);
+      setTimeout(closeExportModal, 1100);
+    }
   } catch (exc) {
-    status.textContent = "Error inesperado: " + exc;
+    setExportStatus("err", "✕ Error inesperado: " + exc);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Descargar";
+    btn.classList.remove("loading");
+    if (label.textContent.startsWith("Generando")) label.textContent = "Descargar";
+    btn.disabled = fondos.length === 0 ? true : (document.querySelectorAll("#export-fund-checks input:checked").length === 0);
   }
 }
 
@@ -5660,7 +5786,14 @@ function render(){
   const __pOp = __params.get("op");
   const __pdfMode = __params.get("pdfmode") === "1";
 
-  if (__pdfMode) document.body.classList.add("pdf-export");
+  if (__pdfMode) {
+    document.body.classList.add("pdf-export");
+    // El PDF exportado siempre se ve en UF, independiente de la preferencia
+    // guardada en localStorage del navegador que lo genera.
+    unitState.balance = "uf";
+    unitState.gastos = "uf";
+    unitState.dfn = "uf";
+  }
 
   if (__pFondo && FUNDS[__pFondo]) {
     switchFund(__pFondo);
@@ -5683,6 +5816,7 @@ function render(){
         __missing = true;
       }
     }
+    if (__pdfMode && !__missing) fitPdfPages();
     window.__PDF_READY__ = __missing ? "no_data" : true;
   } else {
     switchFund("TRI");

@@ -91,7 +91,10 @@ def _generar_pdfs_factsheet(
         browser = p.chromium.launch()
         try:
             for fondo in fondos:
-                page = browser.new_page(extra_http_headers={TOKEN_HEADER: API_TOKEN})
+                page = browser.new_page(
+                    extra_http_headers={TOKEN_HEADER: API_TOKEN},
+                    viewport={"width": 1200, "height": 1000},
+                )
                 try:
                     url = (
                         f"{base_url}?fondo={fondo}&cb={periodo_cb}"
@@ -108,7 +111,10 @@ def _generar_pdfs_factsheet(
                         )
                         continue
                     pdfs[fondo] = page.pdf(
-                        format="A4", landscape=True, print_background=True
+                        format="A4",
+                        landscape=True,
+                        print_background=True,
+                        margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
                     )
                 except Exception as exc:  # noqa: BLE001
                     errores.append(f"{fondo}: error generando PDF ({exc}).")
@@ -875,12 +881,15 @@ def api_export_pdf():
             zf.writestr("errores.txt", "\n".join(errores))
     buf.seek(0)
 
-    return send_file(
+    response = send_file(
         buf,
         mimetype="application/zip",
         as_attachment=True,
         download_name="factsheets.zip",
     )
+    response.headers["X-Export-Ok"] = str(len(pdfs))
+    response.headers["X-Export-Errors"] = str(len(errores))
+    return response
 
 
 if __name__ == "__main__":
