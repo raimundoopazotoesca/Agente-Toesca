@@ -129,10 +129,36 @@ _VIGENCIA_DESDE_OVERRIDE = {
 ```
 
 `ingresos_mes`/`noi_mes` de TRI ahora cubren **101 períodos, ene-2018 a
-may-2026** (antes 34, ago-2023 a may-2026). La vacancia consolidada
-(`_fetch_vacancia_tri` en `scripts/build_factsheet.py`) nunca tuvo esta
-restricción — ya sumaba solo los activos con dato disponible por período,
-sin exigir el universo completo.
+may-2026** (antes 34, ago-2023 a may-2026).
+
+### Bug corregido 2026-08-03: vacancia consolidada subestimada por activos sin rent roll granular
+
+`_fetch_vacancia_tri` (en `scripts/build_factsheet.py`) descartaba
+directamente los activos sin dato granular para un período — pero **Torre
+A y Boulevard (PT) solo tienen UN snapshot de rent roll en toda la DB
+(jun-2026, sin historia previa)**, y **Apo3001/Apo4501/Apo4700 antes de
+jun-2026 solo traen un total manual** (`raw_vacancia_manual`, sin desglose
+por tipo y sin m²GLA) — recién en jun-2026 llegó el primer rent roll con
+detalle por tipo para esos tres. Descartarlos subestimaba la vacancia real:
+mayo-2026 daba 4,29% (solo Viña+INMOSA+Sucden+Curicó, ~60.000 m² de GLA de
+PT/Apo ausentes del denominador) vs 5,96% de junio-2026 (validado, 9
+activos completos) — una caída artificial de ~1,7pp que no reflejaba
+ningún cambio real de ocupación.
+
+**Fix** (decisión del usuario 2026-08-03): "carry-forward" del último dato
+conocido — `_fill_nearest()` rellena m²GLA y m²vacantes de esos 5 activos
+con el valor de jun-2026 (constante) para toda la serie donde no hay rent
+roll propio; Apo3001/Apo4501/Apo4700 usan el m²GLA de jun-2026 combinado
+con el m²vacantes real del total manual mensual cuando existe (sí varía
+mes a mes desde su incorporación — ver `_VIGENCIA_DESDE_OVERRIDE` arriba),
+y solo caen al carry-forward completo en los meses sin ningún dato (toda la
+historia de Torre A/Boulevard, y pre-incorporación de Apo3001/Apoquindo).
+
+**Bug del fix inicial**: la primera versión de `_fill_nearest(serie)`
+iteraba sobre `sorted(serie)` — si un activo tiene un solo dato conocido
+(caso Torre A: solo 2026-06), ese rango tiene un único elemento y no hay
+ningún hueco que rellenar. Corregido pasándole el rango completo de
+períodos objetivo (`_fill_nearest(serie, periodos_objetivo)`).
 
 ## Vacancia consolidada
 

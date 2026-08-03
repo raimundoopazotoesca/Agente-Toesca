@@ -1125,10 +1125,59 @@ _TRI_VACANCIA_ACTIVOS_SIMPLE = ["Torre A", "Boulevard", "Viña Centro", "INMOSA"
 _TRI_VACANCIA_NUM_OVERRIDE = {"Apo3001": 1.0}
 
 
+def _fill_nearest(serie: dict[str, float], periodos_objetivo: list[str]) -> dict[str, float]:
+    """Rellena `periodos_objetivo` con el valor conocido más cercano en el
+    tiempo (forward-fill desde el último dato pasado; si no hay dato pasado
+    —caso Torre A/Boulevard, sin rent roll antes de jun-2026— usa el
+    próximo conocido, "carry-forward" hacia atrás). Ver docstring de
+    _fetch_vacancia_tri: decisión del usuario 2026-08-03 tras detectar que
+    varios activos de TRI solo tienen un snapshot de rent roll (jun-2026) o
+    un total manual sin desglose antes de esa fecha.
+
+    OJO: iterar sobre `periodos_objetivo` (el rango completo pedido), no
+    sobre `sorted(serie)` — si solo hay un dato conocido (ej. Torre A:
+    únicamente 2026-06), sorted(serie) tiene un solo elemento y no hay
+    ningún hueco que rellenar en ese rango."""
+    if not serie:
+        return {}
+    out = {}
+    last = None
+    for p in periodos_objetivo:
+        if p in serie:
+            last = serie[p]
+        if last is not None:
+            out[p] = last
+    nxt = None
+    for p in reversed(periodos_objetivo):
+        if p in serie:
+            nxt = serie[p]
+        elif p not in out:
+            out[p] = nxt
+    return out
+
+
 def _fetch_vacancia_tri(conn) -> dict[str, float | None]:
     """{periodo: vacancia_pct} consolidada del fondo TRI (m² vacantes /
     m² GLA, ponderados por participación efectiva), fuente única para la
-    línea "Vacancia" del chart de página 2 de TRI."""
+    línea "Vacancia" del chart de página 2 de TRI.
+
+    Varios activos no tienen rent roll granular en todos los períodos:
+    Torre A/Boulevard solo tienen UN snapshot en toda la DB (jun-2026, sin
+    historia previa); Apo3001/Apo4501/Apo4700 antes de jun-2026 solo traen
+    un total manual (raw_vacancia_manual, sin desglose por tipo y sin m²GLA)
+    — recién en jun-2026 llegó el primer rent roll con detalle por tipo.
+    Descartar esos activos en los meses sin dato granular (como hacía la
+    versión anterior de esta función) subestima la vacancia real —
+    validado: mayo-2026 daba 4.29% vs 5.96% de junio-2026 (con los 9
+    activos), una caída artificial de ~1.7pp por la ausencia de ~60.000 m²
+    de GLA de PT/Apo en el denominador.
+
+    Decisión del usuario 2026-08-03: hacer "carry-forward" del último dato
+    conocido — m²GLA y m²vacantes de Torre A/Boulevard quedan fijos en el
+    valor de jun-2026 para toda la serie; Apo3001/Apo4501/Apo4700 usan su
+    m²GLA de jun-2026 (fijo, no cambia mes a mes) combinado con el
+    m²vacantes real del total manual de cada mes cuando existe (sí varía
+    mes a mes), y solo caen al carry-forward cuando falta también eso."""
     part = {
         r["activo_key"]: r["participacion_efectiva"]
         for r in conn.execute(
@@ -1136,11 +1185,14 @@ def _fetch_vacancia_tri(conn) -> dict[str, float | None]:
         ).fetchall()
     }
 
-    # (activo, periodo) -> {"gla": {fuente: valor}, "vac": {fuente: valor}}
-    acc: dict[tuple[str, str], dict[str, dict[str, float]]] = {}
+    # activo -> {periodo: {"gla": {fuente: valor}, "vac": {fuente: valor}}}
+    detalle: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
+    # activo -> {periodo: m2_vacantes} — total manual (tipo_unidad IS NULL),
+    # fallback para Apo3001/Apo4501/Apo4700 en meses sin desglose por tipo.
+    total_manual_vac: dict[str, dict[str, float]] = {}
 
-    def _acc_row(activo, periodo, fuente, gla, vac):
-        d = acc.setdefault((activo, periodo), {"gla": {}, "vac": {}})
+    def _acc(activo, periodo, fuente, gla, vac):
+        d = detalle.setdefault(activo, {}).setdefault(periodo, {"gla": {}, "vac": {}})
         d["gla"][fuente] = d["gla"].get(fuente, 0.0) + (gla or 0.0)
         d["vac"][fuente] = d["vac"].get(fuente, 0.0) + (vac or 0.0)
 
@@ -1148,13 +1200,16 @@ def _fetch_vacancia_tri(conn) -> dict[str, float | None]:
     placeholders = ",".join("?" for _ in tipo_activos)
     for r in conn.execute(
         f"SELECT activo_key, periodo, tipo_unidad, m2_gla, m2_vacantes, fuente "
-        f"FROM v_vacancia_activo_tipo WHERE activo_key IN ({placeholders}) "
-        f"AND tipo_unidad IN ('Bodegas','Locales Comerciales','Oficinas')",
+        f"FROM v_vacancia_activo_tipo WHERE activo_key IN ({placeholders})",
         tipo_activos,
     ).fetchall():
+        if r["tipo_unidad"] is None:
+            if r["m2_vacantes"] is not None:
+                total_manual_vac.setdefault(r["activo_key"], {})[r["periodo"]] = r["m2_vacantes"]
+            continue
         if r["tipo_unidad"] not in _TRI_VACANCIA_TIPOS[r["activo_key"]]:
             continue
-        _acc_row(r["activo_key"], r["periodo"], r["fuente"], r["m2_gla"], r["m2_vacantes"])
+        _acc(r["activo_key"], r["periodo"], r["fuente"], r["m2_gla"], r["m2_vacantes"])
 
     placeholders2 = ",".join("?" for _ in _TRI_VACANCIA_ACTIVOS_SIMPLE)
     for r in conn.execute(
@@ -1162,23 +1217,42 @@ def _fetch_vacancia_tri(conn) -> dict[str, float | None]:
         f"WHERE activo_key IN ({placeholders2})",
         _TRI_VACANCIA_ACTIVOS_SIMPLE,
     ).fetchall():
-        _acc_row(r["activo_key"], r["periodo"], r["fuente"], r["m2_gla"], r["m2_vacantes"])
+        _acc(r["activo_key"], r["periodo"], r["fuente"], r["m2_gla"], r["m2_vacantes"])
 
-    periodos = sorted({periodo for (_, periodo) in acc})
-    out: dict[str, float | None] = {}
-    for periodo in periodos:
-        num, den = 0.0, 0.0
-        for activo in list(_TRI_VACANCIA_TIPOS) + _TRI_VACANCIA_ACTIVOS_SIMPLE:
-            d = acc.get((activo, periodo))
-            if not d:
-                continue
+    todos_activos = list(_TRI_VACANCIA_TIPOS) + _TRI_VACANCIA_ACTIVOS_SIMPLE
+    periodos = sorted({
+        periodo
+        for activo in todos_activos
+        for periodo in set(detalle.get(activo, {})) | set(total_manual_vac.get(activo, {}))
+    })
+
+    gla_por_activo: dict[str, dict[str, float]] = {}
+    vac_por_activo: dict[str, dict[str, float]] = {}
+    for activo in todos_activos:
+        gla_serie, vac_serie = {}, {}
+        for periodo, d in detalle.get(activo, {}).items():
             fuente = "rent_roll" if "rent_roll" in d["gla"] else ("manual" if "manual" in d["gla"] else None)
             if fuente is None:
                 continue
-            gla = d["gla"].get(fuente) or 0.0
-            vac = d["vac"].get(fuente) or 0.0
+            if d["gla"].get(fuente):
+                gla_serie[periodo] = d["gla"][fuente]
+            vac_serie[periodo] = d["vac"].get(fuente) or 0.0
+        # Fallback: total manual (sin desglose por tipo) para meses sin
+        # detalle — solo aporta m²vacantes, el GLA sigue viniendo del
+        # carry-forward del snapshot con detalle (jun-2026).
+        for periodo, vac in total_manual_vac.get(activo, {}).items():
+            vac_serie.setdefault(periodo, vac)
+        gla_por_activo[activo] = _fill_nearest(gla_serie, periodos)
+        vac_por_activo[activo] = _fill_nearest(vac_serie, periodos)
+
+    out: dict[str, float | None] = {}
+    for periodo in periodos:
+        num, den = 0.0, 0.0
+        for activo in todos_activos:
+            gla = gla_por_activo[activo].get(periodo)
             if not gla:
                 continue
+            vac = vac_por_activo[activo].get(periodo) or 0.0
             w = part.get(activo)
             if w is None:
                 continue
