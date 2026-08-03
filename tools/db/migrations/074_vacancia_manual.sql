@@ -70,6 +70,10 @@ WHERE m.superseded_at IS NULL
   );
 
 -- Vacancia total por activo y período (colapsa tipo_unidad).
+-- Excluye 'Estacionamiento': confirmado por el usuario 2026-08-03 (Apo3001
+-- 2026-06 GLA rent roll 4589.55 incluye 80 m2 de estacionamientos; excluyéndolos
+-- da 4509.55, que calza con el archivo manual ~4509 y con la vacancia exacta
+-- 1632.6 == manual). El parking no es parte del universo de vacancia comercial.
 CREATE VIEW v_vacancia_activo AS
 SELECT activo_key, periodo,
        SUM(m2_gla)      AS m2_gla,
@@ -77,7 +81,21 @@ SELECT activo_key, periodo,
        CAST(SUM(m2_vacantes) AS REAL) / NULLIF(SUM(m2_gla), 0) AS vacancia_pct,
        fuente
 FROM v_vacancia_activo_tipo
+WHERE tipo_unidad IS NULL OR tipo_unidad != 'Estacionamiento'
 GROUP BY activo_key, periodo, fuente;
+
+-- Vista fondo-efectiva: pondera m2_vacantes por participacion_fondo_activo.
+-- Confirmado por el usuario 2026-08-03 para Mall Curicó (participación 0.8):
+-- vacancia rent roll 3017.87 * 0.8 = 2414.3, ~coincide con el archivo manual
+-- (2476, diff 2.5% dentro de tolerancia). La GLA NO se pondera (el archivo
+-- manual reporta la GLA física completa, sin ajustar por participación) —
+-- solo el m2 vacante efectivo, para consolidación a nivel fondo.
+CREATE VIEW v_vacancia_activo_efectivo AS
+SELECT v.activo_key, v.periodo, v.m2_gla, v.m2_vacantes,
+       v.m2_vacantes * COALESCE(d.participacion_fondo_activo, 1.0) AS m2_vacantes_efectivo,
+       v.vacancia_pct, v.fuente
+FROM v_vacancia_activo v
+LEFT JOIN dim_activo d ON d.activo_key = v.activo_key;
 
 -- Parque Titanium consolidado (Torre A + Boulevard) por tipo_unidad.
 -- Para períodos con rent roll: suma Torre A + Boulevard desglosados por tipo.

@@ -1,3 +1,12 @@
+## [2026-08-03] fix | Vacancia: excluir estacionamientos + ponderar Curicó por participación
+
+Las 2 discrepancias de la migración 074 se resolvieron con explicación del usuario:
+Apo3001 GLA incluía 80 m2 de estacionamientos (excluidos ahora en `v_vacancia_activo`,
+calza exacto: GLA 4509,55 y vacancia 1632,6 == manual). Mall Curicó: la vacancia del
+rent roll se pondera por `participacion_fondo_activo` (0.8) en la nueva vista
+`v_vacancia_activo_efectivo` (2414,3 vs manual 2476, ~2.5%, tolerable — la GLA no se
+pondera). Torre A/Boulevard ya calzaban sin ajuste.
+
 ## [2026-08-03] feat | Vacancia histórica manual (migración 074) + consolidación por tipo de unidad
 
 Nueva tabla `raw_vacancia_manual` + vistas `v_vacancia_activo_tipo`/`v_vacancia_activo`/

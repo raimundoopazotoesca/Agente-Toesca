@@ -372,7 +372,8 @@ el archivo manual solo cubre los períodos sin rent roll ingestado. Vistas:
 - `v_vacancia_activo_tipo` — activo × período × tipo_unidad (Oficinas /
   Locales Comerciales / Bodegas / Estacionamiento / Otro), con `fuente`
   ('rent_roll' | 'manual')
-- `v_vacancia_activo` — colapsa tipo_unidad, da `vacancia_pct` total
+- `v_vacancia_activo` — colapsa tipo_unidad (excluye Estacionamiento), da `vacancia_pct` total
+- `v_vacancia_activo_efectivo` — igual, + `m2_vacantes_efectivo` ponderado por `dim_activo.participacion_fondo_activo`
 - `v_vacancia_pt_consolidado_tipo` — Parque Titanium consolidado (Torre A +
   Boulevard) por tipo_unidad; para períodos sin rent roll usa directo el
   pseudo-activo `PT_consolidado` (el archivo fuente no desglosa PT por
@@ -394,13 +395,17 @@ vista usa ese campo.
   `docs/matriz-claves-ambiguas-apoquindo.md`
 - "Curicó" = `Mall Curicó`, "Apoquindo 3001" = `Apo3001`
 
-**Discrepancias detectadas vs. rent roll ya ingestado (reportadas al usuario,
-pendiente investigar la causa, NO corregidas — son diferencia real de dato,
-no bug de mapeo)**:
-- Mall Curicó 2026-05: archivo manual 2.476 m2 vacantes vs. rent roll JLL
-  3.017,87 m2 (diff ~542 m2, ~22%)
-- Apo3001 2026-06: archivo manual 4.493,55 m2 GLA vs. rent roll 4.589,55 m2
-  (diff exacta de 96 m2)
-- Torre A/Boulevard: GLA y vacantes por tipo calzan casi exacto entre ambas
-  fuentes cuando se agrupa por `tipo_activo_2` (diferencias <1%, atribuibles
-  a redondeo/timing)
+**Discrepancias detectadas vs. rent roll ya ingestado — resueltas 2026-08-03
+con explicación del usuario**:
+- **Apo3001 GLA** (4.493,55 manual vs 4.589,55 rent roll): el rent roll
+  incluía 80 m2 de estacionamientos. `v_vacancia_activo` ahora excluye
+  `tipo_unidad='Estacionamiento'` del total (el parking no es parte del
+  universo de vacancia comercial) → GLA 4.509,55 y vacancia 1.632,6 calzan
+  exacto contra el manual.
+- **Mall Curicó vacancia** (2.476 manual vs 3.017,87 rent roll): explicado
+  por la participación del fondo en el activo (0.8). Nueva vista
+  `v_vacancia_activo_efectivo` pondera `m2_vacantes` por
+  `dim_activo.participacion_fondo_activo` → 3.017,87×0.8=2.414,3, dentro de
+  ~2.5% del manual (tolerable, no exacto). La GLA NO se pondera (el archivo
+  manual reporta la GLA física completa).
+- Torre A/Boulevard: calzan casi exacto sin ajustes (<1% diff).
