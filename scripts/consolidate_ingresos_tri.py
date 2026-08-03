@@ -62,6 +62,21 @@ _INGRESOS_U12M_FORMULA = "SUM ingresos Fondo TRI (ponderado) 12 meses trailing"
 # 100% de Chañarcillo.
 _PARTICIPACION_OVERRIDE = {"Apo3001": 1.0}
 
+# dim_activo no tiene columna vigente_desde (solo vigente_hasta, para
+# divestimientos) — fechas reales de incorporación a TRI confirmadas por el
+# usuario 2026-08-03: Mall Curicó ene-2020, Apo3001 ene-2020, Apoquindo
+# (Apo4501/Apo4700) ene-2019. Sin este override, _ingresos_mes_tri exigiría
+# dato de esos activos (vigente=None) desde el primer período disponible de
+# cualquier otro activo, bloqueando toda la serie previa a su incorporación
+# — el criterio del usuario es que el gráfico consolidado arranque en
+# ene-2018 igual, simplemente sin el aporte de los activos aún no
+# incorporados en cada período.
+_VIGENCIA_DESDE_OVERRIDE = {
+    "Mall Curicó": "2020-01",
+    "Apo3001": "2020-01",
+    "Apoquindo": "2019-01",
+}
+
 
 def _participaciones_tri(conn) -> dict[str, float]:
     cur = conn.execute(
@@ -106,7 +121,8 @@ def _ingresos_mes_tri(
     for periodo in todos_los_periodos:
         vigentes = [
             key for key in series
-            if vigencia.get(key) is None or periodo <= vigencia[key]
+            if (vigencia.get(key) is None or periodo <= vigencia[key])
+            and periodo >= _VIGENCIA_DESDE_OVERRIDE.get(key, "0000-00")
         ]
         if not all(periodo in series[key] for key in vigentes):
             continue

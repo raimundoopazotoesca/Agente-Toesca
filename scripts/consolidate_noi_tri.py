@@ -65,6 +65,15 @@ _NOI_U12M_FORMULA = "SUM NOI Fondo TRI (ponderado) 12 meses trailing"
 # TRI es dueño del 100% de Chañarcillo.
 _PARTICIPACION_OVERRIDE = {"Apo3001": 1.0}
 
+# Ver mismo override en consolidate_ingresos_tri.py: dim_activo no tiene
+# vigente_desde. Fechas de incorporación a TRI confirmadas por el usuario
+# 2026-08-03.
+_VIGENCIA_DESDE_OVERRIDE = {
+    "Mall Curicó": "2020-01",
+    "Apo3001": "2020-01",
+    "Apoquindo": "2019-01",
+}
+
 
 def _participaciones_tri(conn) -> dict[str, float]:
     cur = conn.execute(
@@ -109,7 +118,8 @@ def _noi_mes_tri(
     for periodo in todos_los_periodos:
         vigentes = [
             key for key in series
-            if vigencia.get(key) is None or periodo <= vigencia[key]
+            if (vigencia.get(key) is None or periodo <= vigencia[key])
+            and periodo >= _VIGENCIA_DESDE_OVERRIDE.get(key, "0000-00")
         ]
         if not all(periodo in series[key] for key in vigentes):
             continue

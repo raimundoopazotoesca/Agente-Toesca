@@ -106,13 +106,33 @@ de ene-2020 — celdas en blanco a propósito, no dato faltante).
   "2020-01"}` en `consolidate_ingresos_tri.py`/`consolidate_noi_tri.py`,
   mismo patrón que `_PARTICIPACION_OVERRIDE`.
 
-**Resultado**: la serie de TRI pasó de arrancar en ago-2023 a arrancar en
-**ene-2020**. No llega a ene-2018 porque **Apo3001** (`raw_er_activo_line`
+**Resultado intermedio**: con el backfill, la serie pasó de arrancar en
+ago-2023 a ene-2020 — seguía cortada porque **Apo3001** (`raw_er_activo_line`
 min periodo 2020-01) y **Apoquindo** (Apo4501/Apo4700, min periodo 2019-01)
-también son vigentes desde el origen de TRI mismo sin dato pre-2019/2020 —
-pendiente conseguir ese histórico (o confirmar con el usuario si son fechas
-reales de adquisición, en cuyo caso agregar el mismo override de vigencia
-en vez de backfillear).
+también son vigentes desde el origen de TRI (sin `vigente_hasta`) y no
+tenían dato antes de esas fechas.
+
+**Resultado final**: el usuario confirmó 2026-08-03 que esas SÍ son las
+fechas reales de incorporación a TRI (Apo3001 ene-2020, Apoquindo ene-2019
+— no un hueco de datos) y que el criterio es que el gráfico consolidado
+arranque igual en **ene-2018**, sin el aporte de los activos aún no
+incorporados en cada período (no se perciben sus ingresos/NOI, no cuentan
+para la vacancia). Se extendió `_VIGENCIA_DESDE_OVERRIDE` en
+`consolidate_ingresos_tri.py`/`consolidate_noi_tri.py`:
+
+```python
+_VIGENCIA_DESDE_OVERRIDE = {
+    "Mall Curicó": "2020-01",
+    "Apo3001": "2020-01",
+    "Apoquindo": "2019-01",
+}
+```
+
+`ingresos_mes`/`noi_mes` de TRI ahora cubren **101 períodos, ene-2018 a
+may-2026** (antes 34, ago-2023 a may-2026). La vacancia consolidada
+(`_fetch_vacancia_tri` en `scripts/build_factsheet.py`) nunca tuvo esta
+restricción — ya sumaba solo los activos con dato disponible por período,
+sin exigir el universo completo.
 
 ## Vacancia consolidada
 
