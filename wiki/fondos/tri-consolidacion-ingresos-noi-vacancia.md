@@ -81,6 +81,39 @@ futuro, hay que repetir el mismo patrón manual (no modificar
 Validado tras el fix: ingresos y NOI de TRI mar/abr/may-2026 calzan exacto
 contra el CDG del usuario.
 
+### Backfill histórico Viña Centro + Mall Curicó (2026-08-03)
+
+La serie consolidada de TRI (`ingresos_mes`/`noi_mes`) exige dato de
+**todos** los activos vigentes en cada período (`_ingresos_mes_tri` /
+`_noi_mes_tri`, ver arriba) — antes de este backfill, Viña Centro y Mall
+Curicó solo tenían `raw_er_activo_line` desde ago-2023 (fuente detallada:
+"RAW/NOI VIÑA.xlsx" / "RAW/NOI Curico.xlsx"), lo que cortaba toda la serie
+de TRI en ago-2023 aunque el resto de los activos tuviera historia desde
+2018.
+
+El usuario aportó una planilla auxiliar **"RAW/NOI VIÑA DB.xlsx"** con
+categorías agregadas (no cuenta por cuenta) **en UF** (no CLP, a diferencia
+de la fuente detallada), hoja `Hoja1` = Viña Centro ene-2018→jul-2023, hoja
+`curico` = Mall Curicó ene-2020→jul-2023 (Curicó no era parte de TRI antes
+de ene-2020 — celdas en blanco a propósito, no dato faltante).
+
+- Ingestado con `tools/db/ingest_er_vina_historico.py` y
+  `tools/db/ingest_er_curico_historico.py` (idempotencia por
+  `source_file`+`source_sheet`, no por `activo_key`, para no pisar los datos
+  ago-2023+ de los scripts de detalle).
+- Mall Curicó no tiene `vigente_hasta` (`dim_activo` no tiene columna
+  `vigente_desde`) → se agregó `_VIGENCIA_DESDE_OVERRIDE = {"Mall Curicó":
+  "2020-01"}` en `consolidate_ingresos_tri.py`/`consolidate_noi_tri.py`,
+  mismo patrón que `_PARTICIPACION_OVERRIDE`.
+
+**Resultado**: la serie de TRI pasó de arrancar en ago-2023 a arrancar en
+**ene-2020**. No llega a ene-2018 porque **Apo3001** (`raw_er_activo_line`
+min periodo 2020-01) y **Apoquindo** (Apo4501/Apo4700, min periodo 2019-01)
+también son vigentes desde el origen de TRI mismo sin dato pre-2019/2020 —
+pendiente conseguir ese histórico (o confirmar con el usuario si son fechas
+reales de adquisición, en cuyo caso agregar el mismo override de vigencia
+en vez de backfillear).
+
 ## Vacancia consolidada
 
 Fuente: vistas `v_vacancia_*` (ver [[db]]), **no** `derived_kpi` — no hay un
