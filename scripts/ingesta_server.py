@@ -900,5 +900,8 @@ if __name__ == "__main__":
     # host=0.0.0.0: escucha en todas las interfaces, no solo loopback, para
     # que el resto del equipo entre desde su propio navegador en la misma
     # red. debug=False: el debugger de Werkzeug expone una consola
-    # interactiva a cualquier proceso que alcance el puerto.
-    app.run(host="0.0.0.0", port=8765, debug=False, use_reloader=False)
+    # interactiva a cualquier proceso que alcance el puerto. threaded=True:
+    # /api/export-pdf abre la propia URL del factsheet vía Playwright
+    # mientras la petición POST sigue en curso — sin esto el server
+    # single-threaded se deadlockea consigo mismo.
+    app.run(host="0.0.0.0", port=8765, debug=False, use_reloader=False, threaded=True)
