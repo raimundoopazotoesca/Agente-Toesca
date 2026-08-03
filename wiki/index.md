@@ -16,6 +16,12 @@
 | [[agente/arquitectura]] | Stack técnico, archivos principales, variables de entorno | 2026-05-01 |
 | [[agente/herramientas]] | Catálogo de todos los tools con descripción y archivo fuente | 2026-05-01 |
 
+## Base de datos
+
+| Página | Descripción | Actualizado |
+|--------|-------------|-------------|
+| [[db]] | Schema de `memory/agente_toesca_v2.db`: raw/derived/facts, repos, ingestas por activo. **Vacancia (incl. por tipo Oficinas/Locales para Apoquindo y PT)**: sección "Vacancia histórica" — vistas `v_vacancia_*` | 2026-08-03 |
+
 ## Skills
 
 | Página | Descripción | Actualizado |
