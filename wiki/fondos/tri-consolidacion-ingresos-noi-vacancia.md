@@ -145,20 +145,29 @@ PT/Apo ausentes del denominador) vs 5,96% de junio-2026 (validado, 9
 activos completos) — una caída artificial de ~1,7pp que no reflejaba
 ningún cambio real de ocupación.
 
-**Fix** (decisión del usuario 2026-08-03): "carry-forward" del último dato
-conocido — `_fill_nearest()` rellena m²GLA y m²vacantes de esos 5 activos
-con el valor de jun-2026 (constante) para toda la serie donde no hay rent
-roll propio; Apo3001/Apo4501/Apo4700 usan el m²GLA de jun-2026 combinado
-con el m²vacantes real del total manual mensual cuando existe (sí varía
-mes a mes desde su incorporación — ver `_VIGENCIA_DESDE_OVERRIDE` arriba),
-y solo caen al carry-forward completo en los meses sin ningún dato (toda la
-historia de Torre A/Boulevard, y pre-incorporación de Apo3001/Apoquindo).
+**Intento 1** (revertido): "carry-forward" del último dato conocido —
+`_fill_nearest()` rellenaba m²GLA/m²vacantes de esos 5 activos con el valor
+de jun-2026 (constante) hacia atrás. El usuario lo rechazó: los números no
+calzaban contra ningún período real.
 
-**Bug del fix inicial**: la primera versión de `_fill_nearest(serie)`
-iteraba sobre `sorted(serie)` — si un activo tiene un solo dato conocido
-(caso Torre A: solo 2026-06), ese rango tiene un único elemento y no hay
-ningún hueco que rellenar. Corregido pasándole el rango completo de
-períodos objetivo (`_fill_nearest(serie, periodos_objetivo)`).
+**Intento 2** (revertido): recombinar `v_vacancia_activo` /
+`v_vacancia_activo_tipo` / `v_vacancia_pt_consolidado_tipo` (Torre A +
+Boulevard agregados bajo `PT_consolidado`, con fila total `tipo_unidad IS
+NULL` para GLA real de Apo3001/Apoquindo) en vez de carry-forward. Mejor,
+pero seguía sin calzar contra el número que el usuario ya tenía calculado
+para varios meses históricos (ej. 2020-01: 6.9% calculado vs 5.84% real) —
+solo coincidía casi exacto en jun-2026 (5.96% vs 5.945%).
+
+**Fix definitivo**: el usuario agregó una fila nueva en "Vacancia histórica
+DB.xlsx" ("Vacancia Ponderada Fondo Rentas", fila 37) con su propio cálculo
+ya validado, 2017-06 a 2026-06. Se ingesta directo a `derived_kpi`
+(`entidad_tipo='fondo'`, `entidad_key='TRI'`, `kpi='vacancia_pct'`) vía
+`tools/db/ingest_vacancia_tri_ponderada.py`, y `_fetch_vacancia_tri` en
+`scripts/build_factsheet.py` la usa como fuente de verdad para todo ese
+rango — el cálculo en vivo desde rent roll (`_pick_tipo`/`_pick_pt`/
+`_pick_simple`, ver función) solo rellena los meses que la planilla manual
+todavía no cubre (post jun-2026), validado porque calza casi exacto con la
+histórica en el único mes de traslape (jun-2026).
 
 ## Vacancia consolidada
 
