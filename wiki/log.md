@@ -1,3 +1,15 @@
+## [2026-08-03] feat | Absorción histórica manual (migración 075-076)
+
+No hay rent rolls históricos completos para derivar absorción real, así que el
+usuario entregó `RAW/Absorcion Histórica DB.xlsx` con el detalle de movimientos
+de contrato (nuevo/renovó/término) por activo, hojas jll/viña/curico. Ingestado
+a `raw_movimiento_contrato` (831 filas, `tools/db/ingest_movimiento_contrato.py`).
+Vistas derivadas `v_absorcion_movimiento`/`v_absorcion_activo`: Nuevo Contrato =
++m2 en el mes de inicio, Término = -m2 en el mes de vencimiento, Renovó = 0,
+excluye Estacionamientos (reglas confirmadas por el usuario). A futuro, cuando
+haya rent roll completo, la absorción debe derivarse de `raw_rent_roll_line`
+en vez de pedir planillas manuales. Ver wiki/db.md sección "Absorción histórica".
+
 ## [2026-08-03] feat | Vacancia por tipo (Oficinas/Locales) para Fondo Apoquindo
 
 El usuario agregó 2 filas nuevas a la planilla "Vacancia histórica DB.xlsx" (Fondo

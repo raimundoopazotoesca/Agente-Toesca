@@ -399,6 +399,34 @@ vista usa ese campo.
   `docs/matriz-claves-ambiguas-apoquindo.md`
 - "Curicó" = `Mall Curicó`, "Apoquindo 3001" = `Apo3001`
 
+## Absorción histórica (DB v2, migraciones 075-076)
+
+No hay rent rolls históricos completos para derivar absorción real. Fuente
+manual: `RAW/Absorcion Histórica DB.xlsx` (SharePoint), 3 hojas (`jll`, `viña`,
+`curico`), una fila por movimiento de contrato (nuevo/renovó/término) —no es
+absorción ya calculada, es el detalle de movimientos crudo. Tabla
+`raw_movimiento_contrato(activo_key, tipo_unidad, status, arrendatario, m2,
+vencimiento, inicio_nuevo_contrato, ...)`. Módulo de ingesta:
+`tools/db/ingest_movimiento_contrato.py`. Ver [[project-absorcion-historica-manual]].
+
+**Mapeo activo** (nombre del archivo → `activo_key`): "Apoquindo 3001"→`Apo3001`,
+"Apoquindo 4501"→`Apo4501`, "Apoquindo 4700"→`Apo4700`, "Inm Boulevard PT"→`Boulevard`,
+"Torre A"→`Torre A`, "Viña Centro"→`Viña Centro`, "Curicó"→`Mall Curicó`.
+
+**Regla de derivación** (confirmada por el usuario 2026-08-03):
+- `status='Nuevo Contrato'` → absorción `+m2`, período = mes de `inicio_nuevo_contrato`
+- `status='Término'` → absorción `-m2`, período = mes de `vencimiento`
+- `status='Renovó'`/`'Renovación'` → absorción `0` (mismo arrendatario sigue
+  ocupando; el archivo no trae m2 antes/después desglosado)
+- Excluye `tipo_unidad='Estacionamientos'` (consistente con vacancia)
+
+Vistas: `v_absorcion_movimiento` (detalle por movimiento) y `v_absorcion_activo`
+(neto por `activo_key` + `periodo`).
+
+**A futuro**: cuando exista rent roll para todos los períodos, la absorción
+debe derivarse de `raw_rent_roll_line` (comparando ocupación mes a mes), igual
+que vacancia — este archivo manual queda solo para el histórico sin rent roll.
+
 **Discrepancias detectadas vs. rent roll ya ingestado — resueltas 2026-08-03
 con explicación del usuario**:
 - **Apo3001 GLA** (4.493,55 manual vs 4.589,55 rent roll): el rent roll
