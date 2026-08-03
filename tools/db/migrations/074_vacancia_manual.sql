@@ -1,0 +1,97 @@
+-- 074: vacancia histórica manual + vistas de consolidación.
+--
+-- Fuente: SharePoint RAW/"Vacancia histórica DB.xlsx" (2017-06 a 2026-12).
+-- Cubre los períodos SIN rent roll ingestado. Donde ya existe rent roll
+-- (raw_rent_roll_line), la vacancia se calcula directo desde ahí (más
+-- granular: incluye tipo_unidad por unidad vía extra_json.tipo_activo_1) y
+-- este archivo manual queda solo de respaldo/histórico.
+--
+-- tipo_unidad NULL = el dato de la fuente ya viene consolidado (no desglosado
+-- por tipo). Con valor ('Oficinas'|'Locales Comerciales'|'Bodegas') = desglose
+-- por tipo dentro de un activo o complejo.
+--
+-- activo_key puede ser un activo real de dim_activo (INMOSA, Viña Centro,
+-- Mall Curicó, Apo3001, Sucden, Apo4501, Apo4700, Strip Machalí) o el
+-- pseudo-key 'PT_consolidado': el archivo fuente no desglosa Parque Titanium
+-- por edificio (Torre A / Boulevard) para períodos históricos, solo por tipo
+-- de unidad a nivel del complejo completo. Para períodos con rent roll, la
+-- vacancia de Torre A/Boulevard por tipo se obtiene de raw_rent_roll_line.
+
+CREATE TABLE raw_vacancia_manual (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    activo_key    TEXT NOT NULL,
+    tipo_unidad   TEXT,
+    periodo       TEXT NOT NULL,
+    m2_gla        REAL,
+    m2_vacantes   REAL,
+    source_file   TEXT,
+    source_sheet  TEXT,
+    file_hash     TEXT,
+    ingest_run_id INTEGER REFERENCES ingest_run(id),
+    loaded_at     TEXT DEFAULT (datetime('now')),
+    superseded_at TEXT
+);
+
+CREATE INDEX idx_raw_vacancia_manual_activo_periodo
+    ON raw_vacancia_manual(activo_key, periodo);
+
+-- Vacancia por activo + tipo_unidad, calculada desde rent roll cuando existe
+-- (normaliza extra_json.tipo_activo_1 -> tipo_unidad), y desde el archivo
+-- manual en el resto de los períodos.
+CREATE VIEW v_vacancia_activo_tipo AS
+WITH rr AS (
+    SELECT
+        activo_key,
+        periodo,
+        -- tipo_activo_1 no sirve para unidades vacantes (queda 'Vacante' en vez
+        -- del tipo real); tipo_activo_2 sí es confiable para vacantes y ocupadas.
+        CASE json_extract(extra_json, '$.tipo_activo_2')
+            WHEN 'Oficina'         THEN 'Oficinas'
+            WHEN 'Local'           THEN 'Locales Comerciales'
+            WHEN 'Bodega'          THEN 'Bodegas'
+            WHEN 'Estacionamiento' THEN 'Estacionamiento'
+            ELSE 'Otro'
+        END AS tipo_unidad,
+        SUM(m2) AS m2_gla,
+        SUM(CASE WHEN arrendatario = 'Vacante' THEN m2 ELSE 0 END) AS m2_vacantes
+    FROM raw_rent_roll_line
+    WHERE superseded_at IS NULL
+    GROUP BY activo_key, periodo, tipo_unidad
+)
+SELECT activo_key, periodo, tipo_unidad, m2_gla, m2_vacantes, 'rent_roll' AS fuente
+FROM rr
+UNION ALL
+SELECT m.activo_key, m.periodo, m.tipo_unidad, m.m2_gla, m.m2_vacantes, 'manual' AS fuente
+FROM raw_vacancia_manual m
+WHERE m.superseded_at IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM rr
+       WHERE rr.activo_key = m.activo_key AND rr.periodo = m.periodo
+  );
+
+-- Vacancia total por activo y período (colapsa tipo_unidad).
+CREATE VIEW v_vacancia_activo AS
+SELECT activo_key, periodo,
+       SUM(m2_gla)      AS m2_gla,
+       SUM(m2_vacantes) AS m2_vacantes,
+       CAST(SUM(m2_vacantes) AS REAL) / NULLIF(SUM(m2_gla), 0) AS vacancia_pct,
+       fuente
+FROM v_vacancia_activo_tipo
+GROUP BY activo_key, periodo, fuente;
+
+-- Parque Titanium consolidado (Torre A + Boulevard) por tipo_unidad.
+-- Para períodos con rent roll: suma Torre A + Boulevard desglosados por tipo.
+-- Para períodos históricos sin rent roll: pasa directo el dato ya
+-- consolidado del archivo manual (activo_key = 'PT_consolidado').
+CREATE VIEW v_vacancia_pt_consolidado_tipo AS
+SELECT periodo, tipo_unidad,
+       SUM(m2_gla) AS m2_gla,
+       SUM(m2_vacantes) AS m2_vacantes,
+       fuente
+FROM v_vacancia_activo_tipo
+WHERE activo_key IN ('Torre A', 'Boulevard')
+GROUP BY periodo, tipo_unidad, fuente
+UNION ALL
+SELECT periodo, tipo_unidad, m2_gla, m2_vacantes, fuente
+FROM v_vacancia_activo_tipo
+WHERE activo_key = 'PT_consolidado';

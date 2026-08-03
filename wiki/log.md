@@ -1,3 +1,15 @@
+## [2026-08-03] feat | Vacancia histórica manual (migración 074) + consolidación por tipo de unidad
+
+Nueva tabla `raw_vacancia_manual` + vistas `v_vacancia_activo_tipo`/`v_vacancia_activo`/
+`v_vacancia_pt_consolidado_tipo` en `memory/agente_toesca_v2.db`. Ingesta desde
+`RAW/Vacancia histórica DB.xlsx` (2017-06 a 2026-12), 1204 filas. El rent roll ya ingestado
+manda cuando existe (más granular, con tipo de unidad vía `extra_json.tipo_activo_2` — ojo:
+`tipo_activo_1` queda "Vacante" en unidades vacantes, no sirve para clasificar tipo).
+Mapeos resueltos: Chañarcillo(GLA)=Sucden, Fondo Apoquindo=Apo4501+Apo4700, PT histórico sin
+desglose por edificio (pseudo-activo `PT_consolidado`). Discrepancias detectadas y reportadas
+al usuario (no corregidas, pendiente investigar causa): Mall Curicó vacancia 2026-05 (2.476 vs
+3.017,87 m2), Apo3001 GLA 2026-06 (4.493,55 vs 4.589,55 m2). Detalle en `wiki/db.md`.
+
 ## [2026-07-30] fix | Aspectos del mes (PT): guardado requiere click en "Confirmar", no basta con blur
 
 El guardado on-blur (commit anterior del mismo día) no era confiable: cualquier re-render

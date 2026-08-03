@@ -357,3 +357,50 @@ esta — queda igual que el pendiente abierto para Viña/Curicó vs.
 
 Con Apo3001 quedan consolidados en `raw_er_activo_line` los 5 activos
 pendientes del fondo TRI (INMOSA, Sucden, Viña Centro, Curicó, Apo3001).
+
+## Vacancia histórica (DB v2, `memory/agente_toesca_v2.db`, migración 074)
+
+Fuente manual: `RAW/Vacancia histórica DB.xlsx` (SharePoint), 2017-06 a
+2026-12, formato activo×mes con dos bloques (m2 GLA y m2 vacantes). Tabla
+`raw_vacancia_manual(activo_key, tipo_unidad, periodo, m2_gla, m2_vacantes, ...)`.
+Módulo de ingesta: `tools/db/ingest_vacancia_manual.py`.
+
+**Regla**: `raw_rent_roll_line` manda cuando existe para ese activo/período
+(más granular — trae `tipo_unidad` por unidad vía `extra_json.tipo_activo_2`);
+el archivo manual solo cubre los períodos sin rent roll ingestado. Vistas:
+
+- `v_vacancia_activo_tipo` — activo × período × tipo_unidad (Oficinas /
+  Locales Comerciales / Bodegas / Estacionamiento / Otro), con `fuente`
+  ('rent_roll' | 'manual')
+- `v_vacancia_activo` — colapsa tipo_unidad, da `vacancia_pct` total
+- `v_vacancia_pt_consolidado_tipo` — Parque Titanium consolidado (Torre A +
+  Boulevard) por tipo_unidad; para períodos sin rent roll usa directo el
+  pseudo-activo `PT_consolidado` (el archivo fuente no desglosa PT por
+  edificio en el histórico, solo por tipo a nivel de todo el complejo)
+
+**tipo_activo_2 vs tipo_activo_1**: en `raw_rent_roll_line.extra_json`,
+`tipo_activo_1` queda como literal `"Vacante"` en las unidades vacantes (no
+sirve para clasificar el tipo de unidad). `tipo_activo_2` sí es confiable
+para vacantes y ocupadas (`Oficina`/`Local`/`Bodega`/`Estacionamiento`) — la
+vista usa ese campo.
+
+**Mapeos no obvios** (nombre del archivo → `activo_key`):
+- "Chañarcillo" (bloque GLA) = `Sucden` (comparten `sociedad_key`, el
+  archivo la llama por el nombre de la sociedad en el bloque GLA pero
+  "SUCDEN" en el bloque de vacantes)
+- "Fondo Apoquindo" = agregado `Apo4501` + `Apo4700` (confirmado exacto:
+  1530.73+1507=3037.73 m2 vacantes 2026-06) — mismo pseudo-activo legacy que
+  ya usa `derived_kpi` para NOI/vacancia de Apoquindo, ver
+  `docs/matriz-claves-ambiguas-apoquindo.md`
+- "Curicó" = `Mall Curicó`, "Apoquindo 3001" = `Apo3001`
+
+**Discrepancias detectadas vs. rent roll ya ingestado (reportadas al usuario,
+pendiente investigar la causa, NO corregidas — son diferencia real de dato,
+no bug de mapeo)**:
+- Mall Curicó 2026-05: archivo manual 2.476 m2 vacantes vs. rent roll JLL
+  3.017,87 m2 (diff ~542 m2, ~22%)
+- Apo3001 2026-06: archivo manual 4.493,55 m2 GLA vs. rent roll 4.589,55 m2
+  (diff exacta de 96 m2)
+- Torre A/Boulevard: GLA y vacantes por tipo calzan casi exacto entre ambas
+  fuentes cuando se agrupa por `tipo_activo_2` (diferencias <1%, atribuibles
+  a redondeo/timing)
