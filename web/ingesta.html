@@ -392,6 +392,10 @@
   .inicio-matrix .dot.miss { background: var(--err); }
   .inicio-matrix .dot.na { background: #d0d0d0; }
 
+  .inicio-mini-header {
+    display: flex; align-items: center; gap: 10px; justify-content: center; margin: 10px 0 0;
+  }
+  .mini-refresh-status { font-size: 12px; color: var(--muted); }
   .inicio-mini-cards {
     display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 14px 0 0;
   }
@@ -501,6 +505,10 @@
   </div>
   <div id="inicio-cards" class="inicio-cards"></div>
   <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
+  <div class="inicio-mini-header">
+    <button id="btn-refrescar-mini" class="inicio-action-btn" type="button">Actualizar UF / USD / Cuota</button>
+    <span id="refrescar-mini-status" class="mini-refresh-status"></span>
+  </div>
 </div>
 
 <!-- ══════════════════════════ TAB EEFF ══════════════════════════ -->
@@ -2762,6 +2770,31 @@ if (inicioSort) {
 }
 
 loadEstadoIngesta();
+
+const btnRefrescarMini = document.getElementById('btn-refrescar-mini');
+const refrescarMiniStatus = document.getElementById('refrescar-mini-status');
+if (btnRefrescarMini) {
+  btnRefrescarMini.addEventListener('click', async () => {
+    btnRefrescarMini.disabled = true;
+    refrescarMiniStatus.textContent = 'Actualizando…';
+    try {
+      const res = await fetch('/api/estado_ingesta/refrescar', { method: 'POST' });
+      const data = await res.json();
+      renderEstadoIngesta(data);
+      if (data.ok) {
+        refrescarMiniStatus.textContent = 'Actualizado.';
+      } else {
+        const detalle = Object.entries(data.errores || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
+        refrescarMiniStatus.textContent = `Con errores — ${detalle}`;
+      }
+    } catch (e) {
+      refrescarMiniStatus.textContent = 'Error al actualizar: ' + e.message;
+    } finally {
+      btnRefrescarMini.disabled = false;
+      setTimeout(() => { refrescarMiniStatus.textContent = ''; }, 6000);
+    }
+  });
+}
 
 // ── TAB PARKING PT ───────────────────────────────────────────────────────
 const pkPeriodo = document.getElementById('pk-periodo');

@@ -271,6 +271,44 @@ def api_estado_ingesta():
         con.close()
 
 
+@app.post("/api/estado_ingesta/refrescar")
+def api_estado_ingesta_refrescar():
+    """Trae el último dato disponible de UF, USD y valor cuota bursátil y
+    reporta el estado actualizado. Best-effort: si una fuente falla, las
+    otras dos igual se intentan y se informa el error por separado.
+    """
+    from tools import uf_web_tools, web_bursatil_tools
+    from tools.db import ingest_dolar
+
+    errores: dict[str, str] = {}
+
+    try:
+        uf_web_tools.actualizar_uf_desde_web(verbose=False)
+    except Exception as e:
+        errores["uf"] = str(e)
+
+    try:
+        resultado_dolar = ingest_dolar.backfill_dolar_hoy(verbose=False)
+        if resultado_dolar.get("sin_datos"):
+            errores["dolar"] = "; ".join(resultado_dolar["sin_datos"])
+    except Exception as e:
+        errores["dolar"] = str(e)
+
+    try:
+        hoy = date.today()
+        web_bursatil_tools.obtener_precios_mes(hoy.year, hoy.month)
+    except Exception as e:
+        errores["bursatil"] = str(e)
+
+    con = get_conn_for(str(estado_ingesta.DB_PATH))
+    try:
+        estado = estado_ingesta.estado_ingesta(con)
+    finally:
+        con.close()
+
+    return jsonify({"ok": not errores, "errores": errores, **estado})
+
+
 @app.get("/api/estado_ingesta/timeline_range")
 def api_estado_ingesta_timeline_range():
     tipo_id = request.args.get("tipo", "")
