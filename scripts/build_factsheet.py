@@ -1777,6 +1777,11 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
                font-weight: 700; font-size: 14px; letter-spacing: 1px;
                border-bottom: 2px solid var(--green); }
   .month-bar > span { text-align: right; }
+  body.pdf-export #sidebar,
+  body.pdf-export .tc-fab,
+  body.pdf-export .tc-fab-label,
+  body.pdf-export .tc-panel { display: none !important; }
+  body.pdf-export #main-content { margin-left: 0 !important; }
   .selectors {
     display: flex; flex-direction: column; gap: 0;
     padding: 0; background: transparent;
@@ -2300,6 +2305,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   </div>
   <a href="http://localhost:8765/ingesta" target="_blank" rel="noopener" id="btn-ingesta" class="admin-toggle" style="text-decoration:none;text-align:center;display:block;margin-top:6px" title="Ingestar un nuevo EEFF a la base de datos (requiere tener ingesta.bat corriendo)">Ingesta FS</a>
   <button type="button" id="btn-admin" class="admin-toggle" title="Modo admin: click en cualquier número para ver cómo se calculó, y editar fechas de Noticias">✎ Admin</button>
+  <button type="button" id="btn-export-pdf" class="admin-toggle" title="Exportar uno o varios fact sheets a PDF">⬇ Exportar PDF</button>
 </div>
 <div id="main-content">
 <div class="page">
@@ -2805,6 +2811,29 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   </div>
 </div>
 
+<div id="export-modal-bg" class="trace-modal-bg" aria-hidden="true">
+  <div class="trace-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
+    <button type="button" class="trace-close" id="export-close" aria-label="Cerrar">×</button>
+    <h3 id="export-title">Exportar a PDF</h3>
+    <div class="trace-sub">Elige uno o más fondos y el período a exportar.</div>
+    <div id="export-fund-checks" style="margin:12px 0;display:flex;gap:14px"></div>
+    <table class="trace-inputs" style="width:100%;margin-bottom:12px">
+      <tbody>
+        <tr>
+          <td>Período operacional</td>
+          <td><select id="export-sel-op" style="width:100%"></select></td>
+        </tr>
+        <tr>
+          <td>Período EEFF (contable/bursátil)</td>
+          <td><select id="export-sel-cb" style="width:100%"></select></td>
+        </tr>
+      </tbody>
+    </table>
+    <div id="export-status" style="min-height:16px;font-size:11px;color:#666;margin-bottom:8px"></div>
+    <button type="button" id="export-download-btn" class="fund-btn active" style="width:100%;padding:8px">Descargar</button>
+  </div>
+</div>
+
 <script>
 const FUNDS = __DATA_JSON__;
 const KPI_META = __KPI_META_JSON__;
@@ -2905,6 +2934,100 @@ function renderTraceModal(el){
 
 function closeTraceModal(){
   document.getElementById("trace-modal-bg").classList.remove("open");
+}
+
+function fmtMonthLabel(p){
+  const [y, m] = p.split("-");
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return meses[parseInt(m, 10) - 1] + " " + y;
+}
+
+function refreshExportPeriodos(){
+  const checked = Array.from(document.querySelectorAll("#export-fund-checks input:checked")).map(i => i.value);
+  const opSel = document.getElementById("export-sel-op");
+  const cbSel = document.getElementById("export-sel-cb");
+  const opPrev = opSel.value;
+  const cbPrev = cbSel.value;
+
+  const opSet = new Set();
+  const cbSet = new Set();
+  checked.forEach(f => {
+    Object.keys(FUNDS[f].fondo_kpi || {}).forEach(p => opSet.add(p));
+    Object.keys(FUNDS[f].contable || {})
+      .filter(p => ["03","06","09","12"].includes(p.slice(-2)))
+      .forEach(p => cbSet.add(p));
+  });
+
+  const opList = Array.from(opSet).sort();
+  const cbList = Array.from(cbSet).sort();
+
+  opSel.innerHTML = opList.map(p => `<option value="${p}">${fmtMonthLabel(p)}</option>`).join("");
+  cbSel.innerHTML = cbList.map(p => `<option value="${p}">${fmtQ(p)}</option>`).join("");
+
+  if (opList.includes(opPrev)) opSel.value = opPrev; else if (opList.length) opSel.value = opList[opList.length - 1];
+  if (cbList.includes(cbPrev)) cbSel.value = cbPrev; else if (cbList.length) cbSel.value = cbList[cbList.length - 1];
+
+  document.getElementById("export-download-btn").disabled = checked.length === 0;
+}
+
+function openExportModal(){
+  const wrap = document.getElementById("export-fund-checks");
+  wrap.innerHTML = Object.keys(FUNDS).map(f => `
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px">
+      <input type="checkbox" value="${f}" ${f === currentFund ? "checked" : ""}> ${f}
+    </label>
+  `).join("");
+  wrap.querySelectorAll("input").forEach(i => i.addEventListener("change", refreshExportPeriodos));
+  refreshExportPeriodos();
+  document.getElementById("export-status").textContent = "";
+  document.getElementById("export-modal-bg").classList.add("open");
+}
+
+function closeExportModal(){
+  document.getElementById("export-modal-bg").classList.remove("open");
+}
+
+async function onDescargarPdf(){
+  const fondos = Array.from(document.querySelectorAll("#export-fund-checks input:checked")).map(i => i.value);
+  if (!fondos.length) return;
+  const periodo_op = document.getElementById("export-sel-op").value;
+  const periodo_cb = document.getElementById("export-sel-cb").value;
+  const btn = document.getElementById("export-download-btn");
+  const status = document.getElementById("export-status");
+
+  btn.disabled = true;
+  btn.textContent = "Generando...";
+  status.textContent = "";
+
+  try {
+    const headers = {"Content-Type": "application/json"};
+    if (window.INGESTA_TOKEN) headers["X-Ingesta-Token"] = window.INGESTA_TOKEN;
+    const resp = await fetch("/api/export-pdf", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ fondos, periodo_cb, periodo_op }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      status.textContent = "Error: " + (err.error || resp.statusText);
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `factsheets_${periodo_op}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    closeExportModal();
+  } catch (exc) {
+    status.textContent = "Error inesperado: " + exc;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Descargar";
+  }
 }
 
 function fmtCLP(v){ if(v==null||isNaN(v)) return "—"; return "$"+Math.round(v).toLocaleString("es-CL"); }
@@ -3058,8 +3181,11 @@ function fmtMontoUf(v, periodo, F, tabla){
   return uf ? (v*uf/1e6).toLocaleString("es-CL",{minimumFractionDigits:1,maximumFractionDigits:1}) : "—";
 }
 function toggleUnit(tabla){
-  unitState[tabla] = unitState[tabla]==="uf" ? "clp" : "uf";
-  localStorage.setItem("factsheet_unit_"+tabla, unitState[tabla]);
+  const nuevo = unitState[tabla]==="uf" ? "clp" : "uf";
+  for (const t of Object.keys(unitState)) {
+    unitState[t] = nuevo;
+    localStorage.setItem("factsheet_unit_"+t, nuevo);
+  }
   if (typeof currentFund !== "undefined" && currentFund) render();
 }
 
@@ -5521,7 +5647,47 @@ function render(){
   document.getElementById("btn-unit-balance").addEventListener("click", () => toggleUnit("balance"));
   document.getElementById("btn-unit-gastos").addEventListener("click", () => toggleUnit("gastos"));
   document.getElementById("btn-unit-dfn").addEventListener("click", () => toggleUnit("dfn"));
-  switchFund("TRI");
+  document.getElementById("btn-export-pdf").addEventListener("click", openExportModal);
+  document.getElementById("export-close").addEventListener("click", closeExportModal);
+  document.getElementById("export-modal-bg").addEventListener("click", (ev) => {
+    if (ev.target.id === "export-modal-bg") closeExportModal();
+  });
+  document.getElementById("export-download-btn").addEventListener("click", onDescargarPdf);
+
+  const __params = new URLSearchParams(location.search);
+  const __pFondo = __params.get("fondo");
+  const __pCb = __params.get("cb");
+  const __pOp = __params.get("op");
+  const __pdfMode = __params.get("pdfmode") === "1";
+
+  if (__pdfMode) document.body.classList.add("pdf-export");
+
+  if (__pFondo && FUNDS[__pFondo]) {
+    switchFund(__pFondo);
+    let __missing = false;
+    if (__pCb) {
+      const selCb = document.getElementById("sel-periodo-cb");
+      if (Array.from(selCb.options).some(o => o.value === __pCb)) {
+        selCb.value = __pCb;
+        selCb.dispatchEvent(new Event("change"));
+      } else {
+        __missing = true;
+      }
+    }
+    if (__pOp) {
+      const selOp = document.getElementById("sel-periodo-op");
+      if (Array.from(selOp.options).some(o => o.value === __pOp)) {
+        selOp.value = __pOp;
+        selOp.dispatchEvent(new Event("change"));
+      } else {
+        __missing = true;
+      }
+    }
+    window.__PDF_READY__ = __missing ? "no_data" : true;
+  } else {
+    switchFund("TRI");
+    if (__pdfMode) window.__PDF_READY__ = "no_data";
+  }
 })();
 </script>
 </div><!-- #main-content -->
