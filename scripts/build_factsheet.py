@@ -154,6 +154,16 @@ FONDOS_CFG = {
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
             ],
             "tipo_activo": ["Oficinas", "Comercial", "Industrial", "Residencias"],
+            # Orden de gráficos validado contra el FS TRI abril 2026 (PDF de
+            # referencia): NOI/RCSD + Ingresos-NOI-Vacancia arriba; tablas
+            # anuales por tipo de activo (ingresos/NOI) + donut de rubro al
+            # medio (sin donut de tipo de activo, a diferencia de PT); perfil
+            # de vencimiento + recaudación abajo. Ver PAGE2_CHART_BOXES / JS.
+            "charts_layout": [
+                ["noi_rcsd", "ingresos_noi_vacancia"],
+                ["tablas_anuales", "rubro"],
+                ["perfil_vencimiento", "recaudacion"],
+            ],
         },
         # Página 3 — "Análisis de Mercado" (fact sheet TRI abril 2026, PDF de
         # referencia): oficinas / bodegas / centros comerciales. A diferencia de
@@ -2543,52 +2553,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     </div>
     <p class="small placeholder">Pendiente: valores por activo desde rent roll consolidado (raw_rent_roll_line).</p>
 
-    <div class="charts-grid-2">
-      <div class="chart-box">
-        <div class="chart-title" id="chart-title-rubro">Composición por Rubro del Arrendatario (UF/mes)</div>
-        <div id="chart-rubro" data-chart="rubro-arrendatario">
-          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
-        </div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title" id="chart-title-tipo">Composición por Tipo de Activo (UF/mes)</div>
-        <div class="donut-wrap" id="donut-tipo-activo" data-chart="tipo-activo">
-          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="charts-grid-2">
-      <div class="chart-box">
-        <div class="chart-title">Evolución NOI y Ratio de Cobertura de Servicio de Deuda</div>
-        <div id="chart-noi-rcsd" data-chart="noi-rcsd">
-          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
-        </div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title">Evolución Ingresos, NOI y Vacancia (%)</div>
-        <div id="chart-ingresos-noi-vacancia" data-chart="ingresos-noi-vacancia">
-          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="charts-grid-2">
-      <div class="chart-box">
-        <div class="chart-title">Perfil de Vencimiento de Contratos (UF/mes)
-          <span class="small" style="float:right;font-weight:400;text-transform:none">Plazo medio contratos: <b id="fld-plazo-medio">—</b></span>
-        </div>
-        <div id="chart-perfil-vencimiento" data-chart="perfil-vencimiento-contratos">
-          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
-        </div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title">Recaudación Consolidada U12M
-          <span class="small" style="float:right;font-weight:400;text-transform:none">Morosidad promedio: <b id="fld-morosidad">—</b></span>
-        </div>
-        <div class="chart-placeholder" data-chart="recaudacion-consolidada">Pendiente de datos</div>
-      </div>
-    </div>
+    <div id="page2-charts-container"></div>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
@@ -3855,6 +3820,76 @@ function fmtPerfCell(v, esPct){
   return esPct ? s + "%" : s;
 }
 
+// Página 2 — bloques de gráficos/tablas de "Resumen Performance Activos del
+// Fondo", ensamblados dinámicamente según S.page2.charts_layout (lista de
+// filas, cada fila una lista de claves de PAGE2_CHART_BOXES). Así cada fondo
+// puede tener su propio orden/composición sin duplicar el HTML — ver imagen
+// de referencia FS TRI abril 2026 (orden NOI/RCSD arriba, tablas anuales +
+// donut rubro al medio, perfil vencimiento + recaudación abajo), distinto del
+// orden validado para PT (rubro + tipo activo arriba).
+const PAGE2_CHART_BOXES = {
+  rubro: `<div class="chart-box">
+    <div class="chart-title" id="chart-title-rubro">Composición por Rubro del Arrendatario (UF/mes)</div>
+    <div id="chart-rubro" data-chart="rubro-arrendatario">
+      <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+    </div>
+  </div>`,
+  tipo_activo: `<div class="chart-box">
+    <div class="chart-title" id="chart-title-tipo">Composición por Tipo de Activo (UF/mes)</div>
+    <div class="donut-wrap" id="donut-tipo-activo" data-chart="tipo-activo">
+      <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+    </div>
+  </div>`,
+  noi_rcsd: `<div class="chart-box">
+    <div class="chart-title">Evolución NOI y Ratio de Cobertura de Servicio de Deuda</div>
+    <div id="chart-noi-rcsd" data-chart="noi-rcsd">
+      <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+    </div>
+  </div>`,
+  ingresos_noi_vacancia: `<div class="chart-box">
+    <div class="chart-title">Evolución Ingresos, NOI y Vacancia (%)</div>
+    <div id="chart-ingresos-noi-vacancia" data-chart="ingresos-noi-vacancia">
+      <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+    </div>
+  </div>`,
+  perfil_vencimiento: `<div class="chart-box">
+    <div class="chart-title">Perfil de Vencimiento de Contratos (UF/mes)
+      <span class="small" style="float:right;font-weight:400;text-transform:none">Plazo medio contratos: <b id="fld-plazo-medio">—</b></span>
+    </div>
+    <div id="chart-perfil-vencimiento" data-chart="perfil-vencimiento-contratos">
+      <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+    </div>
+  </div>`,
+  recaudacion: `<div class="chart-box">
+    <div class="chart-title">Recaudación Consolidada U12M
+      <span class="small" style="float:right;font-weight:400;text-transform:none">Morosidad promedio: <b id="fld-morosidad">—</b></span>
+    </div>
+    <div class="chart-placeholder" data-chart="recaudacion-consolidada">Pendiente de datos</div>
+  </div>`,
+  // Tablas anuales por tipo de activo (fila 2019-2025 + U12M) — pendientes de
+  // wire a la DB (no hay fuente consolidada de ingresos/NOI históricos por
+  // tipo de activo a nivel fondo todavía). Estructura visual únicamente.
+  tablas_anuales: `<div class="chart-box chart-box-stack">
+    <div class="chart-title">Ingresos Anuales por Tipo de Activo (UF)</div>
+    <div class="chart-placeholder" data-chart="ingresos-anual-tipo-activo">Pendiente de datos</div>
+    <div class="chart-title">NOI Anual por Tipo de Activo (UF)</div>
+    <div class="chart-placeholder" data-chart="noi-anual-tipo-activo">Pendiente de datos</div>
+  </div>`,
+};
+
+const PAGE2_LAYOUT_DEFAULT = [
+  ["rubro", "tipo_activo"],
+  ["noi_rcsd", "ingresos_noi_vacancia"],
+  ["perfil_vencimiento", "recaudacion"],
+];
+
+function renderPage2ChartsLayout(layoutRows){
+  const rows = layoutRows && layoutRows.length ? layoutRows : PAGE2_LAYOUT_DEFAULT;
+  document.getElementById("page2-charts-container").innerHTML = rows.map(row => {
+    return `<div class="charts-grid-2">${row.map(k => PAGE2_CHART_BOXES[k] || "").join("")}</div>`;
+  }).join("");
+}
+
 // Donut chart (conic-gradient) — data: [[label, pct], ...], pct suma 100.
 const DONUT_COLORS = ["#00B27A", "#C8ECD8", "#7FCDA0", "#E0E0E0"];
 function renderDonut(containerId, data, options = {}){
@@ -4879,28 +4914,39 @@ function render(){
   // Página 2
   document.getElementById("month-bar2").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
   if (S.page2) {
+    renderPage2ChartsLayout(S.page2.charts_layout);
     const perfPeriodo = (F.perf_data || {})[usadoOp] ? usadoOp : null;
     document.getElementById("perf-fecha").textContent = perfPeriodo
       ? "(al " + mesEspanol(perfPeriodo) + ")"
       : "(sin rent roll para " + mesEspanol(usadoOp) + ")";
     renderPerfActivosHeader(S.page2, perfPeriodo ? F.perf_data[perfPeriodo] : null);
-    const rubroPeriodo = (F.rubro_arrendatario || {})[usadoOp] ? usadoOp : null;
-    renderBarChartHorizontal("chart-rubro", rubroPeriodo ? F.rubro_arrendatario[rubroPeriodo] : null);
-    const tipoPeriodo = (F.tipo_activo || {})[usadoOp] ? usadoOp : null;
-    renderTipoActivoDonut("donut-tipo-activo", tipoPeriodo ? F.tipo_activo[tipoPeriodo] : null, S.page2.tipo_activo);
-    if (S.page2.perfil_vencimiento_edificios) {
-      const vencPeriodo = (F.perfil_vencimiento || {})[usadoOp] ? usadoOp : null;
-      const vencData = vencPeriodo ? F.perfil_vencimiento[vencPeriodo] : null;
-      renderStackedBarChart("chart-perfil-vencimiento", vencData, S.page2.perfil_vencimiento_edificios);
-      document.getElementById("fld-plazo-medio").textContent =
-        vencData && vencData.plazo_medio_anios != null ? fmtNum(vencData.plazo_medio_anios, 1) + " años" : "—";
-    } else {
-      // Fondos sin desglose por edificio (PT, TRI): este gráfico es Apo-specific.
-      // Resetear a placeholder explícitamente — si no, al cambiar de fondo en el
-      // selector (SPA sin reload) queda pegado el último SVG renderizado para Apo.
-      document.getElementById("chart-perfil-vencimiento").innerHTML =
-        `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
-      document.getElementById("fld-plazo-medio").textContent = "—";
+    // Los boxes de gráficos se arman según S.page2.charts_layout (ver
+    // renderPage2ChartsLayout arriba) — no todos los fondos incluyen todos
+    // los ids (ej. TRI no tiene "tipo_activo"), por eso cada bloque chequea
+    // que su elemento exista antes de renderizar.
+    if (document.getElementById("chart-rubro")) {
+      const rubroPeriodo = (F.rubro_arrendatario || {})[usadoOp] ? usadoOp : null;
+      renderBarChartHorizontal("chart-rubro", rubroPeriodo ? F.rubro_arrendatario[rubroPeriodo] : null);
+    }
+    if (document.getElementById("donut-tipo-activo")) {
+      const tipoPeriodo = (F.tipo_activo || {})[usadoOp] ? usadoOp : null;
+      renderTipoActivoDonut("donut-tipo-activo", tipoPeriodo ? F.tipo_activo[tipoPeriodo] : null, S.page2.tipo_activo);
+    }
+    if (document.getElementById("chart-perfil-vencimiento")) {
+      if (S.page2.perfil_vencimiento_edificios) {
+        const vencPeriodo = (F.perfil_vencimiento || {})[usadoOp] ? usadoOp : null;
+        const vencData = vencPeriodo ? F.perfil_vencimiento[vencPeriodo] : null;
+        renderStackedBarChart("chart-perfil-vencimiento", vencData, S.page2.perfil_vencimiento_edificios);
+        document.getElementById("fld-plazo-medio").textContent =
+          vencData && vencData.plazo_medio_anios != null ? fmtNum(vencData.plazo_medio_anios, 1) + " años" : "—";
+      } else {
+        // Fondos sin desglose por edificio (PT, TRI): este gráfico es Apo-specific.
+        // Resetear a placeholder explícitamente — si no, al cambiar de fondo en el
+        // selector (SPA sin reload) queda pegado el último SVG renderizado para Apo.
+        document.getElementById("chart-perfil-vencimiento").innerHTML =
+          `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+        document.getElementById("fld-plazo-medio").textContent = "—";
+      }
     }
   }
 

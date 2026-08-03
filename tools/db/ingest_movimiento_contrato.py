@@ -60,12 +60,19 @@ def _norm_tipo(raw):
     return TIPO_UNIDAD_MAP.get(raw.strip().lower(), raw.strip())
 
 
-def _to_iso(v):
+def _to_iso(v, context=""):
     if v is None:
         return None
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
-    return str(v)
+    s = str(v).strip().replace(".", "")
+    for fmt in ("%d-%m-%Y", "%d-%m-%y", "%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    print(f"[WARN] fecha invalida {s!r} ({context}) -> descartada")
+    return None
 
 
 def _read_sheet(ws, sheet_name, start_row, end_row, has_uf_total):
@@ -112,9 +119,9 @@ def _read_sheet(ws, sheet_name, start_row, end_row, has_uf_total):
             "hoy_uf_m2": cell("hoy_uf_m2"),
             "m2": cell("m2"),
             "pct_variacion": cell("pct_variacion"),
-            "vencimiento": _to_iso(cell("vencimiento")),
-            "inicio_nuevo_contrato": _to_iso(cell("inicio_nuevo_contrato")),
-            "nuevo_vencimiento": _to_iso(cell("nuevo_vencimiento")),
+            "vencimiento": _to_iso(cell("vencimiento"), f"{sheet_name} fila {r} vencimiento"),
+            "inicio_nuevo_contrato": _to_iso(cell("inicio_nuevo_contrato"), f"{sheet_name} fila {r} inicio_nuevo_contrato"),
+            "nuevo_vencimiento": _to_iso(cell("nuevo_vencimiento"), f"{sheet_name} fila {r} nuevo_vencimiento"),
             "comentarios": cell("comentarios"),
             "source_row": r,
         })

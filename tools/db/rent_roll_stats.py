@@ -630,7 +630,7 @@ def get_m2_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict |
     return _top_n_por_clave(snapshot, lambda v: v["arrendatario"], lambda v: v["m2"] or 0.0, top_n)
 
 
-def get_rubro_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict | None:
+def get_rubro_arrendatario(activo_key: str, periodo: str, top_n: int = 10) -> dict | None:
     """Renta mensual ocupada (UF), agrupada por rubro del arrendatario
     (extra_json.tipo_arrendatario, top-N por monto + "Otro"), para el
     gráfico "Composición por Rubro del Arrendatario" de la página 2 (ver
