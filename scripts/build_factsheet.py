@@ -868,6 +868,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "parking": parking_data,
+        "noi_rcsd": _fetch_noi_rcsd(fondo_key),
         "perf_data": _fetch_perf_data(fondo_key),
         "vacancia_apo": _fetch_vacancia_apo(fondo_key),
         "rubro_arrendatario": _fetch_rubro_arrendatario(fondo_key),
@@ -883,6 +884,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "vacancia_pt_tipo": _fetch_vacancia_pt_tipo(fondo_key),
         "parking_desempeno": _fetch_parking_desempeno(fondo_key),
         "noi_u12m_yoy": _fetch_noi_u12m_yoy_pt(fondo_key),
+        "ingresos_noi_vacancia": _fetch_ingresos_noi_vacancia(fondo_key),
     }
 
 
@@ -925,6 +927,97 @@ def _fetch_noi_u12m_yoy_pt(fondo_key: str) -> dict:
         base = _u12m(f"{int(anio) - 1}-{mes}")
         if actual is not None and base:
             out[periodo] = round((actual / base - 1) * 100, 1)
+    return out
+
+
+def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
+    """Serie mensual [{periodo, noi_uf, cuota_uf, rcsd}] para el chart
+    "Evolución NOI y Ratio de Cobertura de Servicio de Deuda".
+    noi_uf: derived_kpi entidad_tipo='fondo' kpi='noi_mes' (mismo valor que
+    kpi='noi_mensual' formula='raw_er_noi_v1', ver _fetch_noi_u12m_yoy_pt).
+    cuota_uf: intereses de raw_amortizacion de los créditos del fondo (join
+    dim_credito.fondo_key), clasificando cada crédito por su propio historial
+    (no por tabla fija) en dos tipos:
+      - "Bullet" (capital_uf>0 en <50% de sus períodos, ej. Torre A/Boulevard
+        en PT, Euroamérica en Apo): cuota = solo interés; los meses con
+        capital son prepagos puntuales fuera de la cuota regular, y además el
+        interés de ese mes se devenga sobre el saldo previo al abono y queda
+        anormalmente alto (caso Boulevard nov-2018: interés real 7.041 UF vs
+        ~2.300 UF típico), así que se reemplaza por la mediana histórica de
+        interés del crédito.
+      - "Amortizante" (capital_uf>0 en >=50% de sus períodos, ej. BTG en Apo,
+        "cuotas iguales"): cuota = capital + interés, porque el capital ES la
+        cuota regular del crédito. Se suaviza (reemplazo por mediana de cuota
+        total del crédito) el primer período que supere 2.5x esa mediana —
+        el pago que salda el crédito — y desde ahí el crédito deja de aportar
+        (cuota=0), en vez de "revivir" en pagos posteriores. Caso BTG: pagó su
+        saldo en dos abonos grandes (dic-2025 y mar-2026 real); sin este corte
+        la suavización lo trataba como dos eventos independientes y la cuota
+        volvía a subir en marzo después de caer en enero/febrero — se corta
+        después de dic-2025 por decisión del usuario 2026-07-30.
+    Ver conversación con el usuario 2026-07-30. Solo incluye períodos con
+    ambos datos (NOI y cuota) disponibles."""
+    from statistics import median
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    noi = {
+        r["periodo"]: r["valor"]
+        for r in conn.execute(
+            "SELECT periodo, valor FROM derived_kpi "
+            "WHERE entidad_tipo='fondo' AND entidad_key=? AND kpi='noi_mes'",
+            (fondo_key,),
+        ).fetchall()
+    }
+    rows_amort = conn.execute(
+        "SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf "
+        "FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
+        "WHERE c.fondo_key = ?",
+        (fondo_key,),
+    ).fetchall()
+    por_credito = {}
+    for r in rows_amort:
+        por_credito.setdefault(r["credito_key"], []).append(r)
+
+    cuota = {}
+    for credito_key, filas in por_credito.items():
+        con_capital = sum(1 for r in filas if r["capital_uf"])
+        es_amortizante = con_capital / len(filas) >= 0.5
+
+        if es_amortizante:
+            totales = sorted(
+                (
+                    (r["periodo"], (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0))
+                    for r in filas
+                ),
+                key=lambda t: t[0],
+            )
+            positivos = [t for _, t in totales if t > 0]
+            tipica = median(positivos) if positivos else None
+            for periodo, total in totales:
+                if tipica and total > 2.5 * tipica:
+                    cuota[periodo] = cuota.get(periodo, 0.0) + tipica
+                    break  # pago final del crédito: se suaviza y no aporta más
+                cuota[periodo] = cuota.get(periodo, 0.0) + total
+        else:
+            normales = [r["intereses_uf"] for r in filas if not r["capital_uf"] and r["intereses_uf"]]
+            tipica = median(normales) if normales else None
+            for r in filas:
+                interes = r["intereses_uf"] or 0.0
+                if r["capital_uf"] and tipica:
+                    interes = tipica
+                cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + interes
+
+    periodos = sorted(set(noi) & set(cuota))
+    out = []
+    for p in periodos:
+        n, cu = noi[p], cuota[p]
+        out.append({
+            "periodo": p,
+            "noi_uf": round(n, 1),
+            "cuota_uf": round(cu, 1),
+            "rcsd": round(n / cu, 3) if cu else None,
+        })
     return out
 
 
@@ -1000,6 +1093,81 @@ def _fetch_vacancia_pt_tipo(fondo_key: str) -> dict:
             continue
         out[periodo] = tabla
     return out
+
+
+_VACANCIA_TIPO_VIEW = {
+    "Apo": "v_vacancia_apoquindo_consolidado_tipo",
+    "PT": "v_vacancia_pt_consolidado_tipo",
+}
+
+
+def _fetch_ingresos_noi_vacancia(fondo_key: str) -> list[dict]:
+    """Serie mensual [{periodo, ingresos_uf, noi_uf, vacancia_oficinas_pct,
+    vacancia_locales_pct}] para el chart "Evolución Ingresos, NOI y Vacancia"
+    de la página 2 (eje derecho en %, igual que el fact sheet de referencia).
+    Solo Apo y PT (fondos con rent roll por tipo de activo): ingresos/noi
+    desde derived_kpi (kpi='ingresos_mes'/'noi_mes', fondo), vacancia por
+    tipo desde v_vacancia_{apoquindo,pt}_consolidado_tipo (dedup: prioriza
+    fuente 'rent_roll' sobre 'manual' cuando ambas existen para el mismo
+    período). m2_gla se usa por período cuando viene poblado (caso PT); si
+    no (caso Apo, donde solo el snapshot rent_roll más reciente lo trae) se
+    cae al último m2_gla conocido para ese tipo, asumiendo que la superficie
+    de un edificio no cambia mes a mes."""
+    view = _VACANCIA_TIPO_VIEW.get(fondo_key)
+    if not view:
+        return []
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    ingresos = {
+        r["periodo"]: r["valor"]
+        for r in conn.execute(
+            "SELECT periodo, valor FROM derived_kpi WHERE entidad_tipo='fondo' "
+            "AND entidad_key=? AND kpi='ingresos_mes'",
+            (fondo_key,),
+        ).fetchall()
+    }
+    noi = {
+        r["periodo"]: r["valor"]
+        for r in conn.execute(
+            "SELECT periodo, valor FROM derived_kpi WHERE entidad_tipo='fondo' "
+            "AND entidad_key=? AND kpi='noi_mes'",
+            (fondo_key,),
+        ).fetchall()
+    }
+    vac = {}  # periodo -> {tipo: {fuente: m2_vacantes}}
+    gla_periodo = {}  # (periodo, tipo) -> m2_gla
+    gla_ultimo = {}  # tipo -> último m2_gla conocido (fallback)
+    for r in conn.execute(
+        f"SELECT periodo, tipo_unidad, m2_vacantes, m2_gla, fuente "
+        f"FROM {view} WHERE tipo_unidad IN ('Oficinas', 'Locales Comerciales') "
+        f"ORDER BY periodo"
+    ).fetchall():
+        if r["m2_vacantes"] is not None:
+            vac.setdefault(r["periodo"], {}).setdefault(r["tipo_unidad"], {})[r["fuente"]] = r["m2_vacantes"]
+        if r["m2_gla"]:
+            gla_periodo[(r["periodo"], r["tipo_unidad"])] = r["m2_gla"]
+            gla_ultimo[r["tipo_unidad"]] = r["m2_gla"]
+
+    def _vac_pct(periodo: str, tipo: str):
+        fuentes = vac.get(periodo, {}).get(tipo)
+        gla = gla_periodo.get((periodo, tipo), gla_ultimo.get(tipo))
+        if not fuentes or not gla:
+            return None
+        m2_vac = max(0.0, fuentes.get("rent_roll", fuentes.get("manual")))
+        return round(100.0 * m2_vac / gla, 2)
+
+    periodos = sorted(set(ingresos) & set(noi))
+    return [
+        {
+            "periodo": p,
+            "ingresos_uf": round(ingresos[p], 1),
+            "noi_uf": round(noi[p], 1),
+            "vacancia_oficinas_pct": _vac_pct(p, "Oficinas"),
+            "vacancia_locales_pct": _vac_pct(p, "Locales Comerciales"),
+        }
+        for p in periodos
+    ]
 
 
 def _fetch_plano_pt(fondo_key: str) -> dict:
@@ -1950,10 +2118,10 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   }
   .parking-legend {
     display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: center;
-    font-size: 10px; color: #33413b; margin-top: 4px;
+    font-size: 12px; color: #33413b; margin-top: 4px;
   }
-  .parking-legend .row { display: flex; align-items: center; gap: 5px; }
-  .parking-legend .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .parking-legend .row { display: flex; align-items: center; gap: 6px; }
+  .parking-legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
   .parking-legend .swatch.line { height: 3px; border-radius: 3px; }
   .parking-tooltip {
     position: absolute; min-width: 168px; pointer-events: none; opacity: 0;
@@ -2325,11 +2493,15 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     <div class="charts-grid-2">
       <div class="chart-box">
         <div class="chart-title">Evolución NOI y Ratio de Cobertura de Servicio de Deuda</div>
-        <div class="chart-placeholder" data-chart="noi-rcsd">Pendiente: serie mensual NOI (UF), cuota financiamiento (UF) y RCSD</div>
+        <div id="chart-noi-rcsd" data-chart="noi-rcsd">
+          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+        </div>
       </div>
       <div class="chart-box">
-        <div class="chart-title">Evolución Ingresos, NOI y Vacancia (m²)</div>
-        <div class="chart-placeholder" data-chart="ingresos-noi-vacancia">Pendiente: serie mensual Ingresos (UF), NOI (UF) y vacancia (m²)</div>
+        <div class="chart-title">Evolución Ingresos, NOI y Vacancia (%)</div>
+        <div id="chart-ingresos-noi-vacancia" data-chart="ingresos-noi-vacancia">
+          <div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>
+        </div>
       </div>
     </div>
 
@@ -3878,6 +4050,283 @@ function renderParkingChart(containerId, rows){
   });
 }
 
+function renderNoiRcsdChart(containerId, rows, rcsdAxisMax){
+  const el = document.getElementById(containerId);
+  if (!rows || !rows.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = { cuota: "#5B6560", noi: "#05A978", rcsd: "#1B2A25", grid: "#E8EEEB", axis: "#AEBBB5", text: "#6D7C75" };
+  const W = 900, H = 280, padL = 52, padR = 48, padT = 18, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = rows.length;
+  const x = i => padL + (i + 0.5) * (plotW / n);
+
+  const maxUf = Math.max(1, ...rows.map(r => r.noi_uf || 0));
+  const yMax = Math.ceil(maxUf / 2500) * 2500;
+  const rcsdVals = rows.map(r => r.rcsd).filter(v => v != null);
+  const maxRcsd = Math.max(0.5, ...rcsdVals);
+  const yMaxR = rcsdAxisMax || (Math.ceil(maxRcsd / 0.5) * 0.5);
+  const yUf = v => padT + plotH - (Math.min(v, yMax) / yMax) * plotH;
+  const yR = v => padT + plotH - (Math.min(v, yMaxR) / yMaxR) * plotH;
+
+  const nGrid = 5;
+  let gridLines = "", yLabelsL = "", yLabelsR = "";
+  for (let g = 0; g <= nGrid; g++){
+    const vUf = yMax * g / nGrid, vR = yMaxR * g / nGrid;
+    const y = padT + plotH - plotH * g / nGrid;
+    const strong = g === 0;
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="${strong ? C.axis : C.grid}" stroke-width="${strong ? 1.2 : 1}"/>`;
+    yLabelsL += `<text x="${padL-8}" y="${y+5}" font-size="20" text-anchor="end" fill="${C.text}">${Math.round(vUf).toLocaleString('es-CL')}</text>`;
+    yLabelsR += `<text x="${W-padR+8}" y="${y+5}" font-size="20" text-anchor="start" fill="${C.text}">${vR.toFixed(1)}x</text>`;
+  }
+  const axisLabels =
+    `<text x="${padL}" y="12" font-size="18" font-weight="700" text-anchor="start" fill="${C.text}">UF</text>` +
+    `<text x="${W-padR}" y="12" font-size="18" font-weight="700" text-anchor="end" fill="${C.text}">RCSD</text>`;
+
+  const ptsCuota = rows.map((r,i) => `${x(i).toFixed(1)},${yUf(r.cuota_uf || 0).toFixed(1)}`);
+  const ptsNoi = rows.map((r,i) => `${x(i).toFixed(1)},${yUf(Math.max(r.cuota_uf || 0, r.noi_uf || 0)).toFixed(1)}`);
+  const yBase0 = yUf(0).toFixed(1);
+  const areaCuota = `M${x(0).toFixed(1)},${yBase0} L${ptsCuota.join(' L')} L${x(n-1).toFixed(1)},${yBase0} Z`;
+  const areaNoi = `M${ptsCuota.join(' L')} L${[...ptsNoi].reverse().join(' L')} Z`;
+  const bars =
+    `<path d="${areaCuota}" fill="${C.cuota}"/>` +
+    `<path d="${areaNoi}" fill="${C.noi}"/>` +
+    `<path d="M${ptsCuota.join(' L')}" fill="none" stroke="${C.cuota}" stroke-width="1.4" stroke-linejoin="round"/>` +
+    `<path d="M${ptsNoi.join(' L')}" fill="none" stroke="${C.noi}" stroke-width="1.4" stroke-linejoin="round"/>`;
+
+  let lineRcsd = "", started = false;
+  rows.forEach((r,i) => {
+    if (r.rcsd == null) { started = false; return; }
+    lineRcsd += `${started ? 'L' : 'M'}${x(i).toFixed(1)},${yR(r.rcsd).toFixed(1)} `;
+    started = true;
+  });
+
+  const monthLabels = {1:"ene",2:"feb",3:"mar",4:"abr",5:"may",6:"jun",7:"jul",8:"ago",9:"sept",10:"oct",11:"nov",12:"dic"};
+  const pxPerMonth = plotW / n;
+  const tickInterval = pxPerMonth >= 42 ? 4 : (pxPerMonth >= 20 ? 8 : 12);
+  const xLabels = rows.map((r,i) => {
+    const [y,m] = r.periodo.split("-");
+    if (i % tickInterval !== 0) return "";
+    const xx = x(i);
+    const label = `${monthLabels[parseInt(m,10)]}-${y.slice(2)}`;
+    return `<line x1="${xx}" y1="${padT+plotH}" x2="${xx}" y2="${padT+plotH+4}" stroke="${C.axis}" stroke-width="1"/>` +
+           `<text x="${xx}" y="${H-6}" font-size="18" text-anchor="middle" fill="${C.text}">${label}</text>`;
+  }).join("");
+  const hitW = plotW / n;
+  const hoverRects = rows.map((r,i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución NOI y RCSD">
+        ${gridLines}
+        ${axisLabels}
+        ${bars}
+        <path d="${lineRcsd}" fill="none" stroke="${C.rcsd}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+        <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        <circle class="parking-marker parking-marker-res" cx="0" cy="0" r="4.2" fill="#fff" stroke="${C.rcsd}" stroke-width="2" opacity="0"/>
+        ${yLabelsL}${yLabelsR}${xLabels}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+      <div class="parking-legend">
+        <div class="row"><span class="swatch" style="background:${C.cuota}"></span>Cuota Financiamiento (UF)</div>
+        <div class="row"><span class="swatch" style="background:${C.noi}"></span>NOI (UF)</div>
+        <div class="row"><span class="swatch line" style="background:${C.rcsd}"></span>RCSD</div>
+      </div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const marker = el.querySelector(".parking-marker-res");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const r = rows[i], xx = x(i);
+    const p = toPx(xx, yUf(r.noi_uf || 0));
+    const [year, month] = r.periodo.split("-");
+    const periodo = `${MESES[parseInt(month,10)-1]} ${year}`;
+    tooltip.innerHTML =
+      `<div class="title">${periodo}</div>` +
+      htmlLine("NOI", `${fmtEnteroMiles(r.noi_uf)} UF`, C.noi) +
+      htmlLine("Cuota", `${fmtEnteroMiles(r.cuota_uf)} UF`, C.cuota) +
+      htmlLine("RCSD", r.rcsd != null ? `${r.rcsd.toFixed(2)}x` : "—", C.rcsd);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(74, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+    if (r.rcsd != null) {
+      marker.setAttribute("cx", xx);
+      marker.setAttribute("cy", yR(r.rcsd));
+      marker.setAttribute("opacity", "1");
+    } else {
+      marker.setAttribute("opacity", "0");
+    }
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+    marker.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
+function renderIngresosNoiVacanciaChart(containerId, rows){
+  const el = document.getElementById(containerId);
+  if (!rows || !rows.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = { ingresos: "#3BB878", noi: "#5B6560", oficinas: "#A6E4D0", locales: "#1B2A25", grid: "#E8EEEB", axis: "#AEBBB5", text: "#6D7C75" };
+  const W = 900, H = 280, padL = 52, padR = 56, padT = 18, padB = 34;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = rows.length;
+  const x = i => padL + (i + 0.5) * (plotW / n);
+
+  const maxUf = Math.max(1, ...rows.map(r => r.ingresos_uf || 0));
+  const yMax = Math.ceil(maxUf / 2500) * 2500;
+  const vacVals = rows.flatMap(r => [r.vacancia_oficinas_pct, r.vacancia_locales_pct]).filter(v => v != null);
+  const maxVac = Math.max(10, ...vacVals);
+  const yMaxV = Math.ceil(maxVac / 10) * 10;
+  const yUf = v => padT + plotH - (Math.min(v, yMax) / yMax) * plotH;
+  const yV = v => padT + plotH - (Math.min(v, yMaxV) / yMaxV) * plotH;
+
+  const nGrid = 5;
+  let gridLines = "", yLabelsL = "", yLabelsR = "";
+  for (let g = 0; g <= nGrid; g++){
+    const vUf = yMax * g / nGrid, vV = yMaxV * g / nGrid;
+    const y = padT + plotH - plotH * g / nGrid;
+    const strong = g === 0;
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="${strong ? C.axis : C.grid}" stroke-width="${strong ? 1.2 : 1}"/>`;
+    yLabelsL += `<text x="${padL-8}" y="${y+5}" font-size="20" text-anchor="end" fill="${C.text}">${Math.round(vUf).toLocaleString('es-CL')}</text>`;
+    yLabelsR += `<text x="${W-padR+8}" y="${y+5}" font-size="20" text-anchor="start" fill="${C.text}">${Math.round(vV)}%</text>`;
+  }
+  const axisLabels =
+    `<text x="${padL}" y="12" font-size="18" font-weight="700" text-anchor="start" fill="${C.text}">UF</text>` +
+    `<text x="${W-padR}" y="12" font-size="18" font-weight="700" text-anchor="end" fill="${C.text}">%</text>`;
+
+  const ptsNoi = rows.map((r,i) => `${x(i).toFixed(1)},${yUf(r.noi_uf || 0).toFixed(1)}`);
+  const ptsIngresos = rows.map((r,i) => `${x(i).toFixed(1)},${yUf(Math.max(r.noi_uf || 0, r.ingresos_uf || 0)).toFixed(1)}`);
+  const yBase0 = yUf(0).toFixed(1);
+  const areaNoi = `M${x(0).toFixed(1)},${yBase0} L${ptsNoi.join(' L')} L${x(n-1).toFixed(1)},${yBase0} Z`;
+  const areaIngresos = `M${ptsNoi.join(' L')} L${[...ptsIngresos].reverse().join(' L')} Z`;
+  const areas =
+    `<path d="${areaNoi}" fill="${C.noi}"/>` +
+    `<path d="${areaIngresos}" fill="${C.ingresos}"/>` +
+    `<path d="M${ptsNoi.join(' L')}" fill="none" stroke="${C.noi}" stroke-width="1.4" stroke-linejoin="round"/>` +
+    `<path d="M${ptsIngresos.join(' L')}" fill="none" stroke="${C.ingresos}" stroke-width="1.4" stroke-linejoin="round"/>`;
+
+  const buildLine = (key, yFn) => {
+    let path = "", started = false;
+    rows.forEach((r,i) => {
+      const v = r[key];
+      if (v == null) { started = false; return; }
+      path += `${started ? 'L' : 'M'}${x(i).toFixed(1)},${yFn(v).toFixed(1)} `;
+      started = true;
+    });
+    return path;
+  };
+  const lineOficinas = buildLine("vacancia_oficinas_pct", yV);
+  const lineLocales = buildLine("vacancia_locales_pct", yV);
+
+  const monthLabels = {1:"ene",2:"feb",3:"mar",4:"abr",5:"may",6:"jun",7:"jul",8:"ago",9:"sept",10:"oct",11:"nov",12:"dic"};
+  const pxPerMonth = plotW / n;
+  const tickInterval = pxPerMonth >= 42 ? 4 : (pxPerMonth >= 20 ? 8 : 12);
+  const xLabels = rows.map((r,i) => {
+    const [y,m] = r.periodo.split("-");
+    if (i % tickInterval !== 0) return "";
+    const xx = x(i);
+    const label = `${monthLabels[parseInt(m,10)]}-${y.slice(2)}`;
+    return `<line x1="${xx}" y1="${padT+plotH}" x2="${xx}" y2="${padT+plotH+4}" stroke="${C.axis}" stroke-width="1"/>` +
+           `<text x="${xx}" y="${H-6}" font-size="18" text-anchor="middle" fill="${C.text}">${label}</text>`;
+  }).join("");
+  const hitW = plotW / n;
+  const hoverRects = rows.map((r,i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución Ingresos, NOI y Vacancia">
+        ${gridLines}
+        ${axisLabels}
+        ${areas}
+        <path d="${lineOficinas}" fill="none" stroke="${C.oficinas}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="${lineLocales}" fill="none" stroke="${C.locales}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        ${yLabelsL}${yLabelsR}${xLabels}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+      <div class="parking-legend">
+        <div class="row"><span class="swatch" style="background:${C.ingresos}"></span>Ingresos (UF)</div>
+        <div class="row"><span class="swatch" style="background:${C.noi}"></span>NOI (UF)</div>
+        <div class="row"><span class="swatch line" style="background:${C.oficinas}"></span>Vacancia (%) Oficinas</div>
+        <div class="row"><span class="swatch line" style="background:${C.locales}"></span>Vacancia (%) Locales</div>
+      </div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const r = rows[i], xx = x(i);
+    const p = toPx(xx, yUf(r.ingresos_uf || 0));
+    const [year, month] = r.periodo.split("-");
+    const periodo = `${MESES[parseInt(month,10)-1]} ${year}`;
+    tooltip.innerHTML =
+      `<div class="title">${periodo}</div>` +
+      htmlLine("Ingresos", `${fmtEnteroMiles(r.ingresos_uf)} UF`, C.ingresos) +
+      htmlLine("NOI", `${fmtEnteroMiles(r.noi_uf)} UF`, C.noi) +
+      htmlLine("Vac. Oficinas", r.vacancia_oficinas_pct != null ? `${r.vacancia_oficinas_pct.toFixed(1)}%` : "—", C.oficinas) +
+      htmlLine("Vac. Locales", r.vacancia_locales_pct != null ? `${r.vacancia_locales_pct.toFixed(1)}%` : "—", C.locales);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(74, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
 function renderPerfActivosHeader(p2, perfData){
   const groups = p2.perf_groups;
   const totalCols = groups.reduce((n,g) => n + g.cols.length, 0);
@@ -4653,6 +5102,17 @@ function render(){
   if (S.page3 && S.page3.parking) {
     const parkingRows = (F.parking || []).filter(r => !usadoOp || r.periodo <= usadoOp);
     renderParkingChart("chart-parking", parkingRows);
+  }
+
+  if (document.getElementById("chart-noi-rcsd")) {
+    const noiRcsdRows = (F.noi_rcsd || []).filter(r => !usadoOp || r.periodo <= usadoOp);
+    const rcsdAxisMax = currentFund === "Apo" ? 3.5 : null;
+    renderNoiRcsdChart("chart-noi-rcsd", noiRcsdRows, rcsdAxisMax);
+  }
+
+  if (document.getElementById("chart-ingresos-noi-vacancia")) {
+    const invRows = (F.ingresos_noi_vacancia || []).filter(r => !usadoOp || r.periodo <= usadoOp);
+    renderIngresosNoiVacanciaChart("chart-ingresos-noi-vacancia", invRows);
   }
 
   // Página 3 TRI: tabla de mercado de oficinas — misma fuente que la del
