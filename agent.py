@@ -894,7 +894,7 @@ def main() -> None:
                 break
             run_agent(user_input)
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print("\n\n¡Hasta luego!")
             break
         except Exception as e:
