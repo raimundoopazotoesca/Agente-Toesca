@@ -110,11 +110,30 @@ def _generar_pdfs_factsheet(
                             f"{fondo}: sin datos para el período {periodo_op}/{periodo_cb}."
                         )
                         continue
+
+                    # Cada .page (una de las 4 secciones del factsheet) puede
+                    # ser más alta que una página A4 landscape impresa — sin
+                    # achicar, Chromium la corta en 2 páginas físicas. Se mide
+                    # la sección más grande y se calcula un factor de escala
+                    # único para las 4, en vez de manipular el DOM con
+                    # transform (frágil: colapso de márgenes cortaba
+                    # contenido a la mitad).
+                    dims = page.evaluate(
+                        "Array.from(document.querySelectorAll('.page'))"
+                        ".map(el => ({w: el.scrollWidth, h: el.scrollHeight}))"
+                    )
+                    max_w = max((d["w"] for d in dims), default=1122)
+                    max_h = max((d["h"] for d in dims), default=793)
+                    # A4 landscape @ 96 CSS px/in, sin márgenes.
+                    scale = min(1.0, 1122 / max_w, 793 / max_h)
+                    scale = max(0.1, round(scale, 3))
+
                     pdfs[fondo] = page.pdf(
                         format="A4",
                         landscape=True,
                         print_background=True,
                         margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+                        scale=scale,
                     )
                 except Exception as exc:  # noqa: BLE001
                     errores.append(f"{fondo}: error generando PDF ({exc}).")
