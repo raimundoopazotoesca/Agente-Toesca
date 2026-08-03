@@ -1,3 +1,27 @@
+## [2026-08-03] fix | Consolidación TRI: bug PT (raw_er_activo_line) + bug case-sensitivity vacancia
+
+Dos bugs encontrados y corregidos validando ingresos/NOI/vacancia consolidada
+de TRI contra el CDG y una planilla del usuario:
+
+1. **PT (Torre A/Boulevard) en `raw_er_activo_line`**: los datos venían de un
+   archivo temporal de scratchpad de otra sesión, mal parseado (valores de
+   otra fila/mes). Afectaba ~10% en abr/may-2026 y ~1-2% en 45 periodos
+   históricos 2021-2024. Fix: backfill manual completo (957 filas superseded,
+   958 insertadas correctas desde `RAW/NOI PT.xlsx` real, `ingest_run_id=139`)
+   sin tocar `ingest_er_pt.py` (su guardrail de "historia congelada" sigue
+   intacto). ingresos_mes/noi_mes(TRI) recalculados, calzan exacto vs CDG
+   mar/abr/may-2026.
+2. **Vacancia case-sensitivity**: `v_vacancia_activo_tipo` filtraba
+   `arrendatario = 'Vacante'`, pero el rent roll trae también `'vacante'`
+   minúscula (19 unidades en Apo4501 = 961,96 m², 2 en Apo4700 = 2 m²) que
+   quedaban fuera del cálculo de vacantes. Fix en migración
+   `077_fix_vacancia_case.sql` (`LOWER(arrendatario)='vacante'`), recrea las
+   5 vistas `v_vacancia_*`.
+
+Metodología completa de consolidación TRI (participaciones, excepción
+Apo3001, filtros de tipo_unidad por activo) documentada en
+[[fondos/tri-consolidacion-ingresos-noi-vacancia]].
+
 ## [2026-08-03] feat | Absorción histórica manual (migración 075-076)
 
 No hay rent rolls históricos completos para derivar absorción real, así que el

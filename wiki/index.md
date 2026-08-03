@@ -35,6 +35,7 @@
 | [[fondos/ar-apoquindo]] | Toesca Rentas Inmobiliarias Apoquindo | 0 | 2026-05-01 |
 | [[fondos/ar-pt]] | Toesca Rentas Inmobiliarias PT | 0 | 2026-05-01 |
 | [[fondos/ar-rentas]] | Toesca Rentas Inmobiliarias | 1 | 2026-05-06 |
+| [[fondos/tri-consolidacion-ingresos-noi-vacancia]] | Metodología de consolidación de ingresos, NOI y vacancia del fondo TRI: participaciones efectivas, excepción Apo3001, filtros de tipo_unidad por activo | 2026-08-03 |
 
 ## Activos
 
