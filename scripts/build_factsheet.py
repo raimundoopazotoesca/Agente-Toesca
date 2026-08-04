@@ -895,6 +895,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "parking_desempeno": _fetch_parking_desempeno(fondo_key),
         "noi_u12m_yoy": _fetch_noi_u12m_yoy_pt(fondo_key),
         "ingresos_noi_vacancia": _fetch_ingresos_noi_vacancia(fondo_key),
+        "tablas_anuales_tri": _fetch_tablas_anuales_tri(fondo_key),
     }
 
 
@@ -1388,6 +1389,108 @@ def _fetch_ingresos_noi_vacancia(fondo_key: str) -> list[dict]:
         }
         for p in periodos
     ]
+
+
+# Componentes de TRI reutilizados de scripts/consolidate_{ingresos,noi}_tri.py
+# (misma metodología, misma tabla de participaciones/vigencias) — cada
+# componente ya está persistido en derived_kpi como serie mensual 100%
+# (entidad_tipo='activo', kpi='ingresos_mensual'/'noi_mensual'); acá solo se
+# pondera por participación efectiva y se agrupa por tipo de activo para las
+# tablas "Ingresos/NOI Anual por Tipo de Activo" de la página 2.
+_TRI_TIPO_ACTIVO_COMPONENTES = {
+    "Apo3001": "Oficinas",
+    "Apoquindo": "Oficinas",
+    "PT": "Oficinas",
+    "Mall Curicó": "Comercial",
+    "Viña Centro": "Comercial",
+    "Strip Machalí": "Comercial",
+    "Sucden": "Industrial",
+    "INMOSA": "Residencias",
+}
+_TRI_COMPONENTES_PART = {
+    "Apo3001": "Apo3001",
+    "Apoquindo": "Apo4501",
+    "INMOSA": "INMOSA",
+    "Mall Curicó": "Mall Curicó",
+    "PT": "Torre A",
+    "Sucden": "Sucden",
+    "Viña Centro": "Viña Centro",
+    "Strip Machalí": "Strip Machalí",
+}
+_TRI_PARTICIPACION_OVERRIDE = {"Apo3001": 1.0}
+_TRI_VIGENCIA_DESDE_OVERRIDE = {
+    "Mall Curicó": "2020-01",
+    "Apo3001": "2020-01",
+    "Apoquindo": "2019-01",
+}
+
+
+def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
+    """{"ingresos": {tipo: {año|"U12M": valor_uf}}, "noi": {...}, "years": [...]}
+    para las tablas "Ingresos/NOI Anual por Tipo de Activo (UF)" de la página 2
+    de TRI. Reusa los componentes/participaciones/vigencias ya validados en
+    consolidate_ingresos_tri.py / consolidate_noi_tri.py (kpis ingresos_mensual
+    / noi_mensual por activo, 100%, entidad_tipo='activo')."""
+    if fondo_key != "TRI":
+        return {}
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    part = {
+        r["activo_key"]: r["participacion_efectiva"]
+        for r in conn.execute(
+            "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo WHERE fondo_key='TRI'"
+        ).fetchall()
+    }
+    part.update(_TRI_PARTICIPACION_OVERRIDE)
+    vigencia = {
+        r["activo_key"]: r["vigente_hasta"]
+        for r in conn.execute("SELECT activo_key, vigente_hasta FROM dim_activo WHERE fondo_key='TRI'").fetchall()
+    }
+
+    def _por_kpi(kpi: str) -> tuple[dict, dict]:
+        bucket_year: dict[str, dict[str, float]] = {}
+        bucket_mes: dict[str, dict[str, float]] = {}
+        meses_por_year: dict[str, set] = {}
+        for comp, tipo in _TRI_TIPO_ACTIVO_COMPONENTES.items():
+            part_key = _TRI_COMPONENTES_PART[comp]
+            p = part.get(part_key)
+            if p is None:
+                continue
+            desde = _TRI_VIGENCIA_DESDE_OVERRIDE.get(comp, "0000-00")
+            hasta = vigencia.get(comp)
+            for r in conn.execute(
+                "SELECT periodo, valor FROM derived_kpi WHERE entidad_tipo='activo' AND entidad_key=? AND kpi=?",
+                (comp, kpi),
+            ).fetchall():
+                periodo, valor = r["periodo"], r["valor"]
+                if periodo < desde or (hasta and periodo > hasta):
+                    continue
+                ponderado = valor * p
+                bucket_mes.setdefault(tipo, {})[periodo] = bucket_mes.setdefault(tipo, {}).get(periodo, 0.0) + ponderado
+                year = periodo[:4]
+                bucket_year.setdefault(tipo, {})[year] = bucket_year.setdefault(tipo, {}).get(year, 0.0) + ponderado
+
+        # U12M: 12 meses trailing desde el último periodo con dato en ALGÚN tipo.
+        todos_periodos = sorted({p for serie in bucket_mes.values() for p in serie})
+        out = {tipo: {y: round(v) for y, v in years.items()} for tipo, years in bucket_year.items()}
+        if todos_periodos:
+            ultimo = todos_periodos[-1]
+            y, m = int(ultimo[:4]), int(ultimo[5:7])
+            periodos_u12m = []
+            for _ in range(12):
+                periodos_u12m.append(f"{y}-{m:02d}")
+                m -= 1
+                if m == 0:
+                    m, y = 12, y - 1
+            for tipo, serie in bucket_mes.items():
+                out.setdefault(tipo, {})["U12M"] = round(sum(serie.get(p, 0.0) for p in periodos_u12m))
+        return out
+
+    ingresos = _por_kpi("ingresos_mensual")
+    noi = _por_kpi("noi_mensual")
+    years = sorted({y for tipo in ingresos.values() for y in tipo if y != "U12M"})
+    return {"ingresos": ingresos, "noi": noi, "years": years}
 
 
 def _fetch_plano_pt(fondo_key: str) -> dict:
@@ -4973,7 +5076,7 @@ function render(){
   const usadoOp = Object.keys(F.fondo_kpi).includes(periodoOp) ? periodoOp : Object.keys(F.fondo_kpi).sort().pop();
   const tOp = F.fondo_kpi[usadoOp] || {};
 
-  document.getElementById("month-bar").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
+  document.getElementById("month-bar").textContent = mesEspanol(usadoOp).toUpperCase();
 
   // El Fondo table
   const fechaC = c.fecha || (pc?pc+"-30":"");
@@ -5212,7 +5315,7 @@ function render(){
   }).join("");
 
   // Página 2
-  document.getElementById("month-bar2").textContent = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
+  document.getElementById("month-bar2").textContent = mesEspanol(usadoOp).toUpperCase();
   if (S.page2) {
     renderPage2ChartsLayout(S.page2.charts_layout);
     const perfPeriodo = (F.perf_data || {})[usadoOp] ? usadoOp : null;
@@ -5251,7 +5354,7 @@ function render(){
   }
 
   // Página 3 / 4 — mismo mes de referencia que página 2 (no tienen datos por período aún)
-  const mesRef = (S.has_bursatil ? mesEspanol(pb) : mesEspanol(pc)).toUpperCase();
+  const mesRef = mesEspanol(usadoOp).toUpperCase();
   document.getElementById("month-bar3").textContent = mesRef;
   document.getElementById("month-bar4").textContent = mesRef;
 
