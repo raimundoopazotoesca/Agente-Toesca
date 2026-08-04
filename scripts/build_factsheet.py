@@ -1470,10 +1470,17 @@ def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
                 bucket_mes.setdefault(tipo, {})[periodo] = bucket_mes.setdefault(tipo, {}).get(periodo, 0.0) + ponderado
                 year = periodo[:4]
                 bucket_year.setdefault(tipo, {})[year] = bucket_year.setdefault(tipo, {}).get(year, 0.0) + ponderado
+                meses_por_year.setdefault(year, set()).add(periodo)
 
         # U12M: 12 meses trailing desde el último periodo con dato en ALGÚN tipo.
         todos_periodos = sorted({p for serie in bucket_mes.values() for p in serie})
-        out = {tipo: {y: round(v) for y, v in years.items()} for tipo, years in bucket_year.items()}
+        # Solo años calendario completos (12 meses de dato) — excluye el año
+        # en curso (parcial) y cualquier año de arranque parcial (ej. 2018).
+        years_completos = {y for y, meses in meses_por_year.items() if len(meses) == 12}
+        out = {
+            tipo: {y: round(v) for y, v in years.items() if y in years_completos}
+            for tipo, years in bucket_year.items()
+        }
         if todos_periodos:
             ultimo = todos_periodos[-1]
             y, m = int(ultimo[:4]), int(ultimo[5:7])
@@ -1485,11 +1492,11 @@ def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
                     m, y = 12, y - 1
             for tipo, serie in bucket_mes.items():
                 out.setdefault(tipo, {})["U12M"] = round(sum(serie.get(p, 0.0) for p in periodos_u12m))
-        return out
+        return out, years_completos
 
-    ingresos = _por_kpi("ingresos_mensual")
-    noi = _por_kpi("noi_mensual")
-    years = sorted({y for tipo in ingresos.values() for y in tipo if y != "U12M"})
+    ingresos, years_ing = _por_kpi("ingresos_mensual")
+    noi, years_noi = _por_kpi("noi_mensual")
+    years = sorted(years_ing & years_noi)
     return {"ingresos": ingresos, "noi": noi, "years": years}
 
 
@@ -2446,6 +2453,11 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .chart-box-stack { display: flex; flex-direction: column; }
   .chart-box-stack .chart-title:not(:first-child) { margin-top: 10px; }
   .chart-box-stack > div[data-chart] { flex: 1; }
+  .tabla-anual-tipo-activo { width: 100%; border-collapse: collapse; }
+  .tabla-anual-tipo-activo td, .tabla-anual-tipo-activo th { padding: 2px 4px; font-size: 9px; text-align: right; }
+  .tabla-anual-tipo-activo td:first-child, .tabla-anual-tipo-activo th:first-child { text-align: left; }
+  .tabla-anual-tipo-activo thead th { border-bottom: 1px solid #33413b; font-weight: 700; }
+  .tabla-anual-total { font-weight: 700; border-top: 1px dashed #ccc; }
   .chart-box {
     border: 1px dashed var(--border); border-radius: 6px; padding: 12px 14px;
     min-height: 220px; display: flex; flex-direction: column;
@@ -2678,7 +2690,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   #tbl-perf-activos td:first-child, #tbl-perf-activos th:first-child { text-align: left; }
   #sidebar {
     position: fixed; left: 0; top: 0;
-    width: 252px; height: 100vh;
+    width: 300px; height: 100vh;
     background: #fff; border-right: 1px solid #EAEAEA;
     box-shadow: 4px 0 24px rgba(0,0,0,0.05);
     overflow-y: auto; overflow-x: hidden; z-index: 200;
@@ -4264,11 +4276,37 @@ const PAGE2_CHART_BOXES = {
   // tipo de activo a nivel fondo todavía). Estructura visual únicamente.
   tablas_anuales: `<div class="chart-box chart-box-stack">
     <div class="chart-title">Ingresos Anuales por Tipo de Activo (UF)</div>
-    <div class="chart-placeholder" data-chart="ingresos-anual-tipo-activo">Pendiente de datos</div>
+    <div id="tabla-ingresos-anual-tipo-activo" data-chart="ingresos-anual-tipo-activo">
+      <div class="chart-placeholder" style="width:100%">Pendiente de datos</div>
+    </div>
     <div class="chart-title">NOI Anual por Tipo de Activo (UF)</div>
-    <div class="chart-placeholder" data-chart="noi-anual-tipo-activo">Pendiente de datos</div>
+    <div id="tabla-noi-anual-tipo-activo" data-chart="noi-anual-tipo-activo">
+      <div class="chart-placeholder" style="width:100%">Pendiente de datos</div>
+    </div>
   </div>`,
 };
+
+// Tablas "Ingresos/NOI Anual por Tipo de Activo (UF)" de la página 2 de TRI
+// — ver F.tablas_anuales_tri (build_factsheet.py::_fetch_tablas_anuales_tri).
+// data: {tipo: {año|"U12M": valor_uf}}, order = S.page2.tipo_activo.
+function renderTablaAnualTipoActivo(containerId, data, years, order){
+  const el = document.getElementById(containerId);
+  if(!el) return;
+  if(!data || !years || !years.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const cols = [...years, "U12M"];
+  const tipos = order.filter(t => data[t]);
+  const totalRow = cols.map(c => tipos.reduce((s, t) => s + (data[t][c] || 0), 0));
+  el.innerHTML = `<table class="tabla-anual-tipo-activo">
+    <thead><tr><th></th>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${tipos.map(t => `<tr><td>${t}</td>${cols.map(c => `<td>${fmtEnteroMiles(data[t][c])}</td>`).join("")}</tr>`).join("")}
+      <tr class="tabla-anual-total"><td>Total</td>${totalRow.map(v => `<td>${fmtEnteroMiles(v)}</td>`).join("")}</tr>
+    </tbody>
+  </table>`;
+}
 
 const PAGE2_LAYOUT_DEFAULT = [
   ["rubro", "tipo_activo"],
@@ -5334,6 +5372,11 @@ function render(){
     if (document.getElementById("donut-tipo-activo")) {
       const tipoPeriodo = (F.tipo_activo || {})[usadoOp] ? usadoOp : null;
       renderTipoActivoDonut("donut-tipo-activo", tipoPeriodo ? F.tipo_activo[tipoPeriodo] : null, S.page2.tipo_activo);
+    }
+    if (document.getElementById("tabla-ingresos-anual-tipo-activo")) {
+      const ta = F.tablas_anuales_tri || {};
+      renderTablaAnualTipoActivo("tabla-ingresos-anual-tipo-activo", ta.ingresos, ta.years, S.page2.tipo_activo);
+      renderTablaAnualTipoActivo("tabla-noi-anual-tipo-activo", ta.noi, ta.years, S.page2.tipo_activo);
     }
     if (document.getElementById("chart-perfil-vencimiento")) {
       if (S.page2.perfil_vencimiento_edificios) {
