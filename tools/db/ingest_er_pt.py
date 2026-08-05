@@ -8,14 +8,22 @@ Valores en la planilla están en UF; se guardan en monto_clp por convención
 (mismo criterio que ingest_er_apoquindo.py).
 
 Supuestos operacionales PT definidos por el usuario (2026-07-13):
-- Administracion: gasto de 0,2% de los ingresos operacionales de cada activo.
 - GC vacancia: Boulevard/Inmob. CDC tiene gasto fijo de 531 UF mensual.
 - Contribuciones: gastos fijos mensuales, Torre A 1.257 UF y Boulevard 621 UF.
 - Seguros: gastos fijos mensuales, Torre A 173,464166666667 UF y Boulevard 63,46 UF.
 Aplican desde 2026-07 en adelante; la historia ya cargada no se recalcula.
 
-Pendiente de automatizacion (no incluido en esta ingesta):
-- Margen Energia: calculado internamente en Toesca (urgencia: baja).
+Administración: la regla de 0,2% de los ingresos operacionales (vigente
+2026-07-13 a 2026-08-04) fue descartada por el usuario 2026-08-04 — se
+calculaba sobre el Margen Energía en vez del Ingreso por Energía, quedando
+mal. Desde entonces Administración siempre viene del dato crudo de la
+planilla (fila 32/33), igual que el resto de los gastos.
+
+Margen Energía (filas 10 y 26) ya no está pendiente: desde 2026-08-04 se
+incluye en PT_ING_ARR, sumado junto con el resto del detalle de
+arrendatarios de cada edificio (no se lee de las filas-resumen R3/R11, que
+son valores pegados a mano y quedaron desactualizados — ver
+_TORRE_A_ING_ROWS/_BOULEVARD_ING_ROWS más abajo).
 """
 from __future__ import annotations
 
@@ -23,9 +31,8 @@ import hashlib
 
 import openpyxl
 
-RULES_VERSION = "pt_er_rules_v2_2026_07_13"
+RULES_VERSION = "pt_er_rules_v3_2026_08_04"
 RULES_EFFECTIVE_PERIOD = "2026-07"
-ADMIN_PCT_INGRESOS = 0.002
 GC_VAC_FIJO_UF = {"Boulevard": 531.0}
 CONTRIB_FIJO_UF = {"Torre A": 1257.0, "Boulevard": 621.0}
 SEGUROS_FIJO_UF = {"Torre A": 173.464166666667, "Boulevard": 63.46}
@@ -67,12 +74,20 @@ SEGUROS_FIJO_UF = {"Torre A": 173.464166666667, "Boulevard": 63.46}
 #   R47 (idx 46): "Torre A S.A" <- Torre A
 #   R48 (idx 47): "Inmobiliaria Centro de Convenciones" <- Blvd
 #   R49 (idx 48): "NOI Mensual" - derivado, ignorar
+# R3 y R11 son valores PEGADOS A MANO (no fórmulas — verificado 2026-08-04),
+# no una suma en vivo de sus filas hijas. R11 (Boulevard) quedó desactualizada
+# cuando se agregó "Margen Energía" al detalle (R26): R11 no la incluye,
+# mientras que R3 (Torre A) por casualidad sí incluye la suya (R10). Confiar
+# en R3/R11 directamente arrastra ese desfase manual. Por eso el ingreso por
+# arriendo de cada edificio se recalcula sumando sus propias filas de
+# detalle (_TORRE_A_ING_ROWS / _BOULEVARD_ING_ROWS, ver parse_planilla) en
+# vez de leer R3/R11 — inmune a que alguien vuelva a olvidar actualizar el
+# pegado manual al agregar una categoría nueva.
+_TORRE_A_ING_ROWS = range(3, 10)     # idx 3-9  (R4-R10): arrendatarios + Margen Energía
+_BOULEVARD_ING_ROWS = range(11, 26)  # idx 11-25 (R12-R26): arrendatarios + Margen Energía
+
 _ROW_MAP: list[tuple[int, str, str, str]] = [
     # (row_idx_0based, activo_key, cuenta_codigo, seccion)
-    # R3  idx 2  : "(+) Ingresos Torre A S.A"
-    (2,  "Torre A",   "PT_ING_ARR",    "INGRESOS_OPERACION"),
-    # R11 idx 10 : "(+) Ingresos Inmobiliaria Centro de Convenciones"
-    (10, "Boulevard", "PT_ING_ARR",    "INGRESOS_OPERACION"),
     # R27 idx 26 : "Pago Derecho Uso / Fee Asesor" (solo Boulevard)
     (26, "Boulevard", "PT_FEE_ASESOR", "INGRESOS_OPERACION"),
     # R29/R30 idx 28/29: "(+) Ingresos por Contribuciones" por activo
@@ -134,11 +149,6 @@ def _derived_monto(
 ) -> float | None:
     if periodo < RULES_EFFECTIVE_PERIOD:
         return None
-    if cuenta_codigo == "PT_ADM":
-        ingresos = ingresos_por_activo_periodo.get((activo_key, periodo))
-        if ingresos is None:
-            return None
-        return -abs(ingresos) * ADMIN_PCT_INGRESOS
     if cuenta_codigo == "PT_GC_VAC" and activo_key in GC_VAC_FIJO_UF:
         return -GC_VAC_FIJO_UF[activo_key]
     if cuenta_codigo == "PT_CONTRIB":
@@ -201,6 +211,28 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
     source_montos: dict[tuple[int, int], float] = {}
     ingresos_por_activo_periodo: dict[tuple[str, str], float] = {}
 
+    # PT_ING_ARR: suma de las filas de detalle (arrendatarios + Margen
+    # Energía) de cada edificio, no la fila-resumen pegada a mano (ver nota
+    # arriba de _TORRE_A_ING_ROWS/_BOULEVARD_ING_ROWS).
+    ing_arr_montos: dict[tuple[int, int], float] = {}
+    for activo_key, row_range in (("Torre A", _TORRE_A_ING_ROWS), ("Boulevard", _BOULEVARD_ING_ROWS)):
+        for col_idx, periodo in period_by_col.items():
+            total = 0.0
+            found_any = False
+            for row_idx in row_range:
+                if row_idx >= len(rows) or col_idx >= len(rows[row_idx]):
+                    continue
+                monto = _try_float(rows[row_idx][col_idx])
+                if monto is None:
+                    continue
+                found_any = True
+                total += monto
+            if not found_any:
+                continue
+            ing_arr_montos[(activo_key, col_idx)] = total
+            key = (activo_key, periodo)
+            ingresos_por_activo_periodo[key] = ingresos_por_activo_periodo.get(key, 0.0) + total
+
     for row_idx, activo_key, cuenta_codigo, seccion in _ROW_MAP:
         if row_idx >= len(rows):
             continue
@@ -219,6 +251,24 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
     if source_montos:
         max_data_col = max(col_idx for _, col_idx in source_montos)
         period_by_col = {c: p for c, p in period_by_col.items() if c <= max_data_col}
+
+    for (activo_key, col_idx), monto in ing_arr_montos.items():
+        periodo = period_by_col.get(col_idx)
+        if periodo is None:
+            continue
+        out.append({
+            "activo_key":    activo_key,
+            "periodo":       periodo,
+            "cuenta_codigo": "PT_ING_ARR",
+            "cuenta_nombre": "(+) Ingresos por Arriendos (detalle)",
+            "monto_clp":     monto,
+            "monto_uf":      None,
+            "seccion":       "INGRESOS_OPERACION",
+            "es_operacional": 1,
+            "source_file":   xlsx_path,
+            "source_sheet":  sheet_name,
+            "source_row":    (3 if activo_key == "Torre A" else 11),
+        })
 
     for row_idx, activo_key, cuenta_codigo, seccion in _ROW_MAP:
         if row_idx >= len(rows):

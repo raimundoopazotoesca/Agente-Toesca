@@ -154,6 +154,7 @@ FONDOS_CFG = {
                 "Absorción bruta m² 12M", "Absorción bruta UF 12M", "Absorción neta m² 12M", "Absorción neta UF 12M",
             ],
             "tipo_activo": ["Oficinas", "Comercial", "Industrial", "Residencias"],
+            "perfil_vencimiento_edificios": ["Oficinas", "Activos Comerciales", "Residencias", "Bodegas"],
             # Orden de gráficos validado contra el FS TRI abril 2026 (PDF de
             # referencia): NOI/RCSD + Ingresos-NOI-Vacancia arriba; tablas
             # anuales por tipo de activo (ingresos/NOI) + donut de rubro al
@@ -967,7 +968,19 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
         volvía a subir en marzo después de caer en enero/febrero — se corta
         después de dic-2025 por decisión del usuario 2026-07-30.
     Ver conversación con el usuario 2026-07-30. Solo incluye períodos con
-    ambos datos (NOI y cuota) disponibles."""
+    ambos datos (NOI y cuota) disponibles.
+
+    Look-through TRI (fix 2026-08-05): TRI es el fondo paraguas — la deuda de
+    Torre A/Boulevard y Apo4501/Apo4700 está registrada en dim_credito bajo
+    fondo_key='PT'/'Apo', no 'TRI'. Filtrar solo fondo_key='TRI' la excluía
+    por completo del gráfico (bug real detrás de una cuota que se veía
+    artificialmente plana/baja al comparar con la planilla del usuario).
+    Se suman ponderadas por participación efectiva de TRI en cada activo
+    (v_activo_fondo_efectivo, misma tabla usada para duration/ingresos/NOI
+    look-through). Validado: PT_TORREA_SECURITY/PT_BOULEVARD_SECURITY/
+    APO_APO_EUROAMERICA calzan exacto (100%) contra la planilla manual del
+    usuario "RAW/Cuotas Leasing TRI.xlsx" — no es una fuente distinta, es un
+    espejo de esta misma tabla."""
     from statistics import median
     from tools.db.connection import get_conn
 
@@ -980,44 +993,77 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
             (fondo_key,),
         ).fetchall()
     }
+    fondos_credito = [fondo_key] if fondo_key != "TRI" else ["TRI", "PT", "Apo"]
+    part_efectiva = {
+        r["activo_key"]: r["participacion_efectiva"]
+        for r in conn.execute(
+            "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo WHERE fondo_key='TRI'"
+        ).fetchall()
+    } if fondo_key == "TRI" else {}
     rows_amort = conn.execute(
-        "SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf "
-        "FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
-        "WHERE c.fondo_key = ?",
-        (fondo_key,),
+        f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key "
+        f"FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
+        f"WHERE c.fondo_key IN ({','.join('?' for _ in fondos_credito)})",
+        fondos_credito,
     ).fetchall()
     por_credito = {}
+    peso_credito = {}
     for r in rows_amort:
         por_credito.setdefault(r["credito_key"], []).append(r)
+        peso_credito[r["credito_key"]] = (
+            1.0 if r["fondo_key"] == "TRI" else part_efectiva.get(r["activo_key"], 1.0)
+        )
 
     cuota = {}
     for credito_key, filas in por_credito.items():
-        con_capital = sum(1 for r in filas if r["capital_uf"])
-        es_amortizante = con_capital / len(filas) >= 0.5
+        filas = sorted(filas, key=lambda r: r["periodo"])
 
-        if es_amortizante:
-            totales = sorted(
-                (
+        # Clasificación por tramo (ventana móvil de hasta 12 períodos pasados,
+        # incluyendo el actual) en vez de una sola etiqueta para toda la vida
+        # del crédito: algunos créditos (ej. TRI_APO3001_SCOTIABANK,
+        # TRI_DOMCALDERON_ZURIC) empiezan interest-only ("Bullet") y luego se
+        # convierten a amortización regular ("Amortizante") a mitad de vida.
+        # Clasificar con el ratio histórico completo los deja etiquetados con
+        # su régimen antiguo para siempre, lo que en el tramo reciente
+        # descarta el capital real y sustituye el interés por la mediana de
+        # la era interest-only (bug detectado 2026-08-05: aplanaba la cuota
+        # de TRI desde nov-2024). Ver conversación con el usuario 2026-07-30
+        # para el resto de la lógica de suavizado (sin cambios).
+        regimen = []
+        for i, r in enumerate(filas):
+            ventana = filas[max(0, i - 11): i + 1]
+            con_capital = sum(1 for w in ventana if w["capital_uf"])
+            regimen.append(con_capital / len(ventana) >= 0.5)
+
+        # Agrupar en tramos contiguos del mismo régimen.
+        tramos = []
+        inicio = 0
+        for i in range(1, len(filas) + 1):
+            if i == len(filas) or regimen[i] != regimen[inicio]:
+                tramos.append((regimen[inicio], filas[inicio:i]))
+                inicio = i
+
+        for es_amortizante, tramo_filas in tramos:
+            if es_amortizante:
+                totales = [
                     (r["periodo"], (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0))
-                    for r in filas
-                ),
-                key=lambda t: t[0],
-            )
-            positivos = [t for _, t in totales if t > 0]
-            tipica = median(positivos) if positivos else None
-            for periodo, total in totales:
-                if tipica and total > 2.5 * tipica:
-                    cuota[periodo] = cuota.get(periodo, 0.0) + tipica
-                    break  # pago final del crédito: se suaviza y no aporta más
-                cuota[periodo] = cuota.get(periodo, 0.0) + total
-        else:
-            normales = [r["intereses_uf"] for r in filas if not r["capital_uf"] and r["intereses_uf"]]
-            tipica = median(normales) if normales else None
-            for r in filas:
-                interes = r["intereses_uf"] or 0.0
-                if r["capital_uf"] and tipica:
-                    interes = tipica
-                cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + interes
+                    for r in tramo_filas
+                ]
+                positivos = [t for _, t in totales if t > 0]
+                tipica = median(positivos) if positivos else None
+                for periodo, total in totales:
+                    if tipica and total > 2.5 * tipica:
+                        cuota[periodo] = cuota.get(periodo, 0.0) + tipica
+                        break  # pago final del tramo: se suaviza y no aporta más
+                    cuota[periodo] = cuota.get(periodo, 0.0) + total
+            else:
+                normales = [r["intereses_uf"] for r in tramo_filas if not r["capital_uf"] and r["intereses_uf"]]
+                tipica = median(normales) if normales else None
+                for r in tramo_filas:
+                    interes = r["intereses_uf"] or 0.0
+                    if r["capital_uf"] and tipica:
+                        interes = tipica
+                    cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + interes
 
     periodos = sorted(set(noi) & set(cuota))
     out = []
@@ -1704,10 +1750,24 @@ def _fetch_gla_arrendatario(fondo_key: str) -> dict:
 def _fetch_perfil_vencimiento(fondo_key: str) -> dict:
     """{periodo: {"por_anio": {edificio: {anio: uf}}, "anios": [...],
     "plazo_medio_anios": float}} para el gráfico "Perfil de Vencimiento de
-    Contratos" de la página 2 — ver
-    tools/db/rent_roll_stats.py::get_perfil_vencimiento. Apo y PT (los dos
-    fondos con layout "por edificio/sociedad" en página 2; TRI aún no tiene
-    perf_data). activo_key lógico igual al usado por _fetch_tipo_activo."""
+    Contratos" de la página 2 — ver tools/db/rent_roll_stats.py. PT/Apo
+    agrupan por edificio/sociedad (get_perfil_vencimiento); TRI consolida a
+    nivel fondo paraguas por categoría de activo (get_perfil_vencimiento_tri:
+    Oficinas=PT+Apo+Apo3001, Activos Comerciales=Viña+Curicó,
+    Residencias=INMOSA, Bodegas=Sucden — confirmado con el usuario
+    2026-08-05)."""
+    if fondo_key == "TRI":
+        from tools.db.rent_roll_stats import (
+            get_perfil_vencimiento_tri, periodos_disponibles_tri,
+        )
+
+        out = {}
+        for periodo in periodos_disponibles_tri():
+            tabla = get_perfil_vencimiento_tri(periodo)
+            if tabla is not None:
+                out[periodo] = tabla
+        return out
+
     activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
     edificios = (FONDOS_CFG.get(fondo_key, {}).get("page2") or {}).get("perfil_vencimiento_edificios")
     if not activo_key_logico or not edificios:
@@ -4258,7 +4318,7 @@ const PAGE2_CHART_BOXES = {
     </div>
   </div>`,
   perfil_vencimiento: `<div class="chart-box">
-    <div class="chart-title">Perfil de Vencimiento de Contratos (UF/mes)
+    <div class="chart-title">Perfil de Vencimiento de Contratos (%)
       <span class="small" style="float:right;font-weight:400;text-transform:none">Plazo medio contratos: <b id="fld-plazo-medio">—</b></span>
     </div>
     <div id="chart-perfil-vencimiento" data-chart="perfil-vencimiento-contratos">
@@ -4497,6 +4557,10 @@ function renderTipoActivoDonut(containerId, counts, order){
 const PERFIL_VENC_COLORS = {
   "Apoquindo 4501": "#05A978", "Apoquindo 4700": "#46504D",
   "Torre A S.A.": "#05A978", "Inmob. Boulevard PT SpA": "#46504D",
+  // TRI consolidado por categoría (ver FONDOS_CFG.TRI.page2.perfil_vencimiento_edificios
+  // y tools/db/rent_roll_stats.py::get_perfil_vencimiento_tri).
+  "Oficinas": "#05A978", "Activos Comerciales": "#8C948F",
+  "Residencias": "#1F2A26", "Bodegas": "#8FE3C7",
 };
 function renderStackedBarChart(containerId, data, edificios){
   const el = document.getElementById(containerId);
@@ -4505,14 +4569,19 @@ function renderStackedBarChart(containerId, data, edificios){
     return;
   }
   const { por_anio, anios } = data;
-  const totales = anios.map(a => edificios.reduce((s, ed) => s + ((por_anio[ed] || {})[a] || 0), 0));
+  // Eje Y en % de la renta mensual total del portafolio (no UF absolutas) —
+  // igual al fact sheet de referencia. El UF sigue disponible en el tooltip.
+  const totalesUf = anios.map(a => edificios.reduce((s, ed) => s + ((por_anio[ed] || {})[a] || 0), 0));
+  const granTotalUf = totalesUf.reduce((s, v) => s + v, 0);
+  const pctOf = v => granTotalUf ? (v / granTotalUf) * 100 : 0;
+  const totales = totalesUf.map(pctOf);
   const max = Math.max(1, ...totales);
   const W = 900, H = 280, padL = 78, padR = 16, padT = 18, padB = 46;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = anios.length;
   const bw = Math.max(6, (plotW / n) * 0.55);
   const x = i => padL + (i + 0.5) * (plotW / n);
-  const yMax = Math.ceil(max / 500) * 500 || max;
+  const yMax = Math.ceil(max / 5) * 5 || max;
   const y = v => padT + plotH - (v / yMax) * plotH;
 
   const nGrid = 5;
@@ -4521,7 +4590,7 @@ function renderStackedBarChart(containerId, data, edificios){
     const v = yMax * g / nGrid;
     const yy = padT + plotH - plotH * g / nGrid;
     gridLines += `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="${g===0?'#AEBBB5':'#E8EEEB'}" stroke-width="${g===0?1.2:1}"/>`;
-    yLabels += `<text x="${padL-8}" y="${yy+5}" font-size="20" text-anchor="end" fill="#6D7C75">${Math.round(v).toLocaleString('es-CL')}</text>`;
+    yLabels += `<text x="${padL-8}" y="${yy+5}" font-size="20" text-anchor="end" fill="#6D7C75">${Math.round(v)}%</text>`;
   }
 
   const RX = Math.min(4, bw / 4);
@@ -4530,7 +4599,7 @@ function renderStackedBarChart(containerId, data, edificios){
     const xb = x(i) - bw / 2;
     const presentes = edificios.filter(ed => ((por_anio[ed] || {})[a] || 0) > 0);
     const segs = edificios.map(ed => {
-      const v = (por_anio[ed] || {})[a] || 0;
+      const v = pctOf((por_anio[ed] || {})[a] || 0);
       if (!v) return "";
       const yTop = y(acc + v), yBot = y(acc);
       const esUltimo = ed === presentes[presentes.length - 1];
@@ -4589,7 +4658,7 @@ function renderStackedBarChart(containerId, data, edificios){
     const lines = edificios
       .map(ed => [ed, (por_anio[ed] || {})[a] || 0])
       .filter(([, v]) => v > 0)
-      .map(([ed, v]) => htmlLine(ed, `${Math.round(v).toLocaleString('es-CL')} UF`, PERFIL_VENC_COLORS[ed] || '#999'))
+      .map(([ed, v]) => htmlLine(ed, `${pctOf(v).toFixed(1)}% (${Math.round(v).toLocaleString('es-CL')} UF)`, PERFIL_VENC_COLORS[ed] || '#999'))
       .join("");
     if (!lines) { tooltip.classList.remove("on"); return; }
     tooltip.innerHTML = `<div class="title">${a}</div>${lines}`;

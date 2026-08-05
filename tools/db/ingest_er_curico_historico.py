@@ -29,6 +29,14 @@ import openpyxl
 _ACTIVO_KEY = "Mall Curicó"
 _SHEET_NAME = "curico"
 
+# "(+) Ingresos por Arriendos" es el subtotal de "(+) Ingresos por Arriendo
+# Locales Menores" (+ anclas, sin fila propia en esta planilla) — sumar
+# ambas duplica el ingreso por arriendo. Confirmado por el usuario
+# 2026-08-04 al auditar Mall Curicó 2020-2023 (ingresos/NOI ~35-45% sobre lo
+# esperado, delta idéntico en ingresos y NOI → apuntaba a una sola cuenta de
+# ingreso duplicada, no un problema de gastos ni de participación).
+_LABEL_SUBTOTAL_EXCLUIR = "(+) Ingresos por Arriendos"
+
 
 def parse_planilla(xlsx_path: str) -> list[dict]:
     wb = openpyxl.load_workbook(xlsx_path, data_only=True)
@@ -64,6 +72,8 @@ def parse_planilla(xlsx_path: str) -> list[dict]:
             continue
         if label.lower().startswith("noi mensual"):
             break
+        if label == _LABEL_SUBTOTAL_EXCLUIR:
+            continue
         if label.startswith("(+)"):
             seccion, es_operacional = "INGRESOS_OPERACION", 1
         elif label.startswith("(-)"):

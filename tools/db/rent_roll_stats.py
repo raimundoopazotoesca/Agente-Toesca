@@ -652,10 +652,11 @@ def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) 
     grupo (necesario para PT: "Torre A"->"Torre A S.A.", "Inmob. CdC"->
     "Inmob. Boulevard PT SpA"; para Apo el activo2 ya coincide 1:1). Los años
     se acotan a una
-    ventana de 9 buckets partiendo del año del período (report_year..
-    report_year+8); todo vencimiento posterior cae en el último bucket
-    "{report_year+8}+". Vacantes se excluyen, igual que get_rubro_arrendatario
-    / get_tipo_activo.
+    ventana de 12 buckets partiendo del año del período (report_year..
+    report_year+11); todo vencimiento posterior cae en el último bucket
+    "{report_year+11}+" (ej. período 2026 -> último bucket "2037+", igual
+    al fact sheet de referencia). Vacantes se excluyen, igual que
+    get_rubro_arrendatario / get_tipo_activo.
 
     También calcula el plazo medio de los contratos vigentes (años restantes
     desde `periodo` hasta `vencimiento`), ponderado por renta mensual UF
@@ -671,7 +672,7 @@ def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) 
 
     report_year = int(periodo.split("-")[0])
     report_date = f"{periodo}-01"
-    anio_max = report_year + 8
+    anio_max = report_year + 11
     anios = [str(a) for a in range(report_year, anio_max)] + [f"{anio_max}+"]
 
     por_anio: dict[str, dict[str, float]] = {ed: {a: 0.0 for a in anios} for ed in edificios}
@@ -705,6 +706,133 @@ def _fecha(s: str):
     from datetime import date
     y, m, d = (int(x) for x in s[:10].split("-"))
     return date(y, m, d)
+
+
+# TRI consolida el perfil de vencimiento a nivel fondo paraguas (no por
+# edificio/sociedad como PT/Apo): 4 categorías fijas del fact sheet TRI
+# (confirmado con el usuario 2026-08-05). Oficinas agrupa los 3 activos de
+# oficina de TRI (PT completo + los dos subfondos Apoquindo); Activos
+# Comerciales = centros comerciales TresA; Residencias = las 5 residencias
+# INMOSA (activo_key individual, ver dim_activo); Bodegas = Sucden (único
+# arrendatario, contrato fijo, ver tools/db/ingest_contratos_sucden_inmosa.py).
+_CATEGORIAS_TRI = {
+    "Oficinas": ["Torre A", "Boulevard", "Apo4501", "Apo4700", "Apo3001"],
+    "Activos Comerciales": ["Viña Centro", "Mall Curicó"],
+    "Residencias": [
+        "Residencia Colombia", "Residencia Coventry", "Residencia Candil",
+        "Residencia Arturo Medina", "Residencia Padre Errázuriz",
+    ],
+    "Bodegas": ["Sucden"],
+}
+
+
+def _mejor_periodo(activo_key: str, report_periodo: str) -> str | None:
+    """Último período <= report_periodo con rent roll para activo_key; si no
+    hay ninguno anterior o igual, usa el más antiguo disponible (evita dejar
+    la categoría sin datos por un mes de desfase entre proveedores)."""
+    periodos = rent_roll_source.periodos_disponibles(activo_key)
+    if not periodos:
+        return None
+    candidatos = [p for p in periodos if p <= report_periodo]
+    return candidatos[-1] if candidatos else periodos[0]
+
+
+def _participaciones_efectivas_tri() -> dict[str, float]:
+    """{activo_key: participación efectiva de TRI} desde v_activo_fondo_efectivo
+    (ver tools/db/connection.py — la vista ya resuelve el look-through
+    sociedad->fondo padre, ej. Torre A: 100% de la sociedad TorreASA * 33,33%
+    de TRI en PT = 0.3333; Apo4501: 100% * 30% de TRI en Apo = 0.3). Activos
+    sin fila en la vista (ej. las 5 Residencia_* de INMOSA, Sucden) devuelven
+    1.0 por default: para esos la participación ya se aplicó al ingestar
+    (ver tools/db/ingest_contratos_sucden_inmosa.py, que persiste el m2
+    PONDERADO), así que NO hay que volver a multiplicar acá — daría doble
+    conteo. Confirmado con el usuario 2026-08-05 comparando contra una
+    fuente externa: sin este factor, Oficinas quedaba ~3x sobrestimado
+    (32.522 UF calculado vs 11.082 UF real)."""
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    try:
+        conn.row_factory = None
+        rows = conn.execute(
+            "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo "
+            "WHERE fondo_key='TRI'"
+        ).fetchall()
+        return dict(rows)
+    finally:
+        conn.close()
+
+
+def periodos_disponibles_tri() -> list[str]:
+    """Unión de períodos con rent roll de cualquier activo_key de las 4
+    categorías TRI — usada para saber qué períodos puede intentar armar
+    get_perfil_vencimiento_tri (cada categoría puede tener su propio mes)."""
+    periodos: set[str] = set()
+    for keys in _CATEGORIAS_TRI.values():
+        for k in keys:
+            periodos.update(rent_roll_source.periodos_disponibles(k))
+    return sorted(periodos)
+
+
+def get_perfil_vencimiento_tri(report_periodo: str) -> dict | None:
+    """Igual que get_perfil_vencimiento pero consolidado a nivel TRI: agrupa
+    por categoría (Oficinas/Activos Comerciales/Residencias/Bodegas) en vez
+    de por edificio, y cada activo_key aporta su propio rent roll más
+    reciente disponible hasta report_periodo (ver _mejor_periodo) — los
+    proveedores (JLL, Tres Asociados, contratos fijos Sucden/INMOSA) no
+    siempre comparten el mismo mes de corte.
+
+    Devuelve {"por_anio": {categoria: {anio_bucket: uf}}, "anios": [...],
+    "plazo_medio_anios": float | None}. None si ninguna categoría tiene
+    datos."""
+    report_year = int(report_periodo.split("-")[0])
+    report_date = f"{report_periodo}-01"
+    anio_max = report_year + 11
+    anios = [str(a) for a in range(report_year, anio_max)] + [f"{anio_max}+"]
+
+    por_anio: dict[str, dict[str, float]] = {
+        cat: {a: 0.0 for a in anios} for cat in _CATEGORIAS_TRI
+    }
+    peso_total = 0.0
+    plazo_ponderado = 0.0
+    hay_datos = False
+    participaciones = _participaciones_efectivas_tri()
+
+    for categoria, activo_keys in _CATEGORIAS_TRI.items():
+        for activo_key in activo_keys:
+            periodo = _mejor_periodo(activo_key, report_periodo)
+            if periodo is None:
+                continue
+            participacion = participaciones.get(activo_key, 1.0)
+            snapshot = _snapshot(activo_key, periodo)
+            for v in snapshot.values():
+                if _es_vacante(v["arrendatario"]):
+                    continue
+                venc = v.get("vencimiento")
+                if not venc:
+                    continue
+                monto = _monto_mensual_uf(v) * participacion
+                if not monto:
+                    continue
+                try:
+                    anio_venc = int(str(venc)[:4])
+                except ValueError:
+                    continue
+                hay_datos = True
+                bucket = str(anio_venc) if anio_venc < anio_max else f"{anio_max}+"
+                por_anio[categoria][bucket] = round(
+                    por_anio[categoria].get(bucket, 0.0) + monto, 1
+                )
+                if venc > report_date:
+                    dias = (_fecha(venc) - _fecha(report_date)).days
+                    plazo_ponderado += (dias / 365.0) * monto
+                    peso_total += monto
+
+    if not hay_datos:
+        return None
+
+    plazo_medio = round(plazo_ponderado / peso_total, 2) if peso_total else None
+    return {"por_anio": por_anio, "anios": anios, "plazo_medio_anios": plazo_medio}
 
 
 def get_tipo_activo(activo_key: str, periodo: str) -> dict | None:
