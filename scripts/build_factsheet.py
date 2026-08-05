@@ -4278,6 +4278,32 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
 </div>
 
 <script>
+(function(){
+  // Mantiene el sidebar y el margen del contenido con tamaño de pantalla constante
+  // sin importar el zoom nativo del navegador (Ctrl +/-), que escala devicePixelRatio.
+  var baseDPR = window.devicePixelRatio || 1;
+  var SIDEBAR_W = 300, MAIN_ML = 252;
+  function applyZoomLock(){
+    var ratio = (window.devicePixelRatio || 1) / baseDPR;
+    if (!ratio || !isFinite(ratio) || ratio <= 0) ratio = 1;
+    var sidebar = document.getElementById("sidebar");
+    var main = document.getElementById("main-content");
+    if (sidebar){
+      // Ancho fijo real + reescala uniforme (contenido incluido) para
+      // cancelar el zoom del navegador y que quede pixel-idéntico siempre.
+      sidebar.style.width = SIDEBAR_W + "px";
+      sidebar.style.height = (window.innerHeight * ratio) + "px";
+      sidebar.style.transformOrigin = "top left";
+      sidebar.style.transform = "scale(" + (1 / ratio) + ")";
+    }
+    if (main){
+      main.style.marginLeft = (MAIN_ML / ratio) + "px";
+    }
+  }
+  window.addEventListener("resize", applyZoomLock);
+  applyZoomLock();
+})();
+
 const FUNDS = __DATA_JSON__;
 const KPI_META = __KPI_META_JSON__;
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
