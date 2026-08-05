@@ -947,27 +947,13 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
     "Evolución NOI y Ratio de Cobertura de Servicio de Deuda".
     noi_uf: derived_kpi entidad_tipo='fondo' kpi='noi_mes' (mismo valor que
     kpi='noi_mensual' formula='raw_er_noi_v1', ver _fetch_noi_u12m_yoy_pt).
-    cuota_uf: intereses de raw_amortizacion de los créditos del fondo (join
-    dim_credito.fondo_key), clasificando cada crédito por su propio historial
-    (no por tabla fija) en dos tipos:
-      - "Bullet" (capital_uf>0 en <50% de sus períodos, ej. Torre A/Boulevard
-        en PT, Euroamérica en Apo): cuota = solo interés; los meses con
-        capital son prepagos puntuales fuera de la cuota regular, y además el
-        interés de ese mes se devenga sobre el saldo previo al abono y queda
-        anormalmente alto (caso Boulevard nov-2018: interés real 7.041 UF vs
-        ~2.300 UF típico), así que se reemplaza por la mediana histórica de
-        interés del crédito.
-      - "Amortizante" (capital_uf>0 en >=50% de sus períodos, ej. BTG en Apo,
-        "cuotas iguales"): cuota = capital + interés, porque el capital ES la
-        cuota regular del crédito. Se suaviza (reemplazo por mediana de cuota
-        total del crédito) el primer período que supere 2.5x esa mediana —
-        el pago que salda el crédito — y desde ahí el crédito deja de aportar
-        (cuota=0), en vez de "revivir" en pagos posteriores. Caso BTG: pagó su
-        saldo en dos abonos grandes (dic-2025 y mar-2026 real); sin este corte
-        la suavización lo trataba como dos eventos independientes y la cuota
-        volvía a subir en marzo después de caer en enero/febrero — se corta
-        después de dic-2025 por decisión del usuario 2026-07-30.
-    Ver conversación con el usuario 2026-07-30. Solo incluye períodos con
+    cuota_uf: capital + interés crudo de raw_amortizacion de los créditos del
+    fondo (join dim_credito.fondo_key), sin suavizado — decisión del usuario
+    2026-08-05: se sacó la clasificación bullet/amortizante y el reemplazo
+    por mediana (que existía desde 2026-07-30) porque aplanaba la cuota real
+    y no reproducía el aserruchado visible en la planilla de referencia del
+    usuario. El dato crudo por período es la fuente correcta; los "picos"
+    (prepagos, pagos finales) son reales, no ruido. Solo incluye períodos con
     ambos datos (NOI y cuota) disponibles.
 
     Look-through TRI (fix 2026-08-05): TRI es el fondo paraguas — la deuda de
@@ -977,11 +963,29 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
     artificialmente plana/baja al comparar con la planilla del usuario).
     Se suman ponderadas por participación efectiva de TRI en cada activo
     (v_activo_fondo_efectivo, misma tabla usada para duration/ingresos/NOI
-    look-through). Validado: PT_TORREA_SECURITY/PT_BOULEVARD_SECURITY/
+    look-through) — incluyendo INMOSA y Mall Curicó, que estaban bookeados
+    directo bajo fondo_key='TRI' pero NO son 100% de TRI (el bug anterior
+    los trataba como peso=1.0 solo por estar bajo 'TRI'). INMOSA además tiene
+    participación histórica variable (34,68% desde 2018-01 → 36,39% desde
+    2018-08 → 43% desde 2023-01, fuente RAW/participaciones tri.xlsx) — el
+    resto (PT 33,33%, Apoquindo 30%, Curicó 80%) se mantuvo constante desde
+    que cada una arrancó. Validado: PT_TORREA_SECURITY/PT_BOULEVARD_SECURITY/
     APO_APO_EUROAMERICA calzan exacto (100%) contra la planilla manual del
     usuario "RAW/Cuotas Leasing TRI.xlsx" — no es una fuente distinta, es un
-    espejo de esta misma tabla."""
-    from statistics import median
+    espejo de esta misma tabla.
+
+    Crédito TRI_STRIPMACHALI_LEASING (agregado 2026-08-05, fuente RAW/Cuotas
+    Leasing TRI.xlsx fila "Strip Machalí" + RAW/ene-sept 2018 DB.xlsx para
+    completar ene-sep 2018): Strip Machalí es un activo_key distinto del
+    "Machalí" excluido del portfolio (dim_activo.vigente_hasta='2025-08',
+    fondo_key='TRI' directo) — sí corresponde incluirlo en este gráfico
+    histórico de deuda mientras estuvo vigente. Cuota constante 555,5485 UF/
+    mes desde 2018-01 hasta 2025-09 (último mes con dato real), sin capital
+    (leasing interest-only). También se completó TRI_VINA_PRINCIPAL, que en
+    raw_amortizacion partía en 2018-10: se agregaron ene-sep 2018 (4592,
+    4578, 4596, 3661, 5526, 3577, 3582, 5523, 3579 UF) desde RAW/ene-sept
+    2018 DB.xlsx, sin split capital/interés disponible en la fuente (se
+    guardó como interés puro, capital_uf=0)."""
     from tools.db.connection import get_conn
 
     conn = get_conn()
@@ -1000,70 +1004,36 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
             "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo WHERE fondo_key='TRI'"
         ).fetchall()
     } if fondo_key == "TRI" else {}
+    # Participación histórica de TRI en INMOSA (source: RAW/participaciones tri.xlsx,
+    # hoja Hoja1, fila "Participación INMOSA") — la única que cambió en el tiempo
+    # (34,68% desde 2018-01 → 36,39% desde 2018-08 → 43% desde 2023-01, esta
+    # última coincide con la de v_activo_fondo_efectivo). PT (33,33%), Apoquindo
+    # (30%) y Curicó (80%) se mantuvieron constantes desde que cada una arrancó,
+    # así que para esos basta la participación actual (part_efectiva).
+    _INMOSA_PART_HISTORICA = [("2018-01", 0.3468), ("2018-08", 0.3639), ("2023-01", 0.43)]
+
+    def _peso(activo_key: str, periodo: str) -> float:
+        if fondo_key != "TRI":
+            return 1.0
+        if activo_key == "INMOSA":
+            valor = _INMOSA_PART_HISTORICA[0][1]
+            for desde, v in _INMOSA_PART_HISTORICA:
+                if periodo >= desde:
+                    valor = v
+            return valor
+        return part_efectiva.get(activo_key, 1.0)
+
     rows_amort = conn.execute(
         f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key "
         f"FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
         f"WHERE c.fondo_key IN ({','.join('?' for _ in fondos_credito)})",
         fondos_credito,
     ).fetchall()
-    por_credito = {}
-    peso_credito = {}
-    for r in rows_amort:
-        por_credito.setdefault(r["credito_key"], []).append(r)
-        peso_credito[r["credito_key"]] = (
-            1.0 if r["fondo_key"] == "TRI" else part_efectiva.get(r["activo_key"], 1.0)
-        )
-
     cuota = {}
-    for credito_key, filas in por_credito.items():
-        filas = sorted(filas, key=lambda r: r["periodo"])
-
-        # Clasificación por tramo (ventana móvil de hasta 12 períodos pasados,
-        # incluyendo el actual) en vez de una sola etiqueta para toda la vida
-        # del crédito: algunos créditos (ej. TRI_APO3001_SCOTIABANK,
-        # TRI_DOMCALDERON_ZURIC) empiezan interest-only ("Bullet") y luego se
-        # convierten a amortización regular ("Amortizante") a mitad de vida.
-        # Clasificar con el ratio histórico completo los deja etiquetados con
-        # su régimen antiguo para siempre, lo que en el tramo reciente
-        # descarta el capital real y sustituye el interés por la mediana de
-        # la era interest-only (bug detectado 2026-08-05: aplanaba la cuota
-        # de TRI desde nov-2024). Ver conversación con el usuario 2026-07-30
-        # para el resto de la lógica de suavizado (sin cambios).
-        regimen = []
-        for i, r in enumerate(filas):
-            ventana = filas[max(0, i - 11): i + 1]
-            con_capital = sum(1 for w in ventana if w["capital_uf"])
-            regimen.append(con_capital / len(ventana) >= 0.5)
-
-        # Agrupar en tramos contiguos del mismo régimen.
-        tramos = []
-        inicio = 0
-        for i in range(1, len(filas) + 1):
-            if i == len(filas) or regimen[i] != regimen[inicio]:
-                tramos.append((regimen[inicio], filas[inicio:i]))
-                inicio = i
-
-        for es_amortizante, tramo_filas in tramos:
-            if es_amortizante:
-                totales = [
-                    (r["periodo"], (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0))
-                    for r in tramo_filas
-                ]
-                positivos = [t for _, t in totales if t > 0]
-                tipica = median(positivos) if positivos else None
-                for periodo, total in totales:
-                    if tipica and total > 2.5 * tipica:
-                        cuota[periodo] = cuota.get(periodo, 0.0) + tipica
-                        break  # pago final del tramo: se suaviza y no aporta más
-                    cuota[periodo] = cuota.get(periodo, 0.0) + total
-            else:
-                normales = [r["intereses_uf"] for r in tramo_filas if not r["capital_uf"] and r["intereses_uf"]]
-                tipica = median(normales) if normales else None
-                for r in tramo_filas:
-                    interes = r["intereses_uf"] or 0.0
-                    if r["capital_uf"] and tipica:
-                        interes = tipica
-                    cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + interes
+    for r in rows_amort:
+        peso = _peso(r["activo_key"], r["periodo"])
+        total = (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0)
+        cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total * peso
 
     periodos = sorted(set(noi) & set(cuota))
     out = []
@@ -1494,7 +1464,7 @@ def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
         for r in conn.execute("SELECT activo_key, vigente_hasta FROM dim_activo WHERE fondo_key='TRI'").fetchall()
     }
 
-    def _por_kpi(kpi: str) -> tuple[dict, dict]:
+    def _por_kpi(kpi: str) -> tuple[dict, dict, dict]:
         bucket_year: dict[str, dict[str, float]] = {}
         bucket_mes: dict[str, dict[str, float]] = {}
         meses_por_year: dict[str, set] = {}
@@ -1527,9 +1497,12 @@ def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
             tipo: {y: round(v) for y, v in years.items() if y in years_completos}
             for tipo, years in bucket_year.items()
         }
-        if todos_periodos:
-            ultimo = todos_periodos[-1]
-            y, m = int(ultimo[:4]), int(ultimo[5:7])
+        # U12M rolling por cada periodo disponible (no solo el último), para
+        # que el selector de mes de la UI pueda elegir el U12M correspondiente
+        # al mes visualizado en vez de quedar fijo en el último dato cargado.
+        u12m_por_periodo: dict[str, dict[str, float]] = {}
+        for periodo in todos_periodos:
+            y, m = int(periodo[:4]), int(periodo[5:7])
             periodos_u12m = []
             for _ in range(12):
                 periodos_u12m.append(f"{y}-{m:02d}")
@@ -1537,13 +1510,19 @@ def _fetch_tablas_anuales_tri(fondo_key: str) -> dict:
                 if m == 0:
                     m, y = 12, y - 1
             for tipo, serie in bucket_mes.items():
-                out.setdefault(tipo, {})["U12M"] = round(sum(serie.get(p, 0.0) for p in periodos_u12m))
-        return out, years_completos
+                u12m_por_periodo.setdefault(tipo, {})[periodo] = round(sum(serie.get(p, 0.0) for p in periodos_u12m))
+        return out, years_completos, u12m_por_periodo
 
-    ingresos, years_ing = _por_kpi("ingresos_mensual")
-    noi, years_noi = _por_kpi("noi_mensual")
+    ingresos, years_ing, u12m_ingresos = _por_kpi("ingresos_mensual")
+    noi, years_noi, u12m_noi = _por_kpi("noi_mensual")
     years = sorted(years_ing & years_noi)
-    return {"ingresos": ingresos, "noi": noi, "years": years}
+    return {
+        "ingresos": ingresos,
+        "noi": noi,
+        "years": years,
+        "u12m_ingresos": u12m_ingresos,
+        "u12m_noi": u12m_noi,
+    }
 
 
 def _fetch_plano_pt(fondo_key: str) -> dict:
@@ -1690,8 +1669,19 @@ def _fetch_perf_data(fondo_key: str) -> dict:
 def _fetch_rubro_arrendatario(fondo_key: str) -> dict:
     """{periodo: {rubro: renta_uf}} para el gráfico "Composición por Rubro del
     Arrendatario" de la página 2 — ver tools/db/rent_roll_stats.py::get_rubro_arrendatario
-    (top-N por monto + "Otro", sin lista curada de rubros). Mismo alcance que
-    _fetch_perf_data (PT y Apo; TRI en placeholder)."""
+    (top-N por monto + "Otro", sin lista curada de rubros). TRI consolida a
+    nivel fondo paraguas (mismo criterio que perfil de vencimiento, ver
+    get_rubro_arrendatario_tri)."""
+    if fondo_key == "TRI":
+        from tools.db.rent_roll_stats import get_rubro_arrendatario_tri, periodos_disponibles_tri
+
+        out = {}
+        for periodo in periodos_disponibles_tri():
+            tabla = get_rubro_arrendatario_tri(periodo)
+            if tabla is not None:
+                out[periodo] = tabla
+        return out
+
     activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
     if activo_key_logico is None:
         return {}
@@ -4348,14 +4338,27 @@ const PAGE2_CHART_BOXES = {
 
 // Tablas "Ingresos/NOI Anual por Tipo de Activo (UF)" de la página 2 de TRI
 // — ver F.tablas_anuales_tri (build_factsheet.py::_fetch_tablas_anuales_tri).
-// data: {tipo: {año|"U12M": valor_uf}}, order = S.page2.tipo_activo.
-function renderTablaAnualTipoActivo(containerId, data, years, order){
+// dataYears: {tipo: {año: valor_uf}}, u12mPorPeriodo: {tipo: {periodo: valor_uf}}
+// (rolling, uno por cada mes disponible) — la columna U12M mostrada se resuelve
+// al mes seleccionado (usadoOp), no al último dato cargado en la DB.
+function renderTablaAnualTipoActivo(containerId, dataYears, u12mPorPeriodo, years, order, usadoOp){
   const el = document.getElementById(containerId);
   if(!el) return;
-  if(!data || !years || !years.length){
+  if(!dataYears || !years || !years.length){
     el.innerHTML = `<div class="chart-placeholder" style="width:100%">Pendiente de datos</div>`;
     return;
   }
+  const periodosDisponibles = [...new Set(
+    Object.values(u12mPorPeriodo || {}).flatMap(m => Object.keys(m))
+  )].sort();
+  const elegibles = periodosDisponibles.filter(p => p <= usadoOp);
+  const periodoU12m = elegibles.length ? elegibles[elegibles.length - 1] : periodosDisponibles[periodosDisponibles.length - 1];
+  const data = {};
+  order.forEach(t => {
+    if(!dataYears[t] && !(u12mPorPeriodo[t] || {})[periodoU12m]) return;
+    data[t] = { ...(dataYears[t] || {}) };
+    if(periodoU12m != null) data[t]["U12M"] = (u12mPorPeriodo[t] || {})[periodoU12m];
+  });
   const cols = [...years, "U12M"];
   const tipos = order.filter(t => data[t]);
   const totalRow = cols.map(c => tipos.reduce((s, t) => s + (data[t][c] || 0), 0));
@@ -5444,8 +5447,8 @@ function render(){
     }
     if (document.getElementById("tabla-ingresos-anual-tipo-activo")) {
       const ta = F.tablas_anuales_tri || {};
-      renderTablaAnualTipoActivo("tabla-ingresos-anual-tipo-activo", ta.ingresos, ta.years, S.page2.tipo_activo);
-      renderTablaAnualTipoActivo("tabla-noi-anual-tipo-activo", ta.noi, ta.years, S.page2.tipo_activo);
+      renderTablaAnualTipoActivo("tabla-ingresos-anual-tipo-activo", ta.ingresos, ta.u12m_ingresos || {}, ta.years, S.page2.tipo_activo, usadoOp);
+      renderTablaAnualTipoActivo("tabla-noi-anual-tipo-activo", ta.noi, ta.u12m_noi || {}, ta.years, S.page2.tipo_activo, usadoOp);
     }
     if (document.getElementById("chart-perfil-vencimiento")) {
       if (S.page2.perfil_vencimiento_edificios) {

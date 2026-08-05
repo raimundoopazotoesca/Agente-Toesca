@@ -835,6 +835,50 @@ def get_perfil_vencimiento_tri(report_periodo: str) -> dict | None:
     return {"por_anio": por_anio, "anios": anios, "plazo_medio_anios": plazo_medio}
 
 
+def get_rubro_arrendatario_tri(report_periodo: str) -> dict | None:
+    """Igual que get_rubro_arrendatario pero consolidado a nivel TRI: suma la
+    renta mensual ocupada (UF) de todos los activo_key de _CATEGORIAS_TRI
+    (cada uno con su propio rent roll más reciente hasta report_periodo, ver
+    _mejor_periodo, y ponderado por participación efectiva de TRI, ver
+    _participaciones_efectivas_tri — mismo criterio que
+    get_perfil_vencimiento_tri), agrupando por rubro del arrendatario
+    (top-N por monto + "Otro"). None si ningún activo tiene datos."""
+    agg: dict[str, float] = {}
+    hay_datos = False
+    participaciones = _participaciones_efectivas_tri()
+
+    for activo_keys in _CATEGORIAS_TRI.values():
+        for activo_key in activo_keys:
+            periodo = _mejor_periodo(activo_key, report_periodo)
+            if periodo is None:
+                continue
+            participacion = participaciones.get(activo_key, 1.0)
+            snapshot = _snapshot(activo_key, periodo)
+            for v in snapshot.values():
+                if _es_vacante(v["arrendatario"]):
+                    continue
+                rubro = v.get("tipo_arrendatario")
+                if not rubro or rubro.strip().lower() == "vacante":
+                    continue
+                monto = _monto_mensual_uf(v) * participacion
+                if not monto:
+                    continue
+                hay_datos = True
+                rubro = rubro.strip()
+                agg[rubro] = agg.get(rubro, 0.0) + monto
+
+    if not hay_datos:
+        return None
+
+    items = sorted(((k, v) for k, v in agg.items() if v), key=lambda kv: kv[1], reverse=True)
+    top_n = 10
+    out = {k: round(v, 1) for k, v in items[:top_n]}
+    resto = items[top_n:]
+    if resto:
+        out["Otro"] = round(out.get("Otro", 0.0) + sum(v for _, v in resto), 1)
+    return out
+
+
 def get_tipo_activo(activo_key: str, periodo: str) -> dict | None:
     """Renta mensual ocupada (UF), agrupada por tipo de activo (Oficinas,
     Locales Comerciales, Estacionamientos, Bodegas — ver v["tipo_activo_3"] en
