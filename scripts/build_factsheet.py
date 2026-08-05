@@ -181,14 +181,9 @@ FONDOS_CFG = {
             # Estructura fija de la tabla de oficinas (comuna/clase) para meses en
             # que el trimestre JLL correspondiente aún no fue ingestado — se
             # muestra igual, con celdas en placeholder (mismo criterio que Apo).
+            # Nota: sin fila/grupo "Total" (clase agregada A+B) — el fact sheet
+            # TRI solo muestra los grupos de clase A y B por separado.
             "mercado_rows": [
-                {"comuna": "Las Condes (CBD)", "clase": "Total"},
-                {"comuna": "Providencia", "clase": "Total"},
-                {"comuna": "Santiago Centro", "clase": "Total"},
-                {"comuna": "Vitacura", "clase": "Total"},
-                {"comuna": "Ciudad empresarial", "clase": "Total"},
-                {"comuna": "Estoril", "clase": "Total"},
-                {"comuna": "Santiago", "clase": "Total", "total": True},
                 {"comuna": "Las Condes (CBD)", "clase": "A"},
                 {"comuna": "Providencia", "clase": "A"},
                 {"comuna": "Santiago Centro", "clase": "A"},
@@ -201,6 +196,10 @@ FONDOS_CFG = {
                 {"comuna": "Estoril", "clase": "B"},
                 {"comuna": "Santiago", "clase": "B", "total": True},
             ],
+            # Bodegas: sin fuente en DB todavía (no existe raw_mercado_bodegas) —
+            # solo estructura (zonas de la tabla). Cuando se ingeste el informe de
+            # GPS Property, F.mercado_bodegas debe traer tabla/evolución/párrafos
+            # reales y renderPage3() los consume igual que ya hace con oficinas.
             "bodegas": {
                 "zonas": ["Centro", "Nor-Poniente", "Norte", "Poniente", "Sur"],
                 "total_nombre": "Gran Santiago",
@@ -211,6 +210,271 @@ FONDOS_CFG = {
                     "Línea Hogar", "Muebles", "Supermercados",
                 ],
             },
+        },
+        # Página 4 — "Indicadores Activos" (tasación/deuda/LTV consolidado,
+        # look-through fondo TRI) + "Centro Comercial Paseo Viña Centro".
+        # indicadores_rows: la única cifra estática es "participacion"/"part"
+        # (participación del fondo TRI en cada activo — misma convención que
+        # cfg["activos"] en otros fondos); todo lo demás (valor tasación,
+        # deuda, LTV) se computa en fetch_fondo() desde fact_tasacion +
+        # raw_saldo_deuda. Ver _fetch page4_indicadores.
+        "page4": {
+            "indicadores_rows": [
+                {"label": "Bodega Sucden", "participacion": "100%", "part": 1.0,
+                 "valor_activos": ["Sucden"], "deuda_activos": ["Sucden"]},
+                {"label": "Mall Viña Centro", "participacion": "100%", "part": 1.0,
+                 "valor_activos": ["Viña Centro"], "deuda_activos": ["Viña Centro"]},
+                {"label": "Torre A", "participacion": "33%", "part": 0.33,
+                 "valor_activos": ["Torre A"], "deuda_activos": ["Torre A"]},
+                {"label": "Inmobiliaria Boulevard", "participacion": "33%", "part": 0.33,
+                 "valor_activos": ["Boulevard"], "deuda_activos": ["Boulevard"]},
+                {"label": "Apoquindo 4501", "participacion": "30%", "part": 0.30,
+                 "valor_activos": ["Apo4501"], "deuda_activos": ["Apo4501", "Apo4700"],
+                 "deuda_shared_key": "apo4501_4700"},
+                {"label": "Apoquindo 4700", "participacion": "30%", "part": 0.30,
+                 "valor_activos": ["Apo4700"], "deuda_activos": ["Apo4501", "Apo4700"],
+                 "deuda_shared_key": "apo4501_4700", "deuda_shared_counted": True},
+                {"label": "Residencias", "participacion": "43%", "part": 0.43,
+                 "valor_activos": [
+                     "Residencia Arturo Medina", "Residencia Candil", "Residencia Colombia",
+                     "Residencia Coventry", "Residencia Domingo Calderón", "Residencia Padre Errázuriz",
+                 ], "deuda_activos": ["INMOSA"]},
+                {"label": "Mall Curicó", "participacion": "80%", "part": 0.80,
+                 "valor_activos": ["Mall Curicó"], "deuda_activos": ["Mall Curicó"]},
+                {"label": "Apoquindo 3001", "participacion": "100%", "part": 1.0,
+                 "valor_activos": ["Apo3001"], "deuda_activos": ["Apo3001"]},
+            ],
+            "total_nombre": "Fondo Toesca Rentas Inmobiliarias",
+            "notas": [
+                "*Valor según participación en cada sociedad",
+                "**Deuda al cierre del trimestre",
+            ],
+            # Segunda sección: Viña Centro. Dirección/superficie/arrendatarios
+            # son hechos estáticos del activo (mismo criterio que cfg["aspectos"]
+            # en la página 3 de PT/Apo). Comentarios mensuales (vacancia,
+            # ventas, resultados) y los donuts GLA/Ingresos por arrendatario no
+            # tienen fuente en DB todavía — quedan en placeholder "pendiente".
+            "vina_centro": {
+                "titulo": "Centro Comercial Paseo Viña Centro",
+                "descripcion": (
+                    "Con fecha 29 de diciembre de 2017 Inmobiliaria VC SpA, sociedad filial del Fondo, "
+                    "adquirió el 100% de las acciones de Viña Centro SpA, arrendataria con opción de compra "
+                    "del Centro Comercial Paseo Viña Centro (ex Espacio Urbano Viña Centro), ubicado en "
+                    "Avenida Valparaíso 1070 en la ciudad de Viña del Mar en la 5ta región, a pasos del "
+                    "Rodoviario de Viña, de la Quinta Vergara, y en una zona que durante los últimos años ha "
+                    "experimentado un fuerte crecimiento tanto inmobiliario como en infraestructura. El "
+                    "centro comercial cuenta con una superficie construida de 62.690m2 distribuidos entre 50 "
+                    "locales comerciales. Sus principales arrendatarios son un supermercado Hiper Líder "
+                    "(7.500m2) y un Homecenter Sodimac (12.300m2) los cuales representan un 73% de los "
+                    "ingresos por arriendo del centro comercial."
+                ),
+                "aspectos": [
+                    ("Ubicación", "Viña del Mar, 5ta Región"),
+                    ("Tiendas Ancla", "Hiper Líder / Homecenter"),
+                    ("Financiamiento", "Mutuo + Crédito privado"),
+                    ("Administración", "Tres A"),
+                    ("Superficie Arrendable", None),
+                    ("Vacancia (m²)", None),
+                ],
+            },
+        },
+        # Página 5 — resúmenes de los subfondos PT y Apoquindo (TRI invierte
+        # en cuotas de ambos, ver project_estructura_fondos en memoria). Solo
+        # "descripcion"/"aspectos" fijos (nombre, fecha, duración, activo
+        # subyacente) son estáticos — hechos históricos, mismo criterio que el
+        # resto de cfg["aspectos"] en PT/Apo. Superficie arrendable, vacancia
+        # y los donuts GLA/Ingresos se calculan en fetch_fondo() (page5_data)
+        # reutilizando get_perf_table/get_ingresos_arrendatario/get_gla_edificios
+        # ya wireados para las páginas propias de PT y Apo. Fotos: reusa los
+        # mismos assets que ya existen para PT (pt_torre_a.png) y Apo
+        # (apo4501fs.png/apo4700fs.png).
+        "page5": {
+            "pt": {
+                "titulo": "Toesca Rentas PT Fondo de Inversión",
+                "descripcion": (
+                    "Con fecha 23 de noviembre 2017, el fondo adquirió un 33% de las cuotas del Fondo "
+                    "Toesca Rentas Inmobiliarias PT Fondo de Inversión. Esa misma fecha el Fondo Toesca "
+                    "Rentas Inmobiliarias PT compró el 100% de las acciones de Torre A S.A., sociedad que "
+                    "tiene un contrato de arrendamiento a largo plazo con el banco Scotiabank por la "
+                    "totalidad de los m2 de oficinas de la Torre A, más una serie de estacionamientos y "
+                    "bodegas y, por otro lado, la sociedad filial del Fondo Inmobiliaria Boulevard PT SpA "
+                    "adquirió una serie de locales comerciales, estacionamientos y bodegas, ubicados en el "
+                    "complejo Parque Titanium."
+                ),
+                "parrafo_remuneracion": (
+                    "Es importante destacar que el monto del aporte realizado para la inversión en las "
+                    "cuotas de este fondo no es considerado en la base de cálculo para la remuneración de "
+                    "la administradora, sino que solo se paga mensualmente la remuneración cobrada por el "
+                    "Fondo Rentas Inmobiliarias PT."
+                ),
+                "parrafo_mas_info": "Más información en la ficha del Fondo Toesca Rentas Inmobiliarias PT, disponible en www.toesca.com.",
+                "aspectos": [
+                    ("Nombre", "Toesca Rentas Inmobiliarias PT Fondo de Inversión"),
+                    ("Fecha inicio Operaciones", "16 de noviembre de 2017"),
+                    ("Duración", "15 años (30 de julio de 2032)"),
+                    ("Activo Subyacente", "Torre Scotiabank – Local 100 – Local 500"),
+                    ("Superficie Arrendable", None),
+                    ("Vacancia", None),
+                ],
+                # Foto pendiente de reemplazo (usuario indicó que la actual
+                # va a cambiar) — dejar sin "foto" hasta que llegue la nueva.
+            },
+            "apo": {
+                "titulo": "Toesca Rentas Inmobiliarias Apoquindo Fondo de Inversión",
+                "descripcion": (
+                    "Con fecha 2 de enero 2019 el Fondo adquirió un 30% de las cuotas de Toesca Rentas "
+                    "Inmobiliarias Apoquindo Fondo de Inversión. Un día más tarde, el día 3 de enero de "
+                    "2019, Toesca Rentas Apoquindo realizó su primera y única inversión, la cual se "
+                    "realizó por medio de su sociedad filial, Inmobiliaria Apoquindo S.A., la cual "
+                    "adquirió el 100% de las acciones y créditos de las sociedades Inmobiliaria Uno 2008 "
+                    "SpA e Inmobiliaria SCI Apoquindo SpA, sociedades que eran de propiedad de dos fondos "
+                    "administrados por Capital Advisors, y que con fecha 11 de marzo fueron fusionadas con "
+                    "Inmobiliaria Apoquindo S.A. y posteriormente disueltas."
+                ),
+                "parrafo_remuneracion": (
+                    "Es importante destacar que el monto del aporte realizado para la inversión en las "
+                    "cuotas de este fondo no es considerado en la base de cálculo para la remuneración de "
+                    "la administradora, sino que solo se paga mensualmente la remuneración cobrada por el "
+                    "Fondo Rentas Inmobiliarias Apoquindo."
+                ),
+                "parrafo_mas_info": "Más información en la ficha del Fondo Toesca Rentas Inmobiliarias Apoquindo, disponible en www.toesca.com.",
+                "aspectos": [
+                    ("Nombre", "Toesca Rentas Inmobiliarias Apoquindo Fondo de Inversión"),
+                    ("Fecha inicio Operaciones", "2 de enero de 2019"),
+                    ("Duración", "10 años (16 de noviembre de 2028)"),
+                    ("Activo Subyacente", "Edificio Apoquindo 4501 / Edificio Apoquindo 4700"),
+                    ("Superficie Arrendable", None),
+                    ("Vacancia", None),
+                ],
+                "foto_4501": _data_uri("apo4501fs.png"),
+                "foto_4700": _data_uri("apo4700fs.png"),
+            },
+        },
+        # Página 6 — INMOSSA (residencias adulto mayor) + Mall Curicó.
+        # INMOSSA: contrato triple-net con ACALIS sin rent roll unitario en
+        # DB (arriendo a un solo operador) — descripción/tabla de
+        # residencias/aspectos son hechos fijos del activo (fechas de
+        # apertura, camas, términos contractuales), igual criterio que el
+        # resto de cfg["aspectos"] en TRI/PT/Apo. Ocupación histórica y mapa
+        # quedan en placeholder — sin fuente en la DB. Mall Curicó SÍ tiene
+        # rent roll en DB (activo_key "Mall Curicó") — superficie/vacancia y
+        # los donuts GLA/Ingresos se calculan en fetch_fondo() (page6_data).
+        "page6": {
+            "inmossa": {
+                "titulo": "Inmobiliaria e Inversiones Senior Assist Chile S.A.",
+                "descripcion": (
+                    "Inmobiliaria e Inversiones Senior Assist Chile S.A. (“INMOSSA”) es una inmobiliaria "
+                    "cuyo objetivo es el desarrollo de edificios residenciales para el adulto mayor, los "
+                    "cuales son arrendados con contratos de largo plazo a ACALIS (ex Senior Assist "
+                    "International). INMOSSA busca desarrollar residencias para el adulto mayor, que "
+                    "ofrezcan una alternativa real para la creciente población de este segmento en Chile."
+                ),
+                "residencias": [
+                    ("Medina", "abr-13", 101),
+                    ("Del Canal", "dic-15", 121),
+                    ("Coventry", "sept-16", 128),
+                    ("Padre Errázuriz", "sept-16", 107),
+                    ("Colombia", "dic-16", 106),
+                    ("Domingo Calderón", "abr-23", 146),
+                ],
+                "residencias_subtotal": 709,
+                "aspectos": [
+                    ("Arrendatario", "Acalis (ex Senior Assist International)"),
+                    ("Duración Contratos", "17,1 años"),
+                    ("Salida Anticipada", "No"),
+                    ("Tipo de Contrato", "Doble net (operador paga contribuciones y 50% sobretasa)"),
+                    ("Garantía", "12 rentas / Prenda de acciones"),
+                    ("Financiamiento", "Leasing a un LTV aprox. de 48,7%"),
+                    ("Superficie Arrendable", "24.456 m²"),
+                ],
+            },
+            "curico": {
+                "titulo": "Centro Comercial Paseo Curicó",
+                "descripcion": (
+                    "Con fecha 31 de diciembre 2019 el Fondo adquirió el 80% de las acciones de Power "
+                    "Center Curicó SpA, arrendataria con opción de compra de un centro comercial ubicado "
+                    "en la ciudad de Curicó, séptima región. El centro comercial cuenta con una "
+                    "superficie arrendable de 10.763 m2 distribuidos en 43 locales comerciales. Su "
+                    "principal arrendatario es un supermercado Tottus, el cual representa un 28% de los "
+                    "ingresos por arriendo del centro comercial."
+                ),
+                "aspectos": [
+                    ("Ubicación", "Curicó, 7ª Región"),
+                    ("Tiendas Ancla", "Tottus / Smartfit"),
+                    ("Financiamiento", "Leasing a un LTV aprox. de 58%"),
+                    ("Administración", "Tres A"),
+                    ("Superficie Arrendable", None),
+                    ("Vacancia (m²)", None),
+                ],
+            },
+        },
+        # Página 7 — Edificio Apoquindo 3001 + Bodegas Sucden Chile. Ambos
+        # activos SÍ tienen rent roll en DB (activo_key "Apo3001" / "Sucden")
+        # — donuts GLA/Ingresos y superficie/vacancia se calculan en
+        # fetch_fondo() (page7_data), igual mecanismo que Mall Curicó en
+        # página 6. Descripción/aspectos fijos (ubicación, contrato,
+        # financiamiento) son hechos estáticos, mismo criterio que el resto
+        # del factsheet. Comentarios/renta mensuales quedan en placeholder —
+        # sin fuente en la DB.
+        "page7": {
+            "apo3001": {
+                "titulo": "Edificio Apoquindo 3001",
+                "descripcion_p1": (
+                    "Con fecha 30 de diciembre 2019 Inmobiliaria Chañarcillo, sociedad filial del Fondo, "
+                    "adquirió el 68,5% del edificio de oficinas Apoquindo 3001, ubicado en la comuna de "
+                    "Las Condes."
+                ),
+                "descripcion_p2": (
+                    "La superficie adquirida corresponde a 3.728 m2 de oficinas, 702 m2 de locales "
+                    "comerciales, 64 m2 de bodegas y 71 estacionamientos."
+                ),
+                "aspectos": [
+                    ("Ubicación", "Las Condes, RM"),
+                    ("Principal Arrendatario", "Notaría"),
+                    ("Financiamiento", "Mutuo Hipotecario a un LTV aprox. de 72%"),
+                    ("Administración", "Jones Lang Lasalle (JLL)"),
+                    ("Superficie Arrendable", None),
+                    ("Vacancia (m²)", None),
+                ],
+            },
+            "sucden": {
+                "titulo": "Bodegas Sucden Chile",
+                "descripcion_p1": (
+                    "Con fecha 15 de diciembre 2017 el Fondo adquirió el 100% de los derechos sociales de "
+                    "Inmobiliaria Chañarcillo Limitada (ex Arauco Logística), arrendataria con opción de "
+                    "compra de un centro logístico ubicado en Calle Chañarcillo 600 en la comuna de Maipú."
+                ),
+                "descripcion_p2": (
+                    "El inmueble se emplaza en un terreno de 34.729 m2 y cuenta con una superficie "
+                    "construida de 14.500 m2. Actualmente el 100% de este centro logístico se encuentra "
+                    "arrendado a largo plazo a Sucden Chile S.A., filial de SUCDEN, empresa francesa de "
+                    "trading y distribución de azúcar con presencia en Chile desde el año 1982, en aquel "
+                    "entonces bajo el nombre Amerop Chile (American Operation Chile), y cuyos principales "
+                    "clientes son Embotelladora Andina y Nestlé."
+                ),
+                "aspectos": [
+                    ("Ubicación", "Maipú, Región Metropolitana"),
+                    ("Arrendatario", "Sucden Chile S.A."),
+                    ("Duración Contrato", "12 años"),
+                    ("Salida Anticipada", "No"),
+                    ("Tipo de Contrato", "Gastos Comunes y Seguros de cargo del arrendatario"),
+                    ("Financiamiento", "Leasing a un LTV aprox. 51%"),
+                    ("Superficie Arrendable", None),
+                ],
+            },
+        },
+        # Página 8 (última) — Notas metodológicas (i)-(x). Reutiliza el mismo
+        # boilerplate _notas_template() que ya usan PT/Apo en su página 4 (con
+        # los data-slot fecha-cb/fecha-op/mes-op que ya rellena render() para
+        # cualquier página) — TRI necesitaba su página 4 para "Indicadores
+        # Activos" con notas propias cortas, así que las 10 notas de método
+        # completas van acá en su propia página.
+        "page8": {
+            "notas": _notas_template(True),
+            "nota_final": (
+                "*Tanto el NOI como los Ingresos por Arriendo incorporan los descuentos negociados "
+                "que no serán recuperados en el futuro."
+            ),
         },
     },
     "PT": {
@@ -866,6 +1130,221 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
                 for periodo, abonados_uf, variables_uf, resultado_uf, ocupacion in rows
             ]
 
+    # ---- Página 4 (TRI): "Indicadores Activos" — tabla consolidada de
+    # tasación/deuda/LTV por activo, look-through a nivel fondo TRI. 100%
+    # calculado desde fact_tasacion (tasador='Promedio') + raw_saldo_deuda vía
+    # dim_credito.activo_key — la única cifra estática es la participación del
+    # fondo en cada activo (misma convención que cfg["activos"] en otros
+    # fondos, ver FONDOS_CFG). Se computa una sola vez al buildear (no sigue
+    # el selector de período de la página como sí hace fillTasaciones en
+    # página 3) usando el trimestre cerrado más reciente disponible para deuda
+    # y el año de tasación más reciente para valor.
+    page4_indicadores = None
+    indicadores_rows_cfg = (cfg.get("page4") or {}).get("indicadores_rows")
+    if indicadores_rows_cfg:
+        def _valor_uf(activo_keys):
+            total, fecha_max = 0.0, None
+            for ak in activo_keys:
+                row = cur.execute(
+                    "SELECT fecha, valor_uf FROM fact_tasacion WHERE activo_key=? AND tasador='Promedio' "
+                    "ORDER BY periodo DESC LIMIT 1",
+                    (ak,),
+                ).fetchone()
+                if not row:
+                    return None, None
+                fecha, valor = row
+                total += valor or 0.0
+                if fecha and (fecha_max is None or fecha > fecha_max):
+                    fecha_max = fecha
+            return total, fecha_max
+
+        def _deuda_uf(activo_keys, periodo):
+            placeholders_ak = ",".join("?" * len(activo_keys))
+            row = cur.execute(
+                f"SELECT SUM(s.saldo_uf) FROM dim_credito c JOIN raw_saldo_deuda s ON s.credito_key = c.credito_key "
+                f"WHERE c.activo_key IN ({placeholders_ak}) AND c.estado='VIGENTE' AND s.periodo=?",
+                (*activo_keys, periodo),
+            ).fetchone()
+            return row[0] if row and row[0] is not None else None
+
+        def _target_deuda_periodo():
+            # raw_saldo_deuda trae el cronograma completo de amortización
+            # (histórico Y proyectado, is_proyeccion no distingue esto de forma
+            # confiable acá) — así que el ancla real es el último período
+            # efectivamente reportado en EEFF/valor cuota (raw_valor_cuota_contable),
+            # llevado al cierre de trimestre <= esa fecha (mismo criterio que
+            # "CDG usa EEFF del trimestre anterior" documentado en CLAUDE.md).
+            anchor_row = cur.execute(
+                f"SELECT MAX(periodo) FROM raw_valor_cuota_contable WHERE nemotecnico IN ({placeholders})",
+                series_nemos,
+            ).fetchone()
+            anchor = anchor_row[0] if anchor_row else None
+            if not anchor:
+                return None
+            y, m = int(anchor[:4]), int(anchor[5:7])
+            qm = (m // 3) * 3
+            if qm == 0:
+                y, qm = y - 1, 12
+            return f"{y}-{qm:02d}"
+
+        target_periodo = _target_deuda_periodo()
+
+        rows_out, total_valor, total_deuda = [], 0.0, 0.0
+        deuda_cache: dict[tuple, float | None] = {}
+        for r in indicadores_rows_cfg:
+            valor, fecha = _valor_uf(r["valor_activos"])
+            key = tuple(r["deuda_activos"])
+            if key not in deuda_cache:
+                deuda_cache[key] = _deuda_uf(r["deuda_activos"], target_periodo) if target_periodo else None
+            deuda = deuda_cache[key]
+            ltv = (deuda / valor) if (deuda is not None and valor) else None
+            rows_out.append({
+                "label": r["label"], "participacion": r["participacion"], "part": r["part"],
+                "valor_uf": valor, "fecha": fecha, "deuda_uf": deuda, "ltv": ltv,
+                "deuda_shared_key": r.get("deuda_shared_key"),
+            })
+            if valor is not None:
+                total_valor += valor * r["part"]
+            if deuda is not None and not r.get("deuda_shared_counted"):
+                total_deuda += deuda * r["part"]
+
+        page4_indicadores = {
+            "rows": rows_out,
+            "deuda_periodo": target_periodo,
+            "total_valor": total_valor,
+            "total_deuda": total_deuda,
+            "total_ltv": (total_deuda / total_valor) if total_valor else None,
+        }
+
+    # ---- Página 5 (TRI): resúmenes de los subfondos PT y Apoquindo ----
+    # Reutiliza exactamente las mismas fuentes ya wireadas para las páginas
+    # propias de PT/Apo (rent_roll_stats.get_perf_table para
+    # superficie/vacancia del fondo completo, get_ingresos_arrendatario/
+    # get_m2_arrendatario para los donuts por arrendatario de PT, y
+    # raw_er_activo_line + get_gla_edificios para los donuts por edificio de
+    # Apo) — nada de esto es hardcode, solo se llaman esas funciones con
+    # fondo_key="PT"/"Apo" desde el fetch de TRI en vez de con el fondo_key
+    # propio de cada página.
+    page5_data = None
+    if cfg.get("page5"):
+        from tools.db.rent_roll_stats import get_perf_table, _periodos_disponibles
+
+        def _perf_grand_total(activo_key_logico):
+            periodos = _periodos_disponibles(activo_key_logico)
+            if not periodos:
+                return None, None
+            tabla = get_perf_table(activo_key_logico, periodos[-1])
+            gt = (tabla or {}).get(("__grand_total__", "Total"))
+            if not gt:
+                return None, None
+            return gt.get("m2_utiles"), gt.get("pct_vacancia_m2")
+
+        pt_superficie, pt_vacancia = _perf_grand_total("PT")
+        apo_superficie, apo_vacancia = _perf_grand_total("Apoquindo")
+
+        pt_ingresos_por_periodo = _fetch_ingresos_arrendatario("PT")
+        pt_gla_por_periodo = _fetch_gla_arrendatario("PT")
+        pt_ultimo_periodo = max(pt_ingresos_por_periodo) if pt_ingresos_por_periodo else None
+        pt_ingresos = pt_ingresos_por_periodo.get(pt_ultimo_periodo) if pt_ultimo_periodo else None
+        pt_gla = pt_gla_por_periodo.get(pt_ultimo_periodo) if pt_ultimo_periodo else None
+
+        apo_gla_edificios = _fetch_gla_apo("Apo")
+        apo_ingresos_edificios = None
+        apo_map = (FONDOS_CFG.get("Apo", {}).get("page3") or {}).get("ingresos_activo_map")
+        if apo_map:
+            activo_keys = tuple(apo_map.values())
+            placeholders_ak = ",".join("?" * len(activo_keys))
+            ultimo_periodo_apo = cur.execute(
+                f"SELECT MAX(periodo) FROM raw_er_activo_line WHERE activo_key IN ({placeholders_ak}) "
+                f"AND seccion='INGRESOS_OPERACION' AND superseded_at IS NULL",
+                activo_keys,
+            ).fetchone()[0]
+            if ultimo_periodo_apo:
+                rows = cur.execute(
+                    f"SELECT activo_key, SUM(COALESCE(monto_uf, monto_clp)) FROM raw_er_activo_line "
+                    f"WHERE activo_key IN ({placeholders_ak}) AND seccion='INGRESOS_OPERACION' "
+                    f"AND periodo=? AND superseded_at IS NULL GROUP BY activo_key",
+                    (*activo_keys, ultimo_periodo_apo),
+                ).fetchall()
+                activo_key_a_edificio = {v: k for k, v in apo_map.items()}
+                apo_ingresos_edificios = {activo_key_a_edificio[ak]: monto for ak, monto in rows}
+
+        page5_data = {
+            "pt": {
+                "superficie_arrendable": pt_superficie, "vacancia_pct": pt_vacancia,
+                "ingresos_arrendatario": pt_ingresos, "gla_arrendatario": pt_gla,
+            },
+            "apo": {
+                "superficie_arrendable": apo_superficie, "vacancia_pct": apo_vacancia,
+                "gla_edificios": apo_gla_edificios, "ingresos_edificios": apo_ingresos_edificios,
+            },
+        }
+
+    # ---- Página 6 (TRI): Mall Curicó — superficie/vacancia (raw_rent_roll_line)
+    # + donuts GLA/Ingresos por arrendatario (rent_roll_stats, misma fuente que
+    # ya usa la página 5 para PT). INMOSSA no tiene rent roll unitario en DB
+    # (triple-net a un solo operador) — su contenido es 100% estático (ver
+    # cfg["page6"]["inmossa"]).
+    page6_data = None
+    if cfg.get("page6"):
+        from tools.db.rent_roll_stats import get_ingresos_arrendatario, get_m2_arrendatario, _periodos_disponibles
+
+        activo_curico = "Mall Curicó"
+        periodos_curico = _periodos_disponibles(activo_curico)
+        curico_superficie, curico_vacancia = None, None
+        curico_ingresos, curico_gla = None, None
+        if periodos_curico:
+            ultimo = periodos_curico[-1]
+            rows_cur = cur.execute(
+                "SELECT arrendatario, m2 FROM raw_rent_roll_line WHERE activo_key=? AND periodo=? "
+                "AND superseded_at IS NULL",
+                (activo_curico, ultimo),
+            ).fetchall()
+            tot_m2 = sum(m2 or 0 for _, m2 in rows_cur)
+            vac_m2 = sum(m2 or 0 for arr, m2 in rows_cur if arr and "vacante" in arr.lower())
+            if tot_m2:
+                curico_superficie = tot_m2
+                curico_vacancia = vac_m2 / tot_m2 * 100
+            curico_ingresos = get_ingresos_arrendatario(activo_curico, ultimo)
+            curico_gla = get_m2_arrendatario(activo_curico, ultimo)
+
+        page6_data = {
+            "curico": {
+                "superficie_arrendable": curico_superficie, "vacancia_pct": curico_vacancia,
+                "ingresos_arrendatario": curico_ingresos, "gla_arrendatario": curico_gla,
+            },
+        }
+
+    # ---- Página 7 (TRI): Apoquindo 3001 + Bodegas Sucden Chile — mismo
+    # mecanismo que Mall Curicó en página 6 (raw_rent_roll_line + rent_roll_stats).
+    page7_data = None
+    if cfg.get("page7"):
+        from tools.db.rent_roll_stats import get_ingresos_arrendatario, get_m2_arrendatario, _periodos_disponibles
+
+        def _rent_roll_snapshot(activo_key):
+            periodos = _periodos_disponibles(activo_key)
+            if not periodos:
+                return {"superficie_arrendable": None, "vacancia_pct": None, "ingresos_arrendatario": None, "gla_arrendatario": None}
+            ultimo = periodos[-1]
+            rows = cur.execute(
+                "SELECT arrendatario, m2 FROM raw_rent_roll_line WHERE activo_key=? AND periodo=? "
+                "AND superseded_at IS NULL",
+                (activo_key, ultimo),
+            ).fetchall()
+            tot_m2 = sum(m2 or 0 for _, m2 in rows)
+            vac_m2 = sum(m2 or 0 for arr, m2 in rows if arr and "vacante" in arr.lower())
+            return {
+                "superficie_arrendable": tot_m2 if tot_m2 else None,
+                "vacancia_pct": (vac_m2 / tot_m2 * 100) if tot_m2 else None,
+                "ingresos_arrendatario": get_ingresos_arrendatario(activo_key, ultimo),
+                "gla_arrendatario": get_m2_arrendatario(activo_key, ultimo),
+            }
+
+        page7_data = {
+            "apo3001": _rent_roll_snapshot("Apo3001"),
+            "sucden": _rent_roll_snapshot("Sucden"),
+        }
+
     return {
         "static": cfg,
         "contable": dict(sorted(contable.items())),
@@ -878,6 +1357,10 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "mercado": mercado_por_periodo,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
+        "page4_indicadores": page4_indicadores,
+        "page5": page5_data,
+        "page6": page6_data,
+        "page7": page7_data,
         "parking": parking_data,
         "noi_rcsd": _fetch_noi_rcsd(fondo_key),
         "perf_data": _fetch_perf_data(fondo_key),
@@ -942,19 +1425,78 @@ def _fetch_noi_u12m_yoy_pt(fondo_key: str) -> dict:
     return out
 
 
+_INMOSA_PART_HISTORICA = [("2018-01", 0.3468), ("2018-08", 0.3639), ("2023-01", 0.43)]
+
+
+def _cuota_tri_look_through(conn, periodos: list[str]) -> dict[str, float]:
+    """Cuota de financiamiento TRI (capital+interés, look-through por
+    participación efectiva) para períodos SIN dato en la planilla del
+    usuario (RAW/Cuotas Leasing TRI.xlsx fila 28) — típicamente el mes en
+    curso, antes de que el usuario la actualice. Mismos pesos validados
+    2026-08-05 contra el "TOTAL Ponderado" de esa planilla: Mall Curicó al
+    80%, Apo3001 y el resto de créditos directos de TRI al 100%,
+    Torre A/Boulevard/Apo4501/Apo4700 (créditos de PT/Apo) por
+    participación efectiva, TRI_SUCDEN_BICE excluido (duplica
+    TRI_CHANARCILLO_LEASING)."""
+    part_efectiva = {
+        r["activo_key"]: r["participacion_efectiva"]
+        for r in conn.execute(
+            "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo WHERE fondo_key='TRI'"
+        ).fetchall()
+    }
+
+    def _peso(activo_key: str, periodo: str, credito_fondo_key: str, credito_key: str) -> float:
+        if activo_key == "INMOSA":
+            valor = _INMOSA_PART_HISTORICA[0][1]
+            for desde, v in _INMOSA_PART_HISTORICA:
+                if periodo >= desde:
+                    valor = v
+            return valor
+        if credito_fondo_key != "TRI":
+            return part_efectiva.get(activo_key, 1.0)
+        if credito_key == "TRI_CURICO_METLIFE":
+            return part_efectiva.get(activo_key, 1.0)
+        return 1.0
+
+    placeholders = ",".join("?" for _ in periodos)
+    rows = conn.execute(
+        f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key "
+        f"FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
+        f"WHERE c.fondo_key IN ('TRI','PT','Apo') AND a.credito_key != 'TRI_SUCDEN_BICE' "
+        f"AND a.periodo IN ({placeholders})",
+        periodos,
+    ).fetchall()
+    cuota: dict[str, float] = {}
+    for r in rows:
+        peso = _peso(r["activo_key"], r["periodo"], r["fondo_key"], r["credito_key"])
+        total = (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0)
+        cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total * peso
+    return cuota
+
+
 def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
     """Serie mensual [{periodo, noi_uf, cuota_uf, rcsd}] para el chart
     "Evolución NOI y Ratio de Cobertura de Servicio de Deuda".
     noi_uf: derived_kpi entidad_tipo='fondo' kpi='noi_mes' (mismo valor que
     kpi='noi_mensual' formula='raw_er_noi_v1', ver _fetch_noi_u12m_yoy_pt).
-    cuota_uf: capital + interés crudo de raw_amortizacion de los créditos del
-    fondo (join dim_credito.fondo_key), sin suavizado — decisión del usuario
-    2026-08-05: se sacó la clasificación bullet/amortizante y el reemplazo
-    por mediana (que existía desde 2026-07-30) porque aplanaba la cuota real
-    y no reproducía el aserruchado visible en la planilla de referencia del
-    usuario. El dato crudo por período es la fuente correcta; los "picos"
-    (prepagos, pagos finales) son reales, no ruido. Solo incluye períodos con
-    ambos datos (NOI y cuota) disponibles.
+    cuota_uf (TRI) — histórico: serie oficial derived_kpi
+    entidad_tipo='fondo' entidad_key='TRI' kpi='cuota_financiamiento_uf',
+    ingestada directo desde la fila "Cuota Financiamiento (UF)" (fila 28,
+    bloque del gráfico de referencia del usuario, filas 24-33) de
+    RAW/Cuotas Leasing TRI.xlsx — agregada por el usuario 2026-08-05. Cubre
+    2018-01 hasta el último mes que el usuario haya actualizado en la
+    planilla (ver scripts/ingest_cuota_tri_oficial.py para recargar).
+    cuota_uf (TRI) — períodos posteriores al último dato de esa fila: se
+    calculan con el mismo look-through por participación efectiva que se
+    usa para PT/Apo (ver más abajo), tomado de raw_amortizacion, hasta que
+    el usuario actualice la planilla con esos meses.
+
+    cuota_uf (PT/Apo): capital + interés crudo de raw_amortizacion de los
+    créditos del fondo (join dim_credito.fondo_key), sin suavizado — decisión
+    del usuario 2026-08-05: se sacó la clasificación bullet/amortizante y el
+    reemplazo por mediana (que existía desde 2026-07-30) porque aplanaba la
+    cuota real. Solo incluye períodos con ambos datos (NOI y cuota)
+    disponibles.
 
     Look-through TRI (fix 2026-08-05): TRI es el fondo paraguas — la deuda de
     Torre A/Boulevard y Apo4501/Apo4700 está registrada en dim_credito bajo
@@ -997,43 +1539,64 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
             (fondo_key,),
         ).fetchall()
     }
-    fondos_credito = [fondo_key] if fondo_key != "TRI" else ["TRI", "PT", "Apo"]
-    part_efectiva = {
-        r["activo_key"]: r["participacion_efectiva"]
-        for r in conn.execute(
-            "SELECT activo_key, participacion_efectiva FROM v_activo_fondo_efectivo WHERE fondo_key='TRI'"
-        ).fetchall()
-    } if fondo_key == "TRI" else {}
-    # Participación histórica de TRI en INMOSA (source: RAW/participaciones tri.xlsx,
-    # hoja Hoja1, fila "Participación INMOSA") — la única que cambió en el tiempo
-    # (34,68% desde 2018-01 → 36,39% desde 2018-08 → 43% desde 2023-01, esta
-    # última coincide con la de v_activo_fondo_efectivo). PT (33,33%), Apoquindo
-    # (30%) y Curicó (80%) se mantuvieron constantes desde que cada una arrancó,
-    # así que para esos basta la participación actual (part_efectiva).
-    _INMOSA_PART_HISTORICA = [("2018-01", 0.3468), ("2018-08", 0.3639), ("2023-01", 0.43)]
+    if fondo_key == "TRI":
+        cuota = {
+            r["periodo"]: r["valor"]
+            for r in conn.execute(
+                "SELECT periodo, valor FROM derived_kpi "
+                "WHERE entidad_tipo='fondo' AND entidad_key='TRI' AND kpi='cuota_financiamiento_uf'"
+            ).fetchall()
+        }
+        rcsd_oficial = {
+            r["periodo"]: r["valor"]
+            for r in conn.execute(
+                "SELECT periodo, valor FROM derived_kpi "
+                "WHERE entidad_tipo='fondo' AND entidad_key='TRI' AND kpi='rcsd_oficial'"
+            ).fetchall()
+        }
+        ultimo_periodo_planilla = max(cuota) if cuota else None
+        futuros = sorted(p for p in noi if ultimo_periodo_planilla and p > ultimo_periodo_planilla)
+        if futuros:
+            for p, cu in _cuota_tri_look_through(conn, futuros).items():
+                cuota[p] = cu
 
-    def _peso(activo_key: str, periodo: str) -> float:
-        if fondo_key != "TRI":
-            return 1.0
-        if activo_key == "INMOSA":
-            valor = _INMOSA_PART_HISTORICA[0][1]
-            for desde, v in _INMOSA_PART_HISTORICA:
-                if periodo >= desde:
-                    valor = v
-            return valor
-        return part_efectiva.get(activo_key, 1.0)
+        periodos = sorted(set(noi) & set(cuota))
+        idx = {p: i for i, p in enumerate(periodos)}
+        out = []
+        for p in periodos:
+            n, cu = noi[p], cuota[p]
+            rcsd = rcsd_oficial.get(p)
+            if rcsd is None:
+                # Sin dato oficial (mes posterior a la planilla): misma
+                # metodología que "RCSD Media Móvil" del usuario (fila 31) —
+                # promedio móvil de 3 meses de NOI dividido por promedio
+                # móvil de 3 meses de cuota, no promedio del ratio mes a
+                # mes. Verificado contra la planilla: p.ej. mar-2018
+                # NOI_MA=21.730 / Cuota_MA=9.808 = 2,2 = RCSD Media Móvil.
+                i = idx[p]
+                ventana = periodos[max(0, i - 2): i + 1]
+                noi_ma = sum(noi[q] for q in ventana) / len(ventana)
+                cuota_ma = sum(cuota[q] for q in ventana) / len(ventana)
+                rcsd = round(noi_ma / cuota_ma, 3) if cuota_ma else None
+            out.append({
+                "periodo": p,
+                "noi_uf": round(n, 1),
+                "cuota_uf": round(cu, 1),
+                "rcsd": rcsd,
+            })
+        return out
 
+    # PT/Apo: sin look-through (fondo_key ya es el dueño directo del crédito).
     rows_amort = conn.execute(
-        f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key "
-        f"FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
-        f"WHERE c.fondo_key IN ({','.join('?' for _ in fondos_credito)})",
-        fondos_credito,
+        "SELECT periodo, capital_uf, intereses_uf FROM raw_amortizacion a "
+        "JOIN dim_credito c ON c.credito_key = a.credito_key "
+        "WHERE c.fondo_key = ?",
+        (fondo_key,),
     ).fetchall()
     cuota = {}
     for r in rows_amort:
-        peso = _peso(r["activo_key"], r["periodo"])
         total = (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0)
-        cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total * peso
+        cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total
 
     periodos = sorted(set(noi) & set(cuota))
     out = []
@@ -2358,6 +2921,127 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     font-variant-numeric: tabular-nums; white-space: nowrap;
   }
   .rv-table .rv-sub { display: block; font-weight: 400; font-style: italic; color: #7a7a7a; font-size: 10px; margin-top: 1px; }
+
+  /* Tabla "Análisis de Mercado - Oficinas" (página 3 TRI, #tbl-mercado3):
+     lámina compacta tipo Excel — sin zebra, columnas centradas, bandas grises
+     verticales en Clase/Absorción/Renta, separador punteado verde antes de
+     cada fila total "Santiago". Ver spec de referencia JLL abril 2026. */
+  #tbl-mercado3 { table-layout: fixed; }
+  #tbl-mercado3 col.col-comuna { width: 18%; }
+  #tbl-mercado3 col.col-clase { width: 9%; }
+  #tbl-mercado3 col.col-inventario { width: 15%; }
+  #tbl-mercado3 col.col-absorcion { width: 17%; }
+  #tbl-mercado3 col.col-vacancia { width: 13%; }
+  #tbl-mercado3 col.col-renta { width: 14%; }
+  #tbl-mercado3 col.col-construccion { width: 14%; }
+  #tbl-mercado3 th, #tbl-mercado3 td {
+    padding: 3px 6px; font-size: 11px; line-height: 1.2;
+    text-align: center; border-bottom: none;
+  }
+  #tbl-mercado3 th:first-child, #tbl-mercado3 td:first-child { text-align: left; }
+  #tbl-mercado3 th { font-size: 10.5px; border-bottom: 2px solid var(--green); }
+  #tbl-mercado3 tbody tr { background: none; }
+  #tbl-mercado3 tbody tr:nth-child(even) { background: none; }
+  #tbl-mercado3 tbody tr:hover { background: #EAF7F0; }
+  #tbl-mercado3 tbody td { border-bottom: 1px solid #E9E9E9; }
+  #tbl-mercado3 tbody tr:last-child td { border-bottom: none; }
+  #tbl-mercado3 td:nth-child(2), #tbl-mercado3 td:nth-child(4), #tbl-mercado3 td:nth-child(6),
+  #tbl-mercado3 th:nth-child(2), #tbl-mercado3 th:nth-child(4), #tbl-mercado3 th:nth-child(6) {
+    background: #EDEDED;
+  }
+  #tbl-mercado3 td:nth-child(2), #tbl-mercado3 th:nth-child(2) { background: #D9D9D9; }
+  #tbl-mercado3 tbody tr.row-total, #tbl-mercado3 tbody tr.row-total:nth-child(even) {
+    background: none; font-weight: 400; color: #1a1a1a;
+  }
+  #tbl-mercado3 tbody tr.row-total td:nth-child(2),
+  #tbl-mercado3 tbody tr.row-total td:nth-child(4),
+  #tbl-mercado3 tbody tr.row-total td:nth-child(6) { background: #EDEDED; }
+  #tbl-mercado3 tbody tr.row-total td:nth-child(2) { background: #D9D9D9; }
+  #tbl-mercado3 tbody tr.row-total td { font-weight: 700; border-top: 2px dashed var(--green); border-bottom: none; }
+  #tbl-mercado3 tbody tr.row-spacer td { border: none; padding: 2px 0; background: none; }
+  .page3-mercado-cols { display: grid; grid-template-columns: 26% 1fr; gap: 14px; align-items: start; }
+  .page3-mercado-cols .comentarios { padding-top: 2px; }
+  .comentarios ul { list-style: none; padding-left: 0; margin: 0; }
+  .comentarios li {
+    position: relative; padding-left: 16px; margin-bottom: 8px;
+    font-size: 11px; line-height: 1.35;
+  }
+  .comentarios li::before {
+    content: ""; position: absolute; left: 0; top: 5px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green-bright, #00C878);
+  }
+  .comentarios-bodegas { margin: 2px 0 8px; }
+  .comentarios-bodegas ul { display: flex; gap: 24px; }
+  .comentarios-bodegas li { flex: 1; margin-bottom: 0; }
+
+  /* Sección Bodegas (página 3 TRI): chart combinado 48% + tabla 48%. */
+  .page3-bodegas-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  #tbl-bodegas { table-layout: fixed; }
+  #tbl-bodegas col.col-zona { width: 16%; }
+  #tbl-bodegas col.col-produccion { width: 21%; }
+  #tbl-bodegas col.col-inv-final { width: 22%; }
+  #tbl-bodegas col.col-vacancia { width: 21%; }
+  #tbl-bodegas col.col-arriendo { width: 20%; }
+  #tbl-bodegas th, #tbl-bodegas td {
+    padding: 4px 6px; font-size: 11px; height: 27px;
+    text-align: center; border-bottom: 1px solid #E9E9E9;
+    border-right: 1px solid #E9E9E9;
+  }
+  #tbl-bodegas th:last-child, #tbl-bodegas td:last-child { border-right: none; }
+  #tbl-bodegas th:first-child, #tbl-bodegas td:first-child { text-align: left; }
+  #tbl-bodegas th { background: none; border-bottom: 2px solid var(--green); }
+  #tbl-bodegas tbody tr { background: none; }
+  #tbl-bodegas tbody tr:nth-child(even) { background: none; }
+  #tbl-bodegas tbody tr:hover { background: #EAF7F0; }
+  #tbl-bodegas tbody tr:last-child td { border-bottom: none; }
+  #tbl-bodegas tbody tr.row-total, #tbl-bodegas tbody tr.row-total:nth-child(even) {
+    background: #fff; font-weight: 700; color: #1a1a1a;
+  }
+  #tbl-bodegas tbody tr.row-total td { border-top: 2px dashed var(--green); border-bottom: none; }
+
+  /* Página 4 TRI: tabla "Indicadores Activos" (tasación/deuda/LTV) */
+  #tbl-indicadores { table-layout: fixed; }
+  #tbl-indicadores col.col-part { width: 14%; }
+  #tbl-indicadores col.col-activo { width: 27%; }
+  #tbl-indicadores col.col-valor { width: 15%; }
+  #tbl-indicadores col.col-fecha { width: 15%; }
+  #tbl-indicadores col.col-deuda { width: 15%; }
+  #tbl-indicadores col.col-ltv { width: 14%; }
+  #tbl-indicadores th, #tbl-indicadores td {
+    padding: 3px 6px; font-size: 9px; height: 22px;
+    text-align: center; border-bottom: 1px solid #E9E9E9; border-right: 1px solid #E9E9E9;
+  }
+  #tbl-indicadores th:last-child, #tbl-indicadores td:last-child { border-right: none; }
+  #tbl-indicadores th:nth-child(2), #tbl-indicadores td:nth-child(2) { text-align: left; }
+  #tbl-indicadores th { background: none; border-bottom: 2px solid var(--green); font-size: 9px; }
+  #tbl-indicadores tbody tr { background: none; }
+  #tbl-indicadores tbody tr:nth-child(even) { background: none; }
+  #tbl-indicadores tbody tr:hover { background: #EAF7F0; }
+  #tbl-indicadores td.fecha-tasacion { color: #0066CC; }
+  #tbl-indicadores tbody tr.row-total, #tbl-indicadores tbody tr.row-total:nth-child(even) {
+    background: var(--green-header); font-weight: 700;
+  }
+  #tbl-indicadores tbody tr.row-total td { border-right: none; }
+
+  /* Página 4 TRI: sección Viña Centro (63% descripción/gráficos, 35% aspectos+foto) */
+  .page4-vina-cols { display: grid; grid-template-columns: 63% 1fr; gap: 14px; align-items: start; }
+  .vina-comentarios-box {
+    border: 1.5px dashed #0C7E49; border-radius: 0; padding: 7px 8px;
+    margin-top: 8px; min-height: 140px; font-size: 8px; line-height: 1.35;
+  }
+  #tbl-vina-aspectos.kv tr { border-bottom: 1px solid var(--green); }
+  #foto-vina { aspect-ratio: unset; }
+
+  /* Página 5 TRI: resúmenes PT / Apoquindo */
+  .page5-cols { display: grid; grid-template-columns: 63% 1fr; gap: 14px; align-items: start; }
+  .page5-tbl-aspectos.kv tr { border-bottom: 1px solid var(--green); }
+
+  /* Página 6 TRI: INMOSSA / Mall Curicó */
+  .page6-cols { display: grid; grid-template-columns: 64% 1fr; gap: 14px; align-items: start; }
+  #tbl-residencias { width: 60%; border-collapse: collapse; margin-top: 6px; }
+  #tbl-residencias th, #tbl-residencias td { font-size: 9px; padding: 2px 4px; text-align: center; }
+  #tbl-residencias th:first-child, #tbl-residencias td:first-child { text-align: left; }
+  #tbl-residencias tr.row-total td { font-weight: 700; border-top: 1px solid var(--green); }
   span.ed, span.auto { padding: 0 2px; }
   input.date-input-inline {
     font: inherit; font-size: 11px; padding: 2px 6px;
@@ -3135,17 +3819,27 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
          (solo estructura, sin fuente en DB todavía). ids propios sufijo "-m". -->
     <div id="page3-layout-mercado" class="hidden">
       <div class="section-title">Análisis de Mercado - Oficinas</div>
-      <p class="small placeholder" id="txt-mercado3-p1">Pendiente: párrafo de absorción (informe JLL) — actualización manual, no proviene de la DB.</p>
-      <p class="small placeholder" id="txt-mercado3-p2">Pendiente: párrafo de concentración por comuna (informe JLL).</p>
-      <div style="overflow-x:auto">
-        <table id="tbl-mercado3">
-          <thead><tr>
-            <th>Comuna</th><th>Clase</th><th>Inventario (m²)</th>
-            <th>Absorción neta U12M (m²)</th><th>Vacancia (%)</th>
-            <th>Renta (UF/m²)</th><th>Construcción (m²)</th>
-          </tr></thead>
-          <tbody id="tbl-mercado3-tbody"></tbody>
-        </table>
+      <div class="page3-mercado-cols">
+        <div class="comentarios">
+          <ul>
+            <li class="small placeholder" id="txt-mercado3-p1">Pendiente: párrafo de absorción (informe JLL) — actualización manual, no proviene de la DB.</li>
+            <li class="small placeholder" id="txt-mercado3-p2">Pendiente: párrafo de concentración por comuna (informe JLL).</li>
+          </ul>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="tbl-mercado3">
+            <colgroup>
+              <col class="col-comuna"><col class="col-clase"><col class="col-inventario">
+              <col class="col-absorcion"><col class="col-vacancia"><col class="col-renta"><col class="col-construccion">
+            </colgroup>
+            <thead><tr>
+              <th>Comuna</th><th>Clase</th><th>Inventario<br/>(m²)</th>
+              <th>Absorción neta U12M<br/>(m²)</th><th>Vacancia<br/>(%)</th>
+              <th>Renta<br/>(UF/m²)</th><th>Construcción<br/>(m²)</th>
+            </tr></thead>
+            <tbody id="tbl-mercado3-tbody"></tbody>
+          </table>
+        </div>
       </div>
       <div class="charts-grid-2">
         <div class="chart-box">
@@ -3159,15 +3853,24 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       </div>
 
       <div class="section-title">Análisis de Mercado - Bodegas</div>
-      <p class="small placeholder" id="txt-mercado3-bodegas">Pendiente: párrafo de mercado de bodegas (informe GPS Property) — sin fuente ingestada en la DB todavía.</p>
-      <div class="cols cols-page3-bodegas">
+      <div class="comentarios comentarios-bodegas">
+        <ul>
+          <li class="small" id="txt-mercado3-bodegas-1"></li>
+          <li class="small" id="txt-mercado3-bodegas-2"></li>
+        </ul>
+      </div>
+      <div class="cols page3-bodegas-cols">
         <div class="chart-box">
-          <div class="chart-title">Evolución vacancia y canon de arriendo Bodegas</div>
-          <div class="chart-placeholder" id="chart-bodegas">Pendiente de datos</div>
+          <div class="chart-title">Evolución de la vacancia y canon de arriendo Bodegas</div>
+          <div id="chart-bodegas" style="height:230px"></div>
         </div>
         <div style="overflow-x:auto">
           <table id="tbl-bodegas">
-            <thead><tr><th>Zona</th><th>Producción (m²)</th><th>Inventario Final (m²)</th><th>Vacancia (%)</th><th>Arriendo (UF/m²)</th></tr></thead>
+            <colgroup>
+              <col class="col-zona"><col class="col-produccion"><col class="col-inv-final">
+              <col class="col-vacancia"><col class="col-arriendo">
+            </colgroup>
+            <thead><tr><th>Zona</th><th>Producción<br/>(m²)</th><th>Inventario Final<br/>(m²)</th><th>Vacancia<br/>(%)</th><th>Arriendo<br/>(UF/m²)</th></tr></thead>
             <tbody id="tbl-bodegas-tbody"></tbody>
           </table>
         </div>
@@ -3244,13 +3947,268 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       <div class="charts-grid-2" id="grid-plano"></div>
     </div>
 
+    <!-- Indicadores Activos (TRI): tabla consolidada tasación/deuda/LTV,
+         look-through fondo — ver S.page4.indicadores_rows y
+         F.page4_indicadores (fetch_fondo). Solo visible si el fondo define
+         indicadores_rows (hoy TRI). -->
+    <div id="page4-indicadores" class="hidden">
+      <div class="section-title">Indicadores Activos</div>
+      <div style="overflow-x:auto">
+        <table id="tbl-indicadores">
+          <colgroup>
+            <col class="col-part"><col class="col-activo"><col class="col-valor">
+            <col class="col-fecha"><col class="col-deuda"><col class="col-ltv">
+          </colgroup>
+          <thead><tr>
+            <th>Participación</th><th>Activo</th><th>Valor Tasación (UF)</th>
+            <th>Fecha Tasación</th><th>Deuda**</th><th>LTV</th>
+          </tr></thead>
+          <tbody id="tbl-indicadores-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="section-title">Notas</div>
     <ol id="lst-notas" style="font-size:10px;color:#333;padding-left:16px;line-height:1.5"></ol>
+
+    <!-- Centro Comercial Paseo Viña Centro (TRI): descripción + donuts GLA/
+         Ingresos (sin fuente en DB, placeholder) + comentarios generales
+         (editorial mensual, sin fuente todavía, placeholder) + aspectos
+         relevantes (hechos estáticos del activo) + foto (pendiente de subir).
+         Ver S.page4.vina_centro. -->
+    <div id="page4-vina" class="hidden">
+      <div class="section-title" id="vina-titulo">—</div>
+      <div class="cols page4-vina-cols">
+        <div>
+          <p class="small" id="txt-vina-descripcion" style="text-align:justify"></p>
+          <div class="charts-grid-2">
+            <div class="chart-box">
+              <div class="chart-title">GLA (m²)</div>
+              <div class="chart-placeholder" id="chart-vina-gla">Pendiente de datos</div>
+            </div>
+            <div class="chart-box">
+              <div class="chart-title">Ingresos (UF/mes)</div>
+              <div class="chart-placeholder" id="chart-vina-ingresos">Pendiente de datos</div>
+            </div>
+          </div>
+          <div class="vina-comentarios-box">
+            <div class="small placeholder" id="txt-vina-comentarios">Pendiente: comentarios generales, vacancia, ventas acumuladas y resultados — actualización editorial mensual, sin fuente en la DB todavía.</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
+          <table class="kv" id="tbl-vina-aspectos"><tbody></tbody></table>
+          <div class="foto-box" id="foto-vina" style="margin-top:8px;height:170px">
+            <div class="foto-placeholder">Pendiente: foto del Centro Comercial Paseo Viña Centro</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <p class="small" style="text-align:center;margin-top:20px;color:#888">
     Apoquindo 3885, Piso 22, Las Condes · Tel. +562 26462000 · www.toesca.com
   </p>
+</div>
+
+<!-- Página 5 (TRI): resúmenes de los subfondos PT y Apoquindo. Solo visible
+     si S.page5 está definido (hoy TRI) — ver page5-pending para el resto. -->
+<div class="page" id="page5">
+  <header>
+    <div>
+      <h1 id="hdr5-nombre">—</h1>
+      <h2 id="hdr5-sub">—</h2>
+    </div>
+  </header>
+  <div class="month-bar"><span id="month-bar5">—</span></div>
+
+  <div id="page5-pending" class="hidden">
+    <p class="small placeholder" style="margin-top:16px">
+      Página 5 aún no definida para este fondo.
+    </p>
+  </div>
+
+  <div id="page5-body" class="hidden">
+    <template id="tpl-page5-section">
+      <div class="section-title page5-titulo"></div>
+      <div class="cols page5-cols">
+        <div>
+          <p class="small page5-descripcion" style="text-align:justify"></p>
+          <div class="charts-grid-2">
+            <div class="chart-box">
+              <div class="chart-title">GLA (m²)</div>
+              <div class="donut-wrap page5-donut-gla"></div>
+            </div>
+            <div class="chart-box">
+              <div class="chart-title">Ingresos (UF/mes)</div>
+              <div class="donut-wrap page5-donut-ingresos"></div>
+            </div>
+          </div>
+          <p class="small page5-parrafo-remuneracion" style="text-align:justify;margin-top:8px"></p>
+          <p class="small page5-parrafo-masinfo" style="text-align:justify;margin-top:8px"></p>
+        </div>
+        <div>
+          <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
+          <table class="kv page5-tbl-aspectos"><tbody></tbody></table>
+          <div class="page5-fotos" style="margin-top:7px"></div>
+        </div>
+      </div>
+    </template>
+    <div id="page5-section-pt"></div>
+    <div id="page5-section-apo" style="margin-top:34px"></div>
+  </div>
+
+  <p class="small" style="text-align:center;margin-top:20px;color:#888">
+    Apoquindo 3885, Piso 22, Las Condes · Tel. +562 26462000 · www.toesca.com
+  </p>
+</div>
+
+<!-- Página 6 (TRI): INMOSSA (residencias adulto mayor) + Mall Curicó. Solo
+     visible si S.page6 está definido (hoy TRI). -->
+<div class="page" id="page6">
+  <header>
+    <div>
+      <h1 id="hdr6-nombre">—</h1>
+      <h2 id="hdr6-sub">—</h2>
+    </div>
+  </header>
+  <div class="month-bar"><span id="month-bar6">—</span></div>
+
+  <div id="page6-pending" class="hidden">
+    <p class="small placeholder" style="margin-top:16px">Página 6 aún no definida para este fondo.</p>
+  </div>
+
+  <div id="page6-body" class="hidden">
+    <!-- INMOSSA: sin donuts (arriendo triple-net a un solo operador, sin rent
+         roll unitario) — tabla de residencias + ocupación histórica (placeholder,
+         sin fuente en DB) + comentario del mes (placeholder). -->
+    <div class="section-title" id="inmossa-titulo">—</div>
+    <div class="cols page6-cols">
+      <div>
+        <p class="small" id="txt-inmossa-descripcion" style="text-align:justify"></p>
+        <table id="tbl-residencias">
+          <colgroup><col style="width:52%"><col style="width:25%"><col style="width:23%"></colgroup>
+          <thead><tr><th>Hogar</th><th>Comienzo</th><th>Camas</th></tr></thead>
+          <tbody id="tbl-residencias-tbody"></tbody>
+        </table>
+        <div class="chart-box" style="margin-top:8px">
+          <div class="chart-title">Ocupación (2018–2026)</div>
+          <div class="chart-placeholder" id="chart-ocupacion-inmossa">Pendiente: histórico de ocupación por residencia — sin fuente en la DB todavía.</div>
+        </div>
+        <div class="vina-comentarios-box" style="min-height:auto">
+          <div class="small placeholder" id="txt-inmossa-comentario">Pendiente: comentario del mes — actualización editorial, sin fuente en la DB todavía.</div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
+        <table class="kv" id="tbl-inmossa-aspectos"><tbody></tbody></table>
+        <div class="section-title" style="margin-top:10px">Ubicación Residencias</div>
+        <div class="chart-placeholder" id="mapa-residencias" style="height:165px">Pendiente: mapa esquemático de ubicaciones — sin fuente en la DB todavía.</div>
+      </div>
+    </div>
+
+    <div class="section-title" id="curico-titulo" style="margin-top:16px">—</div>
+    <div class="cols page6-cols">
+      <div>
+        <p class="small" id="txt-curico-descripcion" style="text-align:justify"></p>
+        <div class="charts-grid-2">
+          <div class="chart-box">
+            <div class="chart-title">GLA (m²)</div>
+            <div class="donut-wrap" id="donut-curico-gla"></div>
+          </div>
+          <div class="chart-box">
+            <div class="chart-title">Ingresos (UF/mes)</div>
+            <div class="donut-wrap" id="donut-curico-ingresos"></div>
+          </div>
+        </div>
+        <div class="vina-comentarios-box">
+          <div class="small placeholder" id="txt-curico-comentarios">Pendiente: comentarios generales, vacancia, ventas acumuladas y resultados — actualización editorial mensual, sin fuente en la DB todavía.</div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
+        <table class="kv" id="tbl-curico-aspectos"><tbody></tbody></table>
+        <div class="foto-box" id="foto-curico" style="margin-top:6px;aspect-ratio:216/126">
+          <div class="foto-placeholder">Pendiente: foto del Centro Comercial Paseo Curicó</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="small" style="text-align:center;margin-top:20px;color:#888">
+    Apoquindo 3885, Piso 22, Las Condes · Tel. +562 26462000 · www.toesca.com
+  </p>
+</div>
+
+<!-- Página 7 (TRI): Edificio Apoquindo 3001 + Bodegas Sucden Chile. Solo
+     visible si S.page7 está definido (hoy TRI). -->
+<div class="page" id="page7">
+  <header>
+    <div>
+      <h1 id="hdr7-nombre">—</h1>
+      <h2 id="hdr7-sub">—</h2>
+    </div>
+  </header>
+  <div class="month-bar"><span id="month-bar7">—</span></div>
+
+  <div id="page7-pending" class="hidden">
+    <p class="small placeholder" style="margin-top:16px">Página 7 aún no definida para este fondo.</p>
+  </div>
+
+  <div id="page7-body" class="hidden">
+    <template id="tpl-page7-section">
+      <div class="section-title page7-titulo"></div>
+      <div class="cols page6-cols">
+        <div>
+          <p class="small page7-p1" style="text-align:justify"></p>
+          <p class="small page7-p2" style="text-align:justify;margin-top:4px"></p>
+          <div class="charts-grid-2">
+            <div class="chart-box">
+              <div class="chart-title">GLA (m²)</div>
+              <div class="donut-wrap page7-donut-gla"></div>
+            </div>
+            <div class="chart-box">
+              <div class="chart-title">Ingresos (UF/mes)</div>
+              <div class="donut-wrap page7-donut-ingresos"></div>
+            </div>
+          </div>
+          <div class="vina-comentarios-box">
+            <div class="small placeholder page7-comentarios">Pendiente: comentario del mes — actualización editorial, sin fuente en la DB todavía.</div>
+          </div>
+        </div>
+        <div>
+          <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
+          <table class="kv page7-tbl-aspectos"><tbody></tbody></table>
+          <div class="foto-box page7-foto" style="margin-top:6px">
+            <div class="foto-placeholder">Pendiente: foto</div>
+          </div>
+        </div>
+      </div>
+    </template>
+    <div id="page7-section-apo3001"></div>
+    <div id="page7-section-sucden" style="margin-top:16px"></div>
+  </div>
+
+  <p class="small" style="text-align:center;margin-top:20px;color:#888">
+    Apoquindo 3885, Piso 22, Las Condes · Tel. +562 26462000 · www.toesca.com
+  </p>
+</div>
+
+<!-- Página 8 (TRI, última): Notas metodológicas (i)-(x) + nota final. Sin
+     footer/número de página (ver spec de referencia) — solo visible si
+     S.page8 está definido. -->
+<div class="page" id="page8">
+  <div class="month-bar" style="text-align:right"><span id="month-bar8">—</span></div>
+
+  <div id="page8-pending" class="hidden">
+    <p class="small placeholder" style="margin-top:16px">Página 8 aún no definida para este fondo.</p>
+  </div>
+
+  <div id="page8-body" class="hidden">
+    <div class="section-title">Notas</div>
+    <ol id="lst-notas-8" style="font-size:10px;font-style:italic;color:#000;padding-left:18px;line-height:1.9"></ol>
+    <p class="small" id="txt-nota-final-8" style="font-style:italic;margin-top:10px"></p>
+  </div>
 </div>
 
 <!-- Modal trazabilidad (modo admin) -->
@@ -4216,6 +5174,104 @@ function switchFund(f){
   document.getElementById("page4-pending").classList.toggle("hidden", hasPage4);
   document.getElementById("page4-body").classList.toggle("hidden", !hasPage4);
 
+  // Página 5 — resúmenes de subfondos PT/Apoquindo (hoy solo TRI). Se
+  // construye una sola vez acá (clonando <template id="tpl-page5-section">);
+  // render() más abajo solo rellena los donuts, que sí dependen del período.
+  document.getElementById("hdr5-nombre").textContent = S.nombre;
+  document.getElementById("hdr5-sub").textContent = S.sub;
+  const hasPage5 = !!S.page5;
+  document.getElementById("page5-pending").classList.toggle("hidden", hasPage5);
+  document.getElementById("page5-body").classList.toggle("hidden", !hasPage5);
+  if (hasPage5) {
+    const buildPage5Section = (containerId, sec) => {
+      const tpl = document.getElementById("tpl-page5-section");
+      const frag = tpl.content.cloneNode(true);
+      frag.querySelector(".page5-titulo").textContent = sec.titulo;
+      frag.querySelector(".page5-descripcion").textContent = sec.descripcion;
+      frag.querySelector(".page5-parrafo-remuneracion").textContent = sec.parrafo_remuneracion;
+      const masInfo = frag.querySelector(".page5-parrafo-masinfo");
+      masInfo.innerHTML = sec.parrafo_mas_info.replace("Más información", "<strong>Más información</strong>");
+      frag.querySelector(".page5-tbl-aspectos tbody").innerHTML =
+        sec.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page5-aspecto-pendiente" data-key="'+k+'"' : ""}>${v === null ? "—" : v}</td></tr>`).join("");
+      const fotos = frag.querySelector(".page5-fotos");
+      if (sec.foto_4501 && sec.foto_4700) {
+        fotos.innerHTML = `
+          <div class="fotos-grid">
+            <div class="foto-box"><img src="${sec.foto_4501}"></div>
+            <div class="foto-box"><img src="${sec.foto_4700}"></div>
+          </div>`;
+      } else if (sec.foto) {
+        fotos.innerHTML = `<div class="foto-box"><img src="${sec.foto}"></div>`;
+      } else {
+        fotos.innerHTML = `<div class="foto-box"><div class="foto-placeholder">Pendiente: foto por reemplazar</div></div>`;
+      }
+      document.getElementById(containerId).innerHTML = "";
+      document.getElementById(containerId).appendChild(frag);
+    };
+    buildPage5Section("page5-section-pt", S.page5.pt);
+    buildPage5Section("page5-section-apo", S.page5.apo);
+  }
+
+  // Página 6 — INMOSSA + Mall Curicó (headers/estático acá; donuts y
+  // superficie/vacancia reales de Curicó se rellenan en render(), ver F.page6).
+  document.getElementById("hdr6-nombre").textContent = S.nombre;
+  document.getElementById("hdr6-sub").textContent = S.sub;
+  const hasPage6 = !!S.page6;
+  document.getElementById("page6-pending").classList.toggle("hidden", hasPage6);
+  document.getElementById("page6-body").classList.toggle("hidden", !hasPage6);
+  if (hasPage6) {
+    const inm = S.page6.inmossa;
+    document.getElementById("inmossa-titulo").textContent = inm.titulo;
+    document.getElementById("txt-inmossa-descripcion").textContent = inm.descripcion;
+    document.getElementById("tbl-residencias-tbody").innerHTML =
+      inm.residencias.map(([h, c, camas]) => `<tr><td>${h}</td><td>${c}</td><td>${camas}</td></tr>`).join("") +
+      `<tr class="row-total"><td>Sub total</td><td></td><td>${inm.residencias_subtotal}</td></tr>`;
+    document.getElementById("tbl-inmossa-aspectos").querySelector("tbody").innerHTML =
+      inm.aspectos.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+    const cur = S.page6.curico;
+    document.getElementById("curico-titulo").textContent = cur.titulo;
+    document.getElementById("txt-curico-descripcion").textContent = cur.descripcion;
+    document.getElementById("tbl-curico-aspectos").querySelector("tbody").innerHTML =
+      cur.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page6-curico-pendiente" data-key="'+k+'"' : ""}>${v === null ? "—" : v}</td></tr>`).join("");
+  }
+
+  // Página 7 — Apoquindo 3001 + Bodegas Sucden Chile (headers/estático acá;
+  // donuts y superficie/vacancia reales se rellenan en render(), ver F.page7).
+  document.getElementById("hdr7-nombre").textContent = S.nombre;
+  document.getElementById("hdr7-sub").textContent = S.sub;
+  const hasPage7 = !!S.page7;
+  document.getElementById("page7-pending").classList.toggle("hidden", hasPage7);
+  document.getElementById("page7-body").classList.toggle("hidden", !hasPage7);
+  if (hasPage7) {
+    const buildPage7Section = (containerId, sec, fotoAspect) => {
+      const tpl = document.getElementById("tpl-page7-section");
+      const frag = tpl.content.cloneNode(true);
+      frag.querySelector(".page7-titulo").textContent = sec.titulo;
+      frag.querySelector(".page7-p1").textContent = sec.descripcion_p1;
+      frag.querySelector(".page7-p2").textContent = sec.descripcion_p2;
+      frag.querySelector(".page7-tbl-aspectos tbody").innerHTML =
+        sec.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page7-aspecto-pendiente" data-key="'+k+'"' : ""}>${v === null ? "—" : v}</td></tr>`).join("");
+      frag.querySelector(".page7-foto").style.aspectRatio = fotoAspect;
+      document.getElementById(containerId).innerHTML = "";
+      document.getElementById(containerId).appendChild(frag);
+    };
+    buildPage7Section("page7-section-apo3001", S.page7.apo3001, "158/236");
+    buildPage7Section("page7-section-sucden", S.page7.sucden, "252/139");
+  }
+
+  // Página 8 (última) — Notas metodológicas. Estático salvo los data-slot
+  // fecha-cb/fecha-op/mes-op dentro de S.page8.notas, que ya rellena el
+  // mismo mecanismo document-wide usado por la página 4 (ver fillNotasFechas
+  // más abajo en render()).
+  const hasPage8 = !!S.page8;
+  document.getElementById("page8-pending").classList.toggle("hidden", hasPage8);
+  document.getElementById("page8-body").classList.toggle("hidden", !hasPage8);
+  if (hasPage8) {
+    document.getElementById("lst-notas-8").innerHTML = S.page8.notas.map(n => `<li>${n}</li>`).join("");
+    document.getElementById("txt-nota-final-8").textContent = S.page8.nota_final;
+  }
+
   // Headers de tablas dependientes de series
   const seriesCols = S.series.map(s=>`<th>Serie ${s.label}</th>`).join("");
   document.getElementById("tbl-vcl-thead").innerHTML = "<th>Valor Cuota</th>"+seriesCols;
@@ -5127,6 +6183,79 @@ function renderIngresosNoiVacanciaChart(containerId, rows){
   });
 }
 
+// Gráfico combinado "Evolución vacancia y canon de arriendo Bodegas" (página 3
+// TRI): barras UF/m² (eje izq.) + línea vacancia con etiquetas de % en cada
+// punto (eje der.). Datos estáticos (informe GPS Property), ver S.page3.bodegas.
+function renderBodegasChart(containerId, evolucion){
+  const el = document.getElementById(containerId);
+  const labels = evolucion.semestres, ufVals = evolucion.uf_m2, vacVals = evolucion.vacancia_pct;
+  if (!labels || !labels.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = { bar: "#20C878", vac: "#595959", grid: "#D0D0D0", text: "#333" };
+  const W = 900, H = 260, padL = 46, padR = 42, padT = 34, padB = 56;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = labels.length;
+  const x = i => padL + (i + 0.5) * (plotW / n);
+  const bw = Math.max(6, (plotW / n) * 0.5);
+
+  const yMin = 0.090, yMax = 0.190;
+  const yUf = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+  const vMin = -1, vMax = 14;
+  const yVac = v => padT + plotH - ((v - vMin) / (vMax - vMin)) * plotH;
+
+  const ufTicks = [0.090, 0.110, 0.130, 0.150, 0.170, 0.190];
+  const vacTicks = [-1, 4, 9, 14];
+  let gridLines = "", yLabelsL = "";
+  ufTicks.forEach(v => {
+    const y = yUf(v);
+    gridLines += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+    yLabelsL += `<text x="${padL-6}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="end" fill="${C.text}">${v.toFixed(3)}</text>`;
+  });
+  let yLabelsR = "";
+  vacTicks.forEach(v => {
+    const y = yVac(v);
+    yLabelsR += `<text x="${W-padR+6}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="start" fill="${C.text}">${v}%</text>`;
+  });
+
+  const bars = labels.map((_, i) => {
+    const v = ufVals[i];
+    const xb = x(i) - bw/2, yTop = yUf(v), yBase = yUf(yMin);
+    return `<rect x="${xb.toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, yBase - yTop).toFixed(1)}" fill="${C.bar}"/>`;
+  }).join("");
+
+  const linePts = labels.map((_, i) => `${x(i).toFixed(1)},${yVac(vacVals[i]).toFixed(1)}`);
+  const linePath = `M${linePts.join(" L")}`;
+  const markers = labels.map((_, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${yVac(vacVals[i]).toFixed(1)}" r="2.6" fill="#fff" stroke="${C.vac}" stroke-width="1.6"/>`
+  ).join("");
+  const vacLabels = labels.map((_, i) =>
+    `<text x="${x(i).toFixed(1)}" y="${(yVac(vacVals[i])-6).toFixed(1)}" font-size="8" text-anchor="middle" fill="#000">${vacVals[i]}%</text>`
+  ).join("");
+
+  const xLabels = labels.map((lab, i) =>
+    `<text x="${x(i).toFixed(1)}" y="${padT+plotH+12}" font-size="9" text-anchor="end" fill="${C.text}" transform="rotate(-45 ${x(i).toFixed(1)} ${padT+plotH+12})">${lab}</text>`
+  ).join("");
+  const axisBox = `<line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="${C.grid}" stroke-width="1"/>`;
+
+  const axisTitleL = `<text x="12" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 12 ${padT+plotH/2})">UF/m2</text>`;
+  const axisTitleR = `<text x="${W-10}" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 ${W-10} ${padT+plotH/2})">Vacancia (%)</text>`;
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:center;gap:18px;font-size:10px;margin-bottom:2px">
+      <span><span style="display:inline-block;width:10px;height:10px;background:${C.bar};margin-right:4px;vertical-align:middle"></span>UF/m2</span>
+      <span><span style="display:inline-block;width:14px;height:2px;background:${C.vac};margin-right:4px;vertical-align:middle"></span>Vacancia</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
+      ${gridLines}${axisBox}
+      ${bars}
+      <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      ${markers}${vacLabels}
+      ${yLabelsL}${yLabelsR}${xLabels}${axisTitleL}${axisTitleR}
+    </svg>`;
+}
+
 function renderPerfActivosHeader(p2, perfData){
   const groups = p2.perf_groups;
   const totalCols = groups.reduce((n,g) => n + g.cols.length, 0);
@@ -5472,6 +6601,10 @@ function render(){
   const mesRef = mesEspanol(usadoOp).toUpperCase();
   document.getElementById("month-bar3").textContent = mesRef;
   document.getElementById("month-bar4").textContent = mesRef;
+  document.getElementById("month-bar5").textContent = mesRef;
+  document.getElementById("month-bar6").textContent = mesRef;
+  document.getElementById("month-bar7").textContent = mesRef;
+  document.getElementById("month-bar8").textContent = mesRef;
 
   // Página 3 Apo: donut de ingresos UF/mes por edificio, solo si hay dato real
   // para el período operacional exacto (usadoOp) — nunca mostrar el del mes
@@ -5957,28 +7090,31 @@ function render(){
 
     const p1 = document.getElementById("txt-mercado3-p1");
     const p2 = document.getElementById("txt-mercado3-p2");
-    const totalSantiagoAct = findRowM(mercadoRowsM, "Santiago", "Total");
-    if (totalSantiagoAct) {
-      // Absorción total del año calendario anterior: dato ingestado al cierre de diciembre.
-      const prevYear = mercadoPeriodoM ? parseInt(mercadoPeriodoM.slice(0, 4), 10) - 1 : null;
-      const periodoDicPrev = prevYear ? `${prevYear}-12` : null;
-      const rowsDicPrev = periodoDicPrev ? F.mercado && F.mercado[periodoDicPrev] : null;
-      const totalDicPrev = findRowM(rowsDicPrev, "Santiago", "Total");
-      const absAct = totalSantiagoAct.absorcion_u12m_m2;
-      const absPrev = totalDicPrev ? totalDicPrev.absorcion_u12m_m2 : null;
-      let comparativo = "";
-      if (absPrev !== null && absPrev !== undefined) {
-        const verbo = absAct > absPrev ? "supera" : (absAct < absPrev ? "está por debajo de" : "iguala");
-        comparativo = ` lo que ${verbo} al registrado durante el total del año ${prevYear} (${fmtNumM(absPrev, 0)} m²)`;
-      }
+    // El wording debe reflejar solo lo que la tabla muestra: filas totales
+    // "Santiago" de Clase A y Clase B (la tabla ya no despliega la fila
+    // agregada "Total" A+B — ver mercado_rows / filtro clase !== "Total").
+    const totalA = findRowM(mercadoRowsM, "Santiago", "A");
+    const totalB = findRowM(mercadoRowsM, "Santiago", "B");
+    if (totalA || totalB) {
+      const absA = totalA ? totalA.absorcion_u12m_m2 : null;
+      const absB = totalB ? totalB.absorcion_u12m_m2 : null;
+      const partes = [];
+      if (absA !== null && absA !== undefined) partes.push(`Clase A por ${fmtNumM(absA, 0)} m²`);
+      if (absB !== null && absB !== undefined) partes.push(`Clase B por ${fmtNumM(absB, 0)} m²`);
       p1.textContent = `El mercado de oficinas en Santiago presenta una absorción neta acumulada durante los ` +
-        `últimos 12 meses por ${fmtNumM(absAct, 0)} m²${comparativo}.`;
+        `últimos 12 meses de ${partes.join(" y ")}.`;
       p1.classList.remove("placeholder");
 
-      const comunasM = mercadoRowsM.filter(r => r.clase === "Total" && r.comuna !== "Santiago" && r.absorcion_u12m_m2 !== undefined);
-      const top2 = [...comunasM].sort((a, b) => (b.absorcion_u12m_m2 || 0) - (a.absorcion_u12m_m2 || 0)).slice(0, 2).map(r => r.comuna);
-      if (top2.length) {
-        p2.textContent = `Esta se concentra principalmente en la comuna de ${top2.join(" y ")}.`;
+      const comunasA = mercadoRowsM.filter(r => r.clase === "A" && r.comuna !== "Santiago" && r.absorcion_u12m_m2 !== undefined);
+      const comunasB = mercadoRowsM.filter(r => r.clase === "B" && r.comuna !== "Santiago" && r.absorcion_u12m_m2 !== undefined);
+      const topN = (rows, n) => [...rows].sort((a, b) => (b.absorcion_u12m_m2 || 0) - (a.absorcion_u12m_m2 || 0)).slice(0, n).map(r => r.comuna);
+      const topA = topN(comunasA, 2);
+      const topB = topN(comunasB, 2);
+      const fragA = topA.length ? `en Clase A, en la comuna de ${topA.join(" y ")}` : "";
+      const fragB = topB.length ? `en Clase B, en la comuna de ${topB.join(" y ")}` : "";
+      const frags = [fragA, fragB].filter(Boolean);
+      if (frags.length) {
+        p2.textContent = `Esta se concentra principalmente ${frags.join("; ")}.`;
         p2.classList.remove("placeholder");
       } else {
         p2.classList.add("placeholder");
@@ -5990,22 +7126,38 @@ function render(){
       p2.classList.add("placeholder");
     }
 
-    document.getElementById("tbl-mercado3-tbody").innerHTML = mercadoRowsM.map(r => {
+    const mercadoRowsAB = mercadoRowsM.filter(r => r.clase !== "Total");
+    document.getElementById("tbl-mercado3-tbody").innerHTML = mercadoRowsAB.map((r, i) => {
       const cls = r.total ? ' class="row-total"' : '';
+      const spacerBefore = (i > 0 && r.clase === "B" && mercadoRowsAB[i - 1].clase === "A")
+        ? '<tr class="row-spacer"><td colspan="7">&nbsp;</td></tr>' : '';
+      let rowHtml;
       if (r.inventario_m2 === undefined) {
-        return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+        rowHtml = `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+      } else {
+        rowHtml = `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
+          celdaM(r.inventario_m2, false) + celdaM(r.absorcion_u12m_m2, false) +
+          celdaM(r.vacancia_pct, true) + celdaM(r.renta_uf_m2, false) +
+          celdaM(r.construccion_m2, false) + `</tr>`;
       }
-      return `<tr${cls}><td>${r.comuna}</td><td>${r.clase}</td>` +
-        celdaM(r.inventario_m2, false) + celdaM(r.absorcion_u12m_m2, false) +
-        celdaM(r.vacancia_pct, true) + celdaM(r.renta_uf_m2, false) +
-        celdaM(r.construccion_m2, false) + `</tr>`;
+      return spacerBefore + rowHtml;
     }).join("");
 
-    // Bodegas / centros comerciales: sin fuente en DB todavía — solo estructura.
+    // Bodegas: sin fuente en DB todavía — solo estructura (F.mercado_bodegas
+    // no existe aún). Cuando se ingeste GPS Property, reemplazar los
+    // placeholders de acá por los mismos campos que ya usa "mercado" (oficinas).
     const bod = S.page3.bodegas;
+    const bodP1 = document.getElementById("txt-mercado3-bodegas-1");
+    const bodP2 = document.getElementById("txt-mercado3-bodegas-2");
+    bodP1.textContent = "Pendiente: párrafo de vacancia/canon de arriendo (informe GPS Property) — sin fuente ingestada en la DB todavía.";
+    bodP1.classList.add("placeholder");
+    bodP2.textContent = "Pendiente: párrafo de producción y proyecciones (informe GPS Property).";
+    bodP2.classList.add("placeholder");
     document.getElementById("tbl-bodegas-tbody").innerHTML =
       bod.zonas.map(z => `<tr><td>${z}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
       + `<tr class="row-total"><td>${bod.total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+    document.getElementById("chart-bodegas").innerHTML =
+      `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
 
     const cc = S.page3.centros_comerciales;
     document.getElementById("tbl-comercio-thead").innerHTML =
@@ -6291,6 +7443,197 @@ function render(){
         });
       });
     }
+
+    // Indicadores Activos (TRI): tabla tasación/deuda/LTV consolidada — datos
+    // ya vienen resueltos desde fetch_fondo() en F.page4_indicadores (no
+    // depende del selector de período de la página, ver comentario en
+    // build_factsheet.py::fetch_fondo).
+    const hasIndicadores = !!S.page4.indicadores_rows;
+    document.getElementById("page4-indicadores").classList.toggle("hidden", !hasIndicadores);
+    if (hasIndicadores && F.page4_indicadores) {
+      const pi = F.page4_indicadores;
+      const fmtUf = (v) => v == null ? "—" : Math.round(v).toLocaleString("es-CL");
+      const fmtLtv = (v) => v == null ? "—" : (v * 100).toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+      const fmtFechaQ = (fecha) => {
+        if (!fecha) return "—";
+        const [y, m] = fecha.split("-");
+        const q = Math.ceil(parseInt(m, 10) / 3);
+        return `${q}Q${y.slice(2)}`;
+      };
+      // Filas con deuda_shared_key comparten una única celda Deuda/LTV con
+      // rowspan=2 (calculada sobre el valor combinado de ambos activos) — hoy
+      // Apoquindo 4501/4700, ver page4.indicadores_rows en config.
+      let rowsHtml = "";
+      for (let i = 0; i < pi.rows.length; i++) {
+        const r = pi.rows[i];
+        const next = pi.rows[i + 1];
+        const sharesWithNext = r.deuda_shared_key && next && next.deuda_shared_key === r.deuda_shared_key;
+        rowsHtml += `<tr><td>${r.participacion}</td><td>${r.label}</td>` +
+          `<td>${fmtUf(r.valor_uf)}</td><td class="fecha-tasacion">${fmtFechaQ(r.fecha)}</td>`;
+        if (sharesWithNext) {
+          const valorCombinado = (r.valor_uf || 0) + (next.valor_uf || 0);
+          const ltvCombinado = r.deuda_uf != null && valorCombinado ? r.deuda_uf / valorCombinado : null;
+          rowsHtml += `<td rowspan="2">${fmtUf(r.deuda_uf)}</td><td rowspan="2">${fmtLtv(ltvCombinado)}</td>`;
+        } else if (!r.deuda_shared_key) {
+          rowsHtml += `<td>${fmtUf(r.deuda_uf)}</td><td>${fmtLtv(r.ltv)}</td>`;
+        }
+        rowsHtml += `</tr>`;
+      }
+      rowsHtml += `<tr class="row-total"><td></td><td>${S.page4.total_nombre}</td>` +
+        `<td>${fmtUf(pi.total_valor)}</td><td></td><td>${fmtUf(pi.total_deuda)}</td><td>${fmtLtv(pi.total_ltv)}</td></tr>`;
+      document.getElementById("tbl-indicadores-tbody").innerHTML = rowsHtml;
+    }
+
+    // Centro Comercial Paseo Viña Centro (TRI): descripción + aspectos son
+    // hechos estáticos del activo (ver S.page4.vina_centro); donuts GLA/
+    // Ingresos y comentarios editoriales mensuales quedan en placeholder —
+    // sin fuente en la DB todavía.
+    const hasVina = !!S.page4.vina_centro;
+    document.getElementById("page4-vina").classList.toggle("hidden", !hasVina);
+    if (hasVina) {
+      const vc = S.page4.vina_centro;
+      document.getElementById("vina-titulo").textContent = vc.titulo;
+      document.getElementById("txt-vina-descripcion").textContent = vc.descripcion;
+      document.getElementById("tbl-vina-aspectos").querySelector("tbody").innerHTML =
+        vc.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder"' : ""}>${v === null ? "Pendiente" : v}</td></tr>`).join("");
+    }
+  }
+
+  // Página 5 (TRI): donuts GLA/Ingresos por subfondo + superficie/vacancia,
+  // ya resueltos desde fetch_fondo() en F.page5 (no dependen del selector de
+  // período — mismo criterio que F.page4_indicadores).
+  if (S.page5 && F.page5) {
+    const donutFromDict = (containerId, dict, unit, tooltipTitle) => {
+      const el = document.getElementById(containerId);
+      el.classList.remove("chart-placeholder");
+      if (!dict || !Object.keys(dict).length) {
+        el.classList.add("chart-placeholder");
+        el.innerHTML = "Pendiente de datos";
+        return;
+      }
+      const total = Object.values(dict).reduce((s, v) => s + v, 0);
+      const donutData = Object.entries(dict).map(([n, v]) => [
+        n, total ? Math.round(v / total * 1000) / 10 : 0, { value: v, unit },
+      ]);
+      renderDonut(containerId, donutData, { tooltipTitle });
+    };
+    // Página 5 PT: un arrendatario menos que en la página 3 propia de PT —
+    // el más chico de los nombrados se pliega a "Otros" (que crece). Solo
+    // afecta esta página; no toca el top-N real (rent_roll_stats._top_n_arrendatario)
+    // que sigue sirviendo la página 3 de PT tal cual.
+    const foldSmallestIntoOtros = (dict) => {
+      if (!dict) return dict;
+      const entries = Object.entries(dict).filter(([n]) => n !== "Otros");
+      if (entries.length < 2) return dict;
+      entries.sort((a, b) => a[1] - b[1]);
+      const [smallName, smallVal] = entries[0];
+      const out = {};
+      for (const [n, v] of Object.entries(dict)) {
+        if (n === smallName) continue;
+        out[n] = v;
+      }
+      out["Otros"] = (out["Otros"] || 0) + smallVal;
+      return out;
+    };
+    const fillSection = (rootId, data) => {
+      const root = document.getElementById(rootId);
+      const donutGla = root.querySelector(".page5-donut-gla");
+      const donutIngresos = root.querySelector(".page5-donut-ingresos");
+      donutGla.id = donutGla.id || `${rootId}-donut-gla`;
+      donutIngresos.id = donutIngresos.id || `${rootId}-donut-ingresos`;
+      const isPt = rootId === "page5-section-pt";
+      const gla = isPt ? foldSmallestIntoOtros(data.gla_arrendatario) : data.gla_arrendatario;
+      const ingresos = isPt ? foldSmallestIntoOtros(data.ingresos_arrendatario) : data.ingresos_arrendatario;
+      donutFromDict(donutGla.id, gla || data.gla_edificios, "m²", "GLA");
+      donutFromDict(donutIngresos.id, ingresos || data.ingresos_edificios, "UF", "Ingresos");
+      root.querySelectorAll(".page5-aspecto-pendiente").forEach(td => {
+        const key = td.dataset.key;
+        if (key === "Superficie Arrendable" && data.superficie_arrendable != null) {
+          td.textContent = Math.round(data.superficie_arrendable).toLocaleString("es-CL") + " m²";
+          td.classList.remove("placeholder");
+        } else if ((key === "Vacancia" || key === "Vacancia (m²)") && data.vacancia_pct != null) {
+          td.textContent = data.vacancia_pct.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+          td.classList.remove("placeholder");
+        }
+      });
+    };
+    fillSection("page5-section-pt", F.page5.pt);
+    fillSection("page5-section-apo", F.page5.apo);
+  }
+
+  // Página 6 (TRI): donuts GLA/Ingresos de Mall Curicó + superficie/vacancia
+  // reales, ya resueltos desde fetch_fondo() en F.page6.curico (rent roll,
+  // no depende del selector de período de la página — mismo criterio que
+  // F.page4_indicadores / F.page5).
+  if (S.page6 && F.page6) {
+    const cur = F.page6.curico;
+    const donutOrPlaceholder = (containerId, dict, unit, tooltipTitle) => {
+      const el = document.getElementById(containerId);
+      el.classList.remove("chart-placeholder");
+      if (!dict || !Object.keys(dict).length) {
+        el.classList.add("chart-placeholder");
+        el.innerHTML = "Pendiente de datos";
+        return;
+      }
+      const total = Object.values(dict).reduce((s, v) => s + v, 0);
+      const donutData = Object.entries(dict).map(([n, v]) => [
+        n, total ? Math.round(v / total * 1000) / 10 : 0, { value: v, unit },
+      ]);
+      renderDonut(containerId, donutData, { tooltipTitle });
+    };
+    donutOrPlaceholder("donut-curico-gla", cur.gla_arrendatario, "m²", "GLA");
+    donutOrPlaceholder("donut-curico-ingresos", cur.ingresos_arrendatario, "UF", "Ingresos");
+    document.querySelectorAll(".page6-curico-pendiente").forEach(td => {
+      const key = td.dataset.key;
+      if (key === "Superficie Arrendable" && cur.superficie_arrendable != null) {
+        td.textContent = Math.round(cur.superficie_arrendable).toLocaleString("es-CL") + " m²";
+        td.classList.remove("placeholder");
+      } else if (key === "Vacancia (m²)" && cur.vacancia_pct != null) {
+        td.textContent = cur.vacancia_pct.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+        td.classList.remove("placeholder");
+      }
+    });
+  }
+
+  // Página 7 (TRI): donuts GLA/Ingresos + superficie/vacancia reales de
+  // Apoquindo 3001 y Bodegas Sucden Chile — ya resueltos desde fetch_fondo()
+  // en F.page7 (rent roll, no depende del selector de período de la página).
+  if (S.page7 && F.page7) {
+    const donutOrPlaceholder7 = (containerId, dict, unit, tooltipTitle) => {
+      const el = document.getElementById(containerId);
+      el.classList.remove("chart-placeholder");
+      if (!dict || !Object.keys(dict).length) {
+        el.classList.add("chart-placeholder");
+        el.innerHTML = "Pendiente de datos";
+        return;
+      }
+      const total = Object.values(dict).reduce((s, v) => s + v, 0);
+      const donutData = Object.entries(dict).map(([n, v]) => [
+        n, total ? Math.round(v / total * 1000) / 10 : 0, { value: v, unit },
+      ]);
+      renderDonut(containerId, donutData, { tooltipTitle });
+    };
+    const fillPage7Section = (rootId, data) => {
+      const root = document.getElementById(rootId);
+      const donutGla = root.querySelector(".page7-donut-gla");
+      const donutIngresos = root.querySelector(".page7-donut-ingresos");
+      donutGla.id = donutGla.id || `${rootId}-donut-gla`;
+      donutIngresos.id = donutIngresos.id || `${rootId}-donut-ingresos`;
+      donutOrPlaceholder7(donutGla.id, data.gla_arrendatario, "m²", "GLA");
+      donutOrPlaceholder7(donutIngresos.id, data.ingresos_arrendatario, "UF", "Ingresos");
+      root.querySelectorAll(".page7-aspecto-pendiente").forEach(td => {
+        const key = td.dataset.key;
+        if (key === "Superficie Arrendable" && data.superficie_arrendable != null) {
+          td.textContent = Math.round(data.superficie_arrendable).toLocaleString("es-CL") + " m²";
+          td.classList.remove("placeholder");
+        } else if (key === "Vacancia (m²)" && data.vacancia_pct != null) {
+          td.textContent = data.vacancia_pct.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+          td.classList.remove("placeholder");
+        }
+      });
+    };
+    fillPage7Section("page7-section-apo3001", F.page7.apo3001);
+    fillPage7Section("page7-section-sucden", F.page7.sucden);
   }
 }
 
