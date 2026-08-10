@@ -899,6 +899,10 @@ def _fetch_oficinas_evolucion(db_path: str, submercado: str = "Las Condes (CBD)"
     return {
         "quarters": [f"{t}Q" for _, t in periodos],
         "years": sorted({a for a, _ in periodos}),
+        # fin de trimestre en formato YYYY-MM, alineado índice a índice con
+        # quarters/vacancia_*/renta_* — permite al JS truncar la serie según
+        # la fecha operacional seleccionada en los selectores.
+        "periodos": [f"{a}-{t * 3:02d}" for a, t in periodos],
         "vacancia_a": [por_periodo[p].get("vacancia_a") for p in periodos],
         "vacancia_b": [por_periodo[p].get("vacancia_b") for p in periodos],
         "renta_a": [por_periodo[p].get("renta_a") for p in periodos],
@@ -7379,11 +7383,20 @@ function render(){
     // raw_mercado_oficinas_evolucion, ver F.oficinas_evolucion.
     const of = F.oficinas_evolucion;
     if (of) {
+      // Truncar la serie al trimestre que contiene la fecha operacional
+      // seleccionada en los selectores — no mostrar trimestres futuros.
+      const cutoff = usadoOp ? quarterEndOfM(usadoOp) : null;
+      const idxs = of.periodos
+        .map((p, i) => i)
+        .filter(i => !cutoff || of.periodos[i] <= cutoff);
+      const sliceBy = arr => idxs.map(i => arr[i]);
+      const quartersF = sliceBy(of.quarters);
+      const yearsF = [...new Set(idxs.map(i => Number(of.periodos[i].slice(0, 4))))];
       renderOficinasEvolucionChart("chart-vacancia-oficinas",
-        { quarters: of.quarters, years: of.years, seriesA: of.vacancia_a, seriesB: of.vacancia_b },
+        { quarters: quartersF, years: yearsF, seriesA: sliceBy(of.vacancia_a), seriesB: sliceBy(of.vacancia_b) },
         "pct", "Vacancia");
       renderOficinasEvolucionChart("chart-rentas-oficinas",
-        { quarters: of.quarters, years: of.years, seriesA: of.renta_a, seriesB: of.renta_b },
+        { quarters: quartersF, years: yearsF, seriesA: sliceBy(of.renta_a), seriesB: sliceBy(of.renta_b) },
         "uf", "Renta");
     }
 
