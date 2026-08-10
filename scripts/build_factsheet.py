@@ -6385,12 +6385,12 @@ function renderBodegasChart(containerId, evolucion){
   const x = i => padL + (i + 0.5) * (plotW / n);
   const bw = Math.max(6, (plotW / n) * 0.5);
 
-  const yMin = 0.090, yMax = 0.190;
+  const yMin = 0.090, yMax = 0.200;
   const yUf = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
   const vMin = -1, vMax = 14;
   const yVac = v => padT + plotH - ((v - vMin) / (vMax - vMin)) * plotH;
 
-  const ufTicks = [0.090, 0.110, 0.130, 0.150, 0.170, 0.190];
+  const ufTicks = [0.090, 0.110, 0.130, 0.150, 0.170, 0.190, 0.200];
   const vacTicks = [-1, 4, 9, 14];
   let gridLines = "", yLabelsL = "";
   ufTicks.forEach(v => {
