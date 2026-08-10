@@ -25,24 +25,32 @@ def _shift_periodo(periodo: str, meses: int) -> str:
     return f"{year2:04d}-{month2 + 1:02d}"
 
 
-def _periodo_en_curso(hoy: date, frecuencia: str) -> str:
-    """Período (YYYY-MM) en curso — el mes o trimestre que contiene ``hoy``.
+_PASO_MESES = {"mensual": 1, "trimestral": 3, "semestral": 6}
 
-    Para trimestral, es el mes de cierre del trimestre en curso (03/06/09/12),
-    esté o no ya cerrado.
+
+def _paso(frecuencia: str) -> int:
+    try:
+        return _PASO_MESES[frecuencia]
+    except KeyError:
+        raise ValueError(f"frecuencia inválida: {frecuencia!r}") from None
+
+
+def _periodo_en_curso(hoy: date, frecuencia: str) -> str:
+    """Período (YYYY-MM) en curso — el mes, trimestre o semestre que contiene ``hoy``.
+
+    Para trimestral/semestral, es el mes de cierre del período en curso
+    (03/06/09/12 o 06/12), esté o no ya cerrado.
     """
     if frecuencia == "mensual":
         return f"{hoy.year:04d}-{hoy.month:02d}"
-    if frecuencia == "trimestral":
-        quarter_end_month = ((hoy.month - 1) // 3 + 1) * 3
-        return f"{hoy.year:04d}-{quarter_end_month:02d}"
-    raise ValueError(f"frecuencia inválida: {frecuencia!r}")
+    paso = _paso(frecuencia)
+    end_month = ((hoy.month - 1) // paso + 1) * paso
+    return f"{hoy.year:04d}-{end_month:02d}"
 
 
 def _periodo_cerrado(periodo_en_curso: str, frecuencia: str) -> str:
     """El último período que ya debería estar cerrado y disponible para ingesta."""
-    paso = 1 if frecuencia == "mensual" else 3
-    return _shift_periodo(periodo_en_curso, -paso)
+    return _shift_periodo(periodo_en_curso, -_paso(frecuencia))
 
 
 CONFIG: list[dict] = [
@@ -92,7 +100,11 @@ CONFIG: list[dict] = [
     },
     {
         "id": "mercado",
-        "label": "Mercado Oficinas",
+        "label": "Mercado",
+        # Trimestral: cadencia de la sub-ingesta más frecuente (Oficinas), que
+        # define la grilla de columnas compartida — Bodegas (semestral) usa
+        # esta misma grilla y marca "na" en los trimestres que no le
+        # corresponde reportar (ver _estado_sub_heterogeneo).
         "frecuencia": "trimestral",
         "tabla": "raw_mercado_oficinas",
         "columna_periodo": "periodo",
@@ -101,7 +113,14 @@ CONFIG: list[dict] = [
         "columna_sub_ingesta": None,
         "n_timeline": 4,
         "tab_destino": "mercado",
-        "sub_ingestas": [],
+        "sub_ingestas": [
+            {"key": "oficinas", "label": "Oficinas (JLL)",
+             "tabla": "raw_mercado_oficinas", "columna_periodo": "periodo",
+             "frecuencia": "trimestral"},
+            {"key": "bodegas", "label": "Bodegas (GPS Property)",
+             "tabla": "raw_mercado_bodegas", "columna_periodo": "periodo",
+             "frecuencia": "semestral"},
+        ],
     },
     {
         "id": "balance",
@@ -213,7 +232,7 @@ def _clasifica(periodo: str, en_curso: str, completo: bool) -> str:
 def _construir_timeline(en_curso: str, frecuencia: str, n: int, offset: int, completo_fn) -> list[dict]:
     """Timeline de ``n`` períodos terminando en ``en_curso`` desplazado ``offset`` pasos
     (offset<0: ventana hacia el pasado, offset>0: hacia el futuro)."""
-    paso = 1 if frecuencia == "mensual" else 3
+    paso = _paso(frecuencia)
     ancla = _shift_periodo(en_curso, offset * paso)
     timeline = []
     for i in range(n - 1, -1, -1):
@@ -247,32 +266,133 @@ def _estado_sub(
     }
 
 
+def _periodos_presentes(con, tabla: str, col_periodo: str, col_valor: str | None) -> dict[str, set[str] | bool]:
+    """Presencia de datos por período en ``tabla``: set de valores de ``col_valor``
+    si se declaró, o True/False si la sub-ingesta no distingue por valor (una
+    fila cualquiera basta)."""
+    if col_valor:
+        rows = con.execute(
+            f"SELECT DISTINCT {col_periodo}, {col_valor} FROM {tabla} WHERE superseded_at IS NULL"
+        ).fetchall()
+        out: dict[str, set[str]] = {}
+        for periodo, valor in rows:
+            out.setdefault(periodo, set()).add(valor)
+        return out
+    rows = con.execute(f"SELECT DISTINCT {col_periodo} FROM {tabla} WHERE superseded_at IS NULL").fetchall()
+    return {periodo: True for (periodo,) in rows}
+
+
+def _sub_completo_fn(sub_cfg: dict, tipo_cfg: dict, presentes: dict):
+    valores = sub_cfg.get("valores")
+    if valores:
+        return lambda p: _valores_completo(p, presentes, valores)
+    return lambda p: bool(presentes.get(p))
+
+
+def _estado_sub_heterogeneo(con, sub_cfg: dict, tipo_cfg: dict, hoy: date, en_curso: str, frecuencia: str, n: int) -> dict:
+    """Igual que ``_estado_sub``, pero la sub-ingesta puede vivir en su propia
+    tabla/columna y tener su propia frecuencia (p.ej. 'Mercado' agrupa Oficinas
+    trimestral y Bodegas semestral bajo una sola card). El timeline se alinea
+    a las columnas del padre (``frecuencia``); en los períodos que no son
+    cierre para la cadencia propia de la sub-ingesta, la celda queda "na" —
+    no es que falte, es que a esa sub-ingesta no le corresponde reportar ahí.
+    """
+    tabla = sub_cfg.get("tabla", tipo_cfg["tabla"])
+    col_periodo = sub_cfg.get("columna_periodo", tipo_cfg["columna_periodo"])
+    col_valor = sub_cfg.get("columna_sub_ingesta", tipo_cfg.get("columna_sub_ingesta"))
+    frecuencia_propia = sub_cfg.get("frecuencia", frecuencia)
+
+    presentes = _periodos_presentes(con, tabla, col_periodo, col_valor)
+    completo_fn = _sub_completo_fn(sub_cfg, tipo_cfg, presentes)
+    paso_propio = _paso(frecuencia_propia)
+
+    en_curso_propio = _periodo_en_curso(hoy, frecuencia_propia)
+    cerrado_propio = _periodo_cerrado(en_curso_propio, frecuencia_propia)
+
+    completos = sorted(p for p in presentes if int(p.split("-")[1]) % paso_propio == 0 and completo_fn(p))
+    ultimo_ingestado = completos[-1] if completos else None
+    al_dia = completo_fn(cerrado_propio)
+    pendiente = None if al_dia else cerrado_propio
+
+    paso = _paso(frecuencia)
+    timeline = []
+    for i in range(n - 1, -1, -1):
+        periodo = _shift_periodo(en_curso, -paso * i)
+        mes = int(periodo.split("-")[1])
+        if mes % paso_propio != 0:
+            estado = "na"
+        else:
+            estado = _clasifica(periodo, en_curso_propio, completo_fn(periodo))
+        timeline.append({"periodo": periodo, "estado": estado})
+
+    return {
+        "key": sub_cfg["key"],
+        "label": sub_cfg["label"],
+        "ultimo_ingestado": ultimo_ingestado,
+        "pendiente": pendiente,
+        "al_dia": al_dia,
+        "timeline": timeline,
+    }
+
+
 def estado_tipo(con, tipo_cfg: dict, hoy: date) -> dict:
     frecuencia = tipo_cfg["frecuencia"]
     en_curso = _periodo_en_curso(hoy, frecuencia)
     cerrado = _periodo_cerrado(en_curso, frecuencia)
     n = tipo_cfg["n_timeline"]
 
-    ingestados = _periodos_ingestados(con, tipo_cfg)
-    completos = sorted(p for p in ingestados if _completo(p, ingestados, tipo_cfg))
-    ultimo_ingestado = completos[-1] if completos else None
-
-    al_dia = _completo(cerrado, ingestados, tipo_cfg)
-    pendiente = None if al_dia else cerrado
-
-    timeline = _construir_timeline(en_curso, frecuencia, n, 0, lambda p: _completo(p, ingestados, tipo_cfg))
-
     sub_ingestas_cfg = tipo_cfg.get("sub_ingestas") or []
-    if sub_ingestas_cfg:
-        ingestados_sub = _periodos_por_valor(
-            con, tipo_cfg["tabla"], tipo_cfg["columna_periodo"], tipo_cfg["columna_sub_ingesta"]
-        )
-        subs = [
-            _estado_sub(s, ingestados_sub, en_curso, cerrado, frecuencia, n)
-            for s in sub_ingestas_cfg
-        ]
+    heterogeneo = any("tabla" in s for s in sub_ingestas_cfg)
+
+    if heterogeneo:
+        # Sub-ingestas en tablas/frecuencias propias (p.ej. 'Mercado' agrupa
+        # Oficinas trimestral + Bodegas semestral) — no hay una única tabla
+        # padre de la que derivar completitud, así que se agrega desde las
+        # sub-ingestas: un período del padre está "completo" si todas las
+        # sub-ingestas que le corresponden reportar en ese período lo hicieron
+        # (las que no cierran ahí simplemente se ignoran para ese período).
+        subs = [_estado_sub_heterogeneo(con, s, tipo_cfg, hoy, en_curso, frecuencia, n) for s in sub_ingestas_cfg]
+
+        completo_fns = []
+        for s_cfg in sub_ingestas_cfg:
+            tabla = s_cfg.get("tabla", tipo_cfg["tabla"])
+            col_periodo = s_cfg.get("columna_periodo", tipo_cfg["columna_periodo"])
+            col_valor = s_cfg.get("columna_sub_ingesta", tipo_cfg.get("columna_sub_ingesta"))
+            presentes = _periodos_presentes(con, tabla, col_periodo, col_valor)
+            completo_fns.append((_paso(s_cfg.get("frecuencia", frecuencia)), _sub_completo_fn(s_cfg, tipo_cfg, presentes)))
+
+        def _completo_agregado(periodo: str) -> bool:
+            mes = int(periodo.split("-")[1])
+            aplica = [fn for paso_propio, fn in completo_fns if mes % paso_propio == 0]
+            if not aplica:
+                return False
+            return all(fn(periodo) for fn in aplica)
+
+        completos = sorted(p for p in {t["periodo"] for s in subs for t in s["timeline"]} if _completo_agregado(p))
+        ultimo_ingestado = completos[-1] if completos else None
+        al_dia = _completo_agregado(cerrado)
+        pendiente = None if al_dia else cerrado
+        timeline = _construir_timeline(en_curso, frecuencia, n, 0, _completo_agregado)
     else:
-        subs = []
+        ingestados = _periodos_ingestados(con, tipo_cfg)
+        completos = sorted(p for p in ingestados if _completo(p, ingestados, tipo_cfg))
+        ultimo_ingestado = completos[-1] if completos else None
+
+        al_dia = _completo(cerrado, ingestados, tipo_cfg)
+        pendiente = None if al_dia else cerrado
+
+        timeline = _construir_timeline(en_curso, frecuencia, n, 0, lambda p: _completo(p, ingestados, tipo_cfg))
+
+        if sub_ingestas_cfg:
+            ingestados_sub = _periodos_por_valor(
+                con, tipo_cfg["tabla"], tipo_cfg["columna_periodo"], tipo_cfg["columna_sub_ingesta"]
+            )
+            subs = [
+                _estado_sub(s, ingestados_sub, en_curso, cerrado, frecuencia, n)
+                for s in sub_ingestas_cfg
+            ]
+        else:
+            subs = []
 
     resumen = {"al_dia": sum(1 for s in subs if s["al_dia"]), "total": len(subs)} if subs else None
 

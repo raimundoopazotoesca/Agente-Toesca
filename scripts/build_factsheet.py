@@ -955,7 +955,7 @@ def _fetch_bodegas_evolucion(db_path: str) -> dict | None:
     con = sqlite3.connect(db_path)
     try:
         rows = con.execute(
-            """SELECT semestre, uf_m2, vacancia_pct
+            """SELECT semestre, uf_m2, vacancia_pct, anio, periodo_num
                FROM raw_mercado_bodegas_evolucion
                WHERE superseded_at IS NULL
                ORDER BY anio, periodo_num"""
@@ -968,6 +968,9 @@ def _fetch_bodegas_evolucion(db_path: str) -> dict | None:
         "semestres": [r[0] for r in rows],
         "uf_m2": [r[1] for r in rows],
         "vacancia_pct": [round(r[2] * 100, 4) if r[2] is not None else None for r in rows],
+        # "YYYY-06"/"YYYY-12" — mismo formato que semesterEndOfM() en JS, para
+        # truncar la serie al semestre de la fecha operacional seleccionada.
+        "periodos": [f"{r[3]}-{'06' if r[4] == 1 else '12'}" for r in rows],
     }
 
 
@@ -4030,7 +4033,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       <div class="cols page3-bodegas-cols">
         <div class="chart-box chart-box-bodegas">
           <div class="chart-title">Evolución de la vacancia y canon de arriendo Bodegas</div>
-          <div id="chart-bodegas" style="width:100%;aspect-ratio:900/260"></div>
+          <div id="chart-bodegas" style="width:100%;aspect-ratio:600/205"></div>
         </div>
         <div style="overflow-x:auto">
           <table id="tbl-bodegas">
@@ -6388,29 +6391,36 @@ function renderBodegasChart(containerId, evolucion){
     return;
   }
   const C = { bar: "#20C878", vac: "#595959", grid: "#D0D0D0", text: "#333" };
-  const W = 900, H = 260, padL = 46, padR = 42, padT = 34, padB = 56;
+  // Geometría explícita (no auto-scaling): viewBox 600x250 ≈ 2.4:1, igual
+  // proporción horizontal/baja del informe GPS Property de referencia.
+  // Doble eje Y: UF/m2 a la izquierda (barras), Vacancia a la derecha (línea) —
+  // cada uno con su propio domain/ticks fijo, sin relación entre sí.
+  const W = 600, H = 205, padL = 58, padR = 42, padT = 38, padB = 48;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = labels.length;
   const x = i => padL + (i + 0.5) * (plotW / n);
-  const bw = Math.max(6, (plotW / n) * 0.5);
+  const bw = Math.min(9, (plotW / n) * 0.42);
 
-  const yMin = 0.090, yMax = 0.200;
+  // Las barras no parten de 0 — arrancan del piso del eje (0.09), para
+  // reproducir las alturas relativas del informe de referencia.
+  const yMin = 0.09, yMax = 0.19;
   const yUf = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+  // Eje derecho independiente — domain propio, no relacionado al de UF/m2.
   const vMin = -1, vMax = 14;
   const yVac = v => padT + plotH - ((v - vMin) / (vMax - vMin)) * plotH;
 
-  const ufTicks = [0.090, 0.110, 0.130, 0.150, 0.170, 0.190, 0.200];
+  const ufTicks = [0.110, 0.130, 0.150, 0.170, 0.190];
   const vacTicks = [-1, 4, 9, 14];
   let gridLines = "", yLabelsL = "";
   ufTicks.forEach(v => {
     const y = yUf(v);
     gridLines += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
-    yLabelsL += `<text x="${padL-6}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="end" fill="${C.text}">${v.toFixed(3)}</text>`;
+    yLabelsL += `<text x="${padL-6}" y="${(y+3).toFixed(1)}" font-size="10" text-anchor="end" fill="${C.text}">${v.toFixed(3)}</text>`;
   });
   let yLabelsR = "";
   vacTicks.forEach(v => {
     const y = yVac(v);
-    yLabelsR += `<text x="${W-padR+6}" y="${(y+3).toFixed(1)}" font-size="9" text-anchor="start" fill="${C.text}">${v}%</text>`;
+    yLabelsR += `<text x="${W-padR+6}" y="${(y+3).toFixed(1)}" font-size="10" text-anchor="start" fill="${C.text}">${v}%</text>`;
   });
 
   const bars = labels.map((_, i) => {
@@ -6420,21 +6430,27 @@ function renderBodegasChart(containerId, evolucion){
   }).join("");
 
   const linePts = labels.map((_, i) => `${x(i).toFixed(1)},${yVac(vacVals[i]).toFixed(1)}`);
-  const linePath = `M${linePts.join(" L")}`;
+  const linePath = `M${linePts.join(" L")}`; // segmentos rectos, sin suavizado
   const markers = labels.map((_, i) =>
-    `<circle cx="${x(i).toFixed(1)}" cy="${yVac(vacVals[i]).toFixed(1)}" r="2.6" fill="#fff" stroke="${C.vac}" stroke-width="1.6"/>`
+    `<circle cx="${x(i).toFixed(1)}" cy="${yVac(vacVals[i]).toFixed(1)}" r="3" fill="#fff" stroke="${C.vac}" stroke-width="1.6"/>`
   ).join("");
-  const vacLabels = labels.map((_, i) =>
-    `<text x="${x(i).toFixed(1)}" y="${(yVac(vacVals[i])-6).toFixed(1)}" font-size="8" text-anchor="middle" fill="#000">${vacVals[i]}%</text>`
-  ).join("");
+
+  // El label de cada punto sigue la línea (offset fijo sobre el punto) en
+  // vez de quedar todos a la misma altura — así reproduce el perfil de la
+  // referencia. Se acerca un poco más cuando el punto está muy abajo (valores
+  // bajos de vacancia) para no acercarse demasiado al eje X.
+  const vacLabels = labels.map((_, i) => {
+    const py = yVac(vacVals[i]);
+    const offset = py > padT + plotH - 14 ? 7 : 9;
+    return `<text x="${x(i).toFixed(1)}" y="${(py-offset).toFixed(1)}" font-size="10" text-anchor="middle" fill="#000">${Math.round(vacVals[i])}%</text>`;
+  }).join("");
 
   const xLabels = labels.map((lab, i) =>
     `<text x="${x(i).toFixed(1)}" y="${padT+plotH+12}" font-size="9" text-anchor="end" fill="${C.text}" transform="rotate(-45 ${x(i).toFixed(1)} ${padT+plotH+12})">${lab}</text>`
   ).join("");
-  const axisBox = `<line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="${C.grid}" stroke-width="1"/>`;
 
-  const axisTitleL = `<text x="12" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 12 ${padT+plotH/2})">UF/m2</text>`;
-  const axisTitleR = `<text x="${W-10}" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 ${W-10} ${padT+plotH/2})">Vacancia (%)</text>`;
+  const axisTitleL = `<text x="12" y="${padT+plotH/2}" font-size="10" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 12 ${padT+plotH/2})">UF/m²</text>`;
+  const axisTitleR = `<text x="${W-10}" y="${padT+plotH/2}" font-size="10" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 ${W-10} ${padT+plotH/2})">Vacancia (%)</text>`;
 
   const hitW = plotW / n;
   const hoverRects = labels.map((_, i) =>
@@ -6443,14 +6459,14 @@ function renderBodegasChart(containerId, evolucion){
 
   el.innerHTML = `
     <div class="parking-chart">
-      <div style="display:flex;justify-content:center;gap:18px;font-size:12px;margin-bottom:2px">
-        <span><span style="display:inline-block;width:10px;height:10px;background:${C.bar};margin-right:4px;vertical-align:middle"></span>UF/m2</span>
-        <span><span style="display:inline-block;width:14px;height:2px;background:${C.vac};margin-right:4px;vertical-align:middle"></span>Vacancia</span>
+      <div style="display:flex;justify-content:center;align-items:center;gap:14px;font-size:11px;margin-bottom:2px">
+        <span><span style="display:inline-block;width:9px;height:9px;background:${C.bar};margin-right:3px;vertical-align:middle"></span>UF/m2</span>
+        <span><span style="display:inline-block;width:12px;height:2px;background:${C.vac};margin-right:3px;vertical-align:middle"></span>Vacancia</span>
       </div>
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
-        ${gridLines}${axisBox}
+        ${gridLines}
         ${bars}
-        <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="miter" stroke-linecap="round"/>
         ${markers}${vacLabels}
         <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
         ${yLabelsL}${yLabelsR}${xLabels}${axisTitleL}${axisTitleR}
@@ -7539,7 +7555,7 @@ function render(){
     const bodPeriodos = F.mercado_bodegas ? Object.keys(F.mercado_bodegas).sort() : [];
     const bodPeriodoSelector = usadoOp ? semesterEndOfM(usadoOp) : null;
     const bodPeriodoActual = bodPeriodos.length
-      ? ([...bodPeriodos].reverse().find(p => !bodPeriodoSelector || p <= bodPeriodoSelector) || bodPeriodos[bodPeriodos.length - 1])
+      ? ([...bodPeriodos].reverse().find(p => !bodPeriodoSelector || p <= bodPeriodoSelector) || null)
       : null;
     const bodRows = bodPeriodoActual ? F.mercado_bodegas[bodPeriodoActual] : null;
     const bodP1 = document.getElementById("txt-mercado3-bodegas-1");
@@ -7570,7 +7586,18 @@ function render(){
         + `<tr class="row-total"><td>${bod.total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
     }
     if (F.bodegas_evolucion) {
-      renderBodegasChart("chart-bodegas", F.bodegas_evolucion);
+      // Truncar la serie semestral al semestre que contiene la fecha
+      // operacional seleccionada — no mostrar semestres futuros.
+      const bev = F.bodegas_evolucion;
+      const bevIdxs = bev.periodos
+        .map((p, i) => i)
+        .filter(i => !bodPeriodoSelector || bev.periodos[i] <= bodPeriodoSelector);
+      const bevSliceBy = arr => bevIdxs.map(i => arr[i]);
+      renderBodegasChart("chart-bodegas", {
+        semestres: bevSliceBy(bev.semestres),
+        uf_m2: bevSliceBy(bev.uf_m2),
+        vacancia_pct: bevSliceBy(bev.vacancia_pct),
+      });
     } else {
       document.getElementById("chart-bodegas").innerHTML =
         `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;

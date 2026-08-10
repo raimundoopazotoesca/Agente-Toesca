@@ -2582,6 +2582,7 @@ checkBalancePeriodoStatus();
 function _inicioPeriodoLabel(periodo, frecuencia) {
   const [y, m] = periodo.split('-');
   if (frecuencia === 'trimestral') return `T${{'03':1,'06':2,'09':3,'12':4}[m]} ${y}`;
+  if (frecuencia === 'semestral') return `${m === '06' ? '1S' : '2S'} ${y}`;
   const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   return `${meses[parseInt(m, 10) - 1]} ${y}`;
 }
@@ -2599,8 +2600,15 @@ function _irAIngestar(tabDestino, pendiente, subKey) {
     rrProveedor.dispatchEvent(new Event('change'));
     checkRrPeriodoStatus();
   } else if (tabDestino === 'mercado') {
-    if (pendiente) mercadoPeriodo.value = pendiente;
-    checkMercadoPeriodoStatus();
+    const subTab = subKey === 'bodegas' ? 'bodegas' : 'oficinas';
+    document.querySelector(`#mercado-subtabs [data-mercadotab="${subTab}"]`).click();
+    if (subTab === 'bodegas') {
+      if (pendiente) mercadoBodPeriodo.value = pendiente;
+      checkMercadoBodPeriodoStatus();
+    } else {
+      if (pendiente) mercadoPeriodo.value = pendiente;
+      checkMercadoPeriodoStatus();
+    }
   } else if (tabDestino === 'balance') {
     if (pendiente) balancePeriodo.value = pendiente;
     checkBalancePeriodoStatus();

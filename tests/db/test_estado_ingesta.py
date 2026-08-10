@@ -97,6 +97,14 @@ def _insert_mercado(con, periodo):
     con.commit()
 
 
+def _insert_mercado_bodegas(con, periodo):
+    con.execute(
+        "INSERT INTO raw_mercado_bodegas (periodo, zona, es_total) VALUES (?, 'Centro', 0)",
+        (periodo,),
+    )
+    con.commit()
+
+
 # Tipos que la pantalla de Inicio debe mostrar. Si agregas una fuente nueva a
 # CONFIG, actualiza este set a propósito: la card y su timeline son parte del
 # contrato de la UI, no un detalle interno.
@@ -155,16 +163,41 @@ def test_estado_tipo_rentroll_parcial_no_marca_al_dia(con):
 
 
 def test_estado_tipo_mercado_timeline_ultimo_slot_en_curso(con):
+    # 'Mercado' agrupa Oficinas (trimestral) + Bodegas (semestral) — para
+    # estar "al día" ambas sub-ingestas deben tener su período cerrado
+    # correspondiente cargado.
     cfg = next(c for c in CONFIG if c["id"] == "mercado")
     hoy = date(2026, 7, 23)  # en curso: 2026-09, cerrado: 2026-06
     _insert_mercado(con, "2025-12")
     _insert_mercado(con, "2026-03")
     _insert_mercado(con, "2026-06")
+    _insert_mercado_bodegas(con, "2025-12")
+    _insert_mercado_bodegas(con, "2026-06")
     resultado = estado_tipo(con, cfg, hoy)
     assert resultado["al_dia"] is True
     timeline = resultado["timeline"]
     assert [t["periodo"] for t in timeline] == ["2025-12", "2026-03", "2026-06", "2026-09"]
     assert [t["estado"] for t in timeline] == ["ok", "ok", "ok", "na"]
+
+
+def test_mercado_bodegas_pendiente_no_bloquea_oficinas(con):
+    # Bodegas es semestral: en un trimestre que no es cierre de semestre
+    # (marzo/septiembre) no debe exigirse dato de bodegas para que el
+    # trimestre se marque "ok" a nivel agregado.
+    cfg = next(c for c in CONFIG if c["id"] == "mercado")
+    hoy = date(2026, 4, 10)  # en curso: 2026-06, cerrado: 2026-03
+    _insert_mercado(con, "2026-03")
+    resultado = estado_tipo(con, cfg, hoy)
+    assert resultado["al_dia"] is True
+    subs = {s["key"]: s for s in resultado["sub_ingestas"]}
+    assert subs["oficinas"]["al_dia"] is True
+    # Bodegas: cerrado propio en 2026-04 es 2025-12 (semestre anterior) — sin
+    # datos, así que su propia sub-ingesta queda pendiente...
+    assert subs["bodegas"]["al_dia"] is False
+    # ...pero el timeline agregado del padre no marca "miss" en 2026-03,
+    # porque bodegas no cierra en marzo.
+    fila_marzo = next(t for t in resultado["timeline"] if t["periodo"] == "2026-03")
+    assert fila_marzo["estado"] == "ok"
 
 
 def test_estado_ingesta_devuelve_todos_los_tipos(con):
@@ -208,11 +241,15 @@ def test_rentroll_sub_ingestas_por_proveedor(con):
     assert resultado["resumen"] == {"al_dia": 1, "total": 3}
 
 
-def test_mercado_no_tiene_sub_ingestas(con):
+def test_mercado_tiene_sub_ingestas_oficinas_y_bodegas(con):
+    # 'Mercado' agrupa Oficinas (raw_mercado_oficinas, trimestral) y Bodegas
+    # (raw_mercado_bodegas, semestral) bajo una sola card — mismo patrón que
+    # 'Ingresos/NOI Activos', pero con tabla y frecuencia propia por sub-ingesta.
     cfg = next(c for c in CONFIG if c["id"] == "mercado")
     resultado = estado_tipo(con, cfg, date(2026, 7, 23))
-    assert resultado["sub_ingestas"] == []
-    assert resultado["resumen"] is None
+    keys = {s["key"] for s in resultado["sub_ingestas"]}
+    assert keys == {"oficinas", "bodegas"}
+    assert resultado["resumen"] == {"al_dia": 0, "total": 2}
 
 
 from tools.db.estado_ingesta import timeline_rango

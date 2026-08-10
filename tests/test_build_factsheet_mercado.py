@@ -99,6 +99,7 @@ def test_fetch_bodegas_evolucion_con_datos(tmp_path):
         "semestres": ["2S-2015", "1S-2016"],
         "uf_m2": [0.119, 0.118],
         "vacancia_pct": [9.95, 12.28],
+        "periodos": ["2015-12", "2016-06"],
     }
 
 
