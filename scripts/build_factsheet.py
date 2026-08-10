@@ -906,6 +906,67 @@ def _fetch_oficinas_evolucion(db_path: str, submercado: str = "Las Condes (CBD)"
     }
 
 
+_BODEGAS_ZONAS_ORDEN = ["Centro", "Nor-Poniente", "Norte", "Poniente", "Sur"]
+
+
+def _fetch_bodegas_mercado(db_path: str, periodo: str) -> list[dict] | None:
+    """Lee raw_mercado_bodegas para el período dado, ordenado por
+    _BODEGAS_ZONAS_ORDEN con el total 'Gran Santiago' al final — mismo orden
+    que usa la tabla tbl-bodegas de la página 3 del fact sheet TRI."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT zona, produccion_m2, inventario_final_m2, tasa_vacancia_pct,
+                      precio_uf_m2, es_total
+               FROM raw_mercado_bodegas
+               WHERE periodo = ? AND superseded_at IS NULL""",
+            (periodo,),
+        ).fetchall()
+    finally:
+        con.close()
+    if not rows:
+        return None
+    por_zona = {r[0]: r for r in rows}
+    ordenadas = [por_zona[z] for z in _BODEGAS_ZONAS_ORDEN if z in por_zona]
+    if "Gran Santiago" in por_zona:
+        ordenadas.append(por_zona["Gran Santiago"])
+    return [
+        {
+            "zona": r[0],
+            "produccion_m2": r[1],
+            "inventario_final_m2": r[2],
+            "tasa_vacancia_pct": r[3],
+            "precio_uf_m2": r[4],
+            "es_total": bool(r[5]),
+        }
+        for r in ordenadas
+    ]
+
+
+def _fetch_bodegas_evolucion(db_path: str) -> dict | None:
+    """Lee raw_mercado_bodegas_evolucion (histórico semestral, carga única
+    desde xlsx) y arma {semestres, uf_m2, vacancia_pct} para
+    renderBodegasChart(). vacancia_pct se normaliza a porcentaje entero
+    (9.95, no 0.0995) porque el gráfico espera esa escala."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT semestre, uf_m2, vacancia_pct
+               FROM raw_mercado_bodegas_evolucion
+               WHERE superseded_at IS NULL
+               ORDER BY anio, periodo_num"""
+        ).fetchall()
+    finally:
+        con.close()
+    if not rows:
+        return None
+    return {
+        "semestres": [r[0] for r in rows],
+        "uf_m2": [r[1] for r in rows],
+        "vacancia_pct": [round(r[2] * 100, 4) if r[2] is not None else None for r in rows],
+    }
+
+
 def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     cur = con.cursor()
     series_nemos = [s["nemo"] for s in cfg["series"]]
@@ -1095,6 +1156,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
 
     mercado_por_periodo: dict[str, list[dict]] = {}
     oficinas_evolucion = None
+    mercado_bodegas_por_periodo: dict[str, list[dict]] = {}
+    bodegas_evolucion = None
     if (cfg.get("page4") or {}).get("submercado") or (cfg.get("page3") or {}).get("modo") == "mercado":
         periodos_disponibles = [
             r[0] for r in cur.execute(
@@ -1105,6 +1168,17 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         for periodo in periodos_disponibles:
             mercado_por_periodo[periodo] = _fetch_mercado_rows(str(DB), periodo)
         oficinas_evolucion = _fetch_oficinas_evolucion(str(DB))
+
+        periodos_bodegas = [
+            r[0] for r in cur.execute(
+                "SELECT DISTINCT periodo FROM raw_mercado_bodegas WHERE superseded_at IS NULL ORDER BY periodo"
+            )
+        ]
+        for periodo in periodos_bodegas:
+            filas = _fetch_bodegas_mercado(str(DB), periodo)
+            if filas is not None:
+                mercado_bodegas_por_periodo[periodo] = filas
+        bodegas_evolucion = _fetch_bodegas_evolucion(str(DB))
 
     # ---- Página 3: ingresos UF/mes por edificio, para el donut ----
     # Cada fondo define su propio mapeo edificio (label mostrado) -> activo_key
@@ -1426,6 +1500,8 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "dividendos": dividendos,
         "mercado": mercado_por_periodo,
         "oficinas_evolucion": oficinas_evolucion,
+        "mercado_bodegas": mercado_bodegas_por_periodo,
+        "bodegas_evolucion": bodegas_evolucion,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "page4_indicadores": page4_indicadores,
@@ -7387,21 +7463,45 @@ function render(){
         "uf", "Renta");
     }
 
-    // Bodegas: sin fuente en DB todavía — solo estructura (F.mercado_bodegas
-    // no existe aún). Cuando se ingeste GPS Property, reemplazar los
-    // placeholders de acá por los mismos campos que ya usa "mercado" (oficinas).
+    // Bodegas: raw_mercado_bodegas (snapshot por zona) + raw_mercado_bodegas_evolucion
+    // (histórico semestral, ver F.mercado_bodegas / F.bodegas_evolucion).
     const bod = S.page3.bodegas;
+    const bodPeriodos = F.mercado_bodegas ? Object.keys(F.mercado_bodegas).sort() : [];
+    const bodPeriodoActual = bodPeriodos.length ? bodPeriodos[bodPeriodos.length - 1] : null;
+    const bodRows = bodPeriodoActual ? F.mercado_bodegas[bodPeriodoActual] : null;
     const bodP1 = document.getElementById("txt-mercado3-bodegas-1");
     const bodP2 = document.getElementById("txt-mercado3-bodegas-2");
     bodP1.textContent = "Pendiente: párrafo de vacancia/canon de arriendo (informe GPS Property) — sin fuente ingestada en la DB todavía.";
     bodP1.classList.add("placeholder");
     bodP2.textContent = "Pendiente: párrafo de producción y proyecciones (informe GPS Property).";
     bodP2.classList.add("placeholder");
-    document.getElementById("tbl-bodegas-tbody").innerHTML =
-      bod.zonas.map(z => `<tr><td>${z}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
-      + `<tr class="row-total"><td>${bod.total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
-    document.getElementById("chart-bodegas").innerHTML =
-      `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    const fmtBod = (v, dec) => (v === null || v === undefined) ? null :
+      v.toLocaleString("es-CL", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const celdaBod = (v, esPct) => {
+      if (v === null || v === undefined) return '<td class="placeholder">—</td>';
+      const texto = esPct ? fmtBod(v, 1) + "%" : fmtBod(v, 0);
+      return `<td>${texto}</td>`;
+    };
+    if (bodRows) {
+      document.getElementById("tbl-bodegas-tbody").innerHTML = bodRows.map(r => {
+        const cls = r.es_total ? ' class="row-total"' : '';
+        return `<tr${cls}><td>${r.zona}</td>` +
+          celdaBod(r.produccion_m2, false) + celdaBod(r.inventario_final_m2, false) +
+          celdaBod(r.tasa_vacancia_pct, true) +
+          `<td>${r.precio_uf_m2 !== null && r.precio_uf_m2 !== undefined ? r.precio_uf_m2.toLocaleString("es-CL", {minimumFractionDigits:3, maximumFractionDigits:3}) : '<span class="placeholder">—</span>'}</td>` +
+          `</tr>`;
+      }).join("");
+    } else {
+      document.getElementById("tbl-bodegas-tbody").innerHTML =
+        bod.zonas.map(z => `<tr><td>${z}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`).join("")
+        + `<tr class="row-total"><td>${bod.total_nombre}</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td><td class="placeholder">—</td></tr>`;
+    }
+    if (F.bodegas_evolucion) {
+      renderBodegasChart("chart-bodegas", F.bodegas_evolucion);
+    } else {
+      document.getElementById("chart-bodegas").innerHTML =
+        `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    }
 
     const cc = S.page3.centros_comerciales;
     document.getElementById("tbl-comercio-thead").innerHTML =
