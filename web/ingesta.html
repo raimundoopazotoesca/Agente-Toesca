@@ -477,7 +477,7 @@
     <button class="tab-btn active" data-tab="inicio">Inicio</button>
     <button class="tab-btn" data-tab="eeff">EEFF</button>
     <button class="tab-btn" data-tab="rentroll">Rent Roll</button>
-    <button class="tab-btn" data-tab="mercado">Mercado Oficinas</button>
+    <button class="tab-btn" data-tab="mercado">Mercado</button>
     <button class="tab-btn" data-tab="balance">Balance Consolidado</button>
     <button class="tab-btn" data-tab="parking">Parking PT</button>
     <button class="tab-btn" data-tab="er-activos">Ingresos/NOI Activos</button>
@@ -667,6 +667,15 @@
 <!-- ══════════════════════════ TAB MERCADO ══════════════════════════ -->
 <div id="tab-mercado" class="tab-panel">
 
+  <div class="row" style="margin-bottom:14px;">
+    <div class="tabs" id="mercado-subtabs">
+      <button class="er-subtab-btn active" data-mercadotab="oficinas">Oficinas</button>
+      <button class="er-subtab-btn" data-mercadotab="bodegas">Bodegas</button>
+    </div>
+  </div>
+
+  <div id="mercado-panel-oficinas" class="mercado-sub-panel">
+
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Período y proveedor</div>
     <div class="row">
@@ -717,6 +726,59 @@
       <button id="btn-mercado-confirm" disabled>Confirmar e ingestar</button>
       <span id="mercado-ingest-status" class="muted"></span>
     </div>
+  </div>
+
+  </div>
+
+  <div id="mercado-panel-bodegas" class="mercado-sub-panel hidden">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Período</div>
+    <div class="row">
+      <label class="muted" for="mercadobod-periodo">Período del informe (semestral):</label>
+      <select id="mercadobod-periodo" style="width:160px">
+        <option value="">Elige semestre...</option>
+      </select>
+    </div>
+    <div class="row" id="mercadobod-periodo-status-row" style="margin-top:6px"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">2</span> Copia la tabla del informe y pégala aquí</div>
+    <ol class="instructions">
+      <li>Abre el informe GPS Property del semestre.</li>
+      <li>Selecciona y copia la tabla de mercado de bodegas por zona (encabezado + las 6 filas: Centro, Nor-Poniente, Norte, Poniente, Sur, Gran Santiago).</li>
+      <li>Pega el texto tal cual en el cuadro de abajo.</li>
+    </ol>
+    <textarea id="mercadobod-input" placeholder="Pega aquí el texto copiado de la tabla del informe GPS Property..."></textarea>
+    <div class="row">
+      <button id="btn-mercadobod-validate">Validar y previsualizar</button>
+      <span id="mercadobod-validate-status" class="muted"></span>
+    </div>
+
+    <div id="mercadobod-preview" class="preview hidden">
+      <div class="badges" id="mercadobod-badges"></div>
+      <ul id="mercadobod-errors" class="msg-list err"></ul>
+      <ul id="mercadobod-warnings" class="msg-list warn"></ul>
+
+      <div id="mercadobod-section-tabla" class="hidden">
+        <h3>Filas detectadas</h3>
+        <table>
+          <thead><tr>
+            <th>Zona</th><th class="num">Producción (m²)</th><th class="num">Inventario Final (m²)</th>
+            <th class="num">Tasa Vacancia (%)</th><th class="num">Precio (UF/m²)</th>
+          </tr></thead>
+          <tbody id="mercadobod-tabla-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-mercadobod-confirm" disabled>Confirmar e ingestar</button>
+      <span id="mercadobod-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
   </div>
 
 </div>
@@ -1179,6 +1241,15 @@ document.querySelectorAll('#er-subtabs .er-subtab-btn').forEach(btn => {
     document.querySelectorAll('.er-activo-panel').forEach(p => p.classList.add('hidden'));
     btn.classList.add('active');
     document.getElementById('er-panel-' + btn.dataset.eractivo).classList.remove('hidden');
+  });
+});
+
+document.querySelectorAll('#mercado-subtabs .er-subtab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#mercado-subtabs .er-subtab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#tab-mercado .mercado-sub-panel').forEach(p => p.classList.add('hidden'));
+    btn.classList.add('active');
+    document.getElementById('mercado-panel-' + btn.dataset.mercadotab).classList.remove('hidden');
   });
 });
 
@@ -2036,6 +2107,165 @@ btnMercadoConfirm.addEventListener('click', async () => {
 
 populateMercadoTrimestres();
 checkMercadoPeriodoStatus();
+
+let lastMercadoBodTexto = null;
+let lastMercadoBodPeriodo = null;
+let lastMercadoBodValidationOk = false;
+
+function populateMercadoBodegasSemestres() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const selectedSemestre = currentMonth <= 6 ? '12' : '06';
+  const selectedYear = currentMonth <= 6 ? currentYear - 1 : currentYear;
+
+  for (let y = currentYear - 2; y <= currentYear + 1; y++) {
+    for (const m of ['06', '12']) {
+      const opt = document.createElement('option');
+      opt.value = `${y}-${m}`;
+      opt.textContent = `${m === '06' ? '1S' : '2S'}-${y}`;
+      mercadoBodPeriodo.appendChild(opt);
+      if (y === selectedYear && m === selectedSemestre) {
+        opt.selected = true;
+      }
+    }
+  }
+}
+
+const mercadoBodPeriodo = document.getElementById('mercadobod-periodo');
+const mercadoBodInput = document.getElementById('mercadobod-input');
+const btnMercadoBodValidate = document.getElementById('btn-mercadobod-validate');
+const mercadoBodValidateStatus = document.getElementById('mercadobod-validate-status');
+const btnMercadoBodConfirm = document.getElementById('btn-mercadobod-confirm');
+const mercadoBodIngestStatus = document.getElementById('mercadobod-ingest-status');
+const mercadoBodPeriodoStatusRow = document.getElementById('mercadobod-periodo-status-row');
+
+async function checkMercadoBodPeriodoStatus() {
+  const periodo = mercadoBodPeriodo.value;
+  mercadoBodPeriodoStatusRow.innerHTML = '';
+  if (!periodo) return;
+  try {
+    const res = await fetch(`/api/mercado/bodegas/periodo_check?periodo=${periodo}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot warn"></span>${periodo} ya tiene ${data.n_filas} fila(s) vigentes — reingestar las reemplazará.`;
+      mercadoBodPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) { /* silencioso */ }
+}
+mercadoBodPeriodo.addEventListener('change', checkMercadoBodPeriodoStatus);
+
+function resetMercadoBodPreview() {
+  document.getElementById('mercadobod-preview').classList.add('hidden');
+  btnMercadoBodConfirm.disabled = true;
+  lastMercadoBodValidationOk = false;
+  setStatus(mercadoBodValidateStatus);
+  setStatus(mercadoBodIngestStatus);
+}
+mercadoBodInput.addEventListener('input', resetMercadoBodPreview);
+mercadoBodPeriodo.addEventListener('change', resetMercadoBodPreview);
+
+function renderMercadoBodPreview(data) {
+  document.getElementById('mercadobod-preview').classList.remove('hidden');
+  const badges = document.getElementById('mercadobod-badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('mercadobod-errors');
+  const warnUl = document.getElementById('mercadobod-warnings');
+  errUl.innerHTML = '';
+  warnUl.innerHTML = '';
+
+  function addBadge(label, status) {
+    const el = document.createElement('span');
+    el.className = 'badge';
+    el.innerHTML = `<span class="dot ${status}"></span>${label}`;
+    badges.appendChild(el);
+  }
+  addBadge(data.ok ? 'Validación OK' : 'Validación con errores', data.ok ? 'ok' : 'err');
+  (data.errors || []).forEach(e => {
+    const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li);
+  });
+  (data.warnings || []).forEach(w => {
+    const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li);
+  });
+
+  const tablaBody = document.getElementById('mercadobod-tabla-body');
+  tablaBody.innerHTML = '';
+  if (data.ok && data.filas && data.filas.length) {
+    document.getElementById('mercadobod-section-tabla').classList.remove('hidden');
+    data.filas.forEach(f => {
+      const tr = document.createElement('tr');
+      if (f.es_total) tr.style.fontWeight = '700';
+      tr.innerHTML = `<td>${f.zona}</td>` +
+        `<td class="num">${fmt(f.produccion_m2)}</td><td class="num">${fmt(f.inventario_final_m2)}</td>` +
+        `<td class="num">${fmt(f.tasa_vacancia_pct)}%</td><td class="num">${fmt(f.precio_uf_m2)}</td>`;
+      tablaBody.appendChild(tr);
+    });
+  } else {
+    document.getElementById('mercadobod-section-tabla').classList.add('hidden');
+  }
+
+  lastMercadoBodValidationOk = data.ok;
+  btnMercadoBodConfirm.disabled = !data.ok;
+}
+
+btnMercadoBodValidate.addEventListener('click', async () => {
+  const texto = mercadoBodInput.value;
+  const periodo = mercadoBodPeriodo.value;
+  if (!periodo) { mercadoBodValidateStatus.textContent = 'Declara el período del informe.'; return; }
+  setStatus(mercadoBodValidateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnMercadoBodValidate.disabled = true;
+  btnMercadoBodConfirm.disabled = true;
+  try {
+    const res = await fetch('/api/mercado/bodegas/validate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto, periodo}),
+    });
+    const data = await res.json();
+    lastMercadoBodTexto = texto;
+    lastMercadoBodPeriodo = periodo;
+    renderMercadoBodPreview(data);
+    setStatus(mercadoBodValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
+  } catch (e) {
+    setStatus(mercadoBodValidateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnMercadoBodValidate.disabled = false;
+  }
+});
+
+btnMercadoBodConfirm.addEventListener('click', async () => {
+  if (!lastMercadoBodValidationOk || lastMercadoBodTexto !== mercadoBodInput.value ||
+      lastMercadoBodPeriodo !== mercadoBodPeriodo.value) {
+    mercadoBodIngestStatus.textContent = 'Los datos cambiaron desde la última validación — vuelve a validar.';
+    return;
+  }
+  btnMercadoBodConfirm.disabled = true;
+  setStatus(mercadoBodIngestStatus, 'Ingestando en la base de datos...', 'loading');
+  try {
+    const res = await fetch('/api/mercado/bodegas/commit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto: lastMercadoBodTexto, periodo: lastMercadoBodPeriodo}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+    if (data.status === 'skipped_duplicate') {
+      setStatus(mercadoBodIngestStatus, 'Este texto ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
+    } else {
+      setStatus(mercadoBodIngestStatus,
+        `Listo: ${data.filas_insertadas} filas insertadas` +
+        (data.filas_superseded ? `, ${data.filas_superseded} filas anteriores reemplazadas` : '') +
+        ` (run #${data.run_id}).`,
+        'success');
+    }
+  } catch (e) {
+    setStatus(mercadoBodIngestStatus, 'Error al ingestar: ' + e.message, 'error');
+    btnMercadoBodConfirm.disabled = false;
+  }
+});
+
+populateMercadoBodegasSemestres();
+checkMercadoBodPeriodoStatus();
 
 // ── TAB BALANCE CONSOLIDADO ───────────────────────────────────────────────
 const balancePeriodo = document.getElementById('balance-periodo');
