@@ -674,7 +674,7 @@
     </div>
   </div>
 
-  <div id="mercado-panel-oficinas" class="er-activo-panel">
+  <div id="mercado-panel-oficinas" class="mercado-sub-panel">
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Período y proveedor</div>
@@ -730,7 +730,7 @@
 
   </div>
 
-  <div id="mercado-panel-bodegas" class="er-activo-panel hidden">
+  <div id="mercado-panel-bodegas" class="mercado-sub-panel hidden">
 
   <div class="step">
     <div class="step-title"><span class="step-num">1</span> Período</div>
@@ -1247,7 +1247,7 @@ document.querySelectorAll('#er-subtabs .er-subtab-btn').forEach(btn => {
 document.querySelectorAll('#mercado-subtabs .er-subtab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#mercado-subtabs .er-subtab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('#tab-mercado .er-activo-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('#tab-mercado .mercado-sub-panel').forEach(p => p.classList.add('hidden'));
     btn.classList.add('active');
     document.getElementById('mercado-panel-' + btn.dataset.mercadotab).classList.remove('hidden');
   });
@@ -2117,7 +2117,7 @@ function populateMercadoBodegasSemestres() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const currentSemestre = currentMonth <= 6 ? '06' : '12';
-  const selectedYear = currentMonth > 6 ? currentYear : currentYear;
+  const selectedYear = currentYear;
 
   for (let y = currentYear - 2; y <= currentYear + 1; y++) {
     for (const m of ['06', '12']) {
