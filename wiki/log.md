@@ -1,3 +1,37 @@
+## [2026-08-10] feat+fix | Tabla "Resumen Performance" página 2 TRI + bug de dedup en ingesta rent roll
+
+1. **Wireada la tabla de performance de la página 2 del fact sheet TRI**
+   (`_fetch_perf_data` estaba en placeholder para TRI). Nueva función
+   `get_perf_table_tri` en `tools/db/rent_roll_stats.py`: consolida 8 grupos
+   (Viña, Curicó, subtotal Centros Comerciales, Residencias, Bodegas Sucden,
+   Apo3001, Fondo Apoquindo, Fondo Rentas PT), una sola columna por grupo (sin
+   desagregar por tipo de espacio como PT/Apo). Participación efectiva de TRI
+   escala m² y UF por igual — excepto **Apo3001**, que queda en 1.0 (no
+   0.685): su rent roll ya es reporte propio del activo, igual que el caso ya
+   documentado para NOI/ER (ver `wiki` participación sociedad vs activo).
+   Estacionamientos excluidos de m² útiles/vacantes/absorción m² (cuentan en
+   UF, no en m², igual criterio que PT/Apo).
+
+2. **Bug de ingesta encontrado y corregido**: el pipeline de rent roll validado
+   (`ingest_rent_roll_validated.py`) sobreescribía silenciosamente filas con
+   "Detalle Activo" repetido (mismo piso/zona con 2+ arrendatarios) hasta el
+   commit `2c74a44` (2026-07-29), que agregó desambiguación por sufijo. Viña
+   Centro (ingest_run 117, 21-jul) y Mall Curicó (run 118, 21-jul) se
+   ingestaron ANTES de ese fix y quedaron con filas perdidas: Viña 73→90
+   filas (25.579→25.646 m²), Curicó 46→49 filas (10.811→10.889 m² raw,
+   8.649→8.711 m² con participación 0.8). Reingestados desde
+   `SharePoint/NUEVO ORDEN/Fondos/Renta Comercial/Rent Rolls/Tres A/` con el
+   pipeline corregido (runs 151/152).
+
+3. **VAL5 bajado de gate duro a warning** en `ingest_rent_roll_validated.py`:
+   exigir renta esperada de mercado en TODAS las celdas vacantes bloqueaba
+   ingestas completas por datos que el proveedor (Tres Asociados) omite con
+   frecuencia. Ahora se ingesta con renta vacante en 0 para esas unidades y
+   queda el warning para seguimiento. VAL1-4 siguen siendo gates duros.
+
+Validado contra números que el usuario tenía de otra fuente: Viña ~25.640,
+Curicó ~8.708, Apo3001 ~4.510 — los tres calzan tras los fixes.
+
 ## [2026-08-03] fix | Consolidación TRI: bug PT (raw_er_activo_line) + bug case-sensitivity vacancia
 
 Dos bugs encontrados y corregidos validando ingresos/NOI/vacancia consolidada
@@ -1342,3 +1376,58 @@ huérfanas en Gastos de Administración y Ventas que la fuente excluye de sus
 propios subtotales de categoría (hasta 5.7% del gasto en algunos meses) —
 confirmado con el usuario que el NOI en la DB las incluye, con validación
 de integridad blanda para ese bloque.
+
+## [2026-08-10] fix+feat | Asistente (db_chat.py): correcciones + mejoras analiticas
+
+Sesion enfocada en "que el Asistente responda y calcule bien y sea lo mas util
+posible", sin tocar arquitectura ni datos.
+
+**Bugs corregidos:**
+- Comparaciones/rankings entre multiples entidades (ej. "que fondos tienen
+  mayor LTV?", "compara el DY de las 3 series de TRI") no filtraban al ultimo
+  periodo por entidad -> mezclaban historico completo, produciendo filas
+  duplicadas y respuestas con rangos inventados. Fix: regla R11 + few-shots
+  con subquery correlacionada de ultimo periodo por entidad.
+- El LLM de sintesis (Llama 3.3 70B via Groq) a veces corrompia el formato de
+  numeros largos al redactar (13.478,69 UF -> "13.478.688 UF", 1000x
+  inflado). Fix: formateo con separador chileno se calcula en Python
+  (`_format_cl`/`_format_rows`) y el LLM solo copia el string, nunca hace
+  aritmetica de formato. Conversion ratio->% tambien se movio al SQL
+  (`valor*100 AS x_pct`) por el mismo motivo.
+- Catalogo de KPIs (`_BUSINESS_CONTEXT`) desactualizado: faltaban
+  `cuota_financiamiento_uf` y `rcsd_oficial` (TRI, agregados en el commit
+  d69bf33, 100 registros 2018-2026) y `vacancia_pct` a nivel fondo TRI (unica
+  excepcion legitima a la regla "vacancia siempre en vivo desde rent_roll").
+  El Asistente no podia responder sobre ellos. Agregados con few-shots.
+
+**Mejoras de utilidad:**
+- Preguntas compuestas ("panorama del fondo Apo", "compara NOI y deuda de
+  PT"): el paso SQL ahora puede emitir hasta 4 SELECTs independientes en vez
+  de forzar un solo dato parcial; el paso de redaccion sintetiza una lectura
+  analitica conjunta (deltas, tendencia, dato que mas destaca) en vez de
+  listar hechos sueltos — manteniendo la prohibicion de opinar/recomendar
+  decisiones de inversion.
+- Atajo sin LLM para saludos/meta-preguntas ("hola", "que puedes hacer?"):
+  antes devolvian el error generico "no entendi la pregunta"; ahora responden
+  al instante con una intro de capacidades, sin gastar tokens.
+- Cuando una consulta con filtro de periodo exacto devuelve 0 filas, el
+  Asistente corre automaticamente una consulta de respaldo (mismo filtro sin
+  el periodo) para conocer el rango real disponible y lo cita en la
+  respuesta, en vez de la promesa vacia "sugiere periodos disponibles" que
+  antes no tenia forma de cumplir.
+- Tercera cuenta Groq (`GROQ_API_KEY_3`) agregada a la cadena de fallback,
+  triplicando el cupo diario gratis antes de caer a Gemini.
+
+**Nuevo:** `tests/test_db_chat.py` (38 tests) cubre validacion SQL, formateo
+numerico, extraccion de JSON, atajo de saludos y sugerencia de periodos —
+antes db_chat.py no tenia ningun test dedicado, solo un smoke-import.
+
+**Hallazgo sin resolver (fuera de alcance del codigo):** la API key de Gemini
+(fallback final) esta bloqueada por restriccion de HTTP referrer en Google
+Cloud Console (`403 API_KEY_HTTP_REFERRER_BLOCKED`) — requiere acceso a la
+consola de Google Cloud para quitarla.
+
+**Verificacion:** suite completa 467 passed / 9 failed (preexistentes,
+ingesta rent-roll/ER — no tocados en esta sesion) / 1 deselected (baseline
+drift preexistente) / 1 xfailed. `tools/db_chat.py`, `config.py`,
+`tests/test_db_chat.py` son los unicos archivos modificados/creados.

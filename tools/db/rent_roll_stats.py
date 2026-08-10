@@ -156,6 +156,7 @@ def _celda(grupo: str, tipo: str, snapshot: dict, activo_key: str, periodo: str)
 def _absorcion_ventana(
     activo_key: str, periodo: str, meses: int,
     grupo: str | None = None, tipo: str | None = None,
+    excluir_tipos: set | None = None,
 ) -> dict:
     """Absorción bruta/neta (m² y UF) entre (periodo - meses) y periodo,
     caminando los períodos consecutivos que existan en DB dentro de esa
@@ -164,7 +165,8 @@ def _absorcion_ventana(
 
     Si se pasan grupo/tipo, restringe el movimiento a esa columna de la tabla
     de performance (mismo criterio de _celda); si no, es la absorción total
-    del activo/fondo."""
+    del activo/fondo. excluir_tipos descarta unidades de esos tipos (ej.
+    Estacionamientos, que no cuenta para m² útiles — ver get_perf_table_tri)."""
     disponibles = _periodos_disponibles(activo_key)
     limite_inf = _meses_atras(periodo, meses)
     ventana = sorted(p for p in disponibles if limite_inf <= p <= periodo)
@@ -180,6 +182,10 @@ def _absorcion_ventana(
             if grupo is not None:
                 rec = ahora or antes
                 if _ACTIVO2_LABEL.get(key[0], key[0]) != grupo or rec["tipo_activo_3"] != tipo:
+                    continue
+            if excluir_tipos:
+                rec = ahora or antes
+                if rec["tipo_activo_3"] in excluir_tipos:
                     continue
             ev = _clasificar_evento(antes, ahora)["evento"]
             if ev == "alta" and ahora is not None:
@@ -876,6 +882,119 @@ def get_rubro_arrendatario_tri(report_periodo: str) -> dict | None:
     resto = items[top_n:]
     if resto:
         out["Otro"] = round(out.get("Otro", 0.0) + sum(v for _, v in resto), 1)
+    return out
+
+
+# Grupos de la tabla "Resumen Performance Activos" de la página 2 de TRI (ver
+# FONDOS_CFG["TRI"]["page2"]["perf_groups"] en scripts/build_factsheet.py) —
+# a diferencia de PT/Apo, cada grupo es una sola columna (sin desagregar por
+# tipo de espacio). "Centros Comerciales" es el subtotal Viña+Curicó (excluido
+# del grand total para no duplicar, ver _GRUPOS_PERF_TRI_SUBTOTAL); "Fondo
+# Apoquindo" y "Fondo Rentas PT" consolidan los edificios de esos subfondos.
+_GRUPOS_PERF_TRI = {
+    "Paseo Viña Centro": ["Viña Centro"],
+    "Paseo Curicó": ["Mall Curicó"],
+    "Centros Comerciales": ["Viña Centro", "Mall Curicó"],
+    "Residencias Adulto Mayor": [
+        "Residencia Colombia", "Residencia Coventry", "Residencia Candil",
+        "Residencia Arturo Medina", "Residencia Padre Errázuriz",
+    ],
+    "Bodegas Sucden": ["Sucden"],
+    "Apoquindo 3001": ["Apo3001"],
+    "Fondo Apoquindo": ["Apo4501", "Apo4700"],
+    "Fondo Rentas PT": ["Torre A", "Boulevard"],
+}
+_GRUPOS_PERF_TRI_SUBTOTAL = {"Centros Comerciales"}
+
+
+_TIPOS_EXCLUIR_M2_TRI = {"Estacionamientos"}  # no cuentan para m² útiles/vacantes (unidades, no m²)
+
+
+def _celda_activo_tri(activo_key: str, periodo: str, participacion: float) -> dict:
+    """Celda de performance para un activo_key completo (todos los tipos
+    juntos, sin desagregar, salvo Estacionamientos que se excluye de m²/
+    absorción m² igual que en get_perf_table — ver _TIPOS_EXCLUIR_M2_TRI)
+    escalada por la participación efectiva de TRI en ese activo (ver
+    _participaciones_efectivas_tri) — a diferencia de
+    get_perfil_vencimiento_tri/get_rubro_arrendatario_tri, que solo escalan
+    renta UF, acá la participación también escala m² y absorción m² (confirmado
+    con el usuario 2026-08-10: la tabla de performance reporta la fracción
+    económica que le corresponde a TRI, no la superficie física total del
+    edificio)."""
+    snapshot = _snapshot(activo_key, periodo)
+    ocupadas = [v for v in snapshot.values() if not _es_vacante(v["arrendatario"])]
+    vacantes = [v for v in snapshot.values() if _es_vacante(v["arrendatario"])]
+    ocupadas_m2 = [v for v in ocupadas if v["tipo_activo_3"] not in _TIPOS_EXCLUIR_M2_TRI]
+    vacantes_m2 = [v for v in vacantes if v["tipo_activo_3"] not in _TIPOS_EXCLUIR_M2_TRI]
+    m2_vac = sum(v["m2"] for v in vacantes_m2) * participacion
+    m2_util = (sum(v["m2"] for v in ocupadas_m2) + sum(v["m2"] for v in vacantes_m2)) * participacion
+    pct_vac = round(m2_vac / m2_util * 100, 2) if m2_util else None
+    renta_mensual = round(sum(_monto_mensual_uf(v) for v in ocupadas) * participacion, 1)
+    renta_vacante = round(sum(_monto_mensual_uf(v) for v in vacantes) * participacion, 1)
+    renta_gracia = round(sum(v["renta_gracia"] for v in snapshot.values()) * participacion, 1)
+    pct_vac_uf = _pct_vacancia_uf(renta_mensual, renta_vacante, renta_gracia)
+
+    def _escala(absorcion: dict) -> dict:
+        if absorcion["bruta_m2"] is None:
+            return absorcion
+        return {k: round(v * participacion, 1) if v is not None else None for k, v in absorcion.items()}
+
+    def _absorcion(meses: int) -> dict:
+        # m² sin Estacionamientos (igual que m2_utiles); UF incluye todo
+        # (Estacionamientos también generan renta, solo se excluyen de m²).
+        sin_estac = _absorcion_ventana(activo_key, periodo, meses, excluir_tipos=_TIPOS_EXCLUIR_M2_TRI)
+        con_todo = _absorcion_ventana(activo_key, periodo, meses)
+        return {
+            "bruta_m2": sin_estac["bruta_m2"], "neta_m2": sin_estac["neta_m2"],
+            "bruta_uf": con_todo["bruta_uf"], "neta_uf": con_todo["neta_uf"],
+        }
+
+    return {
+        "m2_utiles": round(m2_util, 1), "m2_vacantes": round(m2_vac, 1),
+        "pct_vacancia_m2": pct_vac,
+        "renta_mensual_uf": renta_mensual, "renta_uf_vacante": renta_vacante,
+        "renta_uf_gracia": renta_gracia, "pct_vacancia_uf": pct_vac_uf,
+        "absorcion_3m": _escala(_absorcion(3)),
+        "absorcion_12m": _escala(_absorcion(12)),
+    }
+
+
+# Apo3001 tiene 0.685 en v_activo_fondo_efectivo (look-through de sociedad),
+# pero su rent roll ya es el reporte propio del activo — igual que en NOI/ER
+# (ver feedback_participacion_sociedad_vs_activo), aplicar ese factor acá
+# volvía a prorratear algo que no corresponde (daba 3.143,8 m² en vez de los
+# ~4.510 reales; confirmado con el usuario 2026-08-10).
+_SIN_PARTICIPACION_PERF_TRI = {"Apo3001"}
+
+
+def get_perf_table_tri(report_periodo: str) -> dict | None:
+    """Igual que get_perf_table pero consolidado a nivel TRI: una columna por
+    grupo (_GRUPOS_PERF_TRI), cada activo_key con su propio rent roll más
+    reciente hasta report_periodo (ver _mejor_periodo) y escalado por
+    participación efectiva de TRI (salvo _SIN_PARTICIPACION_PERF_TRI).
+    "__grand_total__" excluye el subtotal "Centros Comerciales" para no
+    duplicar Viña+Curicó. None si ningún grupo tiene datos."""
+    participaciones = _participaciones_efectivas_tri()
+    out: dict = {}
+    for grupo, activo_keys in _GRUPOS_PERF_TRI.items():
+        celdas = []
+        for activo_key in activo_keys:
+            periodo = _mejor_periodo(activo_key, report_periodo)
+            if periodo is None:
+                continue
+            participacion = (
+                1.0 if activo_key in _SIN_PARTICIPACION_PERF_TRI
+                else participaciones.get(activo_key, 1.0)
+            )
+            celdas.append(_celda_activo_tri(activo_key, periodo, participacion))
+        if not celdas:
+            continue
+        out[(grupo, "")] = _suma_celdas(celdas)
+
+    if not out:
+        return None
+    grand_total_celdas = [v for (g, _), v in out.items() if g not in _GRUPOS_PERF_TRI_SUBTOTAL]
+    out[("__grand_total__", "Total")] = _suma_celdas(grand_total_celdas)
     return out
 
 

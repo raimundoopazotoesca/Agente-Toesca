@@ -2203,11 +2203,23 @@ def _fetch_status_locales_apo(fondo_key: str) -> dict:
 
 def _fetch_perf_data(fondo_key: str) -> dict:
     """Tabla "Resumen Performance Activos" de la página 2 (rent roll), por
-    período — ver tools/db/rent_roll_stats.py. PT y Apo ya están wired
-    (agrupados por sociedad/edificio, ver _GRUPOS_TIPOS_POR_FONDO). TRI queda
-    en placeholder: falta consolidar a nivel fondo paraguas por
-    activo/subfondo.
-    """
+    período — ver tools/db/rent_roll_stats.py. PT y Apo agrupan por
+    sociedad/edificio (ver _GRUPOS_TIPOS_POR_FONDO); TRI consolida a nivel
+    fondo paraguas por activo/subfondo (ver get_perf_table_tri /
+    _GRUPOS_PERF_TRI — una columna por grupo, participación efectiva de TRI
+    escala m² y UF, confirmado con el usuario 2026-08-10)."""
+    if fondo_key == "TRI":
+        from tools.db.rent_roll_stats import get_perf_table_tri, periodos_disponibles_tri
+
+        out = {}
+        for periodo in periodos_disponibles_tri():
+            tabla = get_perf_table_tri(periodo)
+            if tabla is None:
+                continue
+            celdas = {f"{grupo}|||{tipo}": val for (grupo, tipo), val in tabla.items()}
+            out[periodo] = celdas
+        return out
+
     activo_key_logico = {"PT": "PT", "Apo": "Apoquindo"}.get(fondo_key)
     if activo_key_logico is None:
         return {}

@@ -583,13 +583,26 @@ def _flatten_validator_errors(errores: dict) -> list[str]:
     if "lectura" in errores:
         out.append(f"{_ERROR_LABELS['lectura']}: {errores['lectura']}")
         return out
-    for key in ("val1_vacantes", "val2_absorcion", "val3_escalonada", "val4_terminos", "val5_renta_vacante"):
+    for key in ("val1_vacantes", "val2_absorcion", "val3_escalonada", "val4_terminos"):
         rows = errores.get(key)
         if not rows:
             continue
         label = _ERROR_LABELS[key]
         out.append(f"{label}: {len(rows)} caso(s) — no se puede ingestar hasta corregir el archivo fuente.")
     return out
+
+
+def _flatten_validator_warnings(errores: dict) -> list[str]:
+    """VAL5 (celda vacante sin Renta Fija) no bloquea la ingesta — el proveedor
+    frecuentemente omite la renta esperada de mercado para locales vacantes y
+    exigirla como gate duro dejaba fondos enteros sin poder actualizar su rent
+    roll (caso Viña Centro mayo/junio 2026, confirmado con el usuario
+    2026-08-10). Se ingesta igual con renta_uf=0 para esas unidades y se avisa
+    para seguimiento con el proveedor."""
+    rows = errores.get("val5_renta_vacante")
+    if not rows:
+        return []
+    return [f"{_ERROR_LABELS['val5_renta_vacante']}: {len(rows)} caso(s) — se ingestó con renta vacante en 0; pedir al proveedor la renta esperada de mercado."]
 
 
 def _format_errores_detalle(errores: dict) -> str:
@@ -672,6 +685,8 @@ def validate(file_bytes: bytes, filename: str, periodo: str) -> ValidationResult
         errores = val.get("errores", {})
         for msg in _flatten_validator_errors(errores):
             result.add_error(msg)
+        for msg in _flatten_validator_warnings(errores):
+            result.warnings.append(msg)
 
         if not result.ok:
             result.data = {"periodo": periodo, "filename": val.get("archivo"), "errores_detalle": errores}
