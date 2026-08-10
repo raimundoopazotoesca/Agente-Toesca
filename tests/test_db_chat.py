@@ -156,3 +156,32 @@ class TestRunSqlAppliesLimit:
         cols, rows = db_chat._run_sql(sql)
         assert cols == ["x"]
         assert rows == [[1]]
+
+
+# ─── _mensaje_error_llm (nunca mostrar JSON tecnico crudo al usuario) ───────
+class TestMensajeErrorLlm:
+    @pytest.mark.parametrize("texto_error", [
+        "Error code: 429 rate_limit_exceeded: tokens per day (TPD)",
+        "Error code: 403 - API_KEY_HTTP_REFERRER_BLOCKED: Requests from referer <empty> are blocked",
+        "RESOURCE_EXHAUSTED: quota exceeded",
+        "429 Too Many Requests",
+    ])
+    def test_error_de_capacidad_usa_mensaje_sin_cupo(self, texto_error):
+        result = db_chat._mensaje_error_llm(Exception(texto_error))
+        assert result == db_chat._MENSAJE_SIN_CUPO
+        assert "{" not in result and "error" not in result.lower()
+
+    def test_error_generico_no_expone_detalle_tecnico(self):
+        exc = Exception("Traceback: KeyError('unexpected_field') at line 42")
+        result = db_chat._mensaje_error_llm(exc)
+        assert "KeyError" not in result
+        assert "Traceback" not in result
+
+    def test_no_api_key_no_expone_detalle_en_answer_md(self, monkeypatch):
+        monkeypatch.setattr(db_chat, "_provider_chain", lambda: (_ for _ in ()).throw(
+            RuntimeError("No hay API key configurada. Define DEEPSEEK_API_KEY, ...")
+        ))
+        result = db_chat.answer("cual es el LTV del fondo TRI?")
+        assert result["answer_md"] == db_chat._MENSAJE_SIN_CUPO
+        assert result["error"] == "no_api_key"
+        assert "DEEPSEEK_API_KEY" not in result["answer_md"]

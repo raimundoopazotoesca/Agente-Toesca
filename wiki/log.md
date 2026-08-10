@@ -1461,3 +1461,19 @@ Nota tecnica: durante la implementacion goteo un bug de bytes NUL espurios
 insertados en `web/chat_bubble.js` por una edicion previa — detectado por
 `grep` marcando el archivo como binario, corregido limpiando los bytes
 `\x00` directamente. Sin relacion con la logica del feature.
+
+## [2026-08-10] fix | Asistente: mensaje amigable cuando se agota el cupo de LLM
+
+A pedido del usuario: cuando fallan todos los proveedores LLM configurados
+(rate limit diario agotado en las 3 cuentas Groq, o la API key de Gemini
+bloqueada por referrer), el Asistente mostraba el JSON tecnico crudo del
+error de la API directo en el chat (`Error code: 429 ...`, `API_KEY_HTTP_
+REFERRER_BLOCKED...`). Ahora se intercepta con `_mensaje_error_llm()`
+(regex sobre el texto del error: 429/rate limit/quota/TPD/resource exhausted/
+403/permission denied/referrer/blocked/api_key) y se devuelve un mensaje
+generico entendible: "el Asistente no tiene capacidad disponible en este
+momento... intenta de nuevo en unos minutos". El detalle tecnico real queda
+disponible en `error_detalle` (no se muestra en el chat) para debug interno.
+Aplica en los 3 puntos donde antes se filtraba el error crudo: sin API key
+configurada, fallo en el paso de generar SQL, fallo en el paso de redactar
+la respuesta. 6 tests nuevos en `tests/test_db_chat.py` (44 total).

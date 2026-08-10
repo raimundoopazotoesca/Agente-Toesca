@@ -87,6 +87,30 @@ _RATE_LIMIT_RE = re.compile(
     r"429|rate.?limit|quota|tokens per day|tpd|resource.?exhausted", re.IGNORECASE
 )
 
+_MENSAJE_SIN_CUPO = (
+    "⚠️ El Asistente no tiene capacidad disponible en este momento (se agotó "
+    "el cupo de todos los proveedores configurados). Por favor intenta de "
+    "nuevo en unos minutos."
+)
+
+_ERROR_CAPACIDAD_RE = re.compile(
+    r"429|rate.?limit|quota|tokens per day|tpd|resource.?exhausted|"
+    r"403|permission.?denied|referrer|blocked|api_key",
+    re.IGNORECASE,
+)
+
+
+def _mensaje_error_llm(exc: Exception) -> str:
+    """Traduce errores de proveedor LLM (rate limit, cuota agotada, API key
+    bloqueada) a un mensaje entendible; cualquier otro error tambien evita
+    mostrar el JSON tecnico crudo al usuario final."""
+    if _ERROR_CAPACIDAD_RE.search(str(exc)):
+        return _MENSAJE_SIN_CUPO
+    return (
+        "⚠️ El Asistente no pudo procesar la pregunta por un error interno. "
+        "Intenta de nuevo o reformula la pregunta."
+    )
+
 
 def _chat_completion_with_fallback(messages: list, **kwargs):
     """Intenta cada provider disponible en orden; si uno da rate limit/quota,
@@ -794,7 +818,11 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
     try:
         chain = _provider_chain()
     except RuntimeError as exc:
-        return {"answer_md": f"⚠️ {exc}", "error": "no_api_key"}
+        return {
+            "answer_md": _MENSAJE_SIN_CUPO,
+            "error": "no_api_key",
+            "error_detalle": str(exc),
+        }
     provider = chain[0]
 
     # Paso 1: generar SQL. El playbook YA cubre la seleccion de tablas y
@@ -816,8 +844,9 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         )
     except Exception as exc:
         return {
-            "answer_md": f"⚠️ Error consultando al modelo: {exc}",
+            "answer_md": _mensaje_error_llm(exc),
             "error": "llm_error",
+            "error_detalle": str(exc),
             "provider": provider["model"],
         }
 
@@ -911,6 +940,7 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         },
     ]
 
+    error_detalle = None
     try:
         resp2, provider2 = _chat_completion_with_fallback(
             answer_messages, temperature=0.1, max_tokens=1100,
@@ -918,14 +948,17 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         answer_md = (resp2.choices[0].message.content or "").strip()
         provider = provider2
     except Exception as exc:
-        answer_md = (
-            f"Encontré {len(all_rows)} resultados pero fallé al redactar la respuesta: {exc}"
-        )
+        answer_md = _mensaje_error_llm(exc)
+        error_detalle = str(exc)
 
-    return {
+    result = {
         "answer_md": answer_md,
         "sql": "\n\n".join(sql_list),
         "columns": all_cols,
         "rows": all_rows,
         "provider": provider["model"],
     }
+    if error_detalle:
+        result["error"] = "llm_error"
+        result["error_detalle"] = error_detalle
+    return result
