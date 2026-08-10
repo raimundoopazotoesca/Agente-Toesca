@@ -3140,7 +3140,6 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
      de llenar la card. min-height:0 evita que .chart-box (min-height:220px)
      agregue espacio vacío extra: la card queda del alto real del gráfico. */
   .chart-box-bodegas { min-height: 0; }
-  #chart-bodegas svg { display: block; width: 100%; height: auto; }
   #tbl-bodegas { table-layout: fixed; }
   #tbl-bodegas col.col-zona { width: 16%; }
   #tbl-bodegas col.col-produccion { width: 21%; }
@@ -4027,7 +4026,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       <div class="cols page3-bodegas-cols">
         <div class="chart-box chart-box-bodegas">
           <div class="chart-title">Evolución de la vacancia y canon de arriendo Bodegas</div>
-          <div id="chart-bodegas"></div>
+          <div id="chart-bodegas" style="height:300px"></div>
         </div>
         <div style="overflow-x:auto">
           <table id="tbl-bodegas">
@@ -6433,18 +6432,66 @@ function renderBodegasChart(containerId, evolucion){
   const axisTitleL = `<text x="12" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 12 ${padT+plotH/2})">UF/m2</text>`;
   const axisTitleR = `<text x="${W-10}" y="${padT+plotH/2}" font-size="9" font-weight="700" text-anchor="middle" fill="${C.text}" transform="rotate(-90 ${W-10} ${padT+plotH/2})">Vacancia (%)</text>`;
 
+  const hitW = plotW / n;
+  const hoverRects = labels.map((_, i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
   el.innerHTML = `
-    <div style="display:flex;justify-content:center;gap:18px;font-size:10px;margin-bottom:2px">
-      <span><span style="display:inline-block;width:10px;height:10px;background:${C.bar};margin-right:4px;vertical-align:middle"></span>UF/m2</span>
-      <span><span style="display:inline-block;width:14px;height:2px;background:${C.vac};margin-right:4px;vertical-align:middle"></span>Vacancia</span>
-    </div>
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
-      ${gridLines}${axisBox}
-      ${bars}
-      <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-      ${markers}${vacLabels}
-      ${yLabelsL}${yLabelsR}${xLabels}${axisTitleL}${axisTitleR}
-    </svg>`;
+    <div class="parking-chart">
+      <div style="display:flex;justify-content:center;gap:18px;font-size:12px;margin-bottom:2px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:${C.bar};margin-right:4px;vertical-align:middle"></span>UF/m2</span>
+        <span><span style="display:inline-block;width:14px;height:2px;background:${C.vac};margin-right:4px;vertical-align:middle"></span>Vacancia</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
+        ${gridLines}${axisBox}
+        ${bars}
+        <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+        ${markers}${vacLabels}
+        <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        ${yLabelsL}${yLabelsR}${xLabels}${axisTitleL}${axisTitleR}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const xx = x(i);
+    const p = toPx(xx, padT);
+    tooltip.innerHTML =
+      `<div class="title">${labels[i]}</div>` +
+      htmlLine("UF/m2", ufVals[i].toLocaleString("es-CL", {minimumFractionDigits: 3, maximumFractionDigits: 3}), C.bar) +
+      htmlLine("Vacancia", `${vacVals[i]}%`, C.vac);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(24, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
 }
 
 // Gráfico "Evolución anual vacancia/renta Oficinas Las Condes" (página 3 TRI):
@@ -7472,8 +7519,15 @@ function render(){
     // Bodegas: raw_mercado_bodegas (snapshot por zona) + raw_mercado_bodegas_evolucion
     // (histórico semestral, ver F.mercado_bodegas / F.bodegas_evolucion).
     const bod = S.page3.bodegas;
+    const semesterEndOfM = (periodo) => {
+      const [y, m] = periodo.split("-").map(Number);
+      return m <= 6 ? `${y}-06` : `${y}-12`;
+    };
     const bodPeriodos = F.mercado_bodegas ? Object.keys(F.mercado_bodegas).sort() : [];
-    const bodPeriodoActual = bodPeriodos.length ? bodPeriodos[bodPeriodos.length - 1] : null;
+    const bodPeriodoSelector = usadoOp ? semesterEndOfM(usadoOp) : null;
+    const bodPeriodoActual = bodPeriodos.length
+      ? ([...bodPeriodos].reverse().find(p => !bodPeriodoSelector || p <= bodPeriodoSelector) || bodPeriodos[bodPeriodos.length - 1])
+      : null;
     const bodRows = bodPeriodoActual ? F.mercado_bodegas[bodPeriodoActual] : null;
     const bodP1 = document.getElementById("txt-mercado3-bodegas-1");
     const bodP2 = document.getElementById("txt-mercado3-bodegas-2");
