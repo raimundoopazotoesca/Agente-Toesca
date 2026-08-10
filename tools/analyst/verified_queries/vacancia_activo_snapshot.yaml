@@ -1,0 +1,8 @@
+question: "vacancia de Viña Centro en el ultimo periodo"
+intent: vacancia_snapshot
+entities: {activo: "Viña Centro"}
+sql: >
+  SELECT * FROM v_vacancia_activo
+  WHERE activo_key='Viña Centro'
+  ORDER BY periodo DESC LIMIT 1
+notes: "v_vacancia_activo ya excluye estacionamientos y corrige el bug de case de 'vacante' (migracion 077)."

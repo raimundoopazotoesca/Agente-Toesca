@@ -1,0 +1,8 @@
+question: "dividend yield con amortizacion de la serie A de TRI"
+intent: dy_amort
+entities: {fondo: TRI, serie: A}
+sql: >
+  SELECT kpi, valor, periodo FROM derived_kpi
+  WHERE entidad_tipo='serie' AND entidad_key='TRI-A' AND kpi='dy_amort'
+  ORDER BY periodo DESC LIMIT 1
+notes: "formula dividend_yield_con_amort_capital_v1. Para Apo el denominador cambia (ver metrics/dividend_yield.yaml notes)."
