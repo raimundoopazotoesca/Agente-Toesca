@@ -8,6 +8,7 @@ GEMINI_API_KEY        = os.getenv("GEMINI_API_KEY", "")
 DEEPSEEK_API_KEY      = os.getenv("DEEPSEEK_API_KEY", "")
 GROQ_API_KEY          = os.getenv("GROQ_API_KEY", "")
 GROQ_API_KEY_2        = os.getenv("GROQ_API_KEY_2", "")  # cuenta Groq extra para duplicar cupo diario gratis
+GROQ_API_KEY_3        = os.getenv("GROQ_API_KEY_3", "")  # tercera cuenta Groq extra para triplicar cupo diario gratis
 DB_CHAT_PROVIDER      = os.getenv("DB_CHAT_PROVIDER", "groq")  # deepseek | groq | gemini
 SHAREPOINT_DIR        = os.getenv("SHAREPOINT_DIR", "")
 LOCAL_FILES_DIR       = os.getenv("LOCAL_FILES_DIR", "")

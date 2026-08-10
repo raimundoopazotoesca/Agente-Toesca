@@ -29,6 +29,7 @@ from config import (
     GEMINI_API_KEY,
     GROQ_API_KEY,
     GROQ_API_KEY_2,
+    GROQ_API_KEY_3,
 )
 from tools.db.connection import DEFAULT_DB_PATH
 
@@ -44,6 +45,8 @@ _PROVIDER_LIST: list[dict] = [
      "api_key": GROQ_API_KEY, "model": "llama-3.3-70b-versatile"},
     {"name": "groq", "base_url": "https://api.groq.com/openai/v1",
      "api_key": GROQ_API_KEY_2, "model": "llama-3.3-70b-versatile"},
+    {"name": "groq", "base_url": "https://api.groq.com/openai/v1",
+     "api_key": GROQ_API_KEY_3, "model": "llama-3.3-70b-versatile"},
     {"name": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "api_key": GEMINI_API_KEY, "model": "gemini-2.5-flash"},
 ]
@@ -297,6 +300,20 @@ Vacancia:
 Valor cuota libro (valor_cuota_libro | eeff_pdf_v1, unidad=CLP):
   fondo=Apo|PT / serie=CFITOERI1A|CFITOERI1C
 
+Deuda leasing TRI (fondo=TRI unicamente, series oficiales de la planilla del
+usuario — ver commit "cuota financiamiento y RCSD del TRI usan series
+oficiales de la planilla del usuario"):
+  cuota_financiamiento_uf  raw_cuotas_leasing_tri_row28_cuota_financiamiento  fondo=TRI  UF
+  rcsd_oficial             raw_cuotas_leasing_tri_row31_rcsd_media_movil      fondo=TRI  ratio (RCSD = razon cobertura servicio deuda, media movil)
+
+Vacancia a nivel FONDO (excepcion a la regla de "vacancia siempre en vivo"):
+  vacancia_pct  vacancia_ponderada_fondo_rentas_manual  fondo=TRI  ratio
+  Esta es la UNICA excepcion donde la vacancia SI sale de derived_kpi: es un
+  agregado ponderado a nivel fondo (no se puede derivar sumando rent_roll de
+  activos individuales, que ademas no cubre todos los activos de TRI). Para
+  vacancia de un ACTIVO especifico sigue aplicando la regla de la seccion
+  "Vacancia" (calculo en vivo desde raw_rent_roll_line, nunca cdg_vacancia_v1).
+
 ═══════════════════════════════════════════════════════════════════════════════
 5. TABLAS raw_* y VISTAS (cuando NO hay derived_kpi)
 ═══════════════════════════════════════════════════════════════════════════════
@@ -398,7 +415,71 @@ R9. Si la pregunta involucra un rango de meses, devolver la serie completa
     ordenada por periodo, no un solo valor.
 R10. Si preguntan "cuanto/cuanta/cuantos" sin especificar unidad, usar la
     unidad nativa del dato y explicitarlo en la respuesta.
+R11. Si la pregunta COMPARA o RANKEA la misma metrica entre VARIAS entidades
+    (varios fondos, varios activos, varias series) SIN dar un periodo, NUNCA
+    hagas `ORDER BY valor` sobre todos los periodos de golpe (trae filas
+    duplicadas por entidad, de periodos distintos, y arruina la respuesta).
+    Primero trae el ULTIMO periodo POR ENTIDAD con una subquery correlacionada:
+      SELECT d.entidad_key, d.valor FROM derived_kpi d
+      WHERE d.kpi='<kpi>' AND d.entidad_tipo='<tipo>'
+        AND d.periodo = (SELECT MAX(d2.periodo) FROM derived_kpi d2
+                          WHERE d2.entidad_key=d.entidad_key AND d2.kpi=d.kpi
+                            AND d2.entidad_tipo=d.entidad_tipo)
+      ORDER BY d.valor DESC
+    Aplica lo mismo si comparas un KPI entre varios activos/series especificos
+    (ej. "compara el DY de las 3 series de TRI"): filtra el ultimo periodo por
+    entidad_key, no traigas el historico completo de todas.
 """
+
+
+def _format_cl(value: float, decimals: int = 2) -> str:
+    """Formatea un numero con separador de miles chileno (punto miles, coma
+    decimal). Se calcula en Python -- no confiar en que el LLM reformatee
+    numeros correctamente (se ha visto perder/duplicar digitos)."""
+    s = f"{value:,.{decimals}f}"
+    # f-string da "1,234.56" (estilo US); lo invertimos a "1.234,56"
+    s = s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+    return s
+
+
+def _format_rows(cols: list[str], rows: list[list[Any]]) -> list[list[Any]]:
+    """Convierte cada valor numerico de tipo float a string ya formateado en
+    convencion chilena. Enteros y strings quedan intactos."""
+    out = []
+    for row in rows:
+        formatted_row = []
+        for val in row:
+            if isinstance(val, float):
+                formatted_row.append(_format_cl(val))
+            else:
+                formatted_row.append(val)
+        out.append(formatted_row)
+    return out
+
+
+_PERIODO_EQ_RE = re.compile(r"\bperiodo\s*=\s*'(\d{4}-\d{2})'", re.IGNORECASE)
+
+
+def _suggest_available_periods(sql: str) -> str | None:
+    """Si `sql` filtra por un periodo exacto que no devolvio filas, corre una
+    consulta de respaldo (mismo filtro salvo el periodo) para saber el rango
+    de periodos que SI existe, en vez de dejar que el LLM prometa "sugerir
+    periodos disponibles" sin tener ese dato."""
+    m = _PERIODO_EQ_RE.search(sql)
+    from_match = re.search(r"\bFROM\b", sql, re.IGNORECASE)
+    if not m or not from_match:
+        return None
+    tail = sql[from_match.start():]
+    tail = _PERIODO_EQ_RE.sub("1=1", tail, count=1)
+    tail = re.sub(r"\b(order\s+by|group\s+by|limit)\b.*$", "", tail, flags=re.IGNORECASE | re.DOTALL)
+    fallback_sql = f"SELECT MIN(periodo) AS min_periodo, MAX(periodo) AS max_periodo, COUNT(*) AS n {tail.rstrip().rstrip(';')}"
+    try:
+        _, rows = _run_sql(fallback_sql)
+    except sqlite3.Error:
+        return None
+    if not rows or not rows[0] or rows[0][2] in (0, None):
+        return None
+    return f"Para ese mismo filtro (sin restringir el periodo), el rango de periodos disponible es {rows[0][0]} a {rows[0][1]} ({rows[0][2]} registros)."
 
 
 # ─── Validacion SQL ───────────────────────────────────────────────────────────
@@ -482,11 +563,23 @@ REGLAS ABSOLUTAS:
    playbook o en el schema entregado.
 5. Prefiere derived_kpi > vistas v_*/fact_* > tablas raw_*.
 6. Si la pregunta involucra multiples periodos, devuelve la serie ORDER BY periodo.
-7. Un solo statement, sin ';'. Limita a 200 filas si no lo pones tu.
+7. Cada SELECT es un statement independiente, sin ';'. Limita a 200 filas si no
+   lo pones tu.
+8. Si el kpi es un RATIO que se debe mostrar como % (ltv, ltc, dscr, dy,
+   dy_amort, tir_*, rent_*, cap_rate_*, tasa_arriendo_*, leverage_*,
+   tasa_promedio, vacancia), multiplica x100 DENTRO del SQL
+   (`valor * 100 AS <nombre>_pct`) en vez de dejar que el paso de redaccion
+   haga la conversion — evita errores de calculo/formato en esa etapa.
+9. Si la pregunta pide una VISION GENERAL o cruza VARIOS KPIs de una entidad
+   (ej. "como viene TRI este trimestre", "dame un panorama de Apo", "compara
+   NOI y deuda de PT") — actua como analista: emite VARIOS SELECTs
+   independientes (uno por KPI relevante, hasta 4) para poder construir una
+   respuesta completa, en vez de responder con un solo dato parcial.
 
 FORMATO DE RESPUESTA (SOLO JSON, sin texto extra, sin bloques ```):
-{"sql": "SELECT ..."}          → cuando puedes responder con SQL
-{"clarify": "pregunta corta"}  → cuando necesitas aclarar o falta contexto
+{"sql": "SELECT ..."}                     → una sola consulta basta
+{"sql": ["SELECT ...", "SELECT ..."]}     → pregunta compuesta: hasta 4 SELECTs independientes
+{"clarify": "pregunta corta"}             → cuando necesitas aclarar o falta contexto
 """
 
 
@@ -503,7 +596,7 @@ _FEW_SHOT_EXAMPLES = [
     ("TIR desde el inicio serie C bursatil ultima",
      '{"sql": "SELECT periodo, valor FROM derived_kpi WHERE kpi=\'tir_bursatil_desde_inicio\' AND entidad_key=\'CFITOERI1C\' ORDER BY periodo DESC LIMIT 1"}'),
     ("LTV del fondo TRI ultimo dato",
-     '{"sql": "SELECT periodo, valor FROM derived_kpi WHERE kpi=\'ltv\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
+     '{"sql": "SELECT periodo, valor * 100 AS ltv_pct FROM derived_kpi WHERE kpi=\'ltv\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
     ("cuales son los creditos vigentes de Viña Centro?",
      '{"sql": "SELECT credito_key, acreedor, tipo_deuda, deuda_inicial_uf, tasa_anual, fecha_vencimiento FROM dim_credito WHERE activo_key=\'Viña Centro\' AND estado=\'VIGENTE\'"}'),
     ("vacancia Viña Centro ultimos periodos",
@@ -514,6 +607,18 @@ _FEW_SHOT_EXAMPLES = [
      '{"sql": "SELECT fecha_pago, monto, monto_uf, periodo FROM fact_dividendo WHERE nemotecnico=\'CFITOERI1A\' ORDER BY fecha_pago DESC LIMIT 5"}'),
     ("dame el LTV",
      '{"clarify": "¿De que entidad y periodo? Opciones: fondo (Apo, PT, TRI) o activo (Torre A, Boulevard, Apo4501, Apo4700, Apo3001, INMOSA, Mall Curicó, Sucden, Viña Centro)."}'),
+    ("que fondos tienen mayor LTV?",
+     '{"sql": "SELECT d.entidad_key, d.valor * 100 AS ltv_pct FROM derived_kpi d WHERE d.kpi=\'ltv\' AND d.entidad_tipo=\'fondo\' AND d.periodo=(SELECT MAX(d2.periodo) FROM derived_kpi d2 WHERE d2.entidad_key=d.entidad_key AND d2.kpi=d.kpi AND d2.entidad_tipo=d.entidad_tipo) ORDER BY d.valor DESC"}'),
+    ("compara el DY de las tres series de TRI",
+     '{"sql": "SELECT d.entidad_key, d.valor * 100 AS dy_pct FROM derived_kpi d WHERE d.kpi=\'dy\' AND d.formula=\'dy_v2\' AND d.entidad_tipo=\'serie\' AND d.entidad_key IN (\'CFITOERI1A\',\'CFITOERI1C\',\'CFITOERI1I\') AND d.periodo=(SELECT MAX(d2.periodo) FROM derived_kpi d2 WHERE d2.entidad_key=d.entidad_key AND d2.kpi=d.kpi AND d2.formula=d.formula) ORDER BY d.entidad_key"}'),
+    ("cual es la cuota de financiamiento del TRI ultimo dato?",
+     '{"sql": "SELECT periodo, valor FROM derived_kpi WHERE kpi=\'cuota_financiamiento_uf\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
+    ("como viene el RCSD del TRI?",
+     '{"sql": "SELECT periodo, valor * 100 AS rcsd_pct FROM derived_kpi WHERE kpi=\'rcsd_oficial\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
+    ("vacancia del fondo TRI",
+     '{"sql": "SELECT periodo, valor * 100 AS vacancia_pct FROM derived_kpi WHERE kpi=\'vacancia_pct\' AND entidad_tipo=\'fondo\' AND entidad_key=\'TRI\' ORDER BY periodo DESC LIMIT 1"}'),
+    ("dame un panorama general del fondo Apo",
+     '{"sql": ["SELECT valor, unidad FROM derived_kpi WHERE kpi=\'noi_mes\' AND entidad_tipo=\'fondo\' AND entidad_key=\'Apo\' ORDER BY periodo DESC LIMIT 1", "SELECT valor * 100 AS ltv_pct FROM derived_kpi WHERE kpi=\'ltv\' AND entidad_tipo=\'fondo\' AND entidad_key=\'Apo\' ORDER BY periodo DESC LIMIT 1", "SELECT valor * 100 AS dy_pct FROM derived_kpi WHERE kpi=\'dy_amort\' AND formula=\'dividend_yield_con_amort_capital_v1\' AND entidad_tipo=\'serie\' AND entidad_key=\'Apo\' ORDER BY periodo DESC LIMIT 1", "SELECT valor * 100 AS tir_pct FROM derived_kpi WHERE kpi=\'tir_contable_desde_inicio\' AND entidad_tipo=\'serie\' AND entidad_key=\'Apo\' ORDER BY periodo DESC LIMIT 1"]}'),
 ]
 
 
@@ -528,16 +633,39 @@ def _few_shot_messages() -> list[dict]:
 
 _ANSWER_SYSTEM = """\
 Eres el Asistente Virtual Inmobiliario Toesca, asistente del EQUIPO DE INVERSIONES INMOBILIARIAS de Toesca Asset Management.
-Tu audiencia son analistas y PMs de los fondos TRI/PT/Apo — no expliques cosas
-basicas, se sobrio y directo. Recibes:
+Actua como un ANALISTA senior del equipo, no como una interfaz de consulta: tu
+trabajo no es solo entregar el numero, es interpretarlo. Tu audiencia son
+analistas y PMs de los fondos TRI/PT/Apo — no expliques cosas basicas, se
+sobrio, directo y con criterio financiero. Recibes:
 - pregunta original del equipo
-- consulta interna ejecutada
-- datos internos devueltos (verdad absoluta)
+- una lista de consultas internas ejecutadas, cada una con sus datos (verdad
+  absoluta; puede haber mas de una si la pregunta cruza varios KPIs/entidades)
 
 Redacta respuesta en Markdown breve y directa. Reglas:
-- Usa SOLO los datos entregados. Si las filas estan vacias, dilo explicitamente
-  y sugiere periodos disponibles cuando corresponda.
-- No inventes numeros, fechas, activos ni contexto que no este en las filas.
+- Usa SOLO los datos entregados. Si algun dataset viene vacio, dilo
+  explicitamente para ese punto puntual (no invalides el resto de la
+  respuesta). Si ese dataset trae `nota_periodos_disponibles`, usala TAL CUAL
+  para indicar el rango real disponible — nunca inventes un rango si no viene
+  ese campo.
+- No inventes numeros, fechas, activos ni contexto que no este en los datos.
+- Si hay varios datasets (pregunta compuesta: panorama, comparacion cruzada
+  de KPIs), SINTETIZA una sola respuesta coherente que integre todos los
+  puntos — no los listes como bloques separados sin conexion. Ejemplo: si
+  tienes NOI, LTV y DY de un fondo, arma un parrafo/tabla que de una lectura
+  conjunta del desempeño, no tres frases sueltas.
+- Actua con criterio de analista dentro de los datos entregados: destaca
+  deltas relevantes (MoM/YoY si hay series), identifica el dato que mas
+  contexto aporta a la pregunta, señala si un valor es atipico frente al
+  resto de la serie/entidades presentes en los datos. Esto NO es opinar ni
+  recomendar decisiones de inversion — es leer los numeros con criterio,
+  igual que lo haria un analista al reportar a un PM. Nunca sugieras "comprar/
+  vender/rebalancear" ni emitas juicios de valor sobre la gestion del fondo.
+- CRITICO: `rows_formateadas` ya trae cada numero formateado en convencion
+  chilena (punto miles, coma decimal) calculado en Python. COPIA esos valores
+  TAL CUAL, digito por digito, sin recalcularlos ni reformatearlos tu mismo
+  (nunca reescribas "13.478,69" agregando o quitando ceros/puntos). Solo puedes
+  agregarles el signo % si el kpi es un ratio (multiplica x100 esta ya hecho
+  si aplica en la formula, no lo dupliques).
 - Conversa como un asistente financiero del equipo, no como una interfaz tecnica.
 - No menciones "DB", "base de datos", "SQLite", "SQL", tablas, columnas, filas ni nombres internos, salvo que el usuario lo pida explicitamente.
 - Para citar origen usa lenguaje natural: "segun la informacion interna disponible".
@@ -549,14 +677,58 @@ Redacta respuesta en Markdown breve y directa. Reglas:
       tasa_arriendo_*, leverage_*, tasa_promedio, perfil_vencimiento → ratio (mostrar %)
     duration_deuda → años
     m2_vacantes → m2
-- ratio → mostrar como % con 2 decimales.
+- Los ratios ya vienen multiplicados x100 desde el SQL (columnas con sufijo
+  _pct) o desde `rows_formateadas` — nunca los multipliques tu ni los dividas,
+  solo agrega el signo "%" al mostrarlos.
 - UF/CLP/m2 → mostrar con separador de miles chileno (punto miles, coma decimal).
 - Si hay varias filas comparables, arma una tabla Markdown compacta.
-- Para preguntas de contexto amplio (evolucion, comparacion): agrega 1 linea de
-  observacion cuantitativa (max, min, tendencia). NO opines ni recomiendes.
+- Para preguntas de contexto amplio (evolucion, comparacion, panorama): cierra
+  con 2-3 lineas de lectura analitica (deltas, tendencia, que dato destaca y
+  por que) ademas de la tabla — no solo max/min. Para preguntas puntuales de
+  un solo dato, se breve, sin forzar analisis donde no aporta.
 - Cierra con `_Fuente: informacion interna Toesca_`.
-- No muestres la consulta interna.
+- No muestres las consultas internas ni sus nombres de columna/tabla.
 """
+
+
+# ─── Atajo para saludos/meta-preguntas (sin gastar tokens de LLM) ─────────────
+_GREETING_RE = re.compile(
+    r"^\s*(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|hi|hello)\b"
+    r"[\s,.!¡¿?]*(quien eres|que eres)?\s*[.!¡¿?]*\s*$",
+    re.IGNORECASE,
+)
+_CAPABILITY_RE = re.compile(
+    r"^\s*(que|qu[eé])\s+(puedes|sabes|podr[ií]as)\s+(hacer|responder|contestar)\b|"
+    r"^\s*(para que|qu[eé] eres|qui[eé]n eres)\b",
+    re.IGNORECASE,
+)
+_GREETING_ANSWER = (
+    "Soy el Asistente Virtual Inmobiliario Toesca. Respondo preguntas sobre los "
+    "fondos **TRI, PT y Apo** con la informacion interna disponible: NOI e "
+    "ingresos por activo/fondo, vacancia, LTV/LTC/DSCR y deuda, dividend yield "
+    "y TIR (bursatil/contable), precios y dividendos de cuota, creditos "
+    "vigentes, tasas de arriendo y cap rate, entre otros.\n\n"
+    "Ejemplos de preguntas:\n"
+    "- \"cual es el NOI de Viña Centro en enero 2024?\"\n"
+    "- \"dame un panorama general del fondo Apo\"\n"
+    "- \"compara el DY de las tres series de TRI\"\n"
+    "- \"vacancia de Mall Curicó ultimos periodos\"\n\n"
+    "Menciona fondo/activo/periodo cuando puedas para respuestas mas precisas."
+)
+
+
+def _shortcut_answer(question: str) -> dict | None:
+    """Responde saludos/meta-preguntas sin llamar al LLM. None si no aplica."""
+    q = question.strip()
+    if _GREETING_RE.match(q) or _CAPABILITY_RE.match(q):
+        return {
+            "answer_md": _GREETING_ANSWER,
+            "sql": None,
+            "columns": [],
+            "rows": [],
+            "provider": "shortcut",
+        }
+    return None
 
 
 def _extract_json(text: str) -> dict:
@@ -599,6 +771,10 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
     if not question:
         return {"answer_md": "Escribe una pregunta.", "error": "empty"}
 
+    shortcut = _shortcut_answer(question)
+    if shortcut is not None:
+        return shortcut
+
     try:
         chain = _provider_chain()
     except RuntimeError as exc:
@@ -634,8 +810,11 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
 
     if not parsed:
         return {
-            "answer_md": "⚠️ No entendí la pregunta. Reformúlala mencionando "
-                        "fondo/activo/período específico.",
+            "answer_md": (
+                "⚠️ No entendí la pregunta. Reformúlala mencionando "
+                "fondo (TRI/PT/Apo), activo o período específico. Ejemplo: "
+                "\"NOI de Viña Centro en enero 2024\" o \"LTV del fondo TRI\"."
+            ),
             "error": "no_json",
             "provider": provider["model"],
         }
@@ -650,63 +829,83 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
             "provider": provider["model"],
         }
 
-    sql = str(parsed.get("sql") or "").strip()
-    err = _validate_sql(sql)
-    if err:
+    sql_field = parsed.get("sql")
+    sql_list = [str(s).strip() for s in sql_field] if isinstance(sql_field, list) else [str(sql_field or "").strip()]
+    sql_list = [s for s in sql_list if s][:4]  # tope de 4 consultas por pregunta
+    if not sql_list:
         return {
-            "answer_md": f"⚠️ No pude procesar la consulta interna: {err}",
+            "answer_md": "⚠️ No pude procesar la consulta interna: SQL vacío.",
             "error": "invalid_sql",
-            "sql": sql,
+            "sql": "",
             "provider": provider["model"],
         }
 
-    try:
-        cols, rows = _run_sql(sql)
-    except sqlite3.Error as exc:
-        return {
-            "answer_md": f"⚠️ La consulta interna no pudo ejecutarse: `{exc}`",
-            "error": "sql_error",
+    datasets = []
+    all_rows: list[list[Any]] = []
+    all_cols: list[str] = []
+    for sql in sql_list:
+        err = _validate_sql(sql)
+        if err:
+            return {
+                "answer_md": f"⚠️ No pude procesar la consulta interna: {err}",
+                "error": "invalid_sql",
+                "sql": "\n\n".join(sql_list),
+                "provider": provider["model"],
+            }
+        try:
+            cols, rows = _run_sql(sql)
+        except sqlite3.Error as exc:
+            return {
+                "answer_md": f"⚠️ La consulta interna no pudo ejecutarse: `{exc}`",
+                "error": "sql_error",
+                "sql": "\n\n".join(sql_list),
+                "provider": provider["model"],
+            }
+        rows_for_llm = rows[:_MAX_ROWS_TO_LLM]
+        dataset: dict[str, Any] = {
             "sql": sql,
-            "provider": provider["model"],
+            "columns": cols,
+            "rows_formateadas": _format_rows(cols, rows_for_llm),
+            "n_rows_total": len(rows),
+            "truncated_para_analisis": len(rows) > len(rows_for_llm),
         }
+        if not rows:
+            sugerencia = _suggest_available_periods(sql)
+            if sugerencia:
+                dataset["nota_periodos_disponibles"] = sugerencia
+        datasets.append(dataset)
+        all_rows.extend(rows)
+        if not all_cols:
+            all_cols = cols
 
-    # Paso 2: sintetizar respuesta a partir de las filas
-    rows_for_llm = rows[:_MAX_ROWS_TO_LLM]
-    truncated = len(rows) > len(rows_for_llm)
-    data_payload = {
-        "columns": cols,
-        "rows": rows_for_llm,
-        "n_rows_total": len(rows),
-        "truncated_para_analisis": truncated,
-    }
-
+    # Paso 2: sintetizar respuesta a partir de todos los datasets obtenidos
     answer_messages = [
         {"role": "system", "content": _ANSWER_SYSTEM},
         {
             "role": "user",
             "content": (
                 f"PREGUNTA: {question}\n\n"
-                f"SQL EJECUTADO:\n```sql\n{sql}\n```\n\n"
-                f"DATOS (JSON):\n```json\n{json.dumps(data_payload, default=str, ensure_ascii=False)}\n```"
+                f"CONSULTAS INTERNAS EJECUTADAS Y SUS DATOS (JSON, una entrada por consulta):\n"
+                f"```json\n{json.dumps(datasets, default=str, ensure_ascii=False)}\n```"
             ),
         },
     ]
 
     try:
         resp2, provider2 = _chat_completion_with_fallback(
-            answer_messages, temperature=0.1, max_tokens=900,
+            answer_messages, temperature=0.1, max_tokens=1100,
         )
         answer_md = (resp2.choices[0].message.content or "").strip()
         provider = provider2
     except Exception as exc:
         answer_md = (
-            f"Encontré {len(rows)} resultados pero fallé al redactar la respuesta: {exc}"
+            f"Encontré {len(all_rows)} resultados pero fallé al redactar la respuesta: {exc}"
         )
 
     return {
         "answer_md": answer_md,
-        "sql": sql,
-        "columns": cols,
-        "rows": rows,
+        "sql": "\n\n".join(sql_list),
+        "columns": all_cols,
+        "rows": all_rows,
         "provider": provider["model"],
     }
