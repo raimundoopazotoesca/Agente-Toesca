@@ -1,0 +1,6 @@
+leasing:
+  metrics: [vacancia_pct, tasa_arriendo]
+  tables: [raw_rent_roll_line, dim_activo]
+financiero:
+  metrics: [noi, dividend_yield, tir_desde_inicio]
+  tables: [raw_er_activo_line, raw_dividendo, raw_valor_cuota_line, raw_ar_event, raw_amortizacion]

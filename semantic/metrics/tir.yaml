@@ -1,0 +1,21 @@
+name: tir_desde_inicio
+business_definition: >
+  TIR (XIRR) desde el inicio del fondo/serie. Dos metodos segun cantidad de
+  aportes: series TRI (multi-aporte) usan divisor por cuota; PT/Apo
+  (aporte unico) usan metodo agregado sin divisor. El valor terminal SIEMPRE
+  viene de raw_valor_cuota_line.precio_uf, nunca de raw_ar_event_line.
+formula: "XIRR(flujos_aportes_y_dividendos, valor_terminal=raw_valor_cuota_line.precio_uf)"
+unit: pct_annualized
+grain: fondo-serie
+aggregation: xirr
+time_behavior: since_inception
+source:
+  citation: "wiki/tir_contable_desde_inicio.md; skills/real-estate-finance-expert/scripts/tir.py"
+  derived_kpi_cache: {kpi: ["tir_contable_desde_inicio", "tir_bursatil_desde_inicio"]}
+relevant_tables: [raw_ar_event, raw_dividendo, raw_valor_cuota_line]
+allowed_dimensions: [fondo, serie]
+synonyms: ["tir", "tir desde inicio", "rentabilidad desde inicio", "irr"]
+notes: >
+  PT y Apo usan _calcular_tir_agregado (aporte unico, sin divisor por
+  cuota); las series de TRI usan _calcular_tir_por_cuota. No mezclar los dos
+  metodos entre fondos.

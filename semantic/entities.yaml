@@ -1,0 +1,27 @@
+fondos:
+  TRI:
+    nombre: "Toesca Rentas Inmobiliarias Fondo de Inversion"
+    fondo_padre: null
+  PT:
+    nombre: "Fondo Toesca Rentas Inmobiliarias PT"
+    fondo_padre: TRI
+    participacion_en_padre: 0.3333
+  Apo:
+    nombre: "Fondo Toesca Rentas Inmob Apoquindo"
+    fondo_padre: TRI
+    participacion_en_padre: 0.30
+
+activos:
+  "Viña Centro": {nombre: "Mall Paseo Viña Centro", fondo_key: TRI, categoria: "Centros Comerciales"}
+  "Mall Curicó": {nombre: "Power Center Paseo Curicó", fondo_key: TRI, categoria: "Centros Comerciales"}
+  "INMOSA": {nombre: "Residencias adulto mayor (Senior Assist)", fondo_key: TRI, categoria: "Residencias"}
+  "Apo3001": {nombre: "Apoquindo 3001", fondo_key: TRI, sociedad_key: "Chañarcillo", categoria: "Oficinas"}
+  "Sucden": {nombre: "Bodegas Maipu", fondo_key: TRI, sociedad_key: "Chañarcillo", categoria: "Industrial"}
+  "Torre A": {nombre: "Torre A Parque Titanium", fondo_key: PT, categoria: "Oficinas"}
+  "Boulevard": {nombre: "Boulevard Parque Titanium", fondo_key: PT, categoria: "Oficinas"}
+  "Parking PT": {nombre: "Estacionamientos PT (SABA)", fondo_key: PT, categoria: "Parking"}
+  "Apo4501": {nombre: "Apoquindo 4501", fondo_key: Apo, categoria: "Oficinas"}
+  "Apo4700": {nombre: "Apoquindo 4700", fondo_key: Apo, categoria: "Oficinas"}
+
+sociedades:
+  "Chañarcillo": {nombre: "Chañarcillo Ltda", fondo_key: TRI}

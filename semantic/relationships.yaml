@@ -1,0 +1,12 @@
+jerarquia:
+  - fondo: TRI
+    subfondos: [PT, Apo]
+notas_ambiguedad:
+  - clave: "Apo3001"
+    advertencia: >
+      Apo3001 es un activo del fondo TRI, NO del fondo Apo, a pesar del
+      nombre. Ver CLAUDE.md tabla de claves ambiguas Apoquindo.
+  - clave: "Apoquindo (a secas)"
+    advertencia: >
+      Ambiguo entre el fondo Apo y el activo consolidado 'Apoquindo'
+      (= Apo4501+Apo4700) usado en derived_kpi para NOI/vacancia.

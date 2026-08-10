@@ -1,0 +1,22 @@
+name: noi
+business_definition: >
+  Resultado operacional neto: SUM(monto_clp) de raw_er_activo_line con signo
+  ya aplicado (ingresos positivos, gastos negativos), filtrado por periodo y
+  superseded_at IS NULL. Variantes: noi_mes (un mes) y noi_u12m (ultimos 12
+  meses).
+formula: "SUM(monto_clp) FROM raw_er_activo_line WHERE periodo IN <ventana> AND superseded_at IS NULL"
+unit: clp_or_uf
+grain: activo-mes
+aggregation: sum
+time_behavior: rolling_12m_or_month
+source:
+  table: raw_er_activo_line
+  citation: "wiki/kpis_noi_cap_rate_apo.md:10-49"
+  derived_kpi_cache: {kpi: ["noi_u12m", "noi_mes"], formula: raw_er_noi_v1}
+relevant_tables: [raw_er_activo_line]
+allowed_dimensions: [activo, fondo, periodo]
+synonyms: [noi, "resultado operacional neto", "ingreso operacional"]
+notes: >
+  TRAMPA DE UNIDAD: para el fondo Apo, raw_er_activo_line.monto_clp esta en
+  UF, no en CLP (wiki/kpis_noi_cap_rate_apo.md:23-27). Nunca sumar NOI de Apo
+  con NOI de otro fondo sin convertir unidades primero.
