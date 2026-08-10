@@ -185,3 +185,48 @@ class TestMensajeErrorLlm:
         assert result["answer_md"] == db_chat._MENSAJE_SIN_CUPO
         assert result["error"] == "no_api_key"
         assert "DEEPSEEK_API_KEY" not in result["answer_md"]
+
+
+# ─── answer() con capa de intent/result-checks (Task 8) ─────────────────────
+class _FakeMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeChoice:
+    def __init__(self, content):
+        self.message = _FakeMessage(content)
+
+
+class _FakeResp:
+    def __init__(self, content):
+        self.choices = [_FakeChoice(content)]
+
+
+class TestAnswerWithIntentLayer:
+    def test_answer_accepts_session_id_param(self):
+        # Full call would hit a real LLM; verify the signature accepts
+        # session_id without raising TypeError, using empty question shortcut.
+        result = db_chat.answer("", session_id="test-wiring-session")
+        assert result["error"] == "empty"
+
+    def test_answer_result_check_flags_out_of_bounds(self, monkeypatch):
+        sql_json = '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
+        responses = [
+            (_FakeResp(sql_json), {"model": "fake-model-1"}),
+            (_FakeResp("Vacancia fuera de rango."), {"model": "fake-model-1"}),
+        ]
+
+        def fake_chat_completion(_messages, **_kwargs):
+            return responses.pop(0)
+
+        monkeypatch.setattr(db_chat, "_chat_completion_with_fallback", fake_chat_completion)
+        monkeypatch.setattr(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}])
+        monkeypatch.setattr(db_chat, "_run_sql", lambda sql: (["valor"], [[134.0]]))
+        monkeypatch.setattr(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct")
+
+        result = db_chat.answer("vacancia de Curicó", session_id="test-wiring-session-2")
+
+        assert "result_check" in result
+        assert result["result_check"]["passed"] is False
+        assert result["result_check"]["violated"]
