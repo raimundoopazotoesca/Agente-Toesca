@@ -1,0 +1,14 @@
+fondos:
+  TRI: ["Rentas Inmobiliarias", "Rentas", "TRI", "fondo madre"]
+  PT: ["PT", "Parque Titanium", "Fondo PT", "Rentas PT"]
+  Apo: ["Apo", "Apoquindo (el fondo)", "Fondo Apoquindo", "APO"]
+activos:
+  "Viña Centro": ["Vina", "Viña", "VC", "Paseo Viña", "Mall Viña"]
+  "Mall Curicó": ["Curicó", "Curico", "Power Center", "PC Curicó"]
+  "Apo3001": ["Apo 3001", "3001", "Apoquindo 3001", "Chañarcillo (Apo3001)"]
+  "Apo4501": ["Apo 4501", "Apoquindo 4501"]
+  "Apo4700": ["Apo 4700", "Apoquindo 4700"]
+  "Sucden": ["Sucden", "Bodegas Maipú", "Sucden Chile"]
+  "INMOSA": ["INMOSA", "Senior Assist", "residencias"]
+  "Torre A": ["Torre A", "PT Torre A", "PT Oficinas"]
+  "Boulevard": ["Boulevard", "CDC", "Centro Convenciones", "PT Comercial"]

@@ -1,0 +1,8 @@
+question: "cuanto fue el NOI del fondo PT en enero 2024?"
+intent: noi_mes
+entities: {fondo: PT}
+sql: >
+  SELECT kpi, valor, periodo FROM derived_kpi
+  WHERE entidad_tipo='fondo' AND entidad_key='PT' AND kpi='noi_mes'
+    AND periodo='2024-01'
+notes: "Usa derived_kpi cacheado; formula raw_er_noi_v1. Ver wiki/kpis_noi_cap_rate_apo.md."

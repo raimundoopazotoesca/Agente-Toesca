@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "entities_file",
+  "type": "object",
+  "required": ["fondos", "activos", "sociedades"],
+  "properties": {
+    "fondos": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["nombre"],
+        "properties": {
+          "nombre": {"type": "string"},
+          "fondo_padre": {"type": ["string", "null"]},
+          "participacion_en_padre": {"type": ["number", "null"]}
+        }
+      }
+    },
+    "activos": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["nombre", "fondo_key"],
+        "properties": {
+          "nombre": {"type": "string"},
+          "fondo_key": {"type": "string"},
+          "categoria": {"type": "string"},
+          "sociedad_key": {"type": ["string", "null"]},
+          "vigente": {"type": "boolean"}
+        }
+      }
+    },
+    "sociedades": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["nombre", "fondo_key"],
+        "properties": {
+          "nombre": {"type": "string"},
+          "fondo_key": {"type": "string"}
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

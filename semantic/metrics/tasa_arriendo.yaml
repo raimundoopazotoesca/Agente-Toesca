@@ -1,0 +1,22 @@
+name: tasa_arriendo
+business_definition: >
+  Tasa de arriendo ajustada = ingresos_u12m / denom_uf, donde denom_uf es el
+  mismo denominador usado en cap rate implicito (patrimonio o market cap +
+  deuda financiera neta + caja minima, en UF).
+formula: "ingresos_u12m / denom_uf"
+unit: pct_annualized
+grain: activo-fondo
+aggregation: ratio
+time_behavior: rolling_12m
+source:
+  citation: "wiki/kpis_noi_cap_rate_apo.md secciones 4, 8, 9 (lineas 84-86, 182-183, 263)"
+relevant_tables: [raw_er_activo_line]
+allowed_dimensions: [activo, fondo]
+synonyms: ["tasa de arriendo", "tasa de arriendo ajustada"]
+definicion_pendiente: false
+notes: >
+  No hay vista confirmada de renta UF/m2 a nivel unidad de rent roll —
+  raw_rent_roll_line.renta_uf existe pero no hay formula UF/m2 documentada
+  en wiki. Si se pregunta por UF/m2 de rent roll (no la tasa de arriendo
+  ajustada de fondo/activo), responder que la definicion esta pendiente de
+  validar, no inventarla.

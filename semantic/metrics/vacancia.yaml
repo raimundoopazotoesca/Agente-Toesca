@@ -1,0 +1,26 @@
+name: vacancia_pct
+business_definition: >
+  Porcentaje de superficie (m2 GLA) vacante respecto del total arrendable,
+  excluyendo estacionamientos. Unidad vacante = arrendatario = "vacante"
+  (case-insensitive) en raw_rent_roll_line.
+formula: m2_vacantes / m2_gla
+unit: pct_0_100
+grain: activo-mes
+aggregation: weighted_by_participacion
+time_behavior: month_end_snapshot
+source:
+  primary_view: v_vacancia_activo
+  by_type_view: v_vacancia_activo_tipo
+  fund_rollups:
+    PT: v_vacancia_pt_consolidado_tipo
+    Apo: v_vacancia_apoquindo_consolidado_tipo
+  weighted_view: v_vacancia_activo_efectivo
+  citation: "tools/db/migrations/077_fix_vacancia_case.sql:23-91; wiki/db.md:365-452"
+relevant_tables: [raw_rent_roll_line, dim_activo]
+allowed_dimensions: [activo, fondo, tipo_activo, periodo]
+synonyms: [vacancia, ocupacion, ocupación, occupancy, "tasa de ocupacion"]
+invariants:
+  - "0 <= value <= 100"
+notes: >
+  Estacionamiento excluido de los totales. Bug de case-sensitivity en
+  arrendatario='vacante' corregido 2026-08-03 (migracion 077).

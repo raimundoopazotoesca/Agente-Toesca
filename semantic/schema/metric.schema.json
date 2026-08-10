@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "metric",
+  "type": "object",
+  "required": ["name", "business_definition", "formula", "unit", "grain",
+               "aggregation", "time_behavior", "source", "relevant_tables",
+               "synonyms"],
+  "properties": {
+    "name": {"type": "string"},
+    "business_definition": {"type": "string"},
+    "formula": {"type": "string"},
+    "unit": {"type": "string"},
+    "grain": {"type": "string"},
+    "aggregation": {"type": "string"},
+    "time_behavior": {"type": "string"},
+    "source": {"type": "object"},
+    "relevant_tables": {"type": "array", "items": {"type": "string"}},
+    "allowed_dimensions": {"type": "array", "items": {"type": "string"}},
+    "synonyms": {"type": "array", "items": {"type": "string"}},
+    "invariants": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "string"},
+    "definicion_pendiente": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

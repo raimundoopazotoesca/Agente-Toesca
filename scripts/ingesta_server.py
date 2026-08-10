@@ -330,8 +330,12 @@ def api_chat():
     history = body.get("history") or []
     if not isinstance(history, list):
         history = []
+    # No hay autenticación por usuario (token es compartido); usamos la IP
+    # del cliente como session_id de conversación, único identificador que
+    # ya nos da Flask sin inventar un mecanismo nuevo.
+    session_id = request.remote_addr or "default"
     try:
-        result = db_chat.answer(question, history)
+        result = db_chat.answer(question, history, session_id=session_id)
     except Exception as exc:  # noqa: BLE001
         return jsonify({
             "answer_md": f"⚠️ Error inesperado: {exc}",

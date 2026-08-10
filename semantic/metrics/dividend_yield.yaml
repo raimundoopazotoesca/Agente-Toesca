@@ -1,0 +1,21 @@
+name: dividend_yield
+business_definition: >
+  DY_libro = SUM(dividendos_u12m) / VNA_contable_corte.
+  DY_bursatil = SUM(dividendos_u12m) / VNA_bursatil_corte.
+  DY_amort = (dividendos_u12m + amort_u12m) / VNA_{bursatil|contable}_corte;
+  para Apo el denominador es capital_suscrito_por_cuota en vez de VNA.
+formula: "dividendos_u12m / VNA_corte  (variante amort suma amortizacion al numerador)"
+unit: pct_0_100
+grain: fondo-serie-mes
+aggregation: ratio
+time_behavior: rolling_12m
+source:
+  citation: "wiki/kpis_rentabilidad_fondos.md:103-153"
+  derived_kpi_cache: {kpi: ["dy", "dy_amort"], formula: ["dy_v2", "dividend_yield_con_amort_capital_v1"]}
+relevant_tables: [raw_dividendo, raw_valor_cuota_line, raw_amortizacion]
+allowed_dimensions: [fondo, serie, periodo]
+synonyms: ["dividend yield", "dy", "rentabilidad por dividendos"]
+notes: >
+  Filtros de dividendos: tipo='dividendo', superseded_at IS NULL,
+  monto_uf_cuota > 0. Apo usa capital_suscrito_por_cuota como denominador en
+  dy_amort, no VNA — no generalizar la formula de TRI/PT a Apo sin ajustar.

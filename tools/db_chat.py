@@ -32,6 +32,10 @@ from config import (
     GROQ_API_KEY_3,
 )
 from tools.db.connection import DEFAULT_DB_PATH
+from tools.analyst.conversation_state import get_state, update_state
+from tools.analyst.result_checks import check_result
+from tools.analyst.semantic_loader import load_semantic_catalog
+from tools.analyst.verified_queries_repo import find_similar
 
 
 # ─── Provider config ──────────────────────────────────────────────────────────
@@ -795,7 +799,28 @@ def _serialize_history(history: list[dict]) -> list[dict]:
 
 
 # ─── API publica ──────────────────────────────────────────────────────────────
-def answer(question: str, history: list[dict] | None = None) -> dict:
+def _extract_metric_from_sql(sql: str | None) -> str | None:
+    """Best-effort: maps a derived_kpi.kpi literal referenced in the SQL to
+    a semantic/metrics/*.yaml metric name, for result_checks. Returns None
+    if no known metric is referenced — this is a heuristic, not a parser."""
+    if not sql:
+        return None
+    catalog = load_semantic_catalog()
+    sql_lower = sql.lower()
+    _KPI_TO_METRIC = {
+        "vacancia_pct": "vacancia_pct",
+        "noi_u12m": "noi", "noi_mes": "noi",
+        "dy": "dividend_yield", "dy_amort": "dividend_yield",
+        "tir_contable_desde_inicio": "tir_desde_inicio",
+        "tir_bursatil_desde_inicio": "tir_desde_inicio",
+    }
+    for kpi_literal, metric_name in _KPI_TO_METRIC.items():
+        if f"'{kpi_literal}'" in sql_lower and metric_name in catalog.metrics:
+            return metric_name
+    return None
+
+
+def answer(question: str, history: list[dict] | None = None, session_id: str = "default") -> dict:
     """Responde una pregunta libre contra la DB.
 
     Devuelve dict con:
@@ -815,6 +840,9 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
     if shortcut is not None:
         return shortcut
 
+    verified = find_similar(question, top_k=1)
+    verified_hint = verified[0] if verified else None
+
     try:
         chain = _provider_chain()
     except RuntimeError as exc:
@@ -833,6 +861,18 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         {"role": "system", "content": _SQL_SYSTEM},
         {"role": "system", "content": _BUSINESS_CONTEXT},
         {"role": "system", "content": "Ejemplos gold pregunta→JSON. Sigue exactamente este patron de entidad_key, formula, filtros y formato JSON."},
+    ]
+    if verified_hint:
+        sql_messages.append({
+            "role": "system",
+            "content": (
+                "Pregunta similar ya verificada:\n"
+                f"Q: {verified_hint['question']}\n"
+                f"SQL: {verified_hint['sql']}\n"
+                f"Notas: {verified_hint.get('notes', '')}"
+            ),
+        })
+    sql_messages += [
         *_few_shot_messages(),
         *_serialize_history(history or []),
         {"role": "user", "content": question},
@@ -927,6 +967,22 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         if not all_cols:
             all_cols = cols
 
+    result_payload: dict[str, Any] = {}
+    metric_name = _extract_metric_from_sql(sql) if 'sql' in locals() and sql else None
+    if metric_name:
+        catalog = load_semantic_catalog()
+        if metric_name in catalog.metrics and rows:
+            try:
+                value_idx = next(
+                    i for i, c in enumerate(cols) if c.lower() in ("valor", "value")
+                )
+                first_value = float(rows[0][value_idx])
+                check = check_result(metric_name, first_value, catalog)
+                result_payload["result_check"] = {"passed": check.passed, "violated": check.violated}
+            except (StopIteration, ValueError, TypeError, IndexError):
+                pass
+        result_payload["intent"] = {"metric": metric_name}
+
     # Paso 2: sintetizar respuesta a partir de todos los datasets obtenidos
     answer_messages = [
         {"role": "system", "content": _ANSWER_SYSTEM},
@@ -957,8 +1013,12 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
         "columns": all_cols,
         "rows": all_rows,
         "provider": provider["model"],
+        **result_payload,
     }
     if error_detalle:
         result["error"] = "llm_error"
         result["error_detalle"] = error_detalle
+
+    update_state(session_id, last_metric=metric_name or get_state(session_id)["last_metric"])
+
     return result
