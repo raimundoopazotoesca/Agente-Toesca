@@ -973,10 +973,13 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         catalog = load_semantic_catalog()
         if metric_name in catalog.metrics and rows:
             try:
-                first_value = float(rows[0][0])
+                value_idx = next(
+                    i for i, c in enumerate(cols) if c.lower() in ("valor", "value")
+                )
+                first_value = float(rows[0][value_idx])
                 check = check_result(metric_name, first_value, catalog)
                 result_payload["result_check"] = {"passed": check.passed, "violated": check.violated}
-            except (ValueError, TypeError, IndexError):
+            except (StopIteration, ValueError, TypeError, IndexError):
                 pass
         result_payload["intent"] = {"metric": metric_name}
 

@@ -24,7 +24,12 @@ def _load_all(repo_dir: Path) -> list[dict]:
     return entries
 
 
-def find_similar(question: str, top_k: int = 1, repo_dir: Path | None = None) -> list[dict]:
+def find_similar(
+    question: str,
+    top_k: int = 1,
+    repo_dir: Path | None = None,
+    min_score: float = 0.5,
+) -> list[dict]:
     repo_dir = repo_dir or VERIFIED_QUERIES_DIR
     query_tokens = _tokenize(question)
     scored = []
@@ -35,4 +40,4 @@ def find_similar(question: str, top_k: int = 1, repo_dir: Path | None = None) ->
         score = len(overlap) / len(union) if union else 0.0
         scored.append({**entry, "score": score})
     scored.sort(key=lambda e: e["score"], reverse=True)
-    return [e for e in scored[:top_k] if e["score"] > 0]
+    return [e for e in scored[:top_k] if e["score"] >= min_score]
