@@ -1,0 +1,55 @@
+- question: "¿cómo ha evolucionado la vacancia de Parque Titanium este año?"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: PT}
+- question: "vacancia de bodegas en Apoquindo"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: Apo}
+- question: "¿y el mes anterior?"
+  expected_metric: null
+  notes: "requiere conversation_state previo -- correr despues de una pregunta de vacancia en la misma sesion"
+- question: "NOI de Viña Centro en los últimos 12 meses"
+  expected_metric: noi
+  expected_entities: {activo: "Viña Centro"}
+- question: "compara el NOI de Apo y PT este año"
+  expected_metric: noi
+- question: "dividend yield con amortización de la serie A de TRI"
+  expected_metric: dividend_yield
+  expected_entities: {fondo: TRI}
+- question: "¿cuál es la TIR desde inicio bursátil de la serie C?"
+  expected_metric: tir_desde_inicio
+  expected_entities: {fondo: TRI}
+- question: "tasa de arriendo ajustada contable de Apo3001"
+  expected_metric: tasa_arriendo
+  expected_entities: {activo: Apo3001}
+  notes: "Apo3001 pertenece a TRI, no a Apo -- valida entity_resolver/relationships.yaml"
+- question: "¿cómo viene Parque Titanium?"
+  expected_metric: null
+  notes: "ambiguo -- debe pedir aclaracion o cubrir mas de una metrica, no elegir una sola sin avisar"
+- question: "vacancia del fondo TRI por tipo de activo"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: TRI}
+- question: "NOI de enero 2024 de PT"
+  expected_metric: noi
+  expected_entities: {fondo: PT}
+  expected_period: "2024-01"
+- question: "¿la vacancia de Curicó está sobre 100%?"
+  expected_metric: vacancia_pct
+  expected_entities: {activo: "Mall Curicó"}
+  notes: "result_checks debe marcar violado si el dato ejecutado supera 100"
+- question: "dividend yield de las tres series de TRI, sin amortización"
+  expected_metric: dividend_yield
+  expected_entities: {fondo: TRI}
+- question: "¿qué fondo tiene menor vacancia hoy?"
+  expected_metric: vacancia_pct
+- question: "TIR contable desde inicio de Apo"
+  expected_metric: tir_desde_inicio
+  expected_entities: {fondo: Apo}
+- question: "renta promedio UF/m2 en oficinas de Parque Titanium"
+  expected_metric: tasa_arriendo
+  notes: "no hay formula UF/m2 de rent roll confirmada -- debe decir que esta pendiente de validar"
+- question: "capex de Viña Centro este año"
+  expected_metric: null
+  notes: "capex no tiene YAML en esta fase -- debe decir explicitamente que no puede responder"
+- question: "muéstrame lo mismo para Viña Centro"
+  expected_metric: null
+  notes: "sigue a una pregunta de NOI de PT en la misma sesion -- debe heredar metrica/periodo, cambiar solo entidad"
