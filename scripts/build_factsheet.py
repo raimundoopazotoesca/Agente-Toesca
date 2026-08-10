@@ -3135,6 +3135,12 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
 
   /* Sección Bodegas (página 3 TRI): chart combinado 48% + tabla 48%. */
   .page3-bodegas-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  /* El SVG del chart no trae width/height propios (solo viewBox) — sin esta
+     regla el navegador lo renderiza a su tamaño intrínseco (~300x150) en vez
+     de llenar la card. min-height:0 evita que .chart-box (min-height:220px)
+     agregue espacio vacío extra: la card queda del alto real del gráfico. */
+  .chart-box-bodegas { min-height: 0; }
+  #chart-bodegas svg { display: block; width: 100%; height: auto; }
   #tbl-bodegas { table-layout: fixed; }
   #tbl-bodegas col.col-zona { width: 16%; }
   #tbl-bodegas col.col-produccion { width: 21%; }
@@ -4019,9 +4025,9 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         </ul>
       </div>
       <div class="cols page3-bodegas-cols">
-        <div class="chart-box">
+        <div class="chart-box chart-box-bodegas">
           <div class="chart-title">Evolución de la vacancia y canon de arriendo Bodegas</div>
-          <div id="chart-bodegas" style="height:230px"></div>
+          <div id="chart-bodegas"></div>
         </div>
         <div style="overflow-x:auto">
           <table id="tbl-bodegas">
