@@ -435,6 +435,8 @@
     border-radius: 3px; padding: 1px 6px; width: fit-content; align-self: center;
   }
   .mini-serie { font-size: 12px; color: #2b2b2b; font-weight: 600; align-self: center; }
+  .mini-serie-link { text-decoration: none; cursor: pointer; }
+  .mini-serie-link:hover { text-decoration: underline; color: #0d3a29; }
   .mini-fecha { font-size: 11px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
   .mini-bursatil-headrow .mini-fecha { text-align: right; }
   .mini-precio { font-size: 15px; font-weight: 700; color: #2b2b2b; text-align: right; font-variant-numeric: tabular-nums; align-self: center; }
@@ -2436,14 +2438,19 @@ function renderMiniCards(data) {
     const f = (x.fondo || '').localeCompare(y.fondo || '');
     return f !== 0 ? f : (x.serie || '').localeCompare(y.serie || '');
   });
-  const filasHtml = valores.map(v => `
+  const filasHtml = valores.map(v => {
+    const url = 'https://mercados.larrainvial.com/www/v2/index.html';
+    const serieLabel = v.serie ? 'Serie ' + v.serie : v.nemotecnico;
+    const serieHtml = `<a class="mini-serie mini-serie-link" href="${url}" target="_blank" rel="noopener" title="Buscar ${v.nemotecnico || serieLabel} en LarraínVial">${serieLabel}</a>`;
+    return `
     <div class="mini-bursatil-row">
       <span class="mini-fondo-badge">${v.fondo || '—'}</span>
-      <span class="mini-serie">${v.serie ? 'Serie ' + v.serie : v.nemotecnico}</span>
+      ${serieHtml}
       <span class="mini-precio">${_fmtCLP(v.precio_clp)}</span>
       <span class="mini-fecha">${v.fecha || '—'}</span>
     </div>
-  `).join('');
+  `;
+  }).join('');
   container.insertAdjacentHTML('beforeend', `
     <div class="inicio-mini-card mini-wide">
       <div class="mini-head">
