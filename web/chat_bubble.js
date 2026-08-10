@@ -330,6 +330,34 @@
     return div;
   }
 
+  function typeHtml(el, html) {
+    return new Promise((resolve) => {
+      const chunk = Math.max(1, Math.floor(html.length / 220));
+      let i = 0;
+      function step() {
+        if (i >= html.length) {
+          resolve();
+          return;
+        }
+        let n = chunk;
+        while (n-- > 0 && i < html.length) {
+          if (html[i] === "<") {
+            const close = html.indexOf(">", i);
+            const end = close === -1 ? html.length : close + 1;
+            el.innerHTML += html.slice(i, end);
+            i = end;
+          } else {
+            el.innerHTML += html[i];
+            i++;
+          }
+        }
+        body.scrollTop = body.scrollHeight;
+        requestAnimationFrame(() => setTimeout(step, 15));
+      }
+      step();
+    });
+  }
+
   function addTyping() {
     const div = document.createElement("div");
     div.className = "tc-typing";
@@ -375,7 +403,9 @@
           ▸ Ver detalle tecnico (${data.rows ? data.rows.length : 0} resultados)
           <div class="tc-sql-body">${sqlEsc}</div></div>`;
       }
-      addMsg("bot", html);
+      const row = addMsg("bot", "");
+      const msgEl = row.querySelector(".tc-msg");
+      await typeHtml(msgEl, html);
       history.push({ role: "assistant", content: data.answer_md || "" });
     } catch (err) {
       typing.remove();
