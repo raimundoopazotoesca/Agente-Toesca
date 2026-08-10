@@ -340,17 +340,26 @@
           return;
         }
         let n = chunk;
+        let piece = "";
         while (n-- > 0 && i < html.length) {
           if (html[i] === "<") {
             const close = html.indexOf(">", i);
             const end = close === -1 ? html.length : close + 1;
-            el.innerHTML += html.slice(i, end);
+            piece += html.slice(i, end);
+            i = end;
+          } else if (html[i] === "&") {
+            const semi = html.indexOf(";", i);
+            const end = semi !== -1 && semi - i <= 8 ? semi + 1 : i + 1;
+            piece += html.slice(i, end);
             i = end;
           } else {
-            el.innerHTML += html[i];
+            piece += html[i];
             i++;
           }
         }
+        // insertAdjacentHTML solo parsea el fragmento nuevo, sin re-serializar
+        // el DOM ya insertado (innerHTML += rompe entidades como &quot; a mitad de tipeo).
+        el.insertAdjacentHTML("beforeend", piece);
         body.scrollTop = body.scrollHeight;
         requestAnimationFrame(() => setTimeout(step, 15));
       }
