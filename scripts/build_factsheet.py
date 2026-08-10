@@ -4026,7 +4026,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
       <div class="cols page3-bodegas-cols">
         <div class="chart-box chart-box-bodegas">
           <div class="chart-title">Evolución de la vacancia y canon de arriendo Bodegas</div>
-          <div id="chart-bodegas" style="height:300px"></div>
+          <div id="chart-bodegas" style="width:100%;aspect-ratio:900/260"></div>
         </div>
         <div style="overflow-x:auto">
           <table id="tbl-bodegas">
@@ -6443,7 +6443,7 @@ function renderBodegasChart(containerId, evolucion){
         <span><span style="display:inline-block;width:10px;height:10px;background:${C.bar};margin-right:4px;vertical-align:middle"></span>UF/m2</span>
         <span><span style="display:inline-block;width:14px;height:2px;background:${C.vac};margin-right:4px;vertical-align:middle"></span>Vacancia</span>
       </div>
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución vacancia y canon de arriendo Bodegas">
         ${gridLines}${axisBox}
         ${bars}
         <path d="${linePath}" fill="none" stroke="${C.vac}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
