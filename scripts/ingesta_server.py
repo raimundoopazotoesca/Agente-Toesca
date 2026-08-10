@@ -317,7 +317,9 @@ def serve_factsheet():
 
 @app.get("/chat_bubble.js")
 def serve_chat_bubble():
-    return send_from_directory(WEB_DIR, "chat_bubble.js", mimetype="application/javascript")
+    resp = send_from_directory(WEB_DIR, "chat_bubble.js", mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 @app.post("/api/chat")
