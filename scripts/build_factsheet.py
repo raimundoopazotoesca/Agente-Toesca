@@ -210,6 +210,11 @@ FONDOS_CFG = {
                     "Línea Hogar", "Muebles", "Supermercados",
                 ],
             },
+            # Evolución anual vacancia/renta Oficinas Las Condes (Clase A/B):
+            # datos en DB (raw_mercado_oficinas_evolucion), no acá. Se leen en
+            # fetch_fondo() -> F.oficinas_evolucion. Fuente original: SharePoint
+            # RAW/"mercado oficinas DB.xlsx", cargada vía
+            # tools/db/ingest_mercado_oficinas_evolucion.py.
         },
         # Página 4 — "Indicadores Activos" (tasación/deuda/LTV consolidado,
         # look-through fondo TRI) + "Centro Comercial Paseo Viña Centro".
@@ -838,6 +843,69 @@ def _fetch_mercado_rows(db_path: str, periodo: str, proveedor: str = "JLL") -> l
     ]
 
 
+def _fetch_oficinas_evolucion(db_path: str, submercado: str = "Las Condes (CBD)") -> dict | None:
+    """Lee raw_mercado_oficinas_evolucion (histórico trimestral manual vacancia/
+    renta por clase A/B) y arma la estructura {quarters, years, vacancia_a,
+    vacancia_b, renta_a, renta_b} que consumen los gráficos de evolución de
+    página 3. Complementa con trimestres más nuevos que la ingesta recurrente
+    de mercado JLL (raw_mercado_oficinas) ya tenga y el histórico manual
+    todavía no cubra — la ingesta JLL guarda vacancia como porcentaje entero
+    (5.7 = 5.7%), acá se normaliza a fracción (0.057) para que ambas fuentes
+    queden en la misma escala."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT anio, trimestre, clase, vacancia_pct, renta_uf_m2
+               FROM raw_mercado_oficinas_evolucion
+               WHERE submercado = ? AND superseded_at IS NULL
+               ORDER BY anio, trimestre""",
+            (submercado,),
+        ).fetchall()
+        max_periodo = con.execute(
+            """SELECT MAX(periodo) FROM raw_mercado_oficinas_evolucion
+               WHERE submercado = ? AND superseded_at IS NULL""",
+            (submercado,),
+        ).fetchone()[0]
+        jll_rows = con.execute(
+            """SELECT periodo, clase, vacancia_pct, renta_uf_m2
+               FROM raw_mercado_oficinas
+               WHERE submercado = ? AND clase IN ('A', 'B') AND proveedor = 'JLL'
+                 AND superseded_at IS NULL AND (? IS NULL OR periodo > ?)
+               ORDER BY periodo""",
+            (submercado, max_periodo, max_periodo),
+        ).fetchall()
+    finally:
+        con.close()
+    if not rows and not jll_rows:
+        return None
+    por_periodo: dict[tuple[int, int], dict] = {}
+    for anio, trimestre, clase, vacancia_pct, renta_uf_m2 in rows:
+        key = (anio, trimestre)
+        d = por_periodo.setdefault(key, {})
+        if clase == "A":
+            d["vacancia_a"], d["renta_a"] = vacancia_pct, renta_uf_m2
+        elif clase == "B":
+            d["vacancia_b"], d["renta_b"] = vacancia_pct, renta_uf_m2
+    for periodo, clase, vacancia_pct, renta_uf_m2 in jll_rows:
+        anio, mes = int(periodo[:4]), int(periodo[5:7])
+        key = (anio, (mes - 1) // 3 + 1)
+        d = por_periodo.setdefault(key, {})
+        vacancia_frac = vacancia_pct / 100 if vacancia_pct is not None else None
+        if clase == "A":
+            d["vacancia_a"], d["renta_a"] = vacancia_frac, renta_uf_m2
+        elif clase == "B":
+            d["vacancia_b"], d["renta_b"] = vacancia_frac, renta_uf_m2
+    periodos = sorted(por_periodo)
+    return {
+        "quarters": [f"{t}Q" for _, t in periodos],
+        "years": sorted({a for a, _ in periodos}),
+        "vacancia_a": [por_periodo[p].get("vacancia_a") for p in periodos],
+        "vacancia_b": [por_periodo[p].get("vacancia_b") for p in periodos],
+        "renta_a": [por_periodo[p].get("renta_a") for p in periodos],
+        "renta_b": [por_periodo[p].get("renta_b") for p in periodos],
+    }
+
+
 def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     cur = con.cursor()
     series_nemos = [s["nemo"] for s in cfg["series"]]
@@ -1026,6 +1094,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         dividendos.append({"nemo": nemo, "fecha": fecha_pago, "monto_clp": monto_clp, "periodo": periodo})
 
     mercado_por_periodo: dict[str, list[dict]] = {}
+    oficinas_evolucion = None
     if (cfg.get("page4") or {}).get("submercado") or (cfg.get("page3") or {}).get("modo") == "mercado":
         periodos_disponibles = [
             r[0] for r in cur.execute(
@@ -1035,6 +1104,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         ]
         for periodo in periodos_disponibles:
             mercado_por_periodo[periodo] = _fetch_mercado_rows(str(DB), periodo)
+        oficinas_evolucion = _fetch_oficinas_evolucion(str(DB))
 
     # ---- Página 3: ingresos UF/mes por edificio, para el donut ----
     # Cada fondo define su propio mapeo edificio (label mostrado) -> activo_key
@@ -1355,6 +1425,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "uf": uf_por_periodo,
         "dividendos": dividendos,
         "mercado": mercado_por_periodo,
+        "oficinas_evolucion": oficinas_evolucion,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "page4_indicadores": page4_indicadores,
@@ -3853,14 +3924,14 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           </table>
         </div>
       </div>
-      <div class="charts-grid-2">
-        <div class="chart-box">
+      <div class="charts-grid-2" style="align-items:start">
+        <div class="chart-box" style="min-height:0">
           <div class="chart-title">Evolución anual vacancia (%) Oficinas Las Condes</div>
-          <div class="chart-placeholder" id="chart-vacancia-oficinas">Pendiente: histórico insuficiente en DB para graficar evolución (solo trimestres recientes ingestados)</div>
+          <div id="chart-vacancia-oficinas"></div>
         </div>
-        <div class="chart-box">
+        <div class="chart-box" style="min-height:0">
           <div class="chart-title">Evolución anual rentas (UF/m²) Oficinas Las Condes</div>
-          <div class="chart-placeholder" id="chart-rentas-oficinas">Pendiente: histórico insuficiente en DB para graficar evolución (solo trimestres recientes ingestados)</div>
+          <div id="chart-rentas-oficinas"></div>
         </div>
       </div>
 
@@ -6294,6 +6365,129 @@ function renderBodegasChart(containerId, evolucion){
     </svg>`;
 }
 
+// Gráfico "Evolución anual vacancia/renta Oficinas Las Condes" (página 3 TRI):
+// dos líneas (Clase A / Clase B) sobre eje X trimestral agrupado por año.
+// data = {quarters, years, seriesA, seriesB}; fmt = "pct" | "uf".
+function renderOficinasEvolucionChart(containerId, data, fmt, title){
+  const el = document.getElementById(containerId);
+  const labels = data.quarters, seriesA = data.seriesA, seriesB = data.seriesB;
+  if (!labels || !labels.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = { a: "#1B6E5C", b: "#20C878", grid: "#D0D0D0", text: "#333" };
+  const W = 900, H = 260, padL = 50, padR = 14, padT = 22, padB = 60;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = labels.length;
+  const x = i => padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+
+  const allVals = seriesA.concat(seriesB);
+  const rawMax = Math.max(...allVals), rawMin = Math.min(0, Math.min(...allVals));
+  const step = fmt === "pct" ? 0.02 : 0.05;
+  const yMax = Math.ceil(rawMax / step) * step + step;
+  const yMin = 0;
+  const y = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  const nTicks = 5;
+  let gridLines = "", yLabels = "";
+  for (let i = 0; i <= nTicks; i++){
+    const v = yMin + (yMax - yMin) * (i / nTicks);
+    const yy = y(v);
+    gridLines += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+    const label = fmt === "pct" ? (v * 100).toLocaleString("es-CL", {maximumFractionDigits: 0}) + "%"
+      : v.toLocaleString("es-CL", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    yLabels += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" font-size="16" text-anchor="end" fill="${C.text}">${label}</text>`;
+  }
+
+  const linePath = (vals, color) => {
+    const pts = labels.map((_, i) => `${x(i).toFixed(1)},${y(vals[i]).toFixed(1)}`);
+    const markers = labels.map((_, i) =>
+      `<circle cx="${x(i).toFixed(1)}" cy="${y(vals[i]).toFixed(1)}" r="3.2" fill="#fff" stroke="${color}" stroke-width="2"/>`
+    ).join("");
+    return `<path d="M${pts.join(" L")}" fill="none" stroke="${color}" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>${markers}`;
+  };
+
+  // Etiquetas X: fila de trimestre (1Q/2Q/3Q/4Q) + fila de año centrada bajo cada grupo de 4.
+  const xQ = labels.map((lab, i) =>
+    `<text x="${x(i).toFixed(1)}" y="${padT+plotH+16}" font-size="13" text-anchor="middle" fill="${C.text}">${lab}</text>`
+  ).join("");
+  let xYears = "", qi = 0;
+  const yearPerQuarter = new Array(labels.length);
+  (data.years || []).forEach(yr => {
+    const qsThisYear = labels.slice(qi).findIndex((_, k) => qi + k + 1 < labels.length && labels[qi + k + 1] === "1Q");
+    const count = qsThisYear === -1 ? labels.length - qi : qsThisYear + 1;
+    const cx = (x(qi) + x(qi + count - 1)) / 2;
+    xYears += `<text x="${cx.toFixed(1)}" y="${padT+plotH+34}" font-size="15" font-weight="700" text-anchor="middle" fill="${C.text}">${yr}</text>`;
+    for (let k = 0; k < count; k++) yearPerQuarter[qi + k] = yr;
+    qi += count;
+  });
+  const axisBox = `<line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="${C.grid}" stroke-width="1"/>`;
+
+  const hitW = plotW / Math.max(1, n - 1);
+  const hoverRects = labels.map((_, i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  const fmtVal = v => v == null ? "—" : (fmt === "pct"
+    ? (v * 100).toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%"
+    : v.toLocaleString("es-CL", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " UF/m²");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Evolución ${title} Oficinas Las Condes">
+        ${gridLines}${axisBox}
+        ${linePath(seriesA, C.a)}
+        ${linePath(seriesB, C.b)}
+        <line class="parking-guide" x1="0" x2="0" y1="${padT}" y2="${padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        ${yLabels}${xQ}${xYears}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+      <div class="parking-legend">
+        <div class="row"><span class="swatch line" style="background:${C.a}"></span>${title} A</div>
+        <div class="row"><span class="swatch line" style="background:${C.b}"></span>${title} B</div>
+      </div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const showTooltip = (i) => {
+    const xx = x(i);
+    const p = toPx(xx, padT);
+    tooltip.innerHTML =
+      `<div class="title">${labels[i]} ${yearPerQuarter[i] || ""}</div>` +
+      htmlLine(`${title} A`, fmtVal(seriesA[i]), C.a) +
+      htmlLine(`${title} B`, fmtVal(seriesB[i]), C.b);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(24, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
 function renderPerfActivosHeader(p2, perfData){
   const groups = p2.perf_groups;
   const totalCols = groups.reduce((n,g) => n + g.cols.length, 0);
@@ -7180,6 +7374,18 @@ function render(){
       }
       return spacerBefore + rowHtml;
     }).join("");
+
+    // Evolución anual vacancia/renta Oficinas Las Condes (Clase A/B) — desde
+    // raw_mercado_oficinas_evolucion, ver F.oficinas_evolucion.
+    const of = F.oficinas_evolucion;
+    if (of) {
+      renderOficinasEvolucionChart("chart-vacancia-oficinas",
+        { quarters: of.quarters, years: of.years, seriesA: of.vacancia_a, seriesB: of.vacancia_b },
+        "pct", "Vacancia");
+      renderOficinasEvolucionChart("chart-rentas-oficinas",
+        { quarters: of.quarters, years: of.years, seriesA: of.renta_a, seriesB: of.renta_b },
+        "uf", "Renta");
+    }
 
     // Bodegas: sin fuente en DB todavía — solo estructura (F.mercado_bodegas
     // no existe aún). Cuando se ingeste GPS Property, reemplazar los
