@@ -2116,8 +2116,8 @@ function populateMercadoBodegasSemestres() {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
-  const currentSemestre = currentMonth <= 6 ? '06' : '12';
-  const selectedYear = currentYear;
+  const selectedSemestre = currentMonth <= 6 ? '12' : '06';
+  const selectedYear = currentMonth <= 6 ? currentYear - 1 : currentYear;
 
   for (let y = currentYear - 2; y <= currentYear + 1; y++) {
     for (const m of ['06', '12']) {
@@ -2125,7 +2125,7 @@ function populateMercadoBodegasSemestres() {
       opt.value = `${y}-${m}`;
       opt.textContent = `${m === '06' ? '1S' : '2S'}-${y}`;
       mercadoBodPeriodo.appendChild(opt);
-      if (y === selectedYear && m === currentSemestre) {
+      if (y === selectedYear && m === selectedSemestre) {
         opt.selected = true;
       }
     }
