@@ -666,6 +666,22 @@ Redacta respuesta en Markdown breve y directa. Reglas:
   (nunca reescribas "13.478,69" agregando o quitando ceros/puntos). Solo puedes
   agregarles el signo % si el kpi es un ratio (multiplica x100 esta ya hecho
   si aplica en la formula, no lo dupliques).
+- GRAFICOS: si algun dataset tiene una SERIE TEMPORAL (>=3 periodos) o una
+  COMPARACION entre >=3 entidades del mismo kpi, agrega — ADEMAS de la tabla —
+  un bloque ```chart al final con el mismo dato en formato grafico. Usa
+  SIEMPRE los numeros de `rows_valores_grafico` (punto decimal, no coma) para
+  el JSON del grafico — NUNCA los de `rows_formateadas` (tienen coma decimal,
+  rompen el JSON). No emitas chart para una fila unica o datos no comparables
+  entre si (unidades distintas, ejes distintos).
+  Formato EXACTO (JSON valido en una sola linea o multilinea, sin comentarios):
+  ```chart
+  {"type": "line", "title": "NOI PT 2025 (UF)", "labels": ["2025-01","2025-02"], "series": [{"name": "NOI", "values": [13478.69, 13573.50]}]}
+  ```
+  - type: "line" para evolucion en el tiempo (labels=periodos ordenados);
+    "bar" para comparar entidades (labels=entidad_key o nombre).
+  - series: normalmente 1 sola serie; usa varias solo si comparas el mismo
+    kpi entre pocas series/entidades ya presentes en los datos.
+  - title debe incluir la unidad entre parentesis.
 - Conversa como un asistente financiero del equipo, no como una interfaz tecnica.
 - No menciones "DB", "base de datos", "SQLite", "SQL", tablas, columnas, filas ni nombres internos, salvo que el usuario lo pida explicitamente.
 - Para citar origen usa lenguaje natural: "segun la informacion interna disponible".
@@ -866,6 +882,10 @@ def answer(question: str, history: list[dict] | None = None) -> dict:
             "sql": sql,
             "columns": cols,
             "rows_formateadas": _format_rows(cols, rows_for_llm),
+            "rows_valores_grafico": [
+                [round(v, 4) if isinstance(v, float) else v for v in row]
+                for row in rows_for_llm
+            ],
             "n_rows_total": len(rows),
             "truncated_para_analisis": len(rows) > len(rows_for_llm),
         }

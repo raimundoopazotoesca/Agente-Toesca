@@ -1431,3 +1431,33 @@ consola de Google Cloud para quitarla.
 ingesta rent-roll/ER — no tocados en esta sesion) / 1 deselected (baseline
 drift preexistente) / 1 xfailed. `tools/db_chat.py`, `config.py`,
 `tests/test_db_chat.py` son los unicos archivos modificados/creados.
+
+## [2026-08-10] feat | Asistente: graficos inline (SVG, sin librerias externas)
+
+A pedido del usuario, el Asistente ahora puede generar graficos ademas de
+tablas. Diseno: sin dependencias externas (nada de Chart.js/CDN), coherente
+con el resto del stack.
+
+- `tools/db_chat.py`: cada dataset que se pasa al paso de redaccion (LLM)
+  ahora incluye `rows_valores_grafico` (numeros crudos, punto decimal,
+  redondeados a 4 decimales) ademas de `rows_formateadas` (coma decimal para
+  texto). El prompt de redaccion instruye emitir un bloque fenced ```chart
+  con JSON (`{type, title, labels, series}`) cuando hay serie temporal
+  (>=3 periodos) o comparacion entre >=3 entidades — usando SIEMPRE
+  `rows_valores_grafico` para el JSON, nunca `rows_formateadas` (rompe el
+  parseo por la coma decimal).
+- `web/chat_bubble.js`: nuevo renderer SVG inline (`buildChartSvg`,
+  `renderChartBlock`) que soporta tipo "line" (series temporales) y "bar"
+  (comparacion entre entidades), con leyenda si hay >1 serie, tooltips via
+  `<title>` SVG y fallback seguro (`<pre>`) si el JSON viene malformado. Los
+  bloques ```chart se extraen ANTES de escapar HTML (necesitan comillas
+  dobles intactas) y se sustituyen por un placeholder que sobrevive las
+  transformaciones de markdown hasta la sustitucion final.
+- Verificado con pruebas aisladas de las funciones JS (Node, sin DOM) +
+  respuesta real end-to-end del Asistente: tabla + grafico conviven en el
+  mismo mensaje sin corromper ninguno de los dos.
+
+Nota tecnica: durante la implementacion goteo un bug de bytes NUL espurios
+insertados en `web/chat_bubble.js` por una edicion previa — detectado por
+`grep` marcando el archivo como binario, corregido limpiando los bytes
+`\x00` directamente. Sin relacion con la logica del feature.
