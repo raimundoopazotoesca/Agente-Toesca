@@ -36,7 +36,6 @@ from tools.analyst.context_builder import build_context
 from tools.analyst.conversation_state import get_state, update_state
 from tools.analyst.result_checks import check_result
 from tools.analyst.semantic_loader import load_semantic_catalog
-from tools.analyst.verified_queries_repo import find_similar
 
 
 # ─── Provider config ──────────────────────────────────────────────────────────
@@ -861,7 +860,15 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         }
     provider = chain[0]
 
-    ctx = build_context(question, session_id, history or [], _intent_llm_call)
+    try:
+        ctx = build_context(question, session_id, history or [], _intent_llm_call)
+    except Exception as exc:
+        return {
+            "answer_md": _mensaje_error_llm(exc),
+            "error": "llm_error",
+            "error_detalle": str(exc),
+            "provider": provider["model"],
+        }
 
     if ctx.decision.action == "clarify":
         return {
@@ -870,7 +877,7 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
             "sql": None,
             "columns": [],
             "rows": [],
-            "provider": _resolve_provider()["model"],
+            "provider": provider["model"],
         }
 
     # Paso 1: generar SQL. El playbook YA cubre la seleccion de tablas y
