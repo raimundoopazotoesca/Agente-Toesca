@@ -467,6 +467,38 @@
   .fijo-field.is-dirty input[type=number] { border-color: var(--warn); background: #FFFBF0; }
   .fijo-field.is-dirty .fijo-suffix { color: var(--warn); }
   .fijo-field.is-dirty .fijo-dirty-flag { display: block; }
+
+  .busqueda-box {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #FAFAFA; border: 1px solid var(--border); border-radius: 4px;
+    padding: 10px 12px; margin: 6px 0 4px;
+  }
+  .busqueda-box code {
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #2b2b2b;
+    word-break: break-all; flex: 1 1 auto;
+  }
+  .busqueda-box button { flex-shrink: 0; padding: 6px 14px; font-size: 12px; }
+  .comercio-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px; margin-top: 14px;
+  }
+  .comercio-field label {
+    display: block; font-size: 11px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+  }
+  .comercio-field .comercio-input-wrap { position: relative; display: flex; align-items: center; }
+  .comercio-field input {
+    width: 100%; padding: 9px 30px 9px 12px; font-size: 14px; font-weight: 600;
+    font-variant-numeric: tabular-nums; color: #2b2b2b; transition: border-color .15s, box-shadow .15s;
+    border-radius: 3px; border: 1px solid var(--border); background: #fff;
+  }
+  .comercio-field input:focus {
+    outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft);
+  }
+  .comercio-field .comercio-suffix {
+    position: absolute; right: 10px; font-size: 12px; font-weight: 700;
+    color: #a0a0a0; pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -796,14 +828,73 @@
   </div>
 
   <div class="step">
-    <div class="step-title"><span class="step-num">2</span> Busca el dato en el informe CNC y pégalo aquí</div>
+    <div class="step-title"><span class="step-num">2</span> Busca el dato en el informe CNC</div>
+    <div class="busqueda-box">
+      <code id="mercadocom-busqueda-texto">site:cnc.cl/wp-content/uploads/ "Ventas-Comercio-RM" "<span id="mercadocom-mes-busqueda">mes año</span>"</code>
+      <button id="btn-mercadocom-copy-busqueda" type="button">Copiar búsqueda</button>
+      <span id="mercadocom-copy-flash" class="copied-flash hidden">Copiado ✓</span>
+    </div>
     <ol class="instructions">
-      <li>Busca en Google: <code>site:cnc.cl/wp-content/uploads/ "Ventas-Comercio-RM" "<span id="mercadocom-mes-busqueda">mes año</span>"</code></li>
-      <li>Entra al PDF y busca el gráfico "Ventas del Comercio Acumuladas".</li>
-      <li>Pega los 7 valores en una sola línea, en este orden: Total Comercio, Vestuario, Calzado, Artefactos Eléctricos, Línea Hogar, Muebles, Supermercados (usa "-" si algún valor no aparece).</li>
+      <li>Pega la búsqueda en Google y entra al PDF resultante.</li>
+      <li>Busca el gráfico "Ventas del Comercio Acumuladas".</li>
+      <li>Ingresa cada valor en su campo (usa "-" o déjalo vacío si no aparece).</li>
     </ol>
-    <textarea id="mercadocom-input" placeholder="Ej: -0,9% 6,2% -3,0% -9,1% 0,2% -0,6% -1,2%"></textarea>
-    <div class="row">
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">3</span> Valores del informe</div>
+    <div class="comercio-grid">
+      <div class="comercio-field">
+        <label for="mercadocom-in-0">Total Comercio</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-0" data-categoria="Total Comercio" placeholder="-0,9" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-1">Vestuario</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-1" data-categoria="Vestuario" placeholder="6,2" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-2">Calzado</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-2" data-categoria="Calzado" placeholder="-3,0" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-3">Artefactos Eléctricos</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-3" data-categoria="Artefactos Eléctricos" placeholder="-9,1" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-4">Línea Hogar</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-4" data-categoria="Línea Hogar" placeholder="0,2" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-5">Muebles</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-5" data-categoria="Muebles" placeholder="-0,6" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+      <div class="comercio-field">
+        <label for="mercadocom-in-6">Supermercados</label>
+        <div class="comercio-input-wrap">
+          <input id="mercadocom-in-6" data-categoria="Supermercados" placeholder="-1,2" inputmode="decimal">
+          <span class="comercio-suffix">%</span>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px">
       <button id="btn-mercadocom-validate">Validar y previsualizar</button>
       <span id="mercadocom-validate-status" class="muted"></span>
     </div>
@@ -2348,12 +2439,28 @@ function actualizarMercadoComBusqueda() {
 }
 
 const mercadoComPeriodo = document.getElementById('mercadocom-periodo');
-const mercadoComInput = document.getElementById('mercadocom-input');
+const mercadoComInputs = Array.from(document.querySelectorAll('#mercado-panel-comercio [data-categoria]'));
 const btnMercadoComValidate = document.getElementById('btn-mercadocom-validate');
 const mercadoComValidateStatus = document.getElementById('mercadocom-validate-status');
 const btnMercadoComConfirm = document.getElementById('btn-mercadocom-confirm');
 const mercadoComIngestStatus = document.getElementById('mercadocom-ingest-status');
 const mercadoComPeriodoStatusRow = document.getElementById('mercadocom-periodo-status-row');
+const btnMercadoComCopyBusqueda = document.getElementById('btn-mercadocom-copy-busqueda');
+const mercadoComCopyFlash = document.getElementById('mercadocom-copy-flash');
+
+function mercadoComTextoDesdeInputs() {
+  return mercadoComInputs.map(inp => inp.value.trim() || '-').join(' ');
+}
+
+btnMercadoComCopyBusqueda.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(document.getElementById('mercadocom-busqueda-texto').textContent);
+    mercadoComCopyFlash.classList.remove('hidden');
+    setTimeout(() => mercadoComCopyFlash.classList.add('hidden'), 1500);
+  } catch (e) {
+    alert('No se pudo copiar: ' + e.message);
+  }
+});
 
 async function checkMercadoComPeriodoStatus() {
   const periodo = mercadoComPeriodo.value;
@@ -2380,7 +2487,7 @@ function resetMercadoComPreview() {
   setStatus(mercadoComValidateStatus);
   setStatus(mercadoComIngestStatus);
 }
-mercadoComInput.addEventListener('input', resetMercadoComPreview);
+mercadoComInputs.forEach(inp => inp.addEventListener('input', resetMercadoComPreview));
 mercadoComPeriodo.addEventListener('change', resetMercadoComPreview);
 
 const CATEGORIAS_COMERCIO = ['Total Comercio', 'Vestuario', 'Calzado', 'Artefactos Eléctricos', 'Línea Hogar', 'Muebles', 'Supermercados'];
@@ -2426,7 +2533,7 @@ function renderMercadoComPreview(data) {
 }
 
 btnMercadoComValidate.addEventListener('click', async () => {
-  const texto = mercadoComInput.value;
+  const texto = mercadoComTextoDesdeInputs();
   const periodo = mercadoComPeriodo.value;
   if (!periodo) { mercadoComValidateStatus.textContent = 'Declara el período del informe.'; return; }
   setStatus(mercadoComValidateStatus, 'Validando y preparando previsualización...', 'loading');
@@ -2450,7 +2557,7 @@ btnMercadoComValidate.addEventListener('click', async () => {
 });
 
 btnMercadoComConfirm.addEventListener('click', async () => {
-  if (!lastMercadoComValidationOk || lastMercadoComTexto !== mercadoComInput.value ||
+  if (!lastMercadoComValidationOk || lastMercadoComTexto !== mercadoComTextoDesdeInputs() ||
       lastMercadoComPeriodo !== mercadoComPeriodo.value) {
     mercadoComIngestStatus.textContent = 'Los datos cambiaron desde la última validación — vuelve a validar.';
     return;
