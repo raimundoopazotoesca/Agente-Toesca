@@ -27,6 +27,9 @@
       expected_entities: {activo: "Mall Curicó"}
 
 - name: session_isolation_control
+  # Not a real conversation -- used by run_eval.py --full to verify this
+  # conversation's session_id never sees state from another conversation
+  # (regression guard for Task 7's conversation_id wiring).
   turns:
     - question: "vacancia de Apoquindo 4501"
       expected_metric: vacancia_pct
