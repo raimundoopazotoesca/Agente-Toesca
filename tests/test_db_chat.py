@@ -6,6 +6,7 @@ validacion de SQL, formateo numerico, atajo de saludos, extraccion de JSON y
 sugerencia de periodos disponibles.
 """
 import sqlite3
+import unittest
 
 import pytest
 
@@ -211,8 +212,18 @@ class TestAnswerWithIntentLayer:
         assert result["error"] == "empty"
 
     def test_answer_result_check_flags_out_of_bounds(self, monkeypatch):
+        # Task 5 wiring adds a preceding intent-extraction LLM call (through
+        # the same _chat_completion_with_fallback) before SQL generation, so
+        # the fake response queue needs an extra entry up front with a
+        # confident, resolvable intent so build_context proceeds to SQL
+        # generation instead of short-circuiting into clarify.
+        intent_json = (
+            '{"metric": "vacancia_pct", "entities": {"activo": "Curicó"}, '
+            '"period": null, "comparison": null, "confidence": 0.9}'
+        )
         sql_json = '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
         responses = [
+            (_FakeResp(intent_json), {"model": "fake-model-1"}),
             (_FakeResp(sql_json), {"model": "fake-model-1"}),
             (_FakeResp("Vacancia fuera de rango."), {"model": "fake-model-1"}),
         ]
@@ -230,3 +241,43 @@ class TestAnswerWithIntentLayer:
         assert "result_check" in result
         assert result["result_check"]["passed"] is False
         assert result["result_check"]["violated"]
+
+
+# ─── answer() con context_builder wiring (Task 5) ────────────────────────────
+class TestContextBuilderWiring(unittest.TestCase):
+    def test_clarify_short_circuit_before_sql_generation(self):
+        from tools.analyst.conversation_state import clear_state
+        clear_state("test-clarify-wiring")
+        result = db_chat.answer("cuéntame algo", session_id="test-clarify-wiring")
+        # A fully ungrounded question with no prior state must clarify
+        # deterministically, without ever reaching SQL generation.
+        self.assertTrue(result.get("clarify"))
+        self.assertIsNone(result.get("sql"))
+
+    def test_context_sections_reach_the_sql_prompt(self):
+        # Regression guard: RESOLVED INTENT / labeled sections must appear
+        # in the messages sent for SQL generation, not just be computed and
+        # discarded.
+        captured = {}
+        original = db_chat._chat_completion_with_fallback
+
+        def _spy(messages, **kwargs):
+            # answer() now issues an intent-extraction LLM call (via
+            # _intent_llm_call, added by this same wiring) before the SQL
+            # generation call, so "first call" is no longer the SQL prompt.
+            # Identify the SQL-generation call by its distinctive system
+            # message instead of by call order.
+            if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
+                captured["captured_sql_messages"] = messages
+            return original(messages, **kwargs)
+
+        db_chat._chat_completion_with_fallback = _spy
+        try:
+            db_chat.answer("vacancia de Parque Titanium este mes", session_id="test-sections-wiring")
+        finally:
+            db_chat._chat_completion_with_fallback = original
+
+        contents = " ".join(
+            m["content"] for m in captured.get("captured_sql_messages", []) if isinstance(m.get("content"), str)
+        )
+        self.assertIn("RESOLVED INTENT", contents)

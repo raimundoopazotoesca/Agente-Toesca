@@ -32,6 +32,7 @@ from config import (
     GROQ_API_KEY_3,
 )
 from tools.db.connection import DEFAULT_DB_PATH
+from tools.analyst.context_builder import build_context
 from tools.analyst.conversation_state import get_state, update_state
 from tools.analyst.result_checks import check_result
 from tools.analyst.semantic_loader import load_semantic_catalog
@@ -132,6 +133,16 @@ def _chat_completion_with_fallback(messages: list, **kwargs):
                 continue  # probar siguiente provider
             raise
     raise last_exc
+
+
+def _intent_llm_call(prompt: str) -> str:
+    """Adapter handing context_builder's intent extraction a real LLM call
+    through the existing provider chain, without db_chat.answer()'s SQL/answer
+    prompts. Kept intentionally cheap: short prompt, low max_tokens."""
+    resp, _ = _chat_completion_with_fallback(
+        [{"role": "user", "content": prompt}], temperature=0.0, max_tokens=200,
+    )
+    return resp.choices[0].message.content or ""
 
 
 # ─── Schema summary (cacheado) ────────────────────────────────────────────────
@@ -840,9 +851,6 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
     if shortcut is not None:
         return shortcut
 
-    verified = find_similar(question, top_k=1)
-    verified_hint = verified[0] if verified else None
-
     try:
         chain = _provider_chain()
     except RuntimeError as exc:
@@ -853,6 +861,18 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         }
     provider = chain[0]
 
+    ctx = build_context(question, session_id, history or [], _intent_llm_call)
+
+    if ctx.decision.action == "clarify":
+        return {
+            "answer_md": ctx.decision.clarify_message,
+            "clarify": True,
+            "sql": None,
+            "columns": [],
+            "rows": [],
+            "provider": _resolve_provider()["model"],
+        }
+
     # Paso 1: generar SQL. El playbook YA cubre la seleccion de tablas y
     # columnas; el PRAGMA schema completo (~2k tokens) es redundante y hace
     # que el prompt exceda el rate limit del free tier de Groq. Lo dejamos
@@ -862,16 +882,8 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         {"role": "system", "content": _BUSINESS_CONTEXT},
         {"role": "system", "content": "Ejemplos gold pregunta→JSON. Sigue exactamente este patron de entidad_key, formula, filtros y formato JSON."},
     ]
-    if verified_hint:
-        sql_messages.append({
-            "role": "system",
-            "content": (
-                "Pregunta similar ya verificada:\n"
-                f"Q: {verified_hint['question']}\n"
-                f"SQL: {verified_hint['sql']}\n"
-                f"Notas: {verified_hint.get('notes', '')}"
-            ),
-        })
+    for label, content in ctx.prompt_sections:
+        sql_messages.append({"role": "system", "content": f"{label}:\n{content}"})
     sql_messages += [
         *_few_shot_messages(),
         *_serialize_history(history or []),
