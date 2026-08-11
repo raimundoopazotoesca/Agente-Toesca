@@ -335,7 +335,10 @@ def api_chat():
     # del navegador, unico por pestaña/sesion). Si el cliente no lo manda
     # (llamada legacy o sin JS), caemos a la IP como antes.
     conversation_id = body.get("conversation_id") or request.headers.get("X-Conversation-Id")
-    session_id = str(conversation_id) if conversation_id else (request.remote_addr or "default")
+    # Truncate to bound state-dict key size; an oversized/malicious value
+    # can't be used to fan out unbounded distinct session keys.
+    conversation_id = str(conversation_id)[:128] if conversation_id else None
+    session_id = conversation_id or (request.remote_addr or "default")
     try:
         result = db_chat.answer(question, history, session_id=session_id)
     except Exception as exc:  # noqa: BLE001

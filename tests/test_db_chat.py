@@ -7,6 +7,7 @@ sugerencia de periodos disponibles.
 """
 import sqlite3
 import unittest
+import unittest.mock
 
 import pytest
 
@@ -282,6 +283,45 @@ class TestContextBuilderWiring(unittest.TestCase):
         )
         self.assertIn("RESOLVED INTENT", contents)
 
+    def test_build_context_failure_degrades_instead_of_aborting(self):
+        # build_context (intent extraction / verified-query lookup / temporal
+        # resolution) is optional enrichment. If it raises, answer() must
+        # still attempt SQL generation instead of short-circuiting with an
+        # llm_error dict for this reason alone. SQL-gen/synthesis calls are
+        # faked so this test doesn't depend on a live LLM provider.
+        sql_json = '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
+        responses = [
+            (_FakeResp(sql_json), {"model": "fake-model-1"}),
+            (_FakeResp("Vacancia: 12%."), {"model": "fake-model-1"}),
+        ]
+        sql_gen_called = {"value": False}
+
+        def fake_chat_completion(messages, **_kwargs):
+            if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
+                sql_gen_called["value"] = True
+            return responses.pop(0)
+
+        def _raising_build_context(*args, **kwargs):
+            raise RuntimeError("intent extraction provider unavailable")
+
+        original_build_context = db_chat.build_context
+        original_fallback = db_chat._chat_completion_with_fallback
+        db_chat.build_context = _raising_build_context
+        db_chat._chat_completion_with_fallback = fake_chat_completion
+        try:
+            with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+                 unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[12.0]])), \
+                 unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
+                result = db_chat.answer(
+                    "vacancia del fondo TRI en 2026-06", session_id="test-build-context-failure"
+                )
+        finally:
+            db_chat.build_context = original_build_context
+            db_chat._chat_completion_with_fallback = original_fallback
+
+        self.assertTrue(sql_gen_called["value"], "SQL generation must still be attempted")
+        self.assertNotEqual(result.get("error"), "llm_error")
+
     def test_answer_synthesis_receives_resolved_metric_context(self):
         calls = []
         original = db_chat._chat_completion_with_fallback
@@ -296,9 +336,15 @@ class TestContextBuilderWiring(unittest.TestCase):
         finally:
             db_chat._chat_completion_with_fallback = original
 
-        # calls[0] = intent extraction, calls[1] = SQL-gen pass, calls[2] = synthesis pass
-        self.assertEqual(len(calls), 3)
-        synthesis_content = calls[2][-1]["content"]
+        # Find the synthesis pass by its distinctive system prompt rather than
+        # asserting an exact total call count, which is brittle to future
+        # changes in call topology (e.g. caching, extra passes).
+        synthesis_calls = [
+            messages for messages in calls
+            if any(m.get("content") == db_chat._ANSWER_SYSTEM for m in messages)
+        ]
+        self.assertEqual(len(synthesis_calls), 1, "expected exactly one synthesis pass")
+        synthesis_content = synthesis_calls[0][-1]["content"]
         self.assertIn("business_definition", synthesis_content.lower())
 
 

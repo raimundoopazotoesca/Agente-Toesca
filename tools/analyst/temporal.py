@@ -57,7 +57,13 @@ def resolve_temporal(
     today: date | None = None,
     time_behavior: str | None = None,
 ) -> TemporalResolution | None:
-    """Returns None if `text` contains no recognized temporal phrase."""
+    """Returns None if `text` contains no recognized temporal phrase.
+
+    Known limitation: only the FIRST matching pattern in `_PATTERNS` is
+    returned. A question with multiple temporal phrases (e.g. "vacancia este
+    mes vs el año pasado") resolves only the first match and silently drops
+    the rest -- comparison phrases after the first match are not detected.
+    """
     today = today or date.today()
 
     matched = None

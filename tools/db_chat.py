@@ -32,8 +32,10 @@ from config import (
     GROQ_API_KEY_3,
 )
 from tools.db.connection import DEFAULT_DB_PATH
-from tools.analyst.context_builder import build_context
+from tools.analyst.ambiguity import AmbiguityDecision
+from tools.analyst.context_builder import AnalystContext, build_context
 from tools.analyst.conversation_state import get_state, update_state
+from tools.analyst.intent import IntentResult
 from tools.analyst.result_checks import check_result
 from tools.analyst.semantic_loader import load_semantic_catalog
 
@@ -862,13 +864,18 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
 
     try:
         ctx = build_context(question, session_id, history or [], _intent_llm_call)
-    except Exception as exc:
-        return {
-            "answer_md": _mensaje_error_llm(exc),
-            "error": "llm_error",
-            "error_detalle": str(exc),
-            "provider": provider["model"],
-        }
+    except Exception:
+        # build_context (intent extraction, verified-query lookup, temporal
+        # resolution) is optional enrichment, not a hard dependency: Phase 1's
+        # answer() worked without it. Degrade to an empty context instead of
+        # aborting the request, so SQL generation is still attempted.
+        ctx = AnalystContext(
+            intent=IntentResult(metric=None),
+            decision=AmbiguityDecision(action="proceed", reason="context_builder failed, degrading to legacy behavior"),
+            temporal=None,
+            verified_hint=None,
+            prompt_sections=[],
+        )
 
     if ctx.decision.action == "clarify":
         return {
@@ -1050,6 +1057,10 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         result["error"] = "llm_error"
         result["error_detalle"] = error_detalle
 
+    # intent.py's extract_intent() also writes last_metric (LLM-guessed) earlier
+    # in this same request. This write is intentionally authoritative: it runs
+    # after (and overwrites) that earlier guess, using the metric actually
+    # reflected in the SQL that ran, which is more reliable than the LLM guess.
     update_state(session_id, last_metric=metric_name or get_state(session_id)["last_metric"])
 
     return result

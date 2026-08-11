@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from tools.analyst.ambiguity import AmbiguityDecision, decide
-from tools.analyst.conversation_state import get_state
 from tools.analyst.intent import IntentResult, extract_intent
 from tools.analyst.semantic_loader import load_semantic_catalog
 from tools.analyst.temporal import TemporalResolution, resolve_temporal

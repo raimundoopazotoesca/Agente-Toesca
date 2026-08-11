@@ -142,4 +142,10 @@ side only, would produce a misleading list.
   unavailability, not by defects in the Phase 2 pipeline (Tasks 1-11). The
   eval should be re-run once Groq's TPD quota resets (typically daily) or a
   working DeepSeek/Gemini key is configured, to get numbers that reflect
-  Phase 2's real capability rather than today's outage.
+  Phase 2's real capability rather than today's outage. Separately, `--full`
+  runs (`tests/eval/run_eval.py`'s `run_full()`) monkeypatch `db_chat.OpenAI`
+  to `max_retries=0` for the duration of the run, to avoid multi-minute SDK
+  retry stalls against exhausted providers -- this differs from production's
+  default retry behavior, so the `--full` numbers above are not a perfect
+  proxy for production robustness even beyond the quota exhaustion already
+  noted.
