@@ -187,6 +187,22 @@ class TestMensajeErrorLlm:
         assert "DEEPSEEK_API_KEY" not in result["answer_md"]
 
 
+class TestMistralFallback:
+    def test_mistral_is_last_after_groq_accounts_and_gemini(self, monkeypatch):
+        configured = [
+            {**cfg, "api_key": "" if cfg["name"] == "deepseek" else "test-key"}
+            for cfg in db_chat._PROVIDER_LIST
+        ]
+        monkeypatch.setattr(db_chat, "_PROVIDER_LIST", configured)
+        monkeypatch.setattr(db_chat, "DB_CHAT_PROVIDER", "groq")
+
+        chain = db_chat._provider_chain()
+
+        assert [cfg["name"] for cfg in chain] == [
+            "groq", "groq", "groq", "gemini", "mistral"
+        ]
+
+
 # ─── answer() con capa de intent/result-checks (Task 8) ─────────────────────
 class _FakeMessage:
     def __init__(self, content):

@@ -27,6 +27,7 @@ from config import (
     DB_CHAT_PROVIDER,
     DEEPSEEK_API_KEY,
     GEMINI_API_KEY,
+    MISTRAL_API_KEY,
     GROQ_API_KEY,
     GROQ_API_KEY_2,
     GROQ_API_KEY_3,
@@ -53,6 +54,8 @@ _PROVIDER_LIST: list[dict] = [
      "api_key": GROQ_API_KEY_3, "model": "llama-3.3-70b-versatile"},
     {"name": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
      "api_key": GEMINI_API_KEY, "model": "gemini-2.5-flash"},
+    {"name": "mistral", "base_url": "https://api.mistral.ai/v1",
+     "api_key": MISTRAL_API_KEY, "model": "mistral-large-latest"},
 ]
 
 
@@ -67,7 +70,7 @@ def _resolve_provider() -> dict:
             return cfg
     raise RuntimeError(
         "No hay API key configurada. Define DEEPSEEK_API_KEY, "
-        "GROQ_API_KEY (o GROQ_API_KEY_2) o GEMINI_API_KEY en .env"
+        "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY o MISTRAL_API_KEY en .env"
     )
 
 
@@ -80,7 +83,7 @@ def _provider_chain() -> list[dict]:
     if not with_key:
         raise RuntimeError(
             "No hay API key configurada. Define DEEPSEEK_API_KEY, "
-            "GROQ_API_KEY (o GROQ_API_KEY_2) o GEMINI_API_KEY en .env"
+            "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY o MISTRAL_API_KEY en .env"
         )
     primary = [cfg for cfg in with_key if cfg["name"] == primary_name]
     rest = [cfg for cfg in with_key if cfg["name"] != primary_name]

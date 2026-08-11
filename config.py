@@ -5,6 +5,7 @@ load_dotenv(override=True)  # el reloader de Flask hereda os.environ del padre;
                             # sin override, un valor viejo de .env queda "pegado"
 
 GEMINI_API_KEY        = os.getenv("GEMINI_API_KEY", "")
+MISTRAL_API_KEY       = os.getenv("MISTRAL_API_KEY", "")
 DEEPSEEK_API_KEY      = os.getenv("DEEPSEEK_API_KEY", "")
 GROQ_API_KEY          = os.getenv("GROQ_API_KEY", "")
 GROQ_API_KEY_2        = os.getenv("GROQ_API_KEY_2", "")  # cuenta Groq extra para duplicar cupo diario gratis
