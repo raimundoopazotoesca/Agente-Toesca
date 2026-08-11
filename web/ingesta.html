@@ -829,14 +829,27 @@
 
   <div class="step">
     <div class="step-title"><span class="step-num">2</span> Busca el dato en el informe CNC</div>
+    <p class="muted" style="margin:0 0 4px">1. Prueba primero la URL directa del PDF:</p>
     <div class="busqueda-box">
-      <code id="mercadocom-busqueda-texto">site:cnc.cl/wp-content/uploads/ "Ventas-Comercio-RM" "<span id="mercadocom-mes-busqueda">mes año</span>"</code>
-      <button id="btn-mercadocom-copy-busqueda" type="button">Copiar búsqueda</button>
-      <span id="mercadocom-copy-flash" class="copied-flash hidden">Copiado ✓</span>
+      <code id="mercadocom-url-directa">https://cnc.cl/wp-content/uploads/2021/03/Ventas-Comercio-RM-Mes-Año.pdf</code>
+      <button class="btn-mercadocom-copy" type="button" data-target="mercadocom-url-directa">Copiar URL</button>
     </div>
+    <p class="muted" style="margin:10px 0 4px">2. Si no funciona (a veces el nombre del archivo no calza exacto), prueba estas búsquedas en Google:</p>
+    <div class="busqueda-box">
+      <code id="mercadocom-busqueda-1">site:cnc.cl/wp-content/uploads/ "Ventas-Comercio-RM" "<span class="mercadocom-mes-busqueda">mes año</span>"</code>
+      <button class="btn-mercadocom-copy" type="button" data-target="mercadocom-busqueda-1">Copiar</button>
+    </div>
+    <div class="busqueda-box">
+      <code id="mercadocom-busqueda-2">site:cnc.cl "Ventas del Comercio Minorista Región Metropolitana" "<span class="mercadocom-mes-busqueda">mes año</span>"</code>
+      <button class="btn-mercadocom-copy" type="button" data-target="mercadocom-busqueda-2">Copiar</button>
+    </div>
+    <div class="busqueda-box">
+      <code id="mercadocom-busqueda-3">site:cnc.cl "comercio minorista" "Región Metropolitana" "<span class="mercadocom-mes-busqueda-min">mes</span>" "<span class="mercadocom-anio-busqueda">año</span>"</code>
+      <button class="btn-mercadocom-copy" type="button" data-target="mercadocom-busqueda-3">Copiar</button>
+    </div>
+    <span id="mercadocom-copy-flash" class="copied-flash hidden">Copiado ✓</span>
     <ol class="instructions">
-      <li>Pega la búsqueda en Google y entra al PDF resultante.</li>
-      <li>Busca el gráfico "Ventas del Comercio Acumuladas".</li>
+      <li>Entra al PDF y busca el gráfico "Ventas del Comercio Acumuladas".</li>
       <li>Ingresa cada valor en su campo (usa "-" o déjalo vacío si no aparece).</li>
     </ol>
   </div>
@@ -2431,11 +2444,21 @@ function populateMercadoComercioMeses() {
 
 function actualizarMercadoComBusqueda() {
   const periodo = mercadoComPeriodo.value;
-  const el = document.getElementById('mercadocom-mes-busqueda');
-  if (!periodo) { el.textContent = 'mes año'; return; }
+  const urlEl = document.getElementById('mercadocom-url-directa');
+  if (!periodo) {
+    document.querySelectorAll('.mercadocom-mes-busqueda').forEach(el => el.textContent = 'mes año');
+    document.querySelectorAll('.mercadocom-mes-busqueda-min').forEach(el => el.textContent = 'mes');
+    document.querySelectorAll('.mercadocom-anio-busqueda').forEach(el => el.textContent = 'año');
+    urlEl.textContent = 'https://cnc.cl/wp-content/uploads/2021/03/Ventas-Comercio-RM-Mes-Año.pdf';
+    return;
+  }
   const [y, m] = periodo.split('-');
   const nombreMes = MESES_LARGO_ES[parseInt(m, 10) - 1];
-  el.textContent = `${nombreMes.charAt(0).toUpperCase()}${nombreMes.slice(1)} ${y}`;
+  const nombreMesCap = `${nombreMes.charAt(0).toUpperCase()}${nombreMes.slice(1)}`;
+  document.querySelectorAll('.mercadocom-mes-busqueda').forEach(el => el.textContent = `${nombreMesCap} ${y}`);
+  document.querySelectorAll('.mercadocom-mes-busqueda-min').forEach(el => el.textContent = nombreMes);
+  document.querySelectorAll('.mercadocom-anio-busqueda').forEach(el => el.textContent = y);
+  urlEl.textContent = `https://cnc.cl/wp-content/uploads/2021/03/Ventas-Comercio-RM-${nombreMesCap}-${y}.pdf`;
 }
 
 const mercadoComPeriodo = document.getElementById('mercadocom-periodo');
@@ -2445,21 +2468,23 @@ const mercadoComValidateStatus = document.getElementById('mercadocom-validate-st
 const btnMercadoComConfirm = document.getElementById('btn-mercadocom-confirm');
 const mercadoComIngestStatus = document.getElementById('mercadocom-ingest-status');
 const mercadoComPeriodoStatusRow = document.getElementById('mercadocom-periodo-status-row');
-const btnMercadoComCopyBusqueda = document.getElementById('btn-mercadocom-copy-busqueda');
 const mercadoComCopyFlash = document.getElementById('mercadocom-copy-flash');
 
 function mercadoComTextoDesdeInputs() {
   return mercadoComInputs.map(inp => inp.value.trim() || '-').join(' ');
 }
 
-btnMercadoComCopyBusqueda.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(document.getElementById('mercadocom-busqueda-texto').textContent);
-    mercadoComCopyFlash.classList.remove('hidden');
-    setTimeout(() => mercadoComCopyFlash.classList.add('hidden'), 1500);
-  } catch (e) {
-    alert('No se pudo copiar: ' + e.message);
-  }
+document.querySelectorAll('.btn-mercadocom-copy').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    try {
+      const target = document.getElementById(btn.dataset.target);
+      await navigator.clipboard.writeText(target.textContent);
+      mercadoComCopyFlash.classList.remove('hidden');
+      setTimeout(() => mercadoComCopyFlash.classList.add('hidden'), 1500);
+    } catch (e) {
+      alert('No se pudo copiar: ' + e.message);
+    }
+  });
 });
 
 async function checkMercadoComPeriodoStatus() {
