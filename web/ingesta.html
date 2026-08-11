@@ -671,6 +671,7 @@
     <div class="tabs" id="mercado-subtabs">
       <button class="er-subtab-btn active" data-mercadotab="oficinas">Oficinas</button>
       <button class="er-subtab-btn" data-mercadotab="bodegas">Bodegas</button>
+      <button class="er-subtab-btn" data-mercadotab="comercio">Supermercados</button>
     </div>
   </div>
 
@@ -776,6 +777,54 @@
     <div class="row" style="margin-top:20px;">
       <button id="btn-mercadobod-confirm" disabled>Confirmar e ingestar</button>
       <span id="mercadobod-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+  </div>
+
+  <div id="mercado-panel-comercio" class="mercado-sub-panel hidden">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Período</div>
+    <div class="row">
+      <label class="muted" for="mercadocom-periodo">Mes del informe:</label>
+      <select id="mercadocom-periodo" style="width:160px">
+        <option value="">Elige mes...</option>
+      </select>
+    </div>
+    <div class="row" id="mercadocom-periodo-status-row" style="margin-top:6px"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">2</span> Busca el dato en el informe CNC y pégalo aquí</div>
+    <ol class="instructions">
+      <li>Busca en Google: <code>site:cnc.cl/wp-content/uploads/ "Ventas-Comercio-RM" "<span id="mercadocom-mes-busqueda">mes año</span>"</code></li>
+      <li>Entra al PDF y busca el gráfico "Ventas del Comercio Acumuladas".</li>
+      <li>Pega los 7 valores en una sola línea, en este orden: Total Comercio, Vestuario, Calzado, Artefactos Eléctricos, Línea Hogar, Muebles, Supermercados (usa "-" si algún valor no aparece).</li>
+    </ol>
+    <textarea id="mercadocom-input" placeholder="Ej: -0,9% 6,2% -3,0% -9,1% 0,2% -0,6% -1,2%"></textarea>
+    <div class="row">
+      <button id="btn-mercadocom-validate">Validar y previsualizar</button>
+      <span id="mercadocom-validate-status" class="muted"></span>
+    </div>
+
+    <div id="mercadocom-preview" class="preview hidden">
+      <div class="badges" id="mercadocom-badges"></div>
+      <ul id="mercadocom-errors" class="msg-list err"></ul>
+      <ul id="mercadocom-warnings" class="msg-list warn"></ul>
+
+      <div id="mercadocom-section-tabla" class="hidden">
+        <h3>Valores detectados</h3>
+        <table>
+          <thead><tr id="mercadocom-tabla-head"></tr></thead>
+          <tbody><tr id="mercadocom-tabla-row"></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-mercadocom-confirm" disabled>Confirmar e ingestar</button>
+      <span id="mercadocom-ingest-status" class="muted"></span>
     </div>
   </div>
 
@@ -2267,6 +2316,172 @@ btnMercadoBodConfirm.addEventListener('click', async () => {
 populateMercadoBodegasSemestres();
 checkMercadoBodPeriodoStatus();
 
+let lastMercadoComTexto = null;
+let lastMercadoComPeriodo = null;
+let lastMercadoComValidationOk = false;
+
+const MESES_LARGO_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function populateMercadoComercioMeses() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  for (let y = currentYear - 2; y <= currentYear + 1; y++) {
+    for (let m = 1; m <= 12; m++) {
+      const opt = document.createElement('option');
+      const mm = String(m).padStart(2, '0');
+      opt.value = `${y}-${mm}`;
+      opt.textContent = `${MESES_LARGO_ES[m - 1].charAt(0).toUpperCase()}${MESES_LARGO_ES[m - 1].slice(1)} ${y}`;
+      mercadoComPeriodo.appendChild(opt);
+      if (y === currentYear && m === currentMonth) opt.selected = true;
+    }
+  }
+}
+
+function actualizarMercadoComBusqueda() {
+  const periodo = mercadoComPeriodo.value;
+  const el = document.getElementById('mercadocom-mes-busqueda');
+  if (!periodo) { el.textContent = 'mes año'; return; }
+  const [y, m] = periodo.split('-');
+  const nombreMes = MESES_LARGO_ES[parseInt(m, 10) - 1];
+  el.textContent = `${nombreMes.charAt(0).toUpperCase()}${nombreMes.slice(1)} ${y}`;
+}
+
+const mercadoComPeriodo = document.getElementById('mercadocom-periodo');
+const mercadoComInput = document.getElementById('mercadocom-input');
+const btnMercadoComValidate = document.getElementById('btn-mercadocom-validate');
+const mercadoComValidateStatus = document.getElementById('mercadocom-validate-status');
+const btnMercadoComConfirm = document.getElementById('btn-mercadocom-confirm');
+const mercadoComIngestStatus = document.getElementById('mercadocom-ingest-status');
+const mercadoComPeriodoStatusRow = document.getElementById('mercadocom-periodo-status-row');
+
+async function checkMercadoComPeriodoStatus() {
+  const periodo = mercadoComPeriodo.value;
+  mercadoComPeriodoStatusRow.innerHTML = '';
+  actualizarMercadoComBusqueda();
+  if (!periodo) return;
+  try {
+    const res = await fetch(`/api/mercado/comercio/periodo_check?periodo=${periodo}`);
+    const data = await res.json();
+    if (data.ya_ingestado) {
+      const el = document.createElement('span');
+      el.className = 'badge';
+      el.innerHTML = `<span class="dot warn"></span>${periodo} ya tiene datos vigentes — reingestar los reemplazará.`;
+      mercadoComPeriodoStatusRow.appendChild(el);
+    }
+  } catch (e) { /* silencioso */ }
+}
+mercadoComPeriodo.addEventListener('change', checkMercadoComPeriodoStatus);
+
+function resetMercadoComPreview() {
+  document.getElementById('mercadocom-preview').classList.add('hidden');
+  btnMercadoComConfirm.disabled = true;
+  lastMercadoComValidationOk = false;
+  setStatus(mercadoComValidateStatus);
+  setStatus(mercadoComIngestStatus);
+}
+mercadoComInput.addEventListener('input', resetMercadoComPreview);
+mercadoComPeriodo.addEventListener('change', resetMercadoComPreview);
+
+const CATEGORIAS_COMERCIO = ['Total Comercio', 'Vestuario', 'Calzado', 'Artefactos Eléctricos', 'Línea Hogar', 'Muebles', 'Supermercados'];
+
+function renderMercadoComPreview(data) {
+  document.getElementById('mercadocom-preview').classList.remove('hidden');
+  const badges = document.getElementById('mercadocom-badges');
+  badges.innerHTML = '';
+  const errUl = document.getElementById('mercadocom-errors');
+  const warnUl = document.getElementById('mercadocom-warnings');
+  errUl.innerHTML = '';
+  warnUl.innerHTML = '';
+
+  function addBadge(label, status) {
+    const el = document.createElement('span');
+    el.className = 'badge';
+    el.innerHTML = `<span class="dot ${status}"></span>${label}`;
+    badges.appendChild(el);
+  }
+  addBadge(data.ok ? 'Validación OK' : 'Validación con errores', data.ok ? 'ok' : 'err');
+  (data.errors || []).forEach(e => {
+    const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li);
+  });
+  (data.warnings || []).forEach(w => {
+    const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li);
+  });
+
+  if (data.ok && data.fila) {
+    document.getElementById('mercadocom-section-tabla').classList.remove('hidden');
+    document.getElementById('mercadocom-tabla-head').innerHTML =
+      CATEGORIAS_COMERCIO.map(c => `<th>${c}</th>`).join('');
+    document.getElementById('mercadocom-tabla-row').innerHTML =
+      CATEGORIAS_COMERCIO.map(c => {
+        const v = data.fila[c];
+        return `<td class="num">${v === null || v === undefined ? '—' : (v * 100).toFixed(1) + '%'}</td>`;
+      }).join('');
+  } else {
+    document.getElementById('mercadocom-section-tabla').classList.add('hidden');
+  }
+
+  lastMercadoComValidationOk = data.ok;
+  btnMercadoComConfirm.disabled = !data.ok;
+}
+
+btnMercadoComValidate.addEventListener('click', async () => {
+  const texto = mercadoComInput.value;
+  const periodo = mercadoComPeriodo.value;
+  if (!periodo) { mercadoComValidateStatus.textContent = 'Declara el período del informe.'; return; }
+  setStatus(mercadoComValidateStatus, 'Validando y preparando previsualización...', 'loading');
+  btnMercadoComValidate.disabled = true;
+  btnMercadoComConfirm.disabled = true;
+  try {
+    const res = await fetch('/api/mercado/comercio/validate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto, periodo}),
+    });
+    const data = await res.json();
+    lastMercadoComTexto = texto;
+    lastMercadoComPeriodo = periodo;
+    renderMercadoComPreview(data);
+    setStatus(mercadoComValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
+  } catch (e) {
+    setStatus(mercadoComValidateStatus, 'Error: ' + e.message, 'error');
+  } finally {
+    btnMercadoComValidate.disabled = false;
+  }
+});
+
+btnMercadoComConfirm.addEventListener('click', async () => {
+  if (!lastMercadoComValidationOk || lastMercadoComTexto !== mercadoComInput.value ||
+      lastMercadoComPeriodo !== mercadoComPeriodo.value) {
+    mercadoComIngestStatus.textContent = 'Los datos cambiaron desde la última validación — vuelve a validar.';
+    return;
+  }
+  btnMercadoComConfirm.disabled = true;
+  setStatus(mercadoComIngestStatus, 'Ingestando en la base de datos...', 'loading');
+  try {
+    const res = await fetch('/api/mercado/comercio/commit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texto: lastMercadoComTexto, periodo: lastMercadoComPeriodo}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+    if (data.status === 'skipped_duplicate') {
+      setStatus(mercadoComIngestStatus, 'Este texto ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
+    } else {
+      setStatus(mercadoComIngestStatus,
+        `Listo: ${data.filas_insertadas} filas insertadas` +
+        (data.filas_superseded ? `, ${data.filas_superseded} filas anteriores reemplazadas` : '') +
+        ` (run #${data.run_id}).`,
+        'success');
+    }
+  } catch (e) {
+    setStatus(mercadoComIngestStatus, 'Error al ingestar: ' + e.message, 'error');
+    btnMercadoComConfirm.disabled = false;
+  }
+});
+
+populateMercadoComercioMeses();
+checkMercadoComPeriodoStatus();
+
 // ── TAB BALANCE CONSOLIDADO ───────────────────────────────────────────────
 const balancePeriodo = document.getElementById('balance-periodo');
 const balanceUnidad = document.getElementById('balance-unidad');
@@ -2600,11 +2815,14 @@ function _irAIngestar(tabDestino, pendiente, subKey) {
     rrProveedor.dispatchEvent(new Event('change'));
     checkRrPeriodoStatus();
   } else if (tabDestino === 'mercado') {
-    const subTab = subKey === 'bodegas' ? 'bodegas' : 'oficinas';
+    const subTab = subKey === 'bodegas' ? 'bodegas' : subKey === 'comercio' ? 'comercio' : 'oficinas';
     document.querySelector(`#mercado-subtabs [data-mercadotab="${subTab}"]`).click();
     if (subTab === 'bodegas') {
       if (pendiente) mercadoBodPeriodo.value = pendiente;
       checkMercadoBodPeriodoStatus();
+    } else if (subTab === 'comercio') {
+      if (pendiente) mercadoComPeriodo.value = pendiente;
+      checkMercadoComPeriodoStatus();
     } else {
       if (pendiente) mercadoPeriodo.value = pendiente;
       checkMercadoPeriodoStatus();
