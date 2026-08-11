@@ -254,11 +254,14 @@ FONDOS_CFG = {
                 "*Valor según participación en cada sociedad",
                 "**Deuda al cierre del trimestre",
             ],
-            # Segunda sección: Viña Centro. Dirección/superficie/arrendatarios
-            # son hechos estáticos del activo (mismo criterio que cfg["aspectos"]
-            # en la página 3 de PT/Apo). Comentarios mensuales (vacancia,
-            # ventas, resultados) y los donuts GLA/Ingresos por arrendatario no
-            # tienen fuente en DB todavía — quedan en placeholder "pendiente".
+            # Segunda sección: Viña Centro. "descripcion" es texto estático
+            # editable por admin en el HTML (persistido en localStorage, ver
+            # updateTextoFondoEditable). Superficie arrendable, vacancia y los
+            # donuts GLA/Ingresos por arrendatario se derivan de
+            # raw_rent_roll_line en fetch_fondo() (page4_vina_data), igual
+            # mecanismo que Mall Curicó en página 6. Comentarios mensuales
+            # (ventas, resultados) siguen sin fuente en DB — quedan en
+            # placeholder "pendiente".
             "vina_centro": {
                 "titulo": "Centro Comercial Paseo Viña Centro",
                 "descripcion": (
@@ -281,6 +284,7 @@ FONDOS_CFG = {
                     ("Superficie Arrendable", None),
                     ("Vacancia (m²)", None),
                 ],
+                "foto": _data_uri("vina_centro.png"),
             },
         },
         # Página 5 — resúmenes de los subfondos PT y Apoquindo (TRI invierte
@@ -1424,6 +1428,37 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             "total_ltv": (total_deuda / total_valor) if total_valor else None,
         }
 
+    # ---- Página 4 (TRI): Centro Comercial Paseo Viña Centro — superficie/
+    # vacancia (raw_rent_roll_line) + donuts GLA/Ingresos por arrendatario
+    # (rent_roll_stats), mismo mecanismo que Mall Curicó en página 6.
+    page4_vina_data = None
+    if (cfg.get("page4") or {}).get("vina_centro"):
+        from tools.db.rent_roll_stats import get_ingresos_arrendatario, get_m2_arrendatario, _periodos_disponibles
+
+        activo_vina = "Viña Centro"
+        periodos_vina = _periodos_disponibles(activo_vina)
+        vina_superficie, vina_vacancia = None, None
+        vina_ingresos, vina_gla = None, None
+        if periodos_vina:
+            ultimo = periodos_vina[-1]
+            rows_vina = cur.execute(
+                "SELECT arrendatario, m2 FROM raw_rent_roll_line WHERE activo_key=? AND periodo=? "
+                "AND superseded_at IS NULL",
+                (activo_vina, ultimo),
+            ).fetchall()
+            tot_m2 = sum(m2 or 0 for _, m2 in rows_vina)
+            vac_m2 = sum(m2 or 0 for arr, m2 in rows_vina if arr and "vacante" in arr.lower())
+            if tot_m2:
+                vina_superficie = tot_m2
+                vina_vacancia = vac_m2 / tot_m2 * 100
+            vina_ingresos = get_ingresos_arrendatario(activo_vina, ultimo)
+            vina_gla = get_m2_arrendatario(activo_vina, ultimo)
+
+        page4_vina_data = {
+            "superficie_arrendable": vina_superficie, "vacancia_pct": vina_vacancia,
+            "ingresos_arrendatario": vina_ingresos, "gla_arrendatario": vina_gla,
+        }
+
     # ---- Página 5 (TRI): resúmenes de los subfondos PT y Apoquindo ----
     # Reutiliza exactamente las mismas fuentes ya wireadas para las páginas
     # propias de PT/Apo (rent_roll_stats.get_perf_table para
@@ -1571,6 +1606,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "page4_indicadores": page4_indicadores,
+        "page4_vina": page4_vina_data,
         "page5": page5_data,
         "page6": page6_data,
         "page7": page7_data,
@@ -4201,11 +4237,12 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
     <div class="section-title">Notas</div>
     <ol id="lst-notas" style="font-size:10px;color:#333;padding-left:16px;line-height:1.5"></ol>
 
-    <!-- Centro Comercial Paseo Viña Centro (TRI): descripción + donuts GLA/
-         Ingresos (sin fuente en DB, placeholder) + comentarios generales
-         (editorial mensual, sin fuente todavía, placeholder) + aspectos
-         relevantes (hechos estáticos del activo) + foto (pendiente de subir).
-         Ver S.page4.vina_centro. -->
+    <!-- Centro Comercial Paseo Viña Centro (TRI): descripción (texto estático
+         editable por admin, ver updateTextoFondoEditable) + donuts GLA/
+         Ingresos por arrendatario (raw_rent_roll_line, ver F.page4_vina) +
+         comentarios generales (editorial mensual, sin fuente todavía,
+         placeholder) + aspectos relevantes (hechos estáticos del activo) +
+         foto (pendiente de subir). Ver S.page4.vina_centro. -->
     <div id="page4-vina" class="hidden">
       <div class="section-title" id="vina-titulo">—</div>
       <div class="cols page4-vina-cols">
@@ -4214,11 +4251,11 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
           <div class="charts-grid-2">
             <div class="chart-box">
               <div class="chart-title">GLA (m²)</div>
-              <div class="chart-placeholder" id="chart-vina-gla">Pendiente de datos</div>
+              <div class="donut-wrap" id="chart-vina-gla"></div>
             </div>
             <div class="chart-box">
               <div class="chart-title">Ingresos (UF/mes)</div>
-              <div class="chart-placeholder" id="chart-vina-ingresos">Pendiente de datos</div>
+              <div class="donut-wrap" id="chart-vina-ingresos"></div>
             </div>
           </div>
           <div class="vina-comentarios-box">
@@ -4228,9 +4265,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         <div>
           <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
           <table class="kv" id="tbl-vina-aspectos"><tbody></tbody></table>
-          <div class="foto-box" id="foto-vina" style="margin-top:8px;height:170px">
-            <div class="foto-placeholder">Pendiente: foto del Centro Comercial Paseo Viña Centro</div>
-          </div>
+          <div class="foto-box" id="foto-vina" style="margin-top:8px;aspect-ratio:876/588;height:auto"></div>
         </div>
       </div>
     </div>
@@ -5019,6 +5054,60 @@ function updateAspectosMesTexts(containerId, fondo, periodo, autoTexts){
     span.dataset.periodo = periodo || "";
     span.dataset.fondo = fondo || "";
   });
+}
+
+// ---- Párrafos de descripción editables por admin (ej. descripción Viña
+// Centro, página 4 TRI), persistidos en localStorage por fondo+slug — sin
+// eje de período, a diferencia de Aspectos del mes, porque es texto fijo del
+// activo. Mismo criterio de "requiere Confirmar" que updateAspectosMesTexts
+// (sin auto-guardado al perder foco). ----
+const TEXTO_FONDO_STORE_KEY = "factsheet_texto_fondo_overrides";
+function loadTextoFondoOverrides(){
+  try { return JSON.parse(localStorage.getItem(TEXTO_FONDO_STORE_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveTextoFondoOverride(fondo, slug, value){
+  const store = loadTextoFondoOverrides();
+  store[fondo] = store[fondo] || {};
+  if (value && value.trim() !== "") store[fondo][slug] = value.trim();
+  else delete store[fondo][slug];
+  localStorage.setItem(TEXTO_FONDO_STORE_KEY, JSON.stringify(store));
+}
+function getTextoFondoOverride(fondo, slug){
+  const store = loadTextoFondoOverrides();
+  return (store[fondo] && store[fondo][slug]) || null;
+}
+function updateTextoFondoEditable(elId, fondo, slug, autoText){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const isAdmin = document.body.classList.contains("admin");
+  const override = getTextoFondoOverride(fondo, slug);
+  const final = override != null ? override : autoText;
+
+  let btn = el.nextElementSibling;
+  if (!btn || !btn.classList || !btn.classList.contains("texto-fondo-confirm")){
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "texto-fondo-confirm";
+    btn.textContent = "Confirmar";
+    btn.style.cssText = "margin-left:6px;font-size:10px;padding:1px 6px;cursor:pointer;vertical-align:middle;display:none;";
+    el.insertAdjacentElement("afterend", btn);
+    btn.addEventListener("click", () => {
+      const f = el.dataset.fondo, s = el.dataset.slug;
+      if (!f || !s) return;
+      saveTextoFondoOverride(f, s, el.textContent);
+      const original = btn.textContent;
+      btn.textContent = "✓ Guardado";
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    });
+  }
+  if (document.activeElement !== el) {
+    el.textContent = final != null ? final : "";
+  }
+  el.contentEditable = isAdmin ? "true" : "false";
+  btn.style.display = isAdmin ? "inline-block" : "none";
+  el.dataset.fondo = fondo;
+  el.dataset.slug = slug;
 }
 
 // ---- Noticias: fechas editables por admin, persistidas en localStorage ----
@@ -8125,18 +8214,51 @@ function render(){
       document.getElementById("tbl-indicadores-tbody").innerHTML = rowsHtml;
     }
 
-    // Centro Comercial Paseo Viña Centro (TRI): descripción + aspectos son
-    // hechos estáticos del activo (ver S.page4.vina_centro); donuts GLA/
-    // Ingresos y comentarios editoriales mensuales quedan en placeholder —
-    // sin fuente en la DB todavía.
+    // Centro Comercial Paseo Viña Centro (TRI): descripción es texto estático
+    // editable por admin (ver S.page4.vina_centro + updateTextoFondoEditable).
+    // Superficie arrendable, vacancia y donuts GLA/Ingresos se derivan de
+    // raw_rent_roll_line, ya resueltos desde fetch_fondo() en F.page4_vina —
+    // mismo mecanismo que Mall Curicó en página 6.
     const hasVina = !!S.page4.vina_centro;
     document.getElementById("page4-vina").classList.toggle("hidden", !hasVina);
     if (hasVina) {
       const vc = S.page4.vina_centro;
       document.getElementById("vina-titulo").textContent = vc.titulo;
-      document.getElementById("txt-vina-descripcion").textContent = vc.descripcion;
+      updateTextoFondoEditable("txt-vina-descripcion", "TRI", "vina_descripcion", vc.descripcion);
       document.getElementById("tbl-vina-aspectos").querySelector("tbody").innerHTML =
-        vc.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder"' : ""}>${v === null ? "Pendiente" : v}</td></tr>`).join("");
+        vc.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page4-vina-pendiente" data-key="'+k+'"' : ""}>${v === null ? "Pendiente" : v}</td></tr>`).join("");
+      document.getElementById("foto-vina").innerHTML = vc.foto
+        ? `<img src="${vc.foto}">`
+        : `<div class="foto-placeholder">Pendiente: foto del Centro Comercial Paseo Viña Centro</div>`;
+      const vd = F.page4_vina;
+      if (vd) {
+        const donutOrPlaceholderVina = (containerId, dict, unit, tooltipTitle) => {
+          const el = document.getElementById(containerId);
+          el.classList.remove("chart-placeholder");
+          if (!dict || !Object.keys(dict).length) {
+            el.classList.add("chart-placeholder");
+            el.innerHTML = "Pendiente de datos";
+            return;
+          }
+          const total = Object.values(dict).reduce((s, v) => s + v, 0);
+          const donutData = Object.entries(dict).map(([n, v]) => [
+            n, total ? Math.round(v / total * 1000) / 10 : 0, { value: v, unit },
+          ]);
+          renderDonut(containerId, donutData, { tooltipTitle });
+        };
+        donutOrPlaceholderVina("chart-vina-gla", vd.gla_arrendatario, "m²", "GLA");
+        donutOrPlaceholderVina("chart-vina-ingresos", vd.ingresos_arrendatario, "UF", "Ingresos");
+        document.querySelectorAll(".page4-vina-pendiente").forEach(td => {
+          const key = td.dataset.key;
+          if (key === "Superficie Arrendable" && vd.superficie_arrendable != null) {
+            td.textContent = Math.round(vd.superficie_arrendable).toLocaleString("es-CL") + " m²";
+            td.classList.remove("placeholder");
+          } else if (key === "Vacancia (m²)" && vd.vacancia_pct != null) {
+            td.textContent = vd.vacancia_pct.toLocaleString("es-CL", {maximumFractionDigits: 1}) + "%";
+            td.classList.remove("placeholder");
+          }
+        });
+      }
     }
   }
 
