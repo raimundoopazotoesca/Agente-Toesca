@@ -44,6 +44,7 @@ from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db import ingest_mercado_bodegas as mercado_bodegas_core  # noqa: E402
 from tools.db import ingest_mercado_comercio as mercado_comercio_core  # noqa: E402
+from tools.db import ingest_variacion_comercio_rm as variacion_comercio_rm_core  # noqa: E402
 from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
 from tools.db import ingest_balance_consolidado as balance_core  # noqa: E402
 from tools.db import ingest_er_activo_web as er_activo_core  # noqa: E402
@@ -634,6 +635,55 @@ def api_mercado_comercio_commit():
     periodo = body.get("periodo", "")
     try:
         summary = mercado_comercio_core.commit(texto, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
+    return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/mercado/variacion_rm/ultimo_periodo")
+def api_variacion_comercio_rm_ultimo_periodo():
+    con = get_conn_for(str(variacion_comercio_rm_core.DB_PATH))
+    try:
+        row = con.execute(
+            "SELECT MAX(periodo) FROM raw_variacion_comercio_rm WHERE superseded_at IS NULL"
+        ).fetchone()
+        return jsonify({"ultimo_periodo": row[0] if row else None})
+    finally:
+        con.close()
+
+
+@app.post("/api/mercado/variacion_rm/validate")
+def api_variacion_comercio_rm_validate():
+    comercio = request.files.get("comercio")
+    supermercado = request.files.get("supermercado")
+    if comercio is None or not comercio.filename:
+        return jsonify({"ok": False, "errors": ["Sube el XLSX histórico de Índice de Ventas del Comercio RM."], "warnings": []})
+    if supermercado is None or not supermercado.filename:
+        return jsonify({"ok": False, "errors": ["Sube el XLSX histórico de Índice de Ventas de Supermercados RM."], "warnings": []})
+    try:
+        result = _con_archivo_legible(
+            variacion_comercio_rm_core.validate,
+            comercio.read(), comercio.filename, supermercado.read(), supermercado.filename,
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/mercado/variacion_rm/commit")
+def api_variacion_comercio_rm_commit():
+    comercio = request.files.get("comercio")
+    supermercado = request.files.get("supermercado")
+    if comercio is None or not comercio.filename:
+        return jsonify({"ok": False, "error": "Sube el XLSX histórico de Índice de Ventas del Comercio RM."}), 400
+    if supermercado is None or not supermercado.filename:
+        return jsonify({"ok": False, "error": "Sube el XLSX histórico de Índice de Ventas de Supermercados RM."}), 400
+    try:
+        summary = _con_archivo_legible(
+            variacion_comercio_rm_core.commit,
+            comercio.read(), comercio.filename, supermercado.read(), supermercado.filename,
+        )
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     _rebuild_factsheet()

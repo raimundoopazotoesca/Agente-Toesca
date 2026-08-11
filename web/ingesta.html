@@ -704,6 +704,7 @@
       <button class="er-subtab-btn active" data-mercadotab="oficinas">Oficinas</button>
       <button class="er-subtab-btn" data-mercadotab="bodegas">Bodegas</button>
       <button class="er-subtab-btn" data-mercadotab="comercio">Supermercados</button>
+      <button class="er-subtab-btn" data-mercadotab="variacion_rm">Var. Anual RM (CNC)</button>
     </div>
   </div>
 
@@ -929,6 +930,63 @@
     <div class="row" style="margin-top:20px;">
       <button id="btn-mercadocom-confirm" disabled>Confirmar e ingestar</button>
       <span id="mercadocom-ingest-status" class="muted"></span>
+    </div>
+  </div>
+
+  </div>
+
+  <div id="mercado-panel-variacion_rm" class="mercado-sub-panel hidden">
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Descarga las 2 Series Históricas de CNC</div>
+    <p class="muted" style="margin:0 0 4px">
+      CNC &gt; Estudios (<a href="https://cnc.cl/estudios/" target="_blank" rel="noopener">cnc.cl/estudios</a>) — descarga las dos Series Históricas más recientes,
+      no la nota de prensa ni un solo mes.
+    </p>
+    <ol class="instructions">
+      <li>Bloque "Índice de Ventas del Comercio RM" → "Serie Histórica de Índice de Ventas del Comercio – R. Metropolitana – Locales Equivalentes y Total Locales – [último mes]".</li>
+      <li>Bloque "Índice de Ventas de Supermercados" → "Serie Histórica del Índice de Ventas de Supermercados – R. Metropolitana – Locales Equivalentes y Total Locales – [último mes]".</li>
+      <li>Cada mes se reemplaza la serie completa (CNC revisa meses anteriores) — sube siempre los 2 archivos más recientes, no solo el mes nuevo.</li>
+    </ol>
+    <div class="row" id="variacionrm-ultimo-periodo-row" style="margin-top:6px"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="step-num">2</span> Sube los 2 archivos</div>
+    <div class="row">
+      <div id="variacionrm-dropzone-comercio" class="dropzone" style="flex:1">
+        Arrastra aquí el XLSX de "Índice de Ventas del Comercio RM" (hoja Total Locales) o haz click para elegirlo.
+        <input type="file" id="variacionrm-file-comercio" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <div id="variacionrm-dropzone-supermercado" class="dropzone" style="flex:1">
+        Arrastra aquí el XLSX de "Índice de Ventas de Supermercados RM" (hoja Total Locales) o haz click para elegirlo.
+        <input type="file" id="variacionrm-file-supermercado" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <button id="btn-variacionrm-validate">Validar y previsualizar</button>
+      <span id="variacionrm-validate-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="variacionrm-preview" class="step preview hidden">
+    <div class="badges" id="variacionrm-badges"></div>
+    <ul id="variacionrm-errors" class="msg-list err"></ul>
+    <ul id="variacionrm-warnings" class="msg-list warn"></ul>
+
+    <div id="variacionrm-section-tabla" class="hidden">
+      <h3>Últimos meses detectados</h3>
+      <table>
+        <thead><tr><th>Período</th><th class="num">Total Comercio</th><th class="num">Supermercado Tradicional</th></tr></thead>
+        <tbody id="variacionrm-tabla-body"></tbody>
+      </table>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-variacionrm-confirm" disabled>Confirmar e ingestar (reemplaza toda la serie)</button>
+      <span id="variacionrm-ingest-status" class="muted"></span>
     </div>
   </div>
 
@@ -2613,6 +2671,156 @@ btnMercadoComConfirm.addEventListener('click', async () => {
 
 populateMercadoComercioMeses();
 checkMercadoComPeriodoStatus();
+
+// ── SUBTAB MERCADO > VAR. ANUAL RM (CNC) ─────────────────────────────────
+(function initVariacionComercioRm() {
+  const dzComercio = document.getElementById('variacionrm-dropzone-comercio');
+  const fileComercio = document.getElementById('variacionrm-file-comercio');
+  const dzSupermercado = document.getElementById('variacionrm-dropzone-supermercado');
+  const fileSupermercado = document.getElementById('variacionrm-file-supermercado');
+  const btnValidate = document.getElementById('btn-variacionrm-validate');
+  const validateStatus = document.getElementById('variacionrm-validate-status');
+  const preview = document.getElementById('variacionrm-preview');
+  const btnConfirm = document.getElementById('btn-variacionrm-confirm');
+  const ingestStatus = document.getElementById('variacionrm-ingest-status');
+  const ultimoPeriodoRow = document.getElementById('variacionrm-ultimo-periodo-row');
+
+  let selectedComercio = null;
+  let selectedSupermercado = null;
+  let lastValidationOk = false;
+
+  function bindDropzone(dropzone, input, dzTextDefault, setSelected) {
+    dropzone.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const f = input.files[0] || null;
+      setSelected(f);
+      dropzone.textContent = f ? `Archivo seleccionado: ${f.name}` : dzTextDefault;
+      dropzone.classList.toggle('has-file', !!f);
+      dropzone.appendChild(input);
+      resetPreview();
+    });
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('drag');
+      const f = e.dataTransfer.files[0];
+      if (f) {
+        input.files = e.dataTransfer.files;
+        input.dispatchEvent(new Event('change'));
+      }
+    });
+  }
+
+  function resetPreview() {
+    preview.classList.add('hidden');
+    btnConfirm.disabled = true;
+    lastValidationOk = false;
+    setStatus(validateStatus);
+    setStatus(ingestStatus);
+  }
+
+  bindDropzone(dzComercio, fileComercio, dzComercio.textContent.trim(), f => selectedComercio = f);
+  bindDropzone(dzSupermercado, fileSupermercado, dzSupermercado.textContent.trim(), f => selectedSupermercado = f);
+
+  async function checkUltimoPeriodo() {
+    ultimoPeriodoRow.innerHTML = '';
+    try {
+      const res = await fetch('/api/mercado/variacion_rm/ultimo_periodo');
+      const data = await res.json();
+      if (data.ultimo_periodo) {
+        const el = document.createElement('span');
+        el.className = 'badge';
+        el.innerHTML = `<span class="dot"></span>Última data en DB: <strong>${data.ultimo_periodo}</strong>`;
+        ultimoPeriodoRow.appendChild(el);
+      }
+    } catch (e) { /* silencioso */ }
+  }
+
+  function fmtPctVar(v) {
+    if (v === null || v === undefined) return '—';
+    const n = Number(v) * 100;
+    return (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+  }
+
+  function renderPreview(data) {
+    preview.classList.remove('hidden');
+    const badges = document.getElementById('variacionrm-badges');
+    badges.innerHTML = data.ok ? '<span class="badge ok">Válido</span>' : '<span class="badge err">Con errores</span>';
+
+    const errUl = document.getElementById('variacionrm-errors');
+    const warnUl = document.getElementById('variacionrm-warnings');
+    errUl.innerHTML = (data.errors || []).map(e => `<li>${e}</li>`).join('');
+    warnUl.innerHTML = (data.warnings || []).map(w => `<li>${w}</li>`).join('');
+
+    const tabla = document.getElementById('variacionrm-section-tabla');
+    const body = document.getElementById('variacionrm-tabla-body');
+    if (data.filas && data.filas.length) {
+      tabla.classList.remove('hidden');
+      const ultimas = data.filas.slice(-6);
+      body.innerHTML = ultimas.map(f =>
+        `<tr><td>${f.periodo}</td><td class="num">${fmtPctVar(f.total_comercio_var_anual)}</td><td class="num">${fmtPctVar(f.supermercado_tradicional_var_anual)}</td></tr>`
+      ).join('');
+    } else {
+      tabla.classList.add('hidden');
+    }
+
+    lastValidationOk = !!data.ok;
+    btnConfirm.disabled = !lastValidationOk;
+  }
+
+  btnValidate.addEventListener('click', async () => {
+    if (!selectedComercio || !selectedSupermercado) {
+      validateStatus.textContent = 'Sube los 2 archivos primero.';
+      return;
+    }
+    setStatus(validateStatus, 'Validando y preparando previsualización...', 'loading');
+    btnValidate.disabled = true;
+    btnConfirm.disabled = true;
+    const fd = new FormData();
+    fd.append('comercio', selectedComercio);
+    fd.append('supermercado', selectedSupermercado);
+    try {
+      const res = await fetch('/api/mercado/variacion_rm/validate', { method: 'POST', body: fd });
+      const data = await res.json();
+      renderPreview(data);
+      setStatus(validateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
+    } catch (e) {
+      setStatus(validateStatus, 'Error: ' + e.message, 'error');
+    } finally {
+      btnValidate.disabled = false;
+    }
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    if (!lastValidationOk || !selectedComercio || !selectedSupermercado) return;
+    btnConfirm.disabled = true;
+    setStatus(ingestStatus, 'Ingestando en la base de datos (reemplaza toda la serie)...', 'loading');
+    const fd = new FormData();
+    fd.append('comercio', selectedComercio);
+    fd.append('supermercado', selectedSupermercado);
+    try {
+      const res = await fetch('/api/mercado/variacion_rm/commit', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
+      if (data.status === 'skipped_duplicate') {
+        setStatus(ingestStatus, 'Estos archivos ya habían sido ingestados antes — no se creó nada nuevo.', 'warn');
+      } else {
+        setStatus(ingestStatus,
+          `Listo: ${data.filas_insertadas} meses cargados` +
+          (data.filas_superseded ? `, ${data.filas_superseded} filas anteriores reemplazadas` : '') +
+          ` · último período ${data.ultimo_periodo} (run #${data.run_id}).`,
+          'success');
+      }
+      checkUltimoPeriodo();
+    } catch (e) {
+      setStatus(ingestStatus, 'Error al ingestar: ' + e.message, 'error');
+      btnConfirm.disabled = false;
+    }
+  });
+
+  checkUltimoPeriodo();
+})();
 
 // ── TAB BALANCE CONSOLIDADO ───────────────────────────────────────────────
 const balancePeriodo = document.getElementById('balance-periodo');

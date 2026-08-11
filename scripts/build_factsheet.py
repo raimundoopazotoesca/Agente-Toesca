@@ -966,6 +966,31 @@ def _fetch_mercado_comercio(db_path: str, periodo: str) -> dict[str, float | Non
     return {categoria: valor for categoria, valor in rows}
 
 
+def _fetch_variacion_comercio_rm(db_path: str) -> dict | None:
+    """Lee raw_variacion_comercio_rm (serie histórica completa, variación real
+    anual RM Total Locales, se reemplaza entera en cada ingesta mensual) y
+    arma {periodos, total_comercio_pct, supermercado_tradicional_pct} para
+    renderVariacionComercioRmChart(). Valores en porcentaje entero (3.6, no
+    0.036) porque el gráfico espera esa escala."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT periodo, total_comercio_var_anual, supermercado_tradicional_var_anual
+               FROM raw_variacion_comercio_rm
+               WHERE superseded_at IS NULL
+               ORDER BY periodo"""
+        ).fetchall()
+    finally:
+        con.close()
+    if not rows:
+        return None
+    return {
+        "periodos": [r[0] for r in rows],
+        "total_comercio_pct": [round(r[1] * 100, 4) if r[1] is not None else None for r in rows],
+        "supermercado_tradicional_pct": [round(r[2] * 100, 4) if r[2] is not None else None for r in rows],
+    }
+
+
 def _fetch_bodegas_evolucion(db_path: str) -> dict | None:
     """Lee raw_mercado_bodegas_evolucion (histórico semestral, carga única
     desde xlsx) y arma {semestres, uf_m2, vacancia_pct} para
@@ -1185,6 +1210,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     mercado_bodegas_por_periodo: dict[str, list[dict]] = {}
     bodegas_evolucion = None
     mercado_comercio_por_periodo: dict[str, dict[str, float | None]] = {}
+    variacion_comercio_rm = None
     if (cfg.get("page4") or {}).get("submercado") or (cfg.get("page3") or {}).get("modo") == "mercado":
         periodos_disponibles = [
             r[0] for r in cur.execute(
@@ -1216,6 +1242,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             fila = _fetch_mercado_comercio(str(DB), periodo)
             if fila is not None:
                 mercado_comercio_por_periodo[periodo] = fila
+        variacion_comercio_rm = _fetch_variacion_comercio_rm(str(DB))
 
     # ---- Página 3: ingresos UF/mes por edificio, para el donut ----
     # Cada fondo define su propio mapeo edificio (label mostrado) -> activo_key
@@ -1540,6 +1567,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "mercado_bodegas": mercado_bodegas_por_periodo,
         "bodegas_evolucion": bodegas_evolucion,
         "mercado_comercio": mercado_comercio_por_periodo,
+        "variacion_comercio_rm": variacion_comercio_rm,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "page4_indicadores": page4_indicadores,
@@ -4087,8 +4115,8 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         </table>
       </div>
       <div class="chart-box" style="margin-top:10px">
-        <div class="chart-title">Variaciones reales acumuladas Total Locales RM (CNC)</div>
-        <div class="chart-placeholder" id="chart-comercio">Pendiente de datos</div>
+        <div class="chart-title">Variaciones reales anuales Total Locales RM (CNC)</div>
+        <div id="chart-comercio" style="width:100%;aspect-ratio:900/260"></div>
       </div>
 
       <p class="small" style="margin-top:10px;color:#888">
@@ -6545,6 +6573,122 @@ function renderBodegasChart(containerId, evolucion){
   });
 }
 
+// Gráfico "Variaciones reales anuales Total Locales RM (CNC)" (página 3 TRI):
+// 2 líneas sobre un único eje Y — Total Comercio y Supermercado Tradicional,
+// variación real anual (%), serie histórica completa (raw_variacion_comercio_rm,
+// se reemplaza entera en cada ingesta mensual). Ver F.variacion_comercio_rm /
+// _fetch_variacion_comercio_rm en build_factsheet.py.
+function renderVariacionComercioRmChart(containerId, serie){
+  const el = document.getElementById(containerId);
+  const labels = serie && serie.periodos, comVals = serie && serie.total_comercio_pct, superVals = serie && serie.supermercado_tradicional_pct;
+  if (!labels || !labels.length){
+    el.innerHTML = `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    return;
+  }
+  const C = { comercio: "#20C878", super: "#595959", zero: "#B02A2A", grid: "#E4E4E4", text: "#333" };
+  const W = 900, H = 260;
+  const geom = { padL: 46, padR: 18, padT: 16, padB: 42 };
+  const plotW = W - geom.padL - geom.padR, plotH = H - geom.padT - geom.padB;
+  const n = labels.length;
+  const x = i => geom.padL + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+
+  const todos = comVals.concat(superVals).filter(v => v !== null && v !== undefined);
+  const rawMin = Math.min(0, ...todos), rawMax = Math.max(0, ...todos);
+  const margin = Math.max(2, (rawMax - rawMin) * 0.12);
+  const yMin = Math.floor((rawMin - margin) / 5) * 5, yMax = Math.ceil((rawMax + margin) / 5) * 5;
+  const y = v => geom.padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  const nTicks = 5;
+  let gridLines = "", yLabels = "";
+  for (let t = 0; t <= nTicks; t++) {
+    const v = yMin + (t * (yMax - yMin)) / nTicks;
+    const yy = y(v);
+    gridLines += `<line x1="${geom.padL}" y1="${yy.toFixed(1)}" x2="${W-geom.padR}" y2="${yy.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+    yLabels += `<text x="${geom.padL-6}" y="${(yy+3).toFixed(1)}" font-size="9" text-anchor="end" fill="${C.text}">${Math.round(v)}%</text>`;
+  }
+  const yZero = y(0);
+  const zeroLine = `<line x1="${geom.padL}" y1="${yZero.toFixed(1)}" x2="${W-geom.padR}" y2="${yZero.toFixed(1)}" stroke="${C.zero}" stroke-width="1.4"/>`;
+
+  function pathFor(vals) {
+    const pts = [];
+    vals.forEach((v, i) => { if (v !== null && v !== undefined) pts.push(`${pts.length ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`); });
+    return pts.join(" ");
+  }
+
+  // Labels de eje X: un tick cada 3 meses (trimestral), formato "ene-26",
+  // rotadas -45° (mismo tratamiento que renderBodegasChart) para que no se
+  // amontonen entre sí.
+  const MESES_ABR = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const xLabels = labels.map((lab, i) => {
+    const mesIdx = Number(lab.slice(5, 7)) - 1;
+    if (mesIdx % 3 !== 0 && i !== 0 && i !== n - 1) return "";
+    const txt = `${MESES_ABR[mesIdx]}-${lab.slice(2, 4)}`;
+    const xx = x(i).toFixed(1), yy = geom.padT + plotH + 12;
+    return `<text x="${xx}" y="${yy}" font-size="8" text-anchor="end" fill="${C.text}" transform="rotate(-45 ${xx} ${yy})">${txt}</text>`;
+  }).join("");
+
+  const hitW = n > 1 ? plotW / (n - 1) : plotW;
+  const hoverRects = labels.map((_, i) =>
+    `<rect class="parking-hit" data-i="${i}" x="${(x(i)-hitW/2).toFixed(1)}" y="${geom.padT}" width="${hitW.toFixed(1)}" height="${plotH}" fill="transparent" pointer-events="all"/>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <div style="display:flex;justify-content:center;align-items:center;gap:14px;font-size:11px;margin-bottom:2px">
+        <span><span style="display:inline-block;width:12px;height:2px;background:${C.comercio};margin-right:3px;vertical-align:middle"></span>Total Comercio</span>
+        <span><span style="display:inline-block;width:12px;height:2px;background:${C.super};margin-right:3px;vertical-align:middle"></span>Supermercado Tradicional</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Variaciones reales anuales Total Locales RM (CNC)">
+        ${gridLines}${zeroLine}
+        <path d="${pathFor(comVals)}" fill="none" stroke="${C.comercio}" stroke-width="2"/>
+        <path d="${pathFor(superVals)}" fill="none" stroke="${C.super}" stroke-width="2"/>
+        <line class="parking-guide" x1="0" x2="0" y1="${geom.padT}" y2="${geom.padT+plotH}" stroke="#26352F" stroke-width="1" stroke-dasharray="3 4" opacity="0"/>
+        ${yLabels}${xLabels}
+        ${hoverRects}
+      </svg>
+      <div class="parking-tooltip" aria-hidden="true"></div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const wrap = el.querySelector(".parking-chart");
+  const tooltip = el.querySelector(".parking-tooltip");
+  const guide = el.querySelector(".parking-guide");
+  const toPx = (vx, vy) => {
+    const s = svg.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    return { left: s.left - w.left + (vx / W) * s.width, top: s.top - w.top + (vy / H) * s.height };
+  };
+  const htmlLine = (label, value, color) =>
+    `<div class="line"><span class="label"><span class="dot" style="background:${color}"></span>${label}</span><span class="value">${value}</span></div>`;
+  const fmtV = v => v === null || v === undefined ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const showTooltip = (i) => {
+    const xx = x(i);
+    const p = toPx(xx, geom.padT);
+    tooltip.innerHTML =
+      `<div class="title">${labels[i]}</div>` +
+      htmlLine("Total Comercio", fmtV(comVals[i]), C.comercio) +
+      htmlLine("Supermercado Tradicional", fmtV(superVals[i]), C.super);
+    tooltip.style.left = `${Math.max(88, Math.min(wrap.clientWidth - 88, p.left))}px`;
+    tooltip.style.top = `${Math.max(24, p.top - 8)}px`;
+    tooltip.classList.add("on");
+    tooltip.setAttribute("aria-hidden", "false");
+    guide.setAttribute("x1", xx);
+    guide.setAttribute("x2", xx);
+    guide.setAttribute("opacity", "0.42");
+  };
+  const hideTooltip = () => {
+    tooltip.classList.remove("on");
+    tooltip.setAttribute("aria-hidden", "true");
+    guide.setAttribute("opacity", "0");
+  };
+  el.querySelectorAll(".parking-hit").forEach(hit => {
+    const i = Number(hit.dataset.i);
+    hit.addEventListener("mouseenter", () => showTooltip(i));
+    hit.addEventListener("mousemove", () => showTooltip(i));
+    hit.addEventListener("mouseleave", hideTooltip);
+  });
+}
+
 // Gráfico "Evolución anual vacancia/renta Oficinas Las Condes" (página 3 TRI):
 // dos líneas (Clase A / Clase B) sobre eje X trimestral agrupado por año.
 // data = {quarters, years, seriesA, seriesB}; fmt = "pct" | "uf".
@@ -7646,6 +7790,22 @@ function render(){
     document.getElementById("tbl-comercio-tbody").innerHTML =
       `<tr><td>${usadoOp ? mesEspanol(usadoOp) : "—"}</td>` +
       cc.categorias.map(c => `<td>${comercioFila ? fmtComercio(comercioFila[c]) : '<span class="placeholder">—</span>'}</td>`).join("") + `</tr>`;
+
+    if (F.variacion_comercio_rm) {
+      // Truncar la serie al mes de la fecha operacional seleccionada — no
+      // mostrar meses futuros a la fecha del fact sheet.
+      const vcr = F.variacion_comercio_rm;
+      const vcrIdxs = vcr.periodos.map((p, i) => i).filter(i => !usadoOp || vcr.periodos[i] <= usadoOp);
+      const vcrSliceBy = arr => vcrIdxs.map(i => arr[i]);
+      renderVariacionComercioRmChart("chart-comercio", {
+        periodos: vcrSliceBy(vcr.periodos),
+        total_comercio_pct: vcrSliceBy(vcr.total_comercio_pct),
+        supermercado_tradicional_pct: vcrSliceBy(vcr.supermercado_tradicional_pct),
+      });
+    } else {
+      document.getElementById("chart-comercio").innerHTML =
+        `<div class="chart-placeholder" style="width:100%;height:100%">Pendiente de datos</div>`;
+    }
   }
 
   // Página 4: rellenar notas con fechas dinámicas (ahora pc y usadoOp están definidas)
