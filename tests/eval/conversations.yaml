@@ -1,0 +1,33 @@
+- name: followup_comparison_pt_occupancy
+  turns:
+    - question: "¿Cuál fue la ocupación de Parque Titanium en julio?"
+      expected_metric: vacancia_pct
+      expected_entities: {fondo: PT}
+    - question: "¿Y versus el año pasado?"
+      expected_metric: vacancia_pct
+      expected_entities: {fondo: PT}
+      expected_comparison: same_period_last_year
+
+- name: entity_replacement_monthly_evolution
+  turns:
+    - question: "Muéstrame la evolución mensual de ocupación de PT en 2026"
+      expected_metric: vacancia_pct
+      expected_entities: {fondo: PT}
+    - question: "Haz lo mismo para Viña Centro"
+      expected_metric: vacancia_pct
+      expected_entities: {activo: "Viña Centro"}
+
+- name: metric_followup_same_entity
+  turns:
+    - question: "NOI de Mall Curicó en junio"
+      expected_metric: noi
+      expected_entities: {activo: "Mall Curicó"}
+    - question: "¿y la vacancia?"
+      expected_metric: vacancia_pct
+      expected_entities: {activo: "Mall Curicó"}
+
+- name: session_isolation_control
+  turns:
+    - question: "vacancia de Apoquindo 4501"
+      expected_metric: vacancia_pct
+      expected_entities: {activo: "Apo4501"}
