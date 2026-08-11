@@ -325,8 +325,7 @@ FONDOS_CFG = {
                     ("Superficie Arrendable", None),
                     ("Vacancia", None),
                 ],
-                # Foto pendiente de reemplazo (usuario indicó que la actual
-                # va a cambiar) — dejar sin "foto" hasta que llegue la nueva.
+                "foto": _data_uri("pt_fs_tri.png"),
             },
             "apo": {
                 "titulo": "Toesca Rentas Inmobiliarias Apoquindo Fondo de Inversión",
@@ -1435,28 +1434,36 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     if (cfg.get("page4") or {}).get("vina_centro"):
         from tools.db.rent_roll_stats import get_ingresos_arrendatario, get_m2_arrendatario, _periodos_disponibles
 
+        def _vina_vacancia_snapshot(periodo):
+            rows = cur.execute(
+                "SELECT arrendatario, m2 FROM raw_rent_roll_line WHERE activo_key=? AND periodo=? "
+                "AND superseded_at IS NULL",
+                (activo_vina, periodo),
+            ).fetchall()
+            tot_m2 = sum(m2 or 0 for _, m2 in rows)
+            vac_m2 = sum(m2 or 0 for arr, m2 in rows if arr and "vacante" in arr.lower())
+            return (tot_m2, vac_m2 / tot_m2 * 100) if tot_m2 else (None, None)
+
         activo_vina = "Viña Centro"
         periodos_vina = _periodos_disponibles(activo_vina)
         vina_superficie, vina_vacancia = None, None
         vina_ingresos, vina_gla = None, None
+        vina_periodo, vina_periodo_anterior, vina_vacancia_anterior = None, None, None
         if periodos_vina:
-            ultimo = periodos_vina[-1]
-            rows_vina = cur.execute(
-                "SELECT arrendatario, m2 FROM raw_rent_roll_line WHERE activo_key=? AND periodo=? "
-                "AND superseded_at IS NULL",
-                (activo_vina, ultimo),
-            ).fetchall()
-            tot_m2 = sum(m2 or 0 for _, m2 in rows_vina)
-            vac_m2 = sum(m2 or 0 for arr, m2 in rows_vina if arr and "vacante" in arr.lower())
-            if tot_m2:
-                vina_superficie = tot_m2
-                vina_vacancia = vac_m2 / tot_m2 * 100
-            vina_ingresos = get_ingresos_arrendatario(activo_vina, ultimo)
-            vina_gla = get_m2_arrendatario(activo_vina, ultimo)
+            vina_periodo = periodos_vina[-1]
+            vina_superficie, vina_vacancia = _vina_vacancia_snapshot(vina_periodo)
+            if len(periodos_vina) >= 2:
+                vina_periodo_anterior = periodos_vina[-2]
+                _, vina_vacancia_anterior = _vina_vacancia_snapshot(vina_periodo_anterior)
+            vina_ingresos = get_ingresos_arrendatario(activo_vina, vina_periodo)
+            vina_gla = get_m2_arrendatario(activo_vina, vina_periodo)
 
         page4_vina_data = {
             "superficie_arrendable": vina_superficie, "vacancia_pct": vina_vacancia,
             "ingresos_arrendatario": vina_ingresos, "gla_arrendatario": vina_gla,
+            "periodo": vina_periodo, "periodo_anterior": vina_periodo_anterior,
+            "vacancia_anterior_pct": vina_vacancia_anterior,
+            "noi_u12m_yoy": _fetch_noi_u12m_yoy_activo(activo_vina),
         }
 
     # ---- Página 5 (TRI): resúmenes de los subfondos PT y Apoquindo ----
@@ -1650,6 +1657,41 @@ def _fetch_noi_u12m_yoy_pt(fondo_key: str) -> dict:
     rows = conn.execute(
         "SELECT periodo, valor FROM derived_kpi WHERE kpi='noi_mensual' AND "
         "formula='raw_er_noi_v1' AND entidad_key='PT' ORDER BY periodo"
+    ).fetchall()
+    serie = {r["periodo"]: r["valor"] for r in rows}
+
+    def _u12m(hasta: str) -> float | None:
+        y, m = int(hasta[:4]), int(hasta[5:7])
+        meses = []
+        for _ in range(12):
+            meses.append(f"{y}-{m:02d}")
+            m -= 1
+            if m == 0:
+                m, y = 12, y - 1
+        valores = [serie[p] for p in meses if p in serie]
+        return sum(valores) if len(valores) == 12 else None
+
+    out = {}
+    for periodo in serie:
+        anio, mes = periodo[:4], periodo[5:7]
+        actual = _u12m(periodo)
+        base = _u12m(f"{int(anio) - 1}-{mes}")
+        if actual is not None and base:
+            out[periodo] = round((actual / base - 1) * 100, 1)
+    return out
+
+
+def _fetch_noi_u12m_yoy_activo(entidad_key: str) -> dict:
+    """Igual que _fetch_noi_u12m_yoy_pt pero genérico para cualquier
+    entidad_key con derived_kpi kpi='noi_mensual' formula='raw_er_noi_v1'
+    (ej. 'Viña Centro', ver page4_vina_data). {periodo: pct}."""
+    from tools.db.connection import get_conn
+
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT periodo, valor FROM derived_kpi WHERE kpi='noi_mensual' AND "
+        "formula='raw_er_noi_v1' AND entidad_key=? ORDER BY periodo",
+        (entidad_key,),
     ).fetchall()
     serie = {r["periodo"]: r["valor"] for r in rows}
 
@@ -3673,6 +3715,9 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .foto-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .foto-box .foto-placeholder { font-size: 10px; color: #999; text-align: center; padding: 8px; }
   .foto-caption { font-size: 10px; text-align: center; color: #666; margin-top: 3px; }
+  /* Página 5 (resúmenes PT/Apo dentro del TRI): foto apaisada, ancho completo
+     de la columna en vez del recorte alto por defecto de .foto-box. */
+  .page5-fotos .foto-box { aspect-ratio: 875/637; }
 
   /* PT (tenant): proporciones fijas por foto (no estirar a la altura de la
      columna hermana — eso las deformaba). Foto grande ~ratio nativo del
@@ -4259,7 +4304,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
             </div>
           </div>
           <div class="vina-comentarios-box">
-            <div class="small placeholder" id="txt-vina-comentarios">Pendiente: comentarios generales, vacancia, ventas acumuladas y resultados — actualización editorial mensual, sin fuente en la DB todavía.</div>
+            <div class="small placeholder" id="txt-vina-comentarios" style="white-space:pre-wrap">Pendiente: comentarios generales, vacancia, ventas acumuladas y resultados — actualización editorial trimestral, editable en modo admin.</div>
           </div>
         </div>
         <div>
@@ -5107,6 +5152,67 @@ function updateTextoFondoEditable(elId, fondo, slug, autoText){
   el.contentEditable = isAdmin ? "true" : "false";
   btn.style.display = isAdmin ? "inline-block" : "none";
   el.dataset.fondo = fondo;
+  el.dataset.slug = slug;
+}
+
+// ---- Comentarios generales editables por admin (ej. "Comentarios Generales
+// / Vacancia / Ventas Acumuladas / Resultados" de Viña Centro, página 4 TRI),
+// persistidos en localStorage por fondo+período+slug — sí lleva eje de
+// período (a diferencia de updateTextoFondoEditable) porque el contenido es
+// una actualización editorial trimestral/mensual, no un hecho fijo del
+// activo. Guarda innerHTML (no textContent) para permitir negritas/títulos
+// de sección tipeados por el admin; mismo criterio de "requiere Confirmar"
+// que updateAspectosMesTexts (sin auto-guardado al perder foco). ----
+const COMENTARIO_MES_STORE_KEY = "factsheet_comentario_mes_overrides";
+function loadComentarioMesOverrides(){
+  try { return JSON.parse(localStorage.getItem(COMENTARIO_MES_STORE_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveComentarioMesOverride(fondo, periodo, slug, value){
+  const store = loadComentarioMesOverrides();
+  store[fondo] = store[fondo] || {};
+  store[fondo][periodo] = store[fondo][periodo] || {};
+  if (value && value.replace(/<[^>]*>/g, "").trim() !== "") store[fondo][periodo][slug] = value;
+  else delete store[fondo][periodo][slug];
+  localStorage.setItem(COMENTARIO_MES_STORE_KEY, JSON.stringify(store));
+}
+function getComentarioMesOverride(fondo, periodo, slug){
+  const store = loadComentarioMesOverrides();
+  return (store[fondo] && store[fondo][periodo] && store[fondo][periodo][slug]) || null;
+}
+function updateComentarioMesEditable(elId, fondo, periodo, slug, autoHtml){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const isAdmin = document.body.classList.contains("admin");
+  const override = periodo ? getComentarioMesOverride(fondo, periodo, slug) : null;
+  const final = override != null ? override : autoHtml;
+
+  let btn = el.nextElementSibling;
+  if (!btn || !btn.classList || !btn.classList.contains("comentario-mes-confirm")){
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "comentario-mes-confirm";
+    btn.textContent = "Confirmar";
+    btn.style.cssText = "margin-top:4px;font-size:10px;padding:1px 6px;cursor:pointer;display:none;";
+    el.insertAdjacentElement("afterend", btn);
+    btn.addEventListener("click", () => {
+      const f = el.dataset.fondo, p = el.dataset.periodo, s = el.dataset.slug;
+      if (!f || !p || !s) return;
+      saveComentarioMesOverride(f, p, s, el.innerHTML);
+      const original = btn.textContent;
+      btn.textContent = "✓ Guardado";
+      setTimeout(() => { btn.textContent = original; }, 1200);
+      el.classList.remove("placeholder");
+    });
+  }
+  if (document.activeElement !== el) {
+    el.innerHTML = final != null ? final : "Pendiente.";
+    el.classList.toggle("placeholder", final == null);
+  }
+  el.contentEditable = isAdmin && periodo ? "true" : "false";
+  btn.style.display = isAdmin && periodo ? "inline-block" : "none";
+  el.dataset.fondo = fondo;
+  el.dataset.periodo = periodo || "";
   el.dataset.slug = slug;
 }
 
@@ -8225,6 +8331,27 @@ function render(){
       const vc = S.page4.vina_centro;
       document.getElementById("vina-titulo").textContent = vc.titulo;
       updateTextoFondoEditable("txt-vina-descripcion", "TRI", "vina_descripcion", vc.descripcion);
+      // Default dinámico: Vacancia y Resultados (NOI U12M yoy) se derivan de
+      // F.page4_vina (raw_rent_roll_line + derived_kpi noi_mensual/raw_er_noi_v1
+      // para "Viña Centro", ver page4_vina_data en fetch_fondo). Comentarios
+      // Generales y Ventas Acumuladas no tienen fuente en DB — quedan
+      // "Pendiente." hasta que el admin las escriba.
+      const mesAbrev = (p) => p ? `${MESES_ABR[parseInt(p.slice(5,7),10)-1]}-${p.slice(2,4)}` : "—";
+      const vd0 = F.page4_vina || {};
+      const vacanciaTxt = vd0.vacancia_pct != null
+        ? `${mesAbrev(vd0.periodo)}: ${vd0.vacancia_pct.toLocaleString("es-CL",{maximumFractionDigits:1})}%` +
+          (vd0.vacancia_anterior_pct != null ? ` (${mesAbrev(vd0.periodo_anterior)}: ${vd0.vacancia_anterior_pct.toLocaleString("es-CL",{maximumFractionDigits:1})}%)` : "")
+        : "Pendiente.";
+      const noiYoy = vd0.noi_u12m_yoy && vd0.periodo ? vd0.noi_u12m_yoy[vd0.periodo] : null;
+      const resultadosTxt = noiYoy != null
+        ? `El NOI U12M a ${mesEspanol(vd0.periodo).toLowerCase()} fue un ${Math.abs(noiYoy).toLocaleString("es-CL",{maximumFractionDigits:1})}% real ${noiYoy >= 0 ? "mayor" : "menor"} que el año anterior.`
+        : "Pendiente.";
+      const vinaComentariosDefault =
+        "<b>Comentarios Generales:</b><br>Pendiente.<br><br>" +
+        "<b>Vacancia:</b><br>" + vacanciaTxt + "<br><br>" +
+        "<b>Ventas Acumuladas:</b><br>Pendiente.<br><br>" +
+        "<b>Resultados:</b><br>" + resultadosTxt;
+      updateComentarioMesEditable("txt-vina-comentarios", "TRI", periodoCb, "vina_comentarios", vinaComentariosDefault);
       document.getElementById("tbl-vina-aspectos").querySelector("tbody").innerHTML =
         vc.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page4-vina-pendiente" data-key="'+k+'"' : ""}>${v === null ? "Pendiente" : v}</td></tr>`).join("");
       document.getElementById("foto-vina").innerHTML = vc.foto
