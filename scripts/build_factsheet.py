@@ -3715,9 +3715,11 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   .foto-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .foto-box .foto-placeholder { font-size: 10px; color: #999; text-align: center; padding: 8px; }
   .foto-caption { font-size: 10px; text-align: center; color: #666; margin-top: 3px; }
-  /* Página 5 (resúmenes PT/Apo dentro del TRI): foto apaisada, ancho completo
-     de la columna en vez del recorte alto por defecto de .foto-box. */
-  .page5-fotos .foto-box { aspect-ratio: 875/637; }
+  /* Página 5, sección PT (dentro del TRI): foto apaisada, ancho completo de
+     la columna en vez del recorte alto por defecto de .foto-box. Acotado a
+     #page5-section-pt para no afectar la sección de Apo (foto_4501/foto_4700,
+     ratio original). */
+  #page5-section-pt .page5-fotos .foto-box { aspect-ratio: 875/637; }
 
   /* PT (tenant): proporciones fijas por foto (no estirar a la altura de la
      columna hermana — eso las deformaba). Foto grande ~ratio nativo del
