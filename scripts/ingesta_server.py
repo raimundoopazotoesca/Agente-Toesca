@@ -43,6 +43,7 @@ from tools.db import ingest_eeff_validated as core  # noqa: E402
 from tools.db import ingest_rent_roll_validated as rr_core  # noqa: E402
 from tools.db import ingest_mercado as mercado_core  # noqa: E402
 from tools.db import ingest_mercado_bodegas as mercado_bodegas_core  # noqa: E402
+from tools.db import ingest_mercado_comercio as mercado_comercio_core  # noqa: E402
 from tools.db import ingest_parking_pt_mensual as parking_core  # noqa: E402
 from tools.db import ingest_balance_consolidado as balance_core  # noqa: E402
 from tools.db import ingest_er_activo_web as er_activo_core  # noqa: E402
@@ -594,6 +595,45 @@ def api_mercado_bodegas_commit():
     periodo = body.get("periodo", "")
     try:
         summary = mercado_bodegas_core.commit(texto, periodo)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _rebuild_factsheet()
+    return jsonify({"ok": True, **summary})
+
+
+@app.get("/api/mercado/comercio/periodo_check")
+def api_mercado_comercio_periodo_check():
+    periodo = request.args.get("periodo", "")
+    if not periodo:
+        return jsonify({"ya_ingestado": False})
+    con = get_conn_for(str(mercado_comercio_core.DB_PATH))
+    try:
+        n = con.execute(
+            "SELECT COUNT(*) FROM raw_mercado_comercio "
+            "WHERE periodo=? AND superseded_at IS NULL",
+            (periodo,),
+        ).fetchone()[0]
+        return jsonify({"ya_ingestado": bool(n), "n_filas": n})
+    finally:
+        con.close()
+
+
+@app.post("/api/mercado/comercio/validate")
+def api_mercado_comercio_validate():
+    body = request.get_json(force=True, silent=True) or {}
+    texto = body.get("texto", "")
+    periodo = body.get("periodo", "")
+    result = mercado_comercio_core.validate(texto, periodo)
+    return jsonify(result.to_dict())
+
+
+@app.post("/api/mercado/comercio/commit")
+def api_mercado_comercio_commit():
+    body = request.get_json(force=True, silent=True) or {}
+    texto = body.get("texto", "")
+    periodo = body.get("periodo", "")
+    try:
+        summary = mercado_comercio_core.commit(texto, periodo)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     _rebuild_factsheet()
