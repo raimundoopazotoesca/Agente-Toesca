@@ -300,3 +300,31 @@ class TestContextBuilderWiring(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         synthesis_content = calls[2][-1]["content"]
         self.assertIn("business_definition", synthesis_content.lower())
+
+
+class TestConversationalInheritance(unittest.TestCase):
+    def test_followup_inherits_metric_and_entity(self):
+        from tools.analyst.conversation_state import clear_state, get_state
+        clear_state("test-followup-1")
+        db_chat.answer("¿Cuál fue la ocupación de Parque Titanium en julio?",
+                        session_id="test-followup-1")
+        state_after_q1 = get_state("test-followup-1")
+        self.assertIsNotNone(state_after_q1["last_metric"])
+        self.assertTrue(state_after_q1["last_entities"])
+
+        db_chat.answer("¿Y versus el año pasado?", session_id="test-followup-1")
+        state_after_q2 = get_state("test-followup-1")
+        # metric/entity carried forward; not reset to None by the follow-up.
+        self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
+        self.assertEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])
+
+    def test_entity_replacement_keeps_metric_and_period(self):
+        from tools.analyst.conversation_state import clear_state, get_state
+        clear_state("test-replace-1")
+        db_chat.answer("Evolución mensual de ocupación de PT en 2026", session_id="test-replace-1")
+        state_after_q1 = get_state("test-replace-1")
+
+        db_chat.answer("Ahora Viña Centro", session_id="test-replace-1")
+        state_after_q2 = get_state("test-replace-1")
+        self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
+        self.assertNotEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])
