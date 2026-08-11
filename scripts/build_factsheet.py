@@ -947,6 +947,25 @@ def _fetch_bodegas_mercado(db_path: str, periodo: str) -> list[dict] | None:
     ]
 
 
+def _fetch_mercado_comercio(db_path: str, periodo: str) -> dict[str, float | None] | None:
+    """Lee raw_mercado_comercio para el período exacto dado — sin fallback a
+    período anterior (si no está ingestado, la tabla muestra placeholder,
+    igual criterio que bodegas cuando no hay filas)."""
+    con = sqlite3.connect(db_path)
+    try:
+        rows = con.execute(
+            """SELECT categoria, variacion_acumulada_pct
+               FROM raw_mercado_comercio
+               WHERE periodo = ? AND superseded_at IS NULL""",
+            (periodo,),
+        ).fetchall()
+    finally:
+        con.close()
+    if not rows:
+        return None
+    return {categoria: valor for categoria, valor in rows}
+
+
 def _fetch_bodegas_evolucion(db_path: str) -> dict | None:
     """Lee raw_mercado_bodegas_evolucion (histórico semestral, carga única
     desde xlsx) y arma {semestres, uf_m2, vacancia_pct} para
@@ -1165,6 +1184,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
     oficinas_evolucion = None
     mercado_bodegas_por_periodo: dict[str, list[dict]] = {}
     bodegas_evolucion = None
+    mercado_comercio_por_periodo: dict[str, dict[str, float | None]] = {}
     if (cfg.get("page4") or {}).get("submercado") or (cfg.get("page3") or {}).get("modo") == "mercado":
         periodos_disponibles = [
             r[0] for r in cur.execute(
@@ -1186,6 +1206,16 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             if filas is not None:
                 mercado_bodegas_por_periodo[periodo] = filas
         bodegas_evolucion = _fetch_bodegas_evolucion(str(DB))
+
+        periodos_comercio = [
+            r[0] for r in cur.execute(
+                "SELECT DISTINCT periodo FROM raw_mercado_comercio WHERE superseded_at IS NULL ORDER BY periodo"
+            )
+        ]
+        for periodo in periodos_comercio:
+            fila = _fetch_mercado_comercio(str(DB), periodo)
+            if fila is not None:
+                mercado_comercio_por_periodo[periodo] = fila
 
     # ---- Página 3: ingresos UF/mes por edificio, para el donut ----
     # Cada fondo define su propio mapeo edificio (label mostrado) -> activo_key
@@ -1509,6 +1539,7 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
         "oficinas_evolucion": oficinas_evolucion,
         "mercado_bodegas": mercado_bodegas_por_periodo,
         "bodegas_evolucion": bodegas_evolucion,
+        "mercado_comercio": mercado_comercio_por_periodo,
         "ingresos_edificios": dict(sorted(ingresos_edificios_por_periodo.items())),
         "tasaciones": tasaciones_data,
         "page4_indicadores": page4_indicadores,
@@ -7606,9 +7637,15 @@ function render(){
     const cc = S.page3.centros_comerciales;
     document.getElementById("tbl-comercio-thead").innerHTML =
       "<th></th>" + cc.categorias.map(c => `<th>${c}</th>`).join("");
+    const comercioFila = usadoOp && F.mercado_comercio ? F.mercado_comercio[usadoOp] : null;
+    const fmtComercio = (v) => {
+      if (v === null || v === undefined) return '<span class="placeholder">—</span>';
+      const pct = (v * 100).toFixed(1).replace(".", ",");
+      return (v > 0 ? "+" : "") + pct + "%";
+    };
     document.getElementById("tbl-comercio-tbody").innerHTML =
       `<tr><td>${usadoOp ? mesEspanol(usadoOp) : "—"}</td>` +
-      cc.categorias.map(() => '<td class="placeholder">—</td>').join("") + `</tr>`;
+      cc.categorias.map(c => `<td>${comercioFila ? fmtComercio(comercioFila[c]) : '<span class="placeholder">—</span>'}</td>`).join("") + `</tr>`;
   }
 
   // Página 4: rellenar notas con fechas dinámicas (ahora pc y usadoOp están definidas)
