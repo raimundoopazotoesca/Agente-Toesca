@@ -199,7 +199,7 @@ class TestMistralFallback:
         chain = db_chat._provider_chain()
 
         assert [cfg["name"] for cfg in chain] == [
-            "groq", "groq", "groq", "gemini", "mistral"
+            "groq", "groq", "groq", "gemini", "mistral", "sambanova"
         ]
 
 

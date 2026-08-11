@@ -28,6 +28,7 @@ from config import (
     DEEPSEEK_API_KEY,
     GEMINI_API_KEY,
     MISTRAL_API_KEY,
+    SAMBANOVA_API_KEY,
     GROQ_API_KEY,
     GROQ_API_KEY_2,
     GROQ_API_KEY_3,
@@ -56,6 +57,8 @@ _PROVIDER_LIST: list[dict] = [
      "api_key": GEMINI_API_KEY, "model": "gemini-2.5-flash"},
     {"name": "mistral", "base_url": "https://api.mistral.ai/v1",
      "api_key": MISTRAL_API_KEY, "model": "mistral-large-latest"},
+    {"name": "sambanova", "base_url": "https://api.sambanova.ai/v1",
+     "api_key": SAMBANOVA_API_KEY, "model": "gpt-oss-120b"},
 ]
 
 
@@ -70,7 +73,7 @@ def _resolve_provider() -> dict:
             return cfg
     raise RuntimeError(
         "No hay API key configurada. Define DEEPSEEK_API_KEY, "
-        "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY o MISTRAL_API_KEY en .env"
+        "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY, MISTRAL_API_KEY o SAMBANOVA_API_KEY en .env"
     )
 
 
@@ -83,7 +86,7 @@ def _provider_chain() -> list[dict]:
     if not with_key:
         raise RuntimeError(
             "No hay API key configurada. Define DEEPSEEK_API_KEY, "
-            "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY o MISTRAL_API_KEY en .env"
+            "GROQ_API_KEY (o GROQ_API_KEY_2), GEMINI_API_KEY, MISTRAL_API_KEY o SAMBANOVA_API_KEY en .env"
         )
     primary = [cfg for cfg in with_key if cfg["name"] == primary_name]
     rest = [cfg for cfg in with_key if cfg["name"] != primary_name]

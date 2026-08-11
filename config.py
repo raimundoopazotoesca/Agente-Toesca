@@ -6,11 +6,12 @@ load_dotenv(override=True)  # el reloader de Flask hereda os.environ del padre;
 
 GEMINI_API_KEY        = os.getenv("GEMINI_API_KEY", "")
 MISTRAL_API_KEY       = os.getenv("MISTRAL_API_KEY", "")
+SAMBANOVA_API_KEY     = os.getenv("SAMBANOVA_API_KEY", "")
 DEEPSEEK_API_KEY      = os.getenv("DEEPSEEK_API_KEY", "")
 GROQ_API_KEY          = os.getenv("GROQ_API_KEY", "")
 GROQ_API_KEY_2        = os.getenv("GROQ_API_KEY_2", "")  # cuenta Groq extra para duplicar cupo diario gratis
 GROQ_API_KEY_3        = os.getenv("GROQ_API_KEY_3", "")  # tercera cuenta Groq extra para triplicar cupo diario gratis
-DB_CHAT_PROVIDER      = os.getenv("DB_CHAT_PROVIDER", "groq")  # deepseek | groq | gemini
+DB_CHAT_PROVIDER      = os.getenv("DB_CHAT_PROVIDER", "groq")  # deepseek | groq | gemini | mistral | sambanova
 SHAREPOINT_DIR        = os.getenv("SHAREPOINT_DIR", "")
 LOCAL_FILES_DIR       = os.getenv("LOCAL_FILES_DIR", "")
 RENTA_COMERCIAL_DIR   = os.getenv("RENTA_COMERCIAL_DIR", "")  # Ruta directa a carpeta Comercial
