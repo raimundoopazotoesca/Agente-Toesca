@@ -1003,6 +1003,17 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         result_payload["intent"] = {"metric": metric_name}
 
     # Paso 2: sintetizar respuesta a partir de todos los datasets obtenidos
+    resolved_context_note = ""
+    if ctx.intent.metric:
+        catalog = load_semantic_catalog()
+        metric_def = catalog.metrics.get(ctx.intent.metric)
+        if metric_def:
+            resolved_context_note = (
+                f"\n\nCONTEXTO DE LA METRICA RESUELTA ({ctx.intent.metric}):\n"
+                f"business_definition: {metric_def.get('business_definition', '')}\n"
+                f"unit: {metric_def.get('unit', '')}"
+            )
+
     answer_messages = [
         {"role": "system", "content": _ANSWER_SYSTEM},
         {
@@ -1011,6 +1022,7 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
                 f"PREGUNTA: {question}\n\n"
                 f"CONSULTAS INTERNAS EJECUTADAS Y SUS DATOS (JSON, una entrada por consulta):\n"
                 f"```json\n{json.dumps(datasets, default=str, ensure_ascii=False)}\n```"
+                f"{resolved_context_note}"
             ),
         },
     ]

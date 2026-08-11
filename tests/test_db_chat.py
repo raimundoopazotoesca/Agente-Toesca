@@ -281,3 +281,22 @@ class TestContextBuilderWiring(unittest.TestCase):
             m["content"] for m in captured.get("captured_sql_messages", []) if isinstance(m.get("content"), str)
         )
         self.assertIn("RESOLVED INTENT", contents)
+
+    def test_answer_synthesis_receives_resolved_metric_context(self):
+        calls = []
+        original = db_chat._chat_completion_with_fallback
+
+        def _spy(messages, **kwargs):
+            calls.append(messages)
+            return original(messages, **kwargs)
+
+        db_chat._chat_completion_with_fallback = _spy
+        try:
+            db_chat.answer("vacancia del fondo TRI en 2026-06", session_id="test-synthesis-context")
+        finally:
+            db_chat._chat_completion_with_fallback = original
+
+        # calls[0] = intent extraction, calls[1] = SQL-gen pass, calls[2] = synthesis pass
+        self.assertEqual(len(calls), 3)
+        synthesis_content = calls[2][-1]["content"]
+        self.assertIn("business_definition", synthesis_content.lower())
