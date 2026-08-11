@@ -330,10 +330,12 @@ def api_chat():
     history = body.get("history") or []
     if not isinstance(history, list):
         history = []
-    # No hay autenticación por usuario (token es compartido); usamos la IP
-    # del cliente como session_id de conversación, único identificador que
-    # ya nos da Flask sin inventar un mecanismo nuevo.
-    session_id = request.remote_addr or "default"
+    # Session key para el estado conversacional del Asistente: preferimos un
+    # conversation_id generado por el cliente (persistido en sessionStorage
+    # del navegador, unico por pestaña/sesion). Si el cliente no lo manda
+    # (llamada legacy o sin JS), caemos a la IP como antes.
+    conversation_id = body.get("conversation_id") or request.headers.get("X-Conversation-Id")
+    session_id = str(conversation_id) if conversation_id else (request.remote_addr or "default")
     try:
         result = db_chat.answer(question, history, session_id=session_id)
     except Exception as exc:  # noqa: BLE001
