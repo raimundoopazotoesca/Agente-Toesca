@@ -10,6 +10,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from mapa_comunas import build_mapa_comunas_svg  # noqa: E402
+
 ROOT = Path(__file__).parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -386,6 +389,10 @@ FONDOS_CFG = {
                     ("Domingo Calderón", "abr-23", 146),
                 ],
                 "residencias_subtotal": 709,
+                "comunas": [
+                    ("Ñuñoa", 2), ("La Reina", 1), ("Las Condes", 1),
+                    ("Lo Barnechea", 1), ("La Florida", 1),
+                ],
                 "aspectos": [
                     ("Arrendatario", "Acalis (ex Senior Assist International)"),
                     ("Duración Contratos", "17,1 años"),
@@ -3400,6 +3407,12 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
   #tbl-residencias th, #tbl-residencias td { font-size: 9px; padding: 2px 4px; text-align: center; }
   #tbl-residencias th:first-child, #tbl-residencias td:first-child { text-align: left; }
   #tbl-residencias tr.row-total td { font-weight: 700; border-top: 1px solid var(--green); }
+  .mapa-residencias { margin-top: 6px; }
+  .mapa-residencias svg { width: 100%; height: auto; display: block; }
+  .mapa-residencias .comuna-shape { stroke: #C8C8C8; stroke-width: 0.7; }
+  .mapa-residencias .comuna-shape.presente { fill: #82DCB0; stroke: #159A61; stroke-width: 1.8; }
+  .mapa-residencias .comuna-shape.ausente { fill: #EFEFEF; }
+  .mapa-residencias .comuna-dot { fill: #fff; }
   span.ed, span.auto { padding: 0 2px; }
   input.date-input-inline {
     font: inherit; font-size: 11px; padding: 2px 6px;
@@ -4465,7 +4478,7 @@ HTML_TEMPLATE = r"""<!-- ARCHIVO AUTOGENERADO por scripts/build_factsheet.py —
         <div class="section-title" style="margin-top:0">Aspectos Relevantes</div>
         <table class="kv" id="tbl-inmossa-aspectos"><tbody></tbody></table>
         <div class="section-title" style="margin-top:10px">Ubicación Residencias</div>
-        <div class="chart-placeholder" id="mapa-residencias" style="height:165px">Pendiente: mapa esquemático de ubicaciones — sin fuente en la DB todavía.</div>
+        <div id="mapa-residencias" class="mapa-residencias">__MAPA_INMOSA_SVG__</div>
       </div>
     </div>
 
@@ -5731,6 +5744,8 @@ function switchFund(f){
       `<tr class="row-total"><td>Sub total</td><td></td><td>${inm.residencias_subtotal}</td></tr>`;
     document.getElementById("tbl-inmossa-aspectos").querySelector("tbody").innerHTML =
       inm.aspectos.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+    // El mapa de comunas (geometría real, ver scripts/mapa_comunas.py) se
+    // inyecta como SVG estático al construir el HTML — __MAPA_INMOSA_SVG__.
 
     const cur = S.page6.curico;
     document.getElementById("curico-titulo").textContent = cur.titulo;
@@ -8695,11 +8710,13 @@ def main():
         else:
             meta_out[k] = v
     chat_bubble_js = CHAT_BUBBLE_JS.read_text(encoding="utf-8")
+    mapa_inmossa_svg = build_mapa_comunas_svg(FONDOS_CFG["TRI"]["page6"]["inmossa"]["comunas"])
     html = (
         HTML_TEMPLATE
         .replace("__DATA_JSON__", json.dumps(all_data, ensure_ascii=False))
         .replace("__KPI_META_JSON__", json.dumps(meta_out, ensure_ascii=False))
         .replace("__CHAT_BUBBLE_JS__", chat_bubble_js)
+        .replace("__MAPA_INMOSA_SVG__", mapa_inmossa_svg)
     )
     OUT.write_text(html, encoding="utf-8")
     print(f"OK -> {OUT}")
