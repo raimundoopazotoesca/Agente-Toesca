@@ -53,3 +53,105 @@
 - question: "muéstrame lo mismo para Viña Centro"
   expected_metric: null
   notes: "sigue a una pregunta de NOI de PT en la misma sesion -- debe heredar metrica/periodo, cambiar solo entidad"
+
+# --- Phase 2 additions: entity aliases ---
+- question: "¿cómo viene Titanium este mes?"
+  expected_metric: null
+  expected_entities: {fondo: PT}
+  notes: "alias informal 'Titanium' para Parque Titanium/PT sin metrica explicita"
+
+- question: "vacancia del fondo madre"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: TRI}
+  notes: "alias 'fondo madre' -> TRI"
+
+- question: "NOI de Apoquindo 4501"
+  expected_metric: noi
+  expected_entities: {activo: "Apo4501"}
+
+- question: "ocupación de Rentas PT"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: PT}
+  notes: "alias 'Rentas PT'"
+
+# --- Phase 2 additions: metric aliases ---
+- question: "% ocupado de Viña Centro"
+  expected_metric: vacancia_pct
+  expected_entities: {activo: "Viña Centro"}
+  notes: "'% ocupado' es sinonimo inverso de vacancia"
+
+- question: "occupancy de Parque Titanium"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: PT}
+  notes: "termino en ingles"
+
+- question: "rentabilidad de la serie A de TRI desde el inicio"
+  expected_metric: tir_desde_inicio
+  expected_entities: {fondo: TRI}
+
+- question: "dividend yield de Apo"
+  expected_metric: dividend_yield
+  expected_entities: {fondo: Apo}
+
+- question: "tasa de arriendo de Mall Curicó"
+  expected_metric: tasa_arriendo
+  expected_entities: {activo: "Mall Curicó"}
+
+# --- Phase 2 additions: temporal phrases ---
+- question: "vacancia de PT este mes"
+  expected_metric: vacancia_pct
+  expected_entities: {fondo: PT}
+  expected_period: current_month
+
+- question: "NOI de Viña Centro el mes pasado"
+  expected_metric: noi
+  expected_entities: {activo: "Viña Centro"}
+  expected_period: previous_month
+
+- question: "dividend yield YTD de TRI"
+  expected_metric: dividend_yield
+  expected_entities: {fondo: TRI}
+  expected_period: ytd
+
+- question: "vacancia de Apoquindo 4700 en los últimos 12 meses"
+  expected_metric: vacancia_pct
+  expected_entities: {activo: "Apo4700"}
+  expected_period: u12m
+
+- question: "NOI de TRI el año pasado"
+  expected_metric: noi
+  expected_entities: {fondo: TRI}
+  expected_period: previous_year
+
+# --- Phase 2 additions: ambiguity SHOULD clarify ---
+- question: "cuéntame algo"
+  expected_metric: null
+  expected_entities: {}
+  notes: "sin metrica, sin entidad, sin contexto -> debe pedir aclaracion"
+
+- question: "dame el numero"
+  expected_metric: null
+  expected_entities: {}
+  notes: "referencia vaga sin metrica/entidad -> debe pedir aclaracion"
+
+# --- Phase 2 additions: ambiguity should NOT clarify ---
+- question: "¿cómo viene Parque Titanium?"
+  expected_metric: null
+  expected_entities: {fondo: PT}
+  notes: "entidad clara, metrica implicita 'desempeño general' -> NO debe forzar aclaracion, dejar que el LLM elija un resumen razonable"
+
+- question: "Apoquindo"
+  expected_metric: null
+  expected_entities: {}
+  notes: "caso de ambiguedad documentado (fondo Apo vs activo consolidado Apoquindo) -> segun notas_ambiguedad en semantic/relationships.yaml"
+
+# --- Phase 2 additions: known-gap coverage (metrics without semantic/*.yaml yet) ---
+- question: "LTV del fondo TRI"
+  expected_metric: null
+  expected_entities: {fondo: TRI}
+  notes: "LTV no tiene semantic/metrics/*.yaml aun (solo vive en _BUSINESS_CONTEXT) -- documentar el gap, no inventar el yaml en este eval"
+
+- question: "valor cuota libro de la serie C de TRI"
+  expected_metric: null
+  expected_entities: {fondo: TRI}
+  notes: "misma razon -- gap conocido, no cubierto por semantic/ todavia"

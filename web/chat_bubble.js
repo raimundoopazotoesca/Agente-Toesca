@@ -138,6 +138,12 @@
   const closeBtn = panel.querySelector(".tc-close");
 
   const history = [];
+  const CONVERSATION_ID_KEY = "toesca_asistente_conversation_id";
+  let conversationId = sessionStorage.getItem(CONVERSATION_ID_KEY);
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    sessionStorage.setItem(CONVERSATION_ID_KEY, conversationId);
+  }
 
   function toggle(open) {
     const isOpen = open ?? !panel.classList.contains("open");
@@ -395,7 +401,7 @@
       const r = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ question: q, history }),
+        body: JSON.stringify({ question: q, history, conversation_id: conversationId }),
       });
       if (r.status === 401) {
         typing.remove();

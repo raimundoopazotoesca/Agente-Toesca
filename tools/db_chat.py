@@ -34,10 +34,12 @@ from config import (
     GROQ_API_KEY_3,
 )
 from tools.db.connection import DEFAULT_DB_PATH
+from tools.analyst.ambiguity import AmbiguityDecision
+from tools.analyst.context_builder import AnalystContext, build_context
 from tools.analyst.conversation_state import get_state, update_state
+from tools.analyst.intent import IntentResult
 from tools.analyst.result_checks import check_result
 from tools.analyst.semantic_loader import load_semantic_catalog
-from tools.analyst.verified_queries_repo import find_similar
 
 
 # ─── Provider config ──────────────────────────────────────────────────────────
@@ -138,6 +140,16 @@ def _chat_completion_with_fallback(messages: list, **kwargs):
                 continue  # probar siguiente provider
             raise
     raise last_exc
+
+
+def _intent_llm_call(prompt: str) -> str:
+    """Adapter handing context_builder's intent extraction a real LLM call
+    through the existing provider chain, without db_chat.answer()'s SQL/answer
+    prompts. Kept intentionally cheap: short prompt, low max_tokens."""
+    resp, _ = _chat_completion_with_fallback(
+        [{"role": "user", "content": prompt}], temperature=0.0, max_tokens=200,
+    )
+    return resp.choices[0].message.content or ""
 
 
 # ─── Schema summary (cacheado) ────────────────────────────────────────────────
@@ -846,9 +858,6 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
     if shortcut is not None:
         return shortcut
 
-    verified = find_similar(question, top_k=1)
-    verified_hint = verified[0] if verified else None
-
     try:
         chain = _provider_chain()
     except RuntimeError as exc:
@@ -859,6 +868,31 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         }
     provider = chain[0]
 
+    try:
+        ctx = build_context(question, session_id, history or [], _intent_llm_call)
+    except Exception:
+        # build_context (intent extraction, verified-query lookup, temporal
+        # resolution) is optional enrichment, not a hard dependency: Phase 1's
+        # answer() worked without it. Degrade to an empty context instead of
+        # aborting the request, so SQL generation is still attempted.
+        ctx = AnalystContext(
+            intent=IntentResult(metric=None),
+            decision=AmbiguityDecision(action="proceed", reason="context_builder failed, degrading to legacy behavior"),
+            temporal=None,
+            verified_hint=None,
+            prompt_sections=[],
+        )
+
+    if ctx.decision.action == "clarify":
+        return {
+            "answer_md": ctx.decision.clarify_message,
+            "clarify": True,
+            "sql": None,
+            "columns": [],
+            "rows": [],
+            "provider": provider["model"],
+        }
+
     # Paso 1: generar SQL. El playbook YA cubre la seleccion de tablas y
     # columnas; el PRAGMA schema completo (~2k tokens) es redundante y hace
     # que el prompt exceda el rate limit del free tier de Groq. Lo dejamos
@@ -868,16 +902,8 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         {"role": "system", "content": _BUSINESS_CONTEXT},
         {"role": "system", "content": "Ejemplos gold pregunta→JSON. Sigue exactamente este patron de entidad_key, formula, filtros y formato JSON."},
     ]
-    if verified_hint:
-        sql_messages.append({
-            "role": "system",
-            "content": (
-                "Pregunta similar ya verificada:\n"
-                f"Q: {verified_hint['question']}\n"
-                f"SQL: {verified_hint['sql']}\n"
-                f"Notas: {verified_hint.get('notes', '')}"
-            ),
-        })
+    for label, content in ctx.prompt_sections:
+        sql_messages.append({"role": "system", "content": f"{label}:\n{content}"})
     sql_messages += [
         *_few_shot_messages(),
         *_serialize_history(history or []),
@@ -990,6 +1016,17 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         result_payload["intent"] = {"metric": metric_name}
 
     # Paso 2: sintetizar respuesta a partir de todos los datasets obtenidos
+    resolved_context_note = ""
+    if ctx.intent.metric:
+        catalog = load_semantic_catalog()
+        metric_def = catalog.metrics.get(ctx.intent.metric)
+        if metric_def:
+            resolved_context_note = (
+                f"\n\nCONTEXTO DE LA METRICA RESUELTA ({ctx.intent.metric}):\n"
+                f"business_definition: {metric_def.get('business_definition', '')}\n"
+                f"unit: {metric_def.get('unit', '')}"
+            )
+
     answer_messages = [
         {"role": "system", "content": _ANSWER_SYSTEM},
         {
@@ -998,6 +1035,7 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
                 f"PREGUNTA: {question}\n\n"
                 f"CONSULTAS INTERNAS EJECUTADAS Y SUS DATOS (JSON, una entrada por consulta):\n"
                 f"```json\n{json.dumps(datasets, default=str, ensure_ascii=False)}\n```"
+                f"{resolved_context_note}"
             ),
         },
     ]
@@ -1025,6 +1063,10 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
         result["error"] = "llm_error"
         result["error_detalle"] = error_detalle
 
+    # intent.py's extract_intent() also writes last_metric (LLM-guessed) earlier
+    # in this same request. This write is intentionally authoritative: it runs
+    # after (and overwrites) that earlier guess, using the metric actually
+    # reflected in the SQL that ran, which is more reliable than the LLM guess.
     update_state(session_id, last_metric=metric_name or get_state(session_id)["last_metric"])
 
     return result

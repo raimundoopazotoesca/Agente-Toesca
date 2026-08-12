@@ -6,6 +6,8 @@ validacion de SQL, formateo numerico, atajo de saludos, extraccion de JSON y
 sugerencia de periodos disponibles.
 """
 import sqlite3
+import unittest
+import unittest.mock
 
 import pytest
 
@@ -227,8 +229,18 @@ class TestAnswerWithIntentLayer:
         assert result["error"] == "empty"
 
     def test_answer_result_check_flags_out_of_bounds(self, monkeypatch):
+        # Task 5 wiring adds a preceding intent-extraction LLM call (through
+        # the same _chat_completion_with_fallback) before SQL generation, so
+        # the fake response queue needs an extra entry up front with a
+        # confident, resolvable intent so build_context proceeds to SQL
+        # generation instead of short-circuiting into clarify.
+        intent_json = (
+            '{"metric": "vacancia_pct", "entities": {"activo": "Curicó"}, '
+            '"period": null, "comparison": null, "confidence": 0.9}'
+        )
         sql_json = '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
         responses = [
+            (_FakeResp(intent_json), {"model": "fake-model-1"}),
             (_FakeResp(sql_json), {"model": "fake-model-1"}),
             (_FakeResp("Vacancia fuera de rango."), {"model": "fake-model-1"}),
         ]
@@ -246,3 +258,135 @@ class TestAnswerWithIntentLayer:
         assert "result_check" in result
         assert result["result_check"]["passed"] is False
         assert result["result_check"]["violated"]
+
+
+# ─── answer() con context_builder wiring (Task 5) ────────────────────────────
+class TestContextBuilderWiring(unittest.TestCase):
+    def test_clarify_short_circuit_before_sql_generation(self):
+        from tools.analyst.conversation_state import clear_state
+        clear_state("test-clarify-wiring")
+        result = db_chat.answer("cuéntame algo", session_id="test-clarify-wiring")
+        # A fully ungrounded question with no prior state must clarify
+        # deterministically, without ever reaching SQL generation.
+        self.assertTrue(result.get("clarify"))
+        self.assertIsNone(result.get("sql"))
+
+    def test_context_sections_reach_the_sql_prompt(self):
+        # Regression guard: RESOLVED INTENT / labeled sections must appear
+        # in the messages sent for SQL generation, not just be computed and
+        # discarded.
+        captured = {}
+        original = db_chat._chat_completion_with_fallback
+
+        def _spy(messages, **kwargs):
+            # answer() now issues an intent-extraction LLM call (via
+            # _intent_llm_call, added by this same wiring) before the SQL
+            # generation call, so "first call" is no longer the SQL prompt.
+            # Identify the SQL-generation call by its distinctive system
+            # message instead of by call order.
+            if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
+                captured["captured_sql_messages"] = messages
+            return original(messages, **kwargs)
+
+        db_chat._chat_completion_with_fallback = _spy
+        try:
+            db_chat.answer("vacancia de Parque Titanium este mes", session_id="test-sections-wiring")
+        finally:
+            db_chat._chat_completion_with_fallback = original
+
+        contents = " ".join(
+            m["content"] for m in captured.get("captured_sql_messages", []) if isinstance(m.get("content"), str)
+        )
+        self.assertIn("RESOLVED INTENT", contents)
+
+    def test_build_context_failure_degrades_instead_of_aborting(self):
+        # build_context (intent extraction / verified-query lookup / temporal
+        # resolution) is optional enrichment. If it raises, answer() must
+        # still attempt SQL generation instead of short-circuiting with an
+        # llm_error dict for this reason alone. SQL-gen/synthesis calls are
+        # faked so this test doesn't depend on a live LLM provider.
+        sql_json = '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
+        responses = [
+            (_FakeResp(sql_json), {"model": "fake-model-1"}),
+            (_FakeResp("Vacancia: 12%."), {"model": "fake-model-1"}),
+        ]
+        sql_gen_called = {"value": False}
+
+        def fake_chat_completion(messages, **_kwargs):
+            if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
+                sql_gen_called["value"] = True
+            return responses.pop(0)
+
+        def _raising_build_context(*args, **kwargs):
+            raise RuntimeError("intent extraction provider unavailable")
+
+        original_build_context = db_chat.build_context
+        original_fallback = db_chat._chat_completion_with_fallback
+        db_chat.build_context = _raising_build_context
+        db_chat._chat_completion_with_fallback = fake_chat_completion
+        try:
+            with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+                 unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[12.0]])), \
+                 unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
+                result = db_chat.answer(
+                    "vacancia del fondo TRI en 2026-06", session_id="test-build-context-failure"
+                )
+        finally:
+            db_chat.build_context = original_build_context
+            db_chat._chat_completion_with_fallback = original_fallback
+
+        self.assertTrue(sql_gen_called["value"], "SQL generation must still be attempted")
+        self.assertNotEqual(result.get("error"), "llm_error")
+
+    def test_answer_synthesis_receives_resolved_metric_context(self):
+        calls = []
+        original = db_chat._chat_completion_with_fallback
+
+        def _spy(messages, **kwargs):
+            calls.append(messages)
+            return original(messages, **kwargs)
+
+        db_chat._chat_completion_with_fallback = _spy
+        try:
+            db_chat.answer("vacancia del fondo TRI en 2026-06", session_id="test-synthesis-context")
+        finally:
+            db_chat._chat_completion_with_fallback = original
+
+        # Find the synthesis pass by its distinctive system prompt rather than
+        # asserting an exact total call count, which is brittle to future
+        # changes in call topology (e.g. caching, extra passes).
+        synthesis_calls = [
+            messages for messages in calls
+            if any(m.get("content") == db_chat._ANSWER_SYSTEM for m in messages)
+        ]
+        self.assertEqual(len(synthesis_calls), 1, "expected exactly one synthesis pass")
+        synthesis_content = synthesis_calls[0][-1]["content"]
+        self.assertIn("business_definition", synthesis_content.lower())
+
+
+class TestConversationalInheritance(unittest.TestCase):
+    def test_followup_inherits_metric_and_entity(self):
+        from tools.analyst.conversation_state import clear_state, get_state
+        clear_state("test-followup-1")
+        db_chat.answer("¿Cuál fue la ocupación de Parque Titanium en julio?",
+                        session_id="test-followup-1")
+        state_after_q1 = get_state("test-followup-1")
+        self.assertIsNotNone(state_after_q1["last_metric"])
+        self.assertTrue(state_after_q1["last_entities"])
+
+        db_chat.answer("¿Y versus el año pasado?", session_id="test-followup-1")
+        state_after_q2 = get_state("test-followup-1")
+        # metric/entity carried forward; not reset to None by the follow-up.
+        self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
+        self.assertEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])
+
+    def test_entity_replacement_keeps_metric_and_period(self):
+        from tools.analyst.conversation_state import clear_state, get_state
+        clear_state("test-replace-1")
+        db_chat.answer("Evolución mensual de ocupación de PT en 2026", session_id="test-replace-1")
+        state_after_q1 = get_state("test-replace-1")
+
+        db_chat.answer("Ahora Viña Centro", session_id="test-replace-1")
+        state_after_q2 = get_state("test-replace-1")
+        self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
+        self.assertNotEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])

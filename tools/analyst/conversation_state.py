@@ -5,6 +5,7 @@ use — see docs/superpowers/specs/2026-08-10-analyst-agent-phase1-design.md).
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any
 
 _DEFAULTS: dict[str, Any] = {
@@ -14,7 +15,12 @@ _DEFAULTS: dict[str, Any] = {
     "last_analysis_type": None,
 }
 
-_STATE: dict[str, dict[str, Any]] = {}
+# Cap on distinct session_id keys held in memory. Without a bound, a process
+# that never restarts would grow _STATE forever (e.g. one key per malicious
+# or unbounded conversation_id). Oldest entries are evicted first.
+_MAX_SESSIONS = 500
+
+_STATE: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
 
 
 def get_state(session_id: str) -> dict[str, Any]:
@@ -24,7 +30,14 @@ def get_state(session_id: str) -> dict[str, Any]:
 
 
 def update_state(session_id: str, **fields: Any) -> None:
-    current = _STATE.setdefault(session_id, dict(_DEFAULTS))
+    if session_id in _STATE:
+        _STATE.move_to_end(session_id)
+        current = _STATE[session_id]
+    else:
+        current = dict(_DEFAULTS)
+        _STATE[session_id] = current
+        if len(_STATE) > _MAX_SESSIONS:
+            _STATE.popitem(last=False)
     current.update(fields)
 
 
