@@ -57,6 +57,7 @@ Reglas clave:
 - `raw_value` siempre se conserva, incluso si no resuelve a nada canónico — el catálogo no es whitelist. Una métrica no catalogada (ej. "concentración de renta") queda con `canonical_value=None, resolution_status="unresolved"` y el Analyst Agent la recibe igual para poder explorar cómo obtenerla.
 - `source` es proveniencia pura (explicit/inherited/inferred), nunca confianza. Un valor `explicit` puede seguir `unresolved` si el usuario lo dijo claro pero no mapea a nada conocido.
 - `resolution_status="ambiguous"` cuando el catálogo/entity_resolver encuentra más de un candidato plausible.
+- **`source` describe cómo se obtuvo el valor *en el turno actual*, no su origen histórico.** `keep` produce `source="inherited"` en el `ResolvedValue` resultante — aunque el valor original haya sido `explicit` dos turnos atrás. Ejemplo: turno 1 "Ocupación de PT" → `metrics=[occupancy], source=explicit`; turno 2 "¿Y el año pasado?" → `metrics=[occupancy], source=inherited` (se heredó en este turno, aunque semánticamente el usuario nunca lo repitió). Si en el futuro hace falta saber el origen histórico real, se puede agregar `origin_source` — no se incluye ahora por YAGNI. Esto hace los traces (`explicit_fields/inherited_fields/inferred_fields` del log de observabilidad) legibles turno a turno sin tener que rastrear la cadena completa.
 
 Persistencia: mismo mecanismo de hoy — `OrderedDict[session_id, ConversationState]`, cap 500 sesiones, eviction LRU. Solo cambia la forma del valor guardado (antes dict de 4 campos, ahora `ConversationState`).
 
@@ -109,19 +110,43 @@ Fuerzan `clarify` aunque haya campos poblados:
 - `metrics` explícitas pero todas `unresolved`, y no hay `active_goal`/`analysis_mode` exploratorio que permita investigar igual.
 - Contradicción entre `turn_relation="correct"` y un valor nuevo que no logra resolverse a nada usable.
 
-Permiten `proceed` aunque falten métricas:
-- `analysis_mode="exploratory"` o `active_goal` con intención clara, aunque `metrics=[]`.
-- `entities` con `canonical_value` resuelto, aunque `metrics` esté vacío.
+Permiten `proceed` aunque falten métricas — pero **una entidad resuelta por sí sola nunca basta**. "Parque Titanium." (sin objetivo analítico) debe seguir pidiendo clarificación aunque `entities.activo` resuelva perfecto. La condición de proceed sin métricas requiere, además de la entidad, al menos una de:
+- `active_goal`/`analysis_mode` utilizable (explícito o heredado) — ej. "¿Cómo viene Parque Titanium?" trae goal exploratorio en el mismo turno.
+- Una solicitud analítica clara en el turno actual (el LLM de understanding marca `turn_relation` y el delta con algo más que un nombre propio suelto).
+- Un `active_goal` heredado de la conversación (turno anterior ya traía un análisis en curso y este turno lo continúa/modifica sobre la misma entidad).
+
+Formalmente: `proceed` sin métricas ⟺ `entities` resueltas **AND** (`active_goal` o `analysis_mode` con valor utilizable, sea `explicit`, `inherited` o `inferred`). Solo entidad, sin ningún goal/mode en ningún lado del state, cae a `clarify`.
 
 Se mantiene intacta la lógica existente de `verified_hint`/`has_history` como señales adicionales de grounding.
 
 ### 5. Integración
 
-- **`context_builder.py`**: `build_context()` llama `understand_conversation(...)` en vez de `extract_intent(...)`. `_build_sections` se adapta para leer `ResolvedValue` (mostrando `resolution_status` cuando es `unresolved`/`ambiguous`, para que el LLM de SQL sepa que debe explorar y no asumir).
-- **`db_chat.py`**: `answer()` mantiene su contrato externo. Se elimina la llamada manual a `update_state(...)` al final ([db_chat.py:1070](../../../tools/db_chat.py#L1070)) — el estado ya queda persistido dentro de `understand_conversation`.
+- **`context_builder.py`**: `build_context()` ejecuta la secuencia understand→validate→apply→ambiguity→commit descrita en §5bis en vez de llamar `extract_intent(...)`. `_build_sections` se adapta para leer `ResolvedValue` (mostrando `resolution_status` cuando es `unresolved`/`ambiguous`, para que el LLM de SQL sepa que debe explorar y no asumir).
+- **`db_chat.py`**: `answer()` mantiene su contrato externo. La llamada manual a `update_state(...)` al final ([db_chat.py:1070](../../../tools/db_chat.py#L1070)) se elimina — el commit del estado ocurre dentro de `build_context` (paso 6 de §5bis), condicionado a `decision.action == "proceed"`, no como efecto secundario incondicional del LLM call.
 - **`conversation_state.py`**: se reescribe para guardar `ConversationState` en vez del dict de 4 campos. Mismo `OrderedDict` + cap 500 + scoping por `session_id` (garantiza que `session_isolation_control` siga pasando).
-- **`intent.py`**: se retira. Su lógica se reparte entre `conversation_understanding.py` (prompt + parsing del delta) y `apply_delta` (merge). `test_intent.py` se reemplaza por tests del nuevo módulo.
+- **`intent.py`**: no se retira de inmediato. `rg "extract_intent|IntentResult|intent\.py"` (ejecutado 2026-08-12) muestra consumidores reales dentro del propio repo: `tools/db_chat.py` (importa `IntentResult` para construir el fallback degradado cuando `build_context` falla), `tests/eval/run_eval.py` (llama `extract_intent` directamente para una comprobación de precisión aislada del pipeline completo), `tests/analyst/test_ambiguity.py` (construye `IntentResult` contra la firma actual de `ambiguity.decide`), `tests/analyst/test_intent.py`. Todos se migran dentro de esta misma fase (`ambiguity.decide` cambia de firma de todos modos por el ajuste 2, así que `test_ambiguity.py` se reescribe como parte natural del trabajo, no como façade). Mientras dure la migración incremental, `intent.py` se mantiene como façade delgada: `extract_intent(...)` internamente llama a `understand_conversation` + `apply_delta` y devuelve un `IntentResult` construido desde el `ConversationState` resultante, para no romper consumidores no migrados aún en un commit intermedio. Se elimina `intent.py` recién en el último paso del plan de implementación, después de confirmar (`rg` de nuevo) que ningún consumidor depende ya de la API vieja.
 - **SQL pipeline**: sin cambios — validation, read-only, SELECT-only, fallbacks y verified-query behavior se mantienen intactos. Solo cambia qué contexto llega al pipeline.
+
+### 5bis. Secuencia understand → validate → apply → ambiguity → commit
+
+El estado **no** se persiste como efecto secundario de la llamada al LLM. Secuencia explícita, cada paso independiente y testeable:
+
+```python
+previous_state = get_state(session_id)                       # 1. lectura, sin mutar nada
+raw = understand_conversation_llm(question, previous_state,   # 2. LLM call -- entiende, no persiste
+                                   recent_turns, llm_call)
+validated = validate_delta(raw)                               # 3. valida JSON/shape; delta inválido
+                                                                #    o turn_relation desconocido -> delta vacío,
+                                                                #    NUNCA excepción que tumbe el turno
+candidate_state = apply_delta(previous_state, validated)       # 4. merge determinístico -> candidate, no committed
+decision = decide_ambiguity(candidate_state, verified_hint,    # 5. ambiguity evalúa el candidate, no el previous
+                             has_history)
+if decision.action == "proceed":
+    commit_state(session_id, candidate_state)                  # 6. solo aquí se persiste
+# si decision.action == "clarify": previous_state permanece intacto -- el turno no contaminó el estado
+```
+
+Si el JSON del LLM viene roto, `validate_delta` lo trata como delta vacío (`turn_relation` se degrada a `"continue"`, política más conservadora que `new_topic`) — nunca se guarda un estado parcialmente interpretado. Si la decisión es `clarify`, el `candidate_state` se descarta: el próximo turno vuelve a partir del último `previous_state` válido, no de una interpretación a medias. `commit_state` reemplaza la escritura de `update_state` que hoy vive dentro de `db_chat.answer()` ([db_chat.py:1070](../../../tools/db_chat.py#L1070)) — ese `update_state` posterior se elimina porque el commit ya ocurrió en el paso 6, no antes.
 
 ### 6. Eval suite ampliada
 
