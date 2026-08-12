@@ -164,6 +164,46 @@ Detectado al calcular `caja_minima` (= % de activos totales) por fondo/periodo. 
 los periodos donde `ESF.total_activo` existe limpio (67 filas iniciales + Apo 2020-12 corregido).
 Los 9 periodos de TRI y Apo 2026-03 quedan sin `caja_minima` hasta resolver el parseo.
 
+## Ocupación por residencia INMOSA (migración 082)
+
+Fuente: `RAW/Ocupacion Acalis - <mes> <año> - Toesca.xlsx` (SharePoint), 9
+hojas (una por residencia: Candil, Colombia, Coventry, Errazuriz, Medina,
+Montahue, Montemar, VA - Cordillera, VA - Valle). Módulo:
+`tools/db/ingest_ocupacion_residencia.py`.
+
+`INMOSA` en `dim_activo`/`raw_er_activo_line` es un solo activo agregado
+(fondo TRI, participación 0.43) sin desglose por residencia — esta tabla
+agrega esa granularidad fina solo para ocupación. Nueva tabla `dim_residencia`
+(residencia_key, nombre, activo_key, camas, vigente_hasta) — mismo patrón que
+`dim_sociedad`.
+
+Dos formatos de hoja en la fuente: A (Mes/Año, Residentes, Ocupación%) y B
+(+ Ingresos/Egresos/Fallecimiento, + fila "Total" final que se excluye del
+ingest por no ser un período real). `ocupacion_pct` se **recalcula siempre**
+como `cantidad_residentes/camas` (decisión del usuario 2026-08-12) — el % que
+trae la fuente puede venir inconsistente (ej. Colombia mar-2026: fuente=102%
+vs recalculado=101,9%; Coventry abr-2025 traía coma decimal chilena "98,4").
+El valor crudo se preserva en `ocupacion_pct_fuente` solo para auditoría.
+
+**Montahue, Montemar, VA - Cordillera, VA - Valle están vendidas** (confirmado
+por el usuario 2026-08-12, fuera del portafolio actual) — se sigue ingestando
+su histórico para gráficos, marcadas con `dim_residencia.vigente_hasta` =
+último período con datos en la fuente (2020-02 en las 4, proxy de fecha de
+venta real desconocida).
+
+Vistas: `v_ocupacion_inmosa_consolidado` (todas las residencias con datos en
+cada período, refleja el portafolio real de cada momento) y
+`v_ocupacion_inmosa_vigente` (excluye las 4 vendidas en todo el histórico,
+para comparar el portafolio actual contra sí mismo sin el salto al venderlas).
+
+`UNIQUE(file_hash, residencia_key, source_row)` — no solo `(file_hash,
+source_row)`, porque `source_row` se repite entre hojas del mismo archivo
+(todas arrancan en fila 6); con la constraint vieja el `INSERT OR IGNORE`
+descartaba filas legítimas de residencias distintas como si fueran duplicadas.
+
+Rango histórico ingestado: 732 filas, Candil 2015-09..2026-03 (la serie más
+larga) hasta VA - Valle/Cordillera 2018-10..2020-02 (las más cortas, vendidas).
+
 ## Jerarquía de participaciones (post migración 049)
 
 Las participaciones del organigrama TRI viven en 3 lugares:
