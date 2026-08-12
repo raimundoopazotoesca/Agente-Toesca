@@ -1719,6 +1719,29 @@ def _fetch_noi_u12m_yoy_activo(entidad_key: str) -> dict:
 _INMOSA_PART_HISTORICA = [("2018-01", 0.3468), ("2018-08", 0.3639), ("2023-01", 0.43)]
 
 
+def _capital_normal_por_credito(conn) -> dict[str, float]:
+    """Mediana del capital mensual (>0) por crédito sobre todo su historial
+    en raw_amortizacion. Sirve para detectar amortizaciones extraordinarias
+    (prepagos/lump sums que rompen el patrón de cuota regular, ej.
+    APO_APO_BTG dic-2025/mar-2026: ~24.000-22.900 UF vs ~4.000-4.200 UF
+    normales, prepago que dejó el crédito PAGADO) y excluirlas de la cuota
+    de financiamiento del gráfico NOI/RCSD — no son servicio de deuda
+    mensual regular, igual criterio que los pagos de capital bullet.
+    Confirmado por el usuario 2026-08-12."""
+    import statistics
+
+    valores: dict[str, list[float]] = {}
+    for r in conn.execute(
+        "SELECT credito_key, capital_uf FROM raw_amortizacion "
+        "WHERE capital_uf IS NOT NULL AND capital_uf > 0"
+    ).fetchall():
+        valores.setdefault(r["credito_key"], []).append(r["capital_uf"])
+    return {k: statistics.median(v) for k, v in valores.items()}
+
+
+_UMBRAL_AMORT_EXTRAORDINARIA = 2.0  # capital > 2x la mediana del crédito
+
+
 def _cuota_tri_look_through(conn, periodos: list[str]) -> dict[str, float]:
     """Cuota de financiamiento TRI (capital+interés, look-through por
     participación efectiva) para períodos SIN dato en la planilla del
@@ -1751,16 +1774,23 @@ def _cuota_tri_look_through(conn, periodos: list[str]) -> dict[str, float]:
 
     placeholders = ",".join("?" for _ in periodos)
     rows = conn.execute(
-        f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key "
+        f"SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.fondo_key, c.activo_key, "
+        f"c.perfil_amortizacion "
         f"FROM raw_amortizacion a JOIN dim_credito c ON c.credito_key = a.credito_key "
         f"WHERE c.fondo_key IN ('TRI','PT','Apo') AND a.credito_key != 'TRI_SUCDEN_BICE' "
         f"AND a.periodo IN ({placeholders})",
         periodos,
     ).fetchall()
+    capital_normal = _capital_normal_por_credito(conn)
     cuota: dict[str, float] = {}
     for r in rows:
         peso = _peso(r["activo_key"], r["periodo"], r["fondo_key"], r["credito_key"])
-        total = (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0)
+        es_bullet = "bullet" in (r["perfil_amortizacion"] or "").lower()
+        capital = r["capital_uf"] or 0.0
+        normal = capital_normal.get(r["credito_key"])
+        if es_bullet or (normal and capital > _UMBRAL_AMORT_EXTRAORDINARIA * normal):
+            capital = 0.0
+        total = capital + (r["intereses_uf"] or 0.0)
         cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total * peso
     return cuota
 
@@ -1783,11 +1813,17 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
     el usuario actualice la planilla con esos meses.
 
     cuota_uf (PT/Apo): capital + interés crudo de raw_amortizacion de los
-    créditos del fondo (join dim_credito.fondo_key), sin suavizado — decisión
-    del usuario 2026-08-05: se sacó la clasificación bullet/amortizante y el
-    reemplazo por mediana (que existía desde 2026-07-30) porque aplanaba la
-    cuota real. Solo incluye períodos con ambos datos (NOI y cuota)
-    disponibles.
+    créditos del fondo (join dim_credito.fondo_key). Decisión 2026-08-05: se
+    sacó el reemplazo por mediana (que existía desde 2026-07-30) porque
+    aplanaba la cuota real de los créditos amortizantes. Ajuste 2026-08-12:
+    para créditos bullet (dim_credito.perfil_amortizacion contiene "Bullet",
+    ej. APO_APO_EUROAMERICA) se excluye el capital — el pago único del
+    principal al vencimiento generaba un pico artificial (caso real: dic-2026,
+    2.580.000 UF de pago íntegro del leasing Euroamérica) que no representa
+    servicio de deuda mensual normal. Solo se suma el interés para esos
+    créditos; capital+interés se mantiene para los amortizantes. Mismo
+    criterio aplicado en _cuota_tri_look_through. Solo incluye períodos con
+    ambos datos (NOI y cuota) disponibles.
 
     Look-through TRI (fix 2026-08-05): TRI es el fondo paraguas — la deuda de
     Torre A/Boulevard y Apo4501/Apo4700 está registrada en dim_credito bajo
@@ -1878,15 +1914,28 @@ def _fetch_noi_rcsd(fondo_key: str) -> list[dict]:
         return out
 
     # PT/Apo: sin look-through (fondo_key ya es el dueño directo del crédito).
+    # Créditos bullet: se excluye el capital (pago único de principal al
+    # vencimiento) para que ese mes no genere un pico artificial en la
+    # cuota — solo cuenta el interés (servicio de deuda real), igual que
+    # en _cuota_tri_look_through. Decisión 2026-08-12. Amortizaciones
+    # extraordinarias (prepagos, ej. APO_APO_BTG dic-2025/mar-2026) se
+    # detectan y excluyen igual, vía _capital_normal_por_credito.
     rows_amort = conn.execute(
-        "SELECT periodo, capital_uf, intereses_uf FROM raw_amortizacion a "
+        "SELECT a.credito_key, a.periodo, a.capital_uf, a.intereses_uf, c.perfil_amortizacion "
+        "FROM raw_amortizacion a "
         "JOIN dim_credito c ON c.credito_key = a.credito_key "
         "WHERE c.fondo_key = ?",
         (fondo_key,),
     ).fetchall()
+    capital_normal = _capital_normal_por_credito(conn)
     cuota = {}
     for r in rows_amort:
-        total = (r["capital_uf"] or 0.0) + (r["intereses_uf"] or 0.0)
+        es_bullet = "bullet" in (r["perfil_amortizacion"] or "").lower()
+        capital = r["capital_uf"] or 0.0
+        normal = capital_normal.get(r["credito_key"])
+        if es_bullet or (normal and capital > _UMBRAL_AMORT_EXTRAORDINARIA * normal):
+            capital = 0.0
+        total = capital + (r["intereses_uf"] or 0.0)
         cuota[r["periodo"]] = cuota.get(r["periodo"], 0.0) + total
 
     periodos = sorted(set(noi) & set(cuota))
