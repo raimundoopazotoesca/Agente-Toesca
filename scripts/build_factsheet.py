@@ -435,6 +435,7 @@ FONDOS_CFG = {
         "page7": {
             "apo3001": {
                 "titulo": "Edificio Apoquindo 3001",
+                "foto": _data_uri("apo3001_fs.png"),
                 "descripcion_p1": (
                     "Con fecha 30 de diciembre 2019 Inmobiliaria Chañarcillo, sociedad filial del Fondo, "
                     "adquirió el 68,5% del edificio de oficinas Apoquindo 3001, ubicado en la comuna de "
@@ -455,6 +456,7 @@ FONDOS_CFG = {
             },
             "sucden": {
                 "titulo": "Bodegas Sucden Chile",
+                "foto": _data_uri("sucden_fs.png"),
                 "descripcion_p1": (
                     "Con fecha 15 de diciembre 2017 el Fondo adquirió el 100% de los derechos sociales de "
                     "Inmobiliaria Chañarcillo Limitada (ex Arauco Logística), arrendataria con opción de "
@@ -5791,7 +5793,9 @@ function switchFund(f){
       frag.querySelector(".page7-p2").textContent = sec.descripcion_p2;
       frag.querySelector(".page7-tbl-aspectos tbody").innerHTML =
         sec.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page7-aspecto-pendiente" data-key="'+k+'"' : ""}>${v === null ? "—" : v}</td></tr>`).join("");
-      frag.querySelector(".page7-foto").style.aspectRatio = fotoAspect;
+      const fotoBox = frag.querySelector(".page7-foto");
+      fotoBox.style.aspectRatio = fotoAspect;
+      if (sec.foto) fotoBox.innerHTML = `<img src="${sec.foto}">`;
       document.getElementById(containerId).innerHTML = "";
       document.getElementById(containerId).appendChild(frag);
     };
