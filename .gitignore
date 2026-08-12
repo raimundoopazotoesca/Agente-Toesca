@@ -67,3 +67,4 @@ scratchpad/
 
 # Git worktrees creados por Claude Code
 .claude/worktrees/
+.worktrees/
