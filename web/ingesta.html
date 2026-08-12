@@ -4468,13 +4468,12 @@ function initOcupacion() {
     try {
       const res = await fetch('/api/ocupacion/status');
       const data = await res.json();
-      (data.residencias || []).forEach(r => {
+      if (data.ultimo_periodo) {
         const el = document.createElement('span');
         el.className = 'badge';
-        const vendida = r.vigente_hasta ? ` (vendida, última fecha en fuente ${r.vigente_hasta})` : '';
-        el.innerHTML = `<span class="dot"></span>${r.residencia_key}: última en DB <strong>${r.ultimo_periodo ?? '—'}</strong>${vendida}`;
+        el.innerHTML = `<span class="dot"></span>Última data en DB: <strong>${data.ultimo_periodo}</strong> (${data.n_residencias} residencias)`;
         statusRow.appendChild(el);
-      });
+      }
     } catch (e) {}
   }
   checkStatus();

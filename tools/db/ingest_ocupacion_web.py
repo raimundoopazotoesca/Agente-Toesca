@@ -27,20 +27,17 @@ def _tmp_xlsx(file_bytes: bytes, filename: str) -> str:
 
 
 def status() -> dict[str, Any]:
-    """Último período ya cargado en la DB por residencia (contexto antes de subir)."""
+    """Último período ya cargado en la DB, a nivel general (contexto antes de subir)."""
     from tools.db.connection import get_conn
 
     conn = get_conn()
     try:
-        rows = conn.execute(
-            """SELECT r.residencia_key, d.vigente_hasta, MAX(r.periodo) AS ultimo_periodo,
-                      COUNT(*) AS n_meses
+        row = conn.execute(
+            """SELECT MAX(r.periodo) AS ultimo_periodo, COUNT(DISTINCT r.residencia_key) AS n_residencias
                  FROM raw_ocupacion_residencia_line r
-                 JOIN dim_residencia d ON d.residencia_key = r.residencia_key
-                WHERE r.superseded_at IS NULL
-                GROUP BY r.residencia_key ORDER BY r.residencia_key"""
-        ).fetchall()
-        return {"residencias": [dict(r) for r in rows]}
+                WHERE r.superseded_at IS NULL"""
+        ).fetchone()
+        return {"ultimo_periodo": row[0], "n_residencias": row[1]}
     finally:
         conn.close()
 
