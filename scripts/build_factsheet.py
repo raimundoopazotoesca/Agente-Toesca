@@ -414,6 +414,7 @@ FONDOS_CFG = {
                     ("Superficie Arrendable", None),
                     ("Vacancia (m²)", None),
                 ],
+                "foto": _data_uri("mall_curico.png"),
             },
         },
         # Página 7 — Edificio Apoquindo 3001 + Bodegas Sucden Chile. Ambos
@@ -5736,6 +5737,9 @@ function switchFund(f){
     document.getElementById("txt-curico-descripcion").textContent = cur.descripcion;
     document.getElementById("tbl-curico-aspectos").querySelector("tbody").innerHTML =
       cur.aspectos.map(([k, v]) => `<tr><td>${k}</td><td${v === null ? ' class="placeholder page6-curico-pendiente" data-key="'+k+'"' : ""}>${v === null ? "—" : v}</td></tr>`).join("");
+    document.getElementById("foto-curico").innerHTML = cur.foto
+      ? `<img src="${cur.foto}">`
+      : `<div class="foto-placeholder">Pendiente: foto del Centro Comercial Paseo Curicó</div>`;
   }
 
   // Página 7 — Apoquindo 3001 + Bodegas Sucden Chile (headers/estático acá;
