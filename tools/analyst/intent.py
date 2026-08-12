@@ -8,12 +8,13 @@ unit-tested without network calls.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Callable
 
 from tools.analyst.conversation_state import get_state, update_state
 from tools.analyst.entity_resolver import resolve_entity
-from tools.analyst.semantic_loader import load_semantic_catalog
+from tools.analyst.semantic_loader import SemanticCatalog, load_semantic_catalog
 
 _CONFIDENCE_CLARIFY_THRESHOLD = 0.5
 
@@ -24,7 +25,8 @@ _INTENT_PROMPT_TEMPLATE = """Extrae de la pregunta del usuario un JSON con:
  "comparison": "<same_period_last_year | previous_period | null>",
  "confidence": <0.0-1.0>}}
 
-Metricas disponibles: {metric_names}
+Metricas disponibles (nombre: sinonimos):
+{metric_catalog}
 Pregunta: {question}
 Responde SOLO el JSON, sin texto adicional."""
 
@@ -39,10 +41,39 @@ class IntentResult:
     needs_clarification: bool = False
 
 
+def _extract_json(text: str) -> dict:
+    """El LLM a veces envuelve el JSON en ``` o lo antecede con texto.
+    Misma estrategia que db_chat._extract_json, duplicada aqui porque este
+    modulo no depende de db_chat (llm_call se inyecta para mantenerlo
+    testeable sin red)."""
+    text = text.strip()
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _format_metric_catalog(catalog: SemanticCatalog) -> str:
+    """Cada linea: nombre_tecnico: sinonimo1, sinonimo2, ...
+    Sin esto el LLM solo ve nombres tecnicos (ej. 'vacancia_pct') y debe
+    adivinar que 'ocupacion'/'occupancy' mapean a esa metrica por su propio
+    conocimiento -- inconsistente entre llamadas. Los sinonimos ya viven en
+    semantic/metrics/*.yaml (campo `synonyms`), curados para esto."""
+    lines = []
+    for name in sorted(catalog.metrics):
+        synonyms = catalog.metrics[name].get("synonyms") or []
+        syn_str = ", ".join(synonyms) if synonyms else "(sin sinonimos registrados)"
+        lines.append(f"- {name}: {syn_str}")
+    return "\n".join(lines)
+
+
 def _build_prompt(question: str) -> str:
     catalog = load_semantic_catalog()
     return _INTENT_PROMPT_TEMPLATE.format(
-        metric_names=", ".join(sorted(catalog.metrics)),
+        metric_catalog=_format_metric_catalog(catalog),
         question=question,
     )
 
@@ -52,9 +83,8 @@ def extract_intent(question: str, session_id: str, llm_call: Callable[[str], str
     prompt = _build_prompt(question)
     raw = llm_call(prompt)
 
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
+    parsed = _extract_json(raw) if raw else {}
+    if not parsed:
         return IntentResult(metric=None, confidence=0.0, needs_clarification=True)
 
     state = get_state(session_id)

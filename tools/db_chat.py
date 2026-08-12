@@ -8,7 +8,7 @@ Flujo:
 Providers soportados (via API OpenAI-compatible):
     - deepseek   DeepSeek V3       (recomendado, ~10-20x mas barato que Gemini Flash)
     - groq       Llama 3.3 70B     (gratis, rate-limited)
-    - gemini     gemini-2.5-flash  (fallback ya configurado)
+    - gemini     gemini-flash-latest  (fallback ya configurado)
 
 Selecciona con env DB_CHAT_PROVIDER; requiere DEEPSEEK_API_KEY / GROQ_API_KEY
 o GEMINI_API_KEY segun corresponda.
@@ -56,7 +56,7 @@ _PROVIDER_LIST: list[dict] = [
     {"name": "groq", "base_url": "https://api.groq.com/openai/v1",
      "api_key": GROQ_API_KEY_3, "model": "llama-3.3-70b-versatile"},
     {"name": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-     "api_key": GEMINI_API_KEY, "model": "gemini-2.5-flash"},
+     "api_key": GEMINI_API_KEY, "model": "gemini-flash-latest"},
     {"name": "mistral", "base_url": "https://api.mistral.ai/v1",
      "api_key": MISTRAL_API_KEY, "model": "mistral-large-latest"},
     {"name": "sambanova", "base_url": "https://api.sambanova.ai/v1",
