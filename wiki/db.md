@@ -211,6 +211,17 @@ nombre y lo reingesta. Idempotente (no duplica si no cambió). Cuando llegue
 una planilla nueva con más meses, basta con reemplazar el archivo en RAW/ y
 correr el comando — el hash distinto dispara `superseded_and_reinserted`.
 
+**Pestaña "Ocupación INMOSA" en el menú de ingesta web** (`http://127.0.0.1:8765/ingesta`):
+dropzone sin selector de período (la planilla trae el histórico completo) →
+validar (muestra residencias/rango/anomalías) → confirmar e ingestar. Wraper
+`tools/db/ingest_ocupacion_web.py` (validate/commit sobre
+`ingest_ocupacion_residencia.py`), endpoints `/api/ocupacion/status`,
+`/validate`, `/commit` en `scripts/ingesta_server.py`. Aparece también en el
+dashboard de cobertura de la pestaña Inicio (`tools/db/estado_ingesta.py`,
+`CONFIG` id=`ocupacion_inmosa`, mensual, solo las 5 residencias vigentes con
+hoja en la fuente — "Domingo Calderón", 146 camas, es parte del portafolio
+actual pero aún no tiene hoja en esta planilla, gap conocido).
+
 **Wireado en el fact sheet TRI (`scripts/build_factsheet.py`)**: página 6
 (INMOSSA), gráfico "Ocupación (2018–2026)" bajo la tabla de residencias.
 `fetch_fondo()` arma `page6_data.ocupacion_inmosa` desde

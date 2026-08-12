@@ -515,6 +515,7 @@
     <button class="tab-btn" data-tab="er-activos">Ingresos/NOI Activos</button>
     <button class="tab-btn" data-tab="amort-extra">Amort. Extraordinaria</button>
     <button class="tab-btn" data-tab="caja">Saldo Caja</button>
+    <button class="tab-btn" data-tab="ocupacion">Ocupación INMOSA</button>
   </div>
 </header>
 
@@ -1401,6 +1402,46 @@
     <div class="row" style="margin-top:20px;">
       <button id="btn-caja-confirm" disabled>Confirmar e ingestar</button>
       <span id="caja-ingest-status" class="muted"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ TAB OCUPACIÓN INMOSA ══════════════════════════ -->
+<div id="tab-ocupacion" class="tab-panel">
+  <div class="step">
+    <div class="step-title"><span class="step-num">1</span> Archivo</div>
+    <p class="muted" style="margin:0 0 10px;">
+      Sube la planilla <code>Ocupacion Acalis - &lt;mes&gt; &lt;año&gt; - Toesca.xlsx</code>
+      desde <code>SharePoint &gt; RAW</code>. Trae el histórico completo de ocupación
+      de las 9 residencias (una hoja por residencia) — cada mes se sube la versión
+      más reciente y se reingesta completa, no hace falta elegir período.
+    </p>
+    <div id="ocup-status-row" class="row" style="margin-top:6px"></div>
+    <div class="row">
+      <div id="ocup-dropzone" class="dropzone" style="flex:1">
+        Arrastra aquí Ocupacion Acalis - &lt;mes&gt; &lt;año&gt; - Toesca.xlsx o haz click para elegirlo.
+        <input type="file" id="ocup-file" accept=".xlsx" class="hidden">
+      </div>
+    </div>
+    <div class="row">
+      <button id="btn-ocup-validate">Validar y previsualizar</button>
+      <span id="ocup-validate-status" class="muted"></span>
+    </div>
+  </div>
+
+  <div id="ocup-preview" class="step preview hidden">
+    <ul id="ocup-errors" class="msg-list err"></ul>
+    <ul id="ocup-warnings" class="msg-list warn"></ul>
+    <div id="ocup-section" class="hidden">
+      <h3>Residencias en el archivo</h3>
+      <table>
+        <thead><tr><th>Residencia</th><th class="num">Meses</th><th class="num">Desde</th><th class="num">Hasta</th></tr></thead>
+        <tbody id="ocup-resumen-body"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:20px;">
+      <button id="btn-ocup-confirm" disabled>Confirmar e ingestar</button>
+      <span id="ocup-ingest-status" class="muted"></span>
     </div>
   </div>
 </div>
@@ -4381,6 +4422,129 @@ function initCaja() {
   });
 }
 initCaja();
+
+// ── Ocupación INMOSA: sube la planilla completa, sin selector de período ──
+function initOcupacion() {
+  const dropzone = document.getElementById('ocup-dropzone');
+  const fileInput = document.getElementById('ocup-file');
+  const btnValidate = document.getElementById('btn-ocup-validate');
+  const validateStatus = document.getElementById('ocup-validate-status');
+  const preview = document.getElementById('ocup-preview');
+  const btnConfirm = document.getElementById('btn-ocup-confirm');
+  const ingestStatus = document.getElementById('ocup-ingest-status');
+  const statusRow = document.getElementById('ocup-status-row');
+  const dropzoneTextDefault = dropzone.textContent.trim();
+
+  let selectedFile = null;
+
+  function setFile(file) {
+    selectedFile = file;
+    dropzone.textContent = file ? `Archivo seleccionado: ${file.name}` : dropzoneTextDefault;
+    dropzone.classList.toggle('has-file', !!file);
+    dropzone.appendChild(fileInput);
+    resetPreview();
+  }
+
+  function resetPreview() {
+    preview.classList.add('hidden');
+    btnConfirm.disabled = true;
+    setStatus(validateStatus);
+    setStatus(ingestStatus);
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0] || null));
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+
+  async function checkStatus() {
+    statusRow.innerHTML = '';
+    try {
+      const res = await fetch('/api/ocupacion/status');
+      const data = await res.json();
+      (data.residencias || []).forEach(r => {
+        const el = document.createElement('span');
+        el.className = 'badge';
+        const vendida = r.vigente_hasta ? ` (vendida, última fecha en fuente ${r.vigente_hasta})` : '';
+        el.innerHTML = `<span class="dot"></span>${r.residencia_key}: última en DB <strong>${r.ultimo_periodo ?? '—'}</strong>${vendida}`;
+        statusRow.appendChild(el);
+      });
+    } catch (e) {}
+  }
+  checkStatus();
+
+  function renderResumen(resumen) {
+    document.getElementById('ocup-resumen-body').innerHTML = (resumen || []).map(r =>
+      `<tr><td>${r.residencia_key}</td><td class="num">${r.n_meses}</td><td class="num">${r.desde}</td><td class="num">${r.hasta}</td></tr>`
+    ).join('');
+  }
+
+  function renderPreview(data) {
+    preview.classList.remove('hidden');
+    const errUl = document.getElementById('ocup-errors');
+    const warnUl = document.getElementById('ocup-warnings');
+    errUl.innerHTML = ''; warnUl.innerHTML = '';
+    (data.errors || []).forEach(e => { const li = document.createElement('li'); li.textContent = e; errUl.appendChild(li); });
+    (data.warnings || []).forEach(w => { const li = document.createElement('li'); li.textContent = w; warnUl.appendChild(li); });
+
+    const section = document.getElementById('ocup-section');
+    if (data.ok) {
+      section.classList.remove('hidden');
+      renderResumen(data.resumen);
+    } else {
+      section.classList.add('hidden');
+    }
+    btnConfirm.disabled = !data.ok;
+  }
+
+  btnValidate.addEventListener('click', async () => {
+    if (!selectedFile) { validateStatus.textContent = 'Elige un archivo primero.'; return; }
+    setStatus(validateStatus, 'Validando y preparando previsualización...', 'loading');
+    btnValidate.disabled = true;
+    btnConfirm.disabled = true;
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    try {
+      const res = await fetch('/api/ocupacion/validate', { method: 'POST', body: fd });
+      const data = await res.json();
+      setStatus(validateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores.', data.ok ? 'success' : 'error');
+      renderPreview(data);
+    } catch (e) {
+      setStatus(validateStatus, 'Error: ' + e.message, 'error');
+    } finally {
+      btnValidate.disabled = false;
+    }
+  });
+
+  btnConfirm.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    btnConfirm.disabled = true;
+    setStatus(ingestStatus, 'Ingestando en la base de datos...', 'loading');
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    try {
+      const res = await fetch('/api/ocupacion/commit', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!data.ok) {
+        setStatus(ingestStatus, 'Error: ' + (data.error || 'desconocido'), 'error');
+        btnConfirm.disabled = false;
+        return;
+      }
+      setStatus(ingestStatus, `✓ Ingesta OK (${data.status}). ${data.filas_upsert} fila(s) escritas.`, 'success');
+      checkStatus();
+    } catch (e) {
+      setStatus(ingestStatus, 'Error: ' + e.message, 'error');
+      btnConfirm.disabled = false;
+    }
+  });
+}
+initOcupacion();
 </script>
 </body>
 </html>

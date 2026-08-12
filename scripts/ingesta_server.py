@@ -51,6 +51,7 @@ from tools.db import ingest_er_activo_web as er_activo_core  # noqa: E402
 from tools.db import ingest_er_sucden_fijo as sucden_fijo_core  # noqa: E402
 from tools.db import ingest_amortizacion_extra as amort_extra_core  # noqa: E402
 from tools.db import ingest_caja_web as caja_core  # noqa: E402
+from tools.db import ingest_ocupacion_web as ocupacion_core  # noqa: E402
 from tools.db.connection import get_conn_for  # noqa: E402
 from tools.db import estado_ingesta  # noqa: E402
 from tools import db_chat  # noqa: E402
@@ -1005,6 +1006,38 @@ def api_caja_commit():
         return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
     try:
         summary = _con_archivo_legible(caja_core.commit, periodo, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    if not summary.get("ok", True):
+        return jsonify(summary), 400
+    _rebuild_factsheet()
+    return jsonify(summary)
+
+
+@app.get("/api/ocupacion/status")
+def api_ocupacion_status():
+    return jsonify(ocupacion_core.status())
+
+
+@app.post("/api/ocupacion/validate")
+def api_ocupacion_validate():
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "errors": ["Sube la planilla Ocupacion Acalis."], "warnings": []})
+    try:
+        result = _con_archivo_legible(ocupacion_core.validate, file.read(), file.filename)
+    except ValueError as exc:
+        return jsonify({"ok": False, "errors": [str(exc)], "warnings": []})
+    return jsonify(result)
+
+
+@app.post("/api/ocupacion/commit")
+def api_ocupacion_commit():
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"ok": False, "error": "Sube la planilla Ocupacion Acalis."}), 400
+    try:
+        summary = _con_archivo_legible(ocupacion_core.commit, file.read(), file.filename)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     if not summary.get("ok", True):

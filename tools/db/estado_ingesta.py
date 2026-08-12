@@ -158,6 +158,23 @@ CONFIG: list[dict] = [
         ],
     },
     {
+        "id": "ocupacion_inmosa",
+        "label": "Ocupación INMOSA",
+        "frecuencia": "mensual",
+        "tabla": "raw_ocupacion_residencia_line",
+        "columna_periodo": "periodo",
+        # Solo las 5 residencias vigentes con hoja en la fuente (dim_residencia
+        # vigente_hasta IS NULL). "Domingo Calderón" (146 camas) es parte del
+        # portafolio actual pero aún no tiene hoja en la planilla de ocupación
+        # — gap conocido, no cuenta acá.
+        "fondos": ["Candil", "Colombia", "Coventry", "Errazuriz", "Medina"],
+        "columna_fondo": "residencia_key",
+        "columna_sub_ingesta": "residencia_key",
+        "n_timeline": 6,
+        "tab_destino": "ocupacion",
+        "sub_ingestas": [],
+    },
+    {
         "id": "parking_pt",
         "label": "Parking PT",
         "frecuencia": "mensual",
