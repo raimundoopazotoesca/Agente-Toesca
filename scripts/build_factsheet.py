@@ -1566,11 +1566,29 @@ def fetch_fondo(con: sqlite3.Connection, fondo_key: str, cfg: dict) -> dict:
             curico_ingresos = get_ingresos_arrendatario(activo_curico, ultimo)
             curico_gla = get_m2_arrendatario(activo_curico, ultimo)
 
+        # Ocupación histórica INMOSSA (v_ocupacion_inmosa_vigente: solo las 6
+        # residencias del portafolio actual, excluye las 4 vendidas — migración 082).
+        rows_ocup = cur.execute(
+            "SELECT periodo, ocupacion_pct FROM v_ocupacion_inmosa_vigente ORDER BY periodo"
+        ).fetchall()
+        ocupacion_inmosa = None
+        if rows_ocup:
+            series_por_anio: dict[str, list] = {}
+            for periodo, pct in rows_ocup:
+                anio, mes = periodo.split("-")
+                series_por_anio.setdefault(anio, [None] * 12)[int(mes) - 1] = pct
+            anios = sorted(a for a in series_por_anio if a >= "2018")  # 2018 en adelante (decisión usuario 2026-08-12)
+            ocupacion_inmosa = {
+                "years": anios,
+                "series": {a: series_por_anio[a] for a in anios},
+            }
+
         page6_data = {
             "curico": {
                 "superficie_arrendable": curico_superficie, "vacancia_pct": curico_vacancia,
                 "ingresos_arrendatario": curico_ingresos, "gla_arrendatario": curico_gla,
             },
+            "ocupacion_inmosa": ocupacion_inmosa,
         }
 
     # ---- Página 7 (TRI): Apoquindo 3001 + Bodegas Sucden Chile — mismo
@@ -7077,6 +7095,84 @@ function renderOficinasEvolucionChart(containerId, data, fmt, title){
   });
 }
 
+// Paleta por año — misma progresión visual que el histórico usado por
+// Control de Gestión (verdes claros en años viejos, grises/negro en medio,
+// celestes/azules, verde y el año en curso en rojo para destacarlo).
+const OCUPACION_INMOSA_PALETTE = {
+  0: "#8BD6A0", 1: "#7A7A7A", 2: "#1A1A1A", 3: "#A9E0DD", 4: "#AAD4F2",
+  5: "#3FC97E", 6: "#1B6E5C", 7: "#2E6FD9", 8: "#D3272C",
+};
+
+function renderOcupacionInmosaChart(containerId, data){
+  const el = document.getElementById(containerId);
+  if (!data || !data.years || !data.years.length){
+    el.classList.add("chart-placeholder");
+    el.innerHTML = "Pendiente: histórico de ocupación por residencia — sin fuente en la DB todavía.";
+    return;
+  }
+  el.classList.remove("chart-placeholder");
+  const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const years = data.years;
+  const nYears = years.length;
+  const colorOf = i => OCUPACION_INMOSA_PALETTE[i % 9] || "#888";
+
+  const W = 900, H = 300, padL = 44, padR = 14, padT = 34, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const x = i => padL + (i * plotW) / 11;
+  const yMin = 0.6, yMax = 1.0;
+  const y = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  const C = { grid: "#D0D0D0", text: "#333" };
+  let gridLines = "", yLabels = "";
+  for (let v = yMin; v <= yMax + 1e-9; v += 0.1){
+    const yy = y(v);
+    gridLines += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`;
+    yLabels += `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" font-size="13" text-anchor="end" fill="${C.text}">${Math.round(v*100)}%</text>`;
+  }
+  const xLabels = meses.map((m,i) =>
+    `<text x="${x(i).toFixed(1)}" y="${padT+plotH+20}" font-size="12" text-anchor="middle" fill="${C.text}">${m.slice(0,3)}</text>`
+  ).join("");
+  const axisBox = `<line x1="${padL}" y1="${padT+plotH}" x2="${W-padR}" y2="${padT+plotH}" stroke="${C.grid}" stroke-width="1"/>`;
+
+  // La línea más reciente con datos se destaca con etiquetas de valor arriba
+  // de cada punto (igual criterio visual que el histórico de referencia).
+  const lastYearIdx = nYears - 1;
+
+  let linesSvg = "", labelsSvg = "";
+  years.forEach((yr, yi) => {
+    const vals = data.series[yr];
+    const color = colorOf(yi);
+    const isLast = yi === lastYearIdx;
+    let pts = [];
+    vals.forEach((v, mi) => { if (v != null) pts.push([mi, v]); });
+    if (pts.length){
+      const path = pts.map(([mi, v]) => `${x(mi).toFixed(1)},${y(v).toFixed(1)}`).join(" L");
+      linesSvg += `<path d="M${path}" fill="none" stroke="${color}" stroke-width="${isLast?3:2}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      pts.forEach(([mi, v]) => {
+        linesSvg += `<circle cx="${x(mi).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.6" fill="#fff" stroke="${color}" stroke-width="2"/>`;
+      });
+      if (isLast){
+        pts.forEach(([mi, v]) => {
+          labelsSvg += `<text x="${x(mi).toFixed(1)}" y="${(y(v)-8).toFixed(1)}" font-size="11" font-weight="700" text-anchor="middle" fill="${color}">${Math.round(v*100)}%</text>`;
+        });
+      }
+    }
+  });
+
+  const legend = years.map((yr, yi) =>
+    `<div class="row"><span class="swatch line" style="background:${colorOf(yi)}"></span>${yr}</div>`
+  ).join("");
+
+  el.innerHTML = `
+    <div class="parking-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Ocupación histórica INMOSSA por año">
+        ${gridLines}${axisBox}${linesSvg}${labelsSvg}
+        ${yLabels}${xLabels}
+      </svg>
+      <div class="parking-legend" style="flex-wrap:wrap;max-width:100%">${legend}</div>
+    </div>`;
+}
+
 function renderPerfActivosHeader(p2, perfData){
   const groups = p2.perf_groups;
   const totalCols = groups.reduce((n,g) => n + g.cols.length, 0);
@@ -8553,6 +8649,7 @@ function render(){
         td.classList.remove("placeholder");
       }
     });
+    renderOcupacionInmosaChart("chart-ocupacion-inmossa", F.page6.ocupacion_inmosa);
   }
 
   // Página 7 (TRI): donuts GLA/Ingresos + superficie/vacancia reales de

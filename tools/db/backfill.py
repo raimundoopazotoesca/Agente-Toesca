@@ -763,8 +763,36 @@ def _print_reporte(nombre: str, rep: dict) -> None:
             print(f"  - {s}")
 
 
+def backfill_ocupacion(verbose: bool = True) -> dict:
+    """Ingesta la planilla de ocupación de residencias INMOSA (Living Acalis).
+
+    Fuente: SharePoint RAW/"Ocupacion Acalis - <mes> <año> - Toesca.xlsx" —
+    un solo archivo con el histórico completo (no una carpeta con un archivo
+    por mes), se toma la versión más reciente por nombre de archivo.
+    """
+    from tools.db.ingest_ocupacion_residencia import persist
+    from tools.sharepoint_paths import RAW_DIR
+
+    candidatos = sorted(glob.glob(os.path.join(RAW_DIR, "Ocupacion Acalis*.xlsx")))
+    if not candidatos:
+        return {"archivos": 0, "filas": 0, "sin_datos": ["no se encontró 'Ocupacion Acalis*.xlsx' en RAW/"], "detalle": []}
+
+    path = candidatos[-1]
+    rep = {"archivos": 0, "filas": 0, "sin_datos": [], "detalle": []}
+    try:
+        res = persist(path)
+        rep["archivos"] = 1
+        rep["filas"] = res["rows"]
+        rep["detalle"].append(f"{os.path.basename(path)}: {res['status']}, {res['rows']} filas")
+        if verbose:
+            print(f"  [ocupacion] {os.path.basename(path)}: {res}")
+    except Exception as e:
+        rep["sin_datos"].append(f"{os.path.basename(path)}: {e}")
+    return rep
+
+
 def main(argv: list[str]) -> None:
-    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi", "ar_pt", "ar_apo", "eeff_pt"]
+    dominios = argv[1:] or ["rent_roll", "er", "inmosa", "uf", "eeff", "precios", "dividendos", "vacancia", "noi", "ar_pt", "ar_apo", "eeff_pt", "ocupacion"]
     if "rent_roll" in dominios:
         _print_reporte("rent_roll", backfill_rent_roll(verbose=True))
     if "er" in dominios:
@@ -804,6 +832,8 @@ def main(argv: list[str]) -> None:
         _print_reporte("dolar", backfill_dolar(verbose=True))
     if "caja" in dominios:
         _print_reporte("caja", backfill_caja(verbose=True))
+    if "ocupacion" in dominios:
+        _print_reporte("ocupacion", backfill_ocupacion(verbose=True))
 
 
 if __name__ == "__main__":

@@ -204,6 +204,24 @@ descartaba filas legítimas de residencias distintas como si fueran duplicadas.
 Rango histórico ingestado: 732 filas, Candil 2015-09..2026-03 (la serie más
 larga) hasta VA - Valle/Cordillera 2018-10..2020-02 (las más cortas, vendidas).
 
+**Flujo de ingesta recurrente**: `python -X utf8 -m tools.db.backfill ocupacion`
+(o `python -X utf8 -m tools.db.backfill` sin argumentos, incluido en la lista
+por defecto) — busca el archivo `RAW/Ocupacion Acalis*.xlsx` más reciente por
+nombre y lo reingesta. Idempotente (no duplica si no cambió). Cuando llegue
+una planilla nueva con más meses, basta con reemplazar el archivo en RAW/ y
+correr el comando — el hash distinto dispara `superseded_and_reinserted`.
+
+**Wireado en el fact sheet TRI (`scripts/build_factsheet.py`)**: página 6
+(INMOSSA), gráfico "Ocupación (2018–2026)" bajo la tabla de residencias.
+`fetch_fondo()` arma `page6_data.ocupacion_inmosa` desde
+`v_ocupacion_inmosa_vigente` (solo las 6 residencias del portafolio actual,
+2018 en adelante — decisión del usuario 2026-08-12), pivotado a
+`{years: [...], series: {año: [12 valores mensuales o null]}}`. Render JS:
+`renderOcupacionInmosaChart()`, una línea por año (paleta fija
+`OCUPACION_INMOSA_PALETTE`, 9 colores para 2018-2026), año más reciente con
+etiquetas de valor sobre cada punto — mismo estilo visual que el histórico de
+ocupación de Control de Gestión.
+
 ## Jerarquía de participaciones (post migración 049)
 
 Las participaciones del organigrama TRI viven en 3 lugares:
