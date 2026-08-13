@@ -1,0 +1,170 @@
+# Toesca Analyst Benchmark -- Rubric Judge v1 scoring anchors.
+#
+# Single source of truth for what each 0-4 score means. judge.py loads this
+# file and renders it into the judge prompt verbatim -- editing the rubric
+# means editing this file, not code.
+#
+# Every dimension is scored 0 (worst) - 4 (best), or marked not_applicable
+# when the case genuinely doesn't call for it (e.g. investigation_quality
+# on a single-lookup L1 case). The judge never invents its own scale.
+#
+# Deterministic graders (graders/gates.py, graders/deterministic.py) remain
+# authoritative for anything they can verify -- these dimensions are the
+# ones deliberately left unscored there because they require reading
+# comprehension, not string/number matching. See design doc section 9.
+
+dimensions:
+  analytical_quality:
+    question: >
+      Does the response correctly identify what matters in the data and
+      organize it into a coherent read of the situation?
+    anchors:
+      0: "No analysis attempted, or the response is unrelated to the question's analytical intent."
+      1: "Restates raw data with no synthesis; fails to identify which facts are relevant to the question asked."
+      2: "Identifies some relevant facts but the organization/reasoning is superficial, or misses an obvious driver/comparison the data itself supports."
+      3: "Correctly identifies the main relevant facts and organizes them into a coherent read of the situation; minor gaps in depth or a secondary angle left unexplored."
+      4: "Thorough: identifies the primary driver(s), addresses secondary factors, and the reasoning chain from data to conclusion is explicit and sound."
+
+  grounding:
+    question: >
+      Is every substantive claim in the response traceable to a query the
+      system actually executed, or to the provided ground truth?
+    anchors:
+      0: "Central claims contradict the executed query results or the provided ground truth outright."
+      1: "Most substantive claims are not traceable to any executed query or provided ground truth."
+      2: "Some claims traceable, but at least one material claim lacks any query/ground-truth support."
+      3: "Nearly all claims traceable to executed queries/ground truth; at most a minor unsupported aside."
+      4: "Every substantive claim is directly traceable to an executed query result or the provided ground truth; no unsupported assertions."
+
+  hallucination:
+    question: >
+      Does the response invent facts, entities, or relationships not
+      grounded in evidence? (4 = none found; 0 = severe.) This dimension is
+      NOT about wrong numbers pulled from a real, executed query -- that is
+      C1/C2 territory, already scored deterministically. This is about
+      claims that have no query/ground-truth basis at all. See "F1 vs
+      C1/C2" below before scoring.
+    anchors:
+      0: "Fabricates a material fact, entity, or relationship with no basis in any executed query or ground truth."
+      1: "Contains a fabricated but non-material detail that doesn't change the substance of the answer."
+      2: "Overstates confidence/certainty beyond what the evidence supports, without inventing new facts."
+      3: "No fabrication; does not notably overstate certainty."
+      4: "No fabrication, and explicit, correctly-calibrated acknowledgment of any evidence gaps (e.g. says plainly what it couldn't confirm)."
+
+  clarification_judgment:
+    question: >
+      Given what the case calls for (clarification_expected) and what data
+      was actually available, was answering / clarifying / declining the
+      right call, and was it justified?
+    anchors:
+      0: "Declines or asks for clarification when the data was clearly available and directly answerable (unjustified avoidance); OR answers directly when the question was genuinely ambiguous, silently picking one interpretation without flagging it."
+      1: "Clarifies/declines with weak justification when a reasonable attempt was possible, or answers an ambiguous case without acknowledging the ambiguity existed."
+      2: "The decision to answer/clarify/decline is defensible but not clearly the best choice available given the data."
+      3: "The decision to answer/clarify/decline matches what the case calls for, with adequate justification."
+      4: "The decision is exactly right and clearly justified -- e.g. correctly declines because the data genuinely doesn't exist and says so precisely, or correctly answers a well-specified question without unnecessary hedging."
+
+  investigation_quality:
+    question: >
+      For questions that require exploration (comparisons, diagnosis,
+      open-ended investigation): did the system query enough, and the right
+      things, before concluding?
+    anchors:
+      0: "No investigation: concludes without querying anything the case requires, or the query attempts are entirely unrelated to the question."
+      1: "Minimal investigation: a single query where the question clearly needed comparison across entities/periods."
+      2: "Investigates but stops short of an obvious next step the data itself suggested (e.g. finds a discrepancy but never checks the adjacent period/entity that would explain it)."
+      3: "Investigates adequately: covers the entities/periods/angles the question requires with reasonable efficiency."
+      4: "Thorough and efficient: covers every angle the question needs, follows up on what the data reveals, without redundant or pointless queries."
+
+  output_usefulness:
+    question: >
+      Would a human analyst find this response usable as-is, or close to it?
+    anchors:
+      0: "Not usable: wrong, irrelevant, or too vague to act on."
+      1: "Marginally usable: requires substantial rework or independent verification before an analyst could use it."
+      2: "Usable with moderate editing: the core content is right but poorly organized or missing an obvious bottom line."
+      3: "Usable with minor polish: clear bottom line, correctly organized, an analyst could forward it with light editing."
+      4: "Directly usable: clear bottom line, appropriately organized, and anticipates the natural follow-up question."
+
+  tool_correctness:
+    question: >
+      Semantic layer only -- use when the case's tool_requirements need
+      judgment beyond what graders/deterministic.py already checked
+      (query count, tables touched, artifacts produced). This asks: were
+      the queries actually WELL-TARGETED for the question, not just
+      present in the right quantity/tables? not_applicable when the case
+      has no tool_requirements, OR when the deterministic tool_correctness
+      check already fully resolved the question (rare -- most cases still
+      benefit from this semantic pass when tool_requirements is set).
+    anchors:
+      0: "Queries run are unrelated to what's needed to answer the question."
+      1: "Queries are on-topic but use the wrong grain/filter such that the results couldn't support the required facts even in principle."
+      2: "Queries are roughly right but inefficient or redundant (repeats the same query, or queries far more than needed)."
+      3: "Queries are well-targeted and sufficient, with minor inefficiency."
+      4: "Queries are precisely targeted, minimal, and sufficient to support the answer."
+
+# ---------------------------------------------------------------------------
+# Gates the judge decides (F1, C4, C5). F2/F3/F4/F5/C1/C2/C3 are fully
+# deterministic (graders/gates.py) and are NEVER re-decided here -- the
+# judge is not shown them as open questions, only as prior results (see
+# judge_input.py) so it doesn't waste a verdict on already-settled ground.
+# ---------------------------------------------------------------------------
+gates:
+  F1_fabrication:
+    kind: fatal
+    definition: >
+      Reserved for MATERIAL fabrication: asserting as fact an entity,
+      relationship, event, or data point that is not supported by any
+      executed query result or the provided ground truth, where the claim
+      is not simply a numeric value pulled from a real query and reported
+      inaccurately.
+    explicitly_not_f1: >
+      A number that came from an executed query but is wrong, mis-rounded,
+      or from the wrong period/entity is C1/C2 territory (already scored
+      deterministically) -- do NOT trigger F1 for that. F1 requires that
+      the underlying claim itself (not just its numeric value) has no
+      grounding in anything actually queried or given as ground truth.
+    trigger_test: >
+      Ask: "if I strip out every number, is there still a claim here that
+      no executed query or ground truth fact supports?" If yes -> F1
+      triggered. If the ungrounded part is only the wrong number, it is not
+      F1.
+
+  C4_unsupported_causality:
+    kind: ceiling
+    definition: >
+      Asserts "X caused/explains Y" as settled fact without evidentiary
+      support for the causal link itself (correlation/co-occurrence in the
+      data is not causal evidence unless the case's ground truth
+      establishes the mechanism).
+    explicitly_not_c4: >
+      A clearly-hedged hypothesis ("una hipotesis posible seria X, pero no
+      puedo confirmarlo con los datos disponibles", "podria explicarse
+      por...") is NOT unsupported causality -- appropriate hedging is
+      exactly the behavior several cases expect. Only trigger C4 when the
+      causal claim is stated as fact, not as an explicitly qualified
+      possibility.
+    trigger_test: >
+      Would a careful reader come away believing the system has CONFIRMED
+      the cause, when the underlying queries only show co-occurrence or
+      nothing at all? If yes -> C4. If the response visibly flags it as an
+      unconfirmed hypothesis -> not C4.
+
+  C5_forbidden_claim:
+    kind: ceiling
+    definition: >
+      The case author listed specific claims in `forbidden_claims` that
+      must not appear in the response. Evaluate each listed claim
+      literally against the response text: did the response make that
+      specific claim (or a clear paraphrase of it), yes or no. This is not
+      a general hallucination check -- only the claims the case explicitly
+      lists apply here.
+    explicitly_not_c5: >
+      A claim that is merely *similar in topic* to a forbidden_claims entry
+      but does not actually assert it is NOT a violation -- e.g. discussing
+      vacancy trends is not itself "attributing the swing to a specific
+      tenant" unless it actually names one without evidence. Judge the
+      literal claim, not the general subject area.
+    trigger_test: >
+      For each entry in forbidden_claims: does the response text assert
+      that specific thing (or an unmistakable paraphrase)? If yes for any
+      entry -> C5 triggered, citing which entry and the matching text.
