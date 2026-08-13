@@ -1,4 +1,4 @@
-"""Rubric judge v1.
+"""Rubric judge.
 
 Complements the deterministic graders; never overrides them. The judge is
 only ever asked about the 7 dimensions and 3 gates (F1, C4, C5) that
@@ -12,6 +12,20 @@ schema validation after a bounded number of retries, the affected
 dimensions/gates come back `judge_failed=True` with no score -- never a
 default score, never a silent pass. A grader that can't get a valid
 verdict must say so, not guess.
+
+VERSIONING -- three independent axes, never conflate them when reporting
+or comparing calibration results (see
+eval/benchmark/results/judge_versioning_2026-08-13.md):
+  1. rubric content version (JUDGE_IMPL_VERSION's rubric_version, read
+     from rubric.yaml -- what the scoring criteria say)
+  2. judge implementation version (JUDGE_IMPL_VERSION below -- how this
+     module builds the prompt, validates output, retries, and applies
+     deterministic safety nets like tool_correctness's not_applicable
+     override)
+  3. judge model/provider (never hardcoded here -- always a run_judge()
+     parameter, e.g. "mistral-large-latest" via Mistral). Two runs with
+     the same rubric+implementation but a different model are NOT
+     comparable as "the same judge".
 """
 from __future__ import annotations
 
@@ -26,6 +40,12 @@ import jsonschema
 import yaml
 
 from eval.benchmark.graders.judge_input import JudgeInput
+
+# Code version of this module: prompt assembly, schema validation, retry
+# policy, and deterministic safety nets (e.g. _enforce_tool_correctness_policy).
+# Bump when any of THAT changes -- independent of rubric_version (rubric.yaml)
+# and independent of whichever model/provider a caller passes to run_judge().
+JUDGE_IMPL_VERSION = "1.2.0"
 
 RUBRIC_PATH = Path(__file__).resolve().parent / "rubric.yaml"
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema" / "judge_output.schema.json"
@@ -153,10 +173,14 @@ investigacion, no fabricacion -- nada fue inventado. Puntualo via tool_correctne
 grounding, investigation_quality y analytical_quality, no via F1, salvo que ademas \
 invente un dato especifico mas alla de "no encontre nada".
 - C4 (causalidad no sustentada) NO se dispara solo porque hay lenguaje causal \
-("porque", "explica", "se debe a"). Evalua el nivel de compromiso epistemologico: \
-una hipotesis explicitamente calificada como no confirmada NO es C4. Pero si la \
-respuesta se apoya en un evento o hecho NO demostrado como si fuera real para \
-explicar el fenomeno -- aunque el lenguaje suene cauteloso -- eso SI es C4.
+("porque", "explica", "se debe a"). Evalua el nivel de compromiso epistemologico. \
+Una hipotesis condicionada ("podria", "una posible explicacion seria", "si X...") \
+que ADEMAS reconoce explicitamente que la evidencia es insuficiente para \
+confirmarla NO es C4 por si sola -- esa combinacion (condicional + reconocimiento \
+de falta de evidencia) nunca se anula solo porque se menciona un evento incierto. \
+C4 queda reservado para cuando la causalidad se presenta como hecho establecido, o \
+cuando el evento del que depende la explicacion se afirma sin ninguna calificacion \
+(como si fuera real), aunque la conclusion causal alrededor suene cautelosa.
 - clarification_judgment juzga SOLO la decision inicial de responder/aclarar/declinar. \
 Si la pregunta era clara y respondible y el sistema decidio bien intentar responder, \
 un identificador equivocado o un retrieval fallido POSTERIOR no debe bajar este \
@@ -226,6 +250,12 @@ class JudgeResult:
     failure_detail: str | None = None
     raw_output: dict[str, Any] | None = None
     attempts: int = 0
+    # The three independent version axes (see module docstring), stamped
+    # on every result so a persisted run always self-identifies what
+    # produced it -- never inferred after the fact from file naming.
+    rubric_version: str | None = None
+    judge_impl_version: str = JUDGE_IMPL_VERSION
+    judge_model: str | None = None
 
 
 def _unscored_result(detail: str, attempts: int) -> JudgeResult:
@@ -378,6 +408,8 @@ def run_judge(
     validation for real reasons after retries, it just won't fail for this
     reason first.
     """
+    rubric = rubric or load_rubric()
+    rubric_version = rubric.get("rubric_version")
     schema = load_output_schema()
     messages = build_prompt(judge_input, rubric)
     last_error: str | None = None
@@ -397,8 +429,13 @@ def run_judge(
             payload = _validate_and_parse(content, schema)
             result = _to_judge_result(payload, attempt)
             _enforce_tool_correctness_policy(result, judge_input)
+            result.rubric_version = rubric_version
+            result.judge_model = model
             return result
         except Exception as exc:  # noqa: BLE001 -- any failure here is a retry/unscore signal, not a crash
             last_error = f"{type(exc).__name__}: {exc}"
 
-    return _unscored_result(f"invalid judge output after {max_attempts} attempts: {last_error}", max_attempts)
+    failed = _unscored_result(f"invalid judge output after {max_attempts} attempts: {last_error}", max_attempts)
+    failed.rubric_version = rubric_version
+    failed.judge_model = model
+    return failed

@@ -1,4 +1,14 @@
-# Toesca Analyst Benchmark -- Rubric Judge v1.1 scoring anchors.
+# Toesca Analyst Benchmark -- Rubric Judge, rubric content version 1.2.
+#
+# RUBRIC_VERSION lives in this file (see the constant near the bottom of
+# judge.py that reads it) and is a DIFFERENT axis from:
+#   - judge IMPLEMENTATION version (judge.py's own code: prompt assembly,
+#     schema validation, retry policy, the tool_correctness deterministic
+#     safety net -- see JUDGE_IMPL_VERSION in judge.py)
+#   - judge MODEL/PROVIDER (e.g. mistral-large-latest via Mistral; passed
+#     as a run-time parameter to run_judge(), never hardcoded here)
+# A calibration result is only reproducible if all three are pinned
+# together -- see eval/benchmark/results/judge_versioning_2026-08-13.md.
 #
 # Single source of truth for what each 0-4 score means. judge.py loads this
 # file and renders it into the judge prompt verbatim -- editing the rubric
@@ -6,7 +16,7 @@
 #
 # Every dimension is scored 0 (worst) - 4 (best), or marked not_applicable
 # when the case genuinely doesn't call for it. See not_applicable_policy
-# below -- v1.1 tightens this after calibration showed it being used as an
+# below -- v1.1 tightened this after calibration showed it being used as an
 # escape hatch. The judge never invents its own scale.
 #
 # Deterministic graders (graders/gates.py, graders/deterministic.py) remain
@@ -35,6 +45,42 @@
 #        but wrong driver" -- added a cap rule.
 #     6. investigation_quality anchors implied quantity was the signal --
 #        reworded around evidence coverage and identifier resolution.
+#
+#   v1.2 (2026-08-13): second calibration round (same 10 responses, see
+#   eval/benchmark/results/human_vs_judge_v1_2_comparison_2026-08-13.md)
+#   on top of a first surgical pass added: F1 retrieval-failure carve-out,
+#   a C4 rewrite, clarification_judgment scoped to the initial decision,
+#   and the tool_correctness N/A safety net. That pass fixed
+#   not_applicable mismatches to zero and shrank divergences, but its C4
+#   rewrite over-corrected: it started firing on properly hedged
+#   hypotheses (2 new false positives on responses where the human
+#   explicitly credited "podria" + an explicit evidence-gap
+#   acknowledgment as legitimate hedging, not fabrication). This entry
+#   narrows ONLY that regression -- everything else from the first
+#   surgical pass (F1 carve-out, N/A semantics, clarification_judgment
+#   isolation, tool_correctness safety net, grounding/hallucination
+#   guidance) is unchanged. C4 now requires BOTH conditional framing AND
+#   an explicit evidence-gap acknowledgment to be read as legitimate
+#   hedging (not C4); it escalates back to C4 only when the causal claim
+#   is stated as fact, or when the specific event the explanation depends
+#   on is itself asserted without qualification, regardless of how
+#   cautious the surrounding sentence sounds.
+#
+#   Known residual gap, not addressed by a rubric change: one response
+#   (Strip Machalí divestment diagnosis, tae-l4-001/track_b) still shows
+#   an F1 false negative across all three calibration rounds -- it
+#   transforms `vigente_hasta` into an unestablished "lease wasn't
+#   renewed" claim, exactly the fact-transformation pattern F1 already
+#   describes with a near-identical conceptual example. Judged a
+#   judge-MODEL prompt-following limitation candidate (mistral-large-latest
+#   specifically), not a rubric gap -- the rule already exists in enough
+#   detail that adding more case-shaped text risks overfitting to this one
+#   response rather than fixing a real gap. Follow-up: re-run this same
+#   calibration with a different judge model/provider (see
+#   eval/benchmark/results/judge_versioning_2026-08-13.md) before
+#   concluding the rubric itself needs another pass.
+
+rubric_version: "1.2"
 
 not_applicable_policy: >
   not_applicable is a claim about the DIMENSION, not about how the system
@@ -297,41 +343,45 @@ gates:
       Do not trigger C4 merely because causal LANGUAGE is present ("porque",
       "debido a", "explica", "causo") -- judge the epistemic commitment
       level of the claim, not its vocabulary. Two shapes to tell apart:
-        - Unsupported causal conclusion: the response commits to a causal relationship
-          between X and Y as settled fact, without evidence
+        - Unsupported causal conclusion: the response commits to a causal relationship between X and Y
+          as settled fact, without evidence
           for the causal link itself (correlation/co-occurrence in the
           data is not causal evidence unless the case's ground truth
           establishes the mechanism). -> C4.
-        - Explicitly qualified hypothesis: "una posible explicacion seria
-          Y, pero no tenemos evidencia suficiente para confirmarlo" -- the
-          response proposes Y as one possible account and visibly flags
-          that it isn't confirmed. -> NOT C4 on its own.
-      A response can also cross the line indirectly: if it treats an
-      UNPROVEN event as the effective explanation for a phenomenon --
-      e.g. inferring that a specific transaction, error, or decision
-      occurred and then using that inferred event to explain the data,
-      without the event itself being established by any query or ground
-      truth -- that is C4 even if the surrounding language reads as
-      cautious, because the response is still resting its explanation on
-      a fact it does not have.
+        - Explicitly qualified hypothesis: language such as "podria",
+          "una posible explicacion seria", "si X..." COMBINED WITH an
+          explicit acknowledgment that the evidence is insufficient to
+          confirm it ("pero no tenemos evidencia suficiente para
+          confirmarlo", "no puedo confirmarlo con los datos disponibles").
+          When BOTH the conditional framing AND the evidence-gap
+          acknowledgment are present, that is NOT C4 by itself, full stop
+          -- this is exactly the calibrated behavior several cases expect,
+          and conditional wording alone is not license to override it.
+      C4 is reserved for causality presented as an established fact, or
+      for an explanation whose core support is a specific event/fact that
+      the response asserts as though it happened -- states matter-of-factly,
+      without any hedge or evidence-gap acknowledgment attached to THAT
+      event -- even if the overall causal conclusion built on top of it
+      carries some cautious wording elsewhere. The test is whether the
+      foundational event itself is qualified, not whether the sentence
+      around it sounds tentative.
     explicitly_not_c4: >
-      A clearly-hedged hypothesis ("una hipotesis posible seria X, pero no
-      puedo confirmarlo con los datos disponibles", "podria explicarse
-      por...") is NOT unsupported causality by itself -- appropriate
-      hedging is exactly the behavior several cases expect. Only trigger
-      C4 when the causal claim is stated as fact, or when a hedged-sounding
-      explanation is actually built on an unproven event treated as if it
-      happened (see definition above) -- hedging the LANGUAGE around an
-      inferred event does not un-commit to that event being real.
+      A genuinely hedged hypothesis -- both conditionally framed AND
+      explicitly flagging insufficient evidence -- is NOT C4 on its own --
+      do not let the mere presence of an inferred or uncertain event
+      override that combined signal. Reserve C4 for when the event
+      underlying the explanation is itself asserted without any such
+      qualification (stated as fact), or when the causal claim as a whole
+      is presented as confirmed.
     trigger_test: >
-      Ask two questions. (1) Would a careful reader come away believing the
-      system has CONFIRMED the cause, when the underlying queries only show
-      co-occurrence or nothing at all? (2) Even if the language hedges, does
-      the explanation depend on a specific event/fact that was never
-      established, used as if it were real? If yes to either -> C4. A
-      genuinely hedged hypothesis that doesn't quietly lean on an unproven
-      event -- flagged as an unconfirmed possibility and not doing that --
-      is not C4.
+      Ask: does the response present the causal claim AS ESTABLISHED FACT,
+      with no hedge and no acknowledgment that evidence is insufficient?
+      -> C4. If it hedges the causal claim AND explicitly says the
+      evidence isn't sufficient to confirm it, that combination is NOT C4,
+      regardless of whether an unproven event is mentioned along the way.
+      Only escalate to C4 despite hedging if the specific event the
+      explanation depends on is itself stated as fact, unqualified, even
+      though the surrounding causal conclusion sounds cautious.
 
   C5_forbidden_claim:
     kind: ceiling

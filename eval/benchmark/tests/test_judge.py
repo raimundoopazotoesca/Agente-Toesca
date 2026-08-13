@@ -200,6 +200,31 @@ def _minimal_input() -> JudgeInput:
     )
 
 
+def test_judge_result_stamps_all_three_version_axes_independently():
+    """rubric_version (from rubric.yaml), judge_impl_version (this module's
+    own code version), and judge_model (whatever the caller passed) must
+    all be recorded and must not collapse into one value -- they vary
+    independently across calibration runs."""
+    payload = json.dumps(_valid_payload())
+    chat_fn = _fake_chat([payload])
+    result = judge.run_judge(_minimal_input(), chat_fn, model="some-other-model")
+    assert result.rubric_version == judge.load_rubric()["rubric_version"]
+    assert result.judge_impl_version == judge.JUDGE_IMPL_VERSION
+    assert result.judge_model == "some-other-model"
+    # the three must be independently settable/distinguishable, not the same string
+    assert len({result.rubric_version, result.judge_impl_version, result.judge_model}) == 3
+
+
+def test_judge_result_stamps_versions_even_on_persistent_failure():
+    """A judge_failed result still self-identifies which rubric/impl/model
+    produced the failure -- version info isn't only for successes."""
+    chat_fn = _fake_chat(["garbage", "still garbage", "nope"])
+    result = judge.run_judge(_minimal_input(), chat_fn, model="test-model", max_attempts=3)
+    assert result.judge_failed is True
+    assert result.rubric_version == judge.load_rubric()["rubric_version"]
+    assert result.judge_model == "test-model"
+
+
 def test_run_judge_valid_output_first_try():
     payload = json.dumps(_valid_payload())
     chat_fn = _fake_chat([payload])
@@ -284,6 +309,27 @@ def test_rubric_c4_covers_unproven_event_used_as_explanation():
     Y' assertions."""
     text = judge._render_rubric_text(judge.load_rubric())
     assert "unproven event" in text
+
+
+def test_rubric_c4_requires_both_conditional_framing_and_evidence_gap_for_exception():
+    """Regression guard for the v1.2 -> v1.2-narrowed fix: a genuinely
+    hedged hypothesis needs BOTH conditional wording ("podria", "posible")
+    AND an explicit evidence-gap acknowledgment to count as legitimate
+    hedging. Conditional wording alone, or an uncertain event mentioned in
+    passing, must not be enough on its own to force C4 despite that
+    combined signal -- this is a general instruction to the judge, not a
+    per-case rule."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "BOTH" in text
+    assert "evidence" in text.lower() and "insufficient" in text.lower()
+    assert "full stop" in text or "override" in text
+
+
+def test_rubric_c4_still_fires_on_unqualified_causal_conclusion():
+    """The narrowing must not have swallowed the original, legitimate C4
+    case: a causal claim stated as settled fact with no hedge at all."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "established fact" in text or "ESTABLISHED FACT" in text
 
 
 def test_run_judge_retries_once_then_succeeds():
