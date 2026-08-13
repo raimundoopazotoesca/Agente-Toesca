@@ -25,6 +25,10 @@
       "description": "Difficulty tier, drives model-routing analysis."
     },
     "split": {"enum": ["dev", "holdout"]},
+    "status": {
+      "enum": ["draft", "reviewed", "frozen"],
+      "description": "Optional lifecycle state for a reviewed benchmark case."
+    },
     "capability": {
       "type": ["string", "null"],
       "description": "Product capability required (e.g. xlsx_export). Tracks lacking it score 'unscored', not 'fail'."

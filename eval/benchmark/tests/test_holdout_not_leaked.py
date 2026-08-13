@@ -54,7 +54,6 @@ _ALLOWED_MANIFEST_CASE_FIELDS = {
     "case_id",
     "split",
     "level",
-    "category",
     "status",
     "batch",
 }
@@ -64,6 +63,7 @@ _ALLOWED_MANIFEST_CASE_FIELDS = {
 # is a leak signal. Union of case-level semantic fields and raw
 # question/ground-truth content fields.
 _FORBIDDEN_SEMANTIC_FIELDS = {
+    "category",
     "primary_behavior",
     "secondary_behaviors",
     "domain",
@@ -123,7 +123,7 @@ def _manifest_case_ids() -> list[str]:
 
 def test_manifest_case_entries_are_minimal():
     """Each case entry in HOLDOUT_MANIFEST.yaml carries only governance
-    fields (case_id/split/level/category/status/batch). Anything else --
+    fields (case_id/split/level/status/batch). Anything else --
     including case-level semantic metadata like domain/entities/periods/
     metrics, not just raw question/sql content -- belongs in the private
     repo's MANIFEST_FULL.yaml, never here."""

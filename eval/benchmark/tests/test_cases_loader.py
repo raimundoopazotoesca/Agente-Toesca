@@ -56,6 +56,11 @@ def test_unknown_field_rejected(tmp_path):
         load_case(_write(tmp_path, body))
 
 
+def test_review_status_is_allowed(tmp_path):
+    body = VALID.replace("split: dev", "split: dev\nstatus: reviewed")
+    assert load_case(_write(tmp_path, body)).raw["status"] == "reviewed"
+
+
 def test_analyst_case_requires_level_and_tier(tmp_path):
     body = VALID.replace("level: L1\n", "")
     with pytest.raises(CaseValidationError, match="need a `level`"):

@@ -1,84 +1,36 @@
 # Toesca Analyst Benchmark v1 — Holdout governance manifest (minimized)
 #
-# Correccion post Batch-1-review: la version anterior de este archivo
-# contenia metadata semantica case-level (entidad, periodo, metrica,
-# tablas fuente, primary/secondary behavior, similarity_reason contra
-# Dev). Eso es exactamente el tipo de contenido que este repo NO debe
-# tener disponible por defecto para agentes de desarrollo -- moverlo aqui
-# derrotaba parcialmente el aislamiento fisico descrito en
-# cases/holdout/README.md. Esa informacion completa vive ahora
-# UNICAMENTE en el repo privado
-# (toesca-benchmark-holdout-private/MANIFEST_FULL.yaml), junto al
-# contenido real de los casos.
-#
-# Este archivo solo registra lo minimo necesario para gobernanza: cuantos
-# casos existen, en que batch, en que nivel/categoria estructural (L1-L8 /
-# TAE-TCE, no el dominio de negocio que evaluan) y su estado de revision.
-# No permite reconstruir de que trata ningun caso.
-#
-# `status`: draft (escrito, no revisado) | reviewed (paso human review del
-# batch) | frozen (incluido en HOLDOUT_FREEZE_MANIFEST.yaml).
-#
-# `tests/test_holdout_not_leaked.py` falla si aparece cualquier campo
-# fuera de {case_id, split, level, category, status, batch} en una fila
-# de `cases`, o si aparece un campo de la lista negra explicita
-# (entities, periods, metrics, source_tables, primary_behavior,
-# secondary_behaviors, similarity_reason, domain, dev_case_checked_against,
-# most_similar_dev_case) en cualquier parte de este archivo.
+# The real holdout case content and semantic metadata live only in the private
+# repository. This public manifest carries lifecycle governance only.
 
 version: 2
 benchmark_version: v1
-generated_for_batch: 1
+completed_through_batch: 5
 total_target: 21
-total_registered: 6
-
-# Distribucion agregada (no ligada a case_id individual) -- coincide con
-# la tabla publica de HOLDOUT_SET_V1_DESIGN.md, no agrega informacion.
-batch_1_level_distribution: {L1: 3, L2: 1, L3: 2}
+total_registered: 21
+total_tae: 14
+total_tce: 7
+total_tce_turns: 18
 
 cases:
-  - case_id: tae-l1h-001
-    split: holdout
-    level: L1
-    category: null
-    status: draft
-    batch: 1
-
-  - case_id: tae-l1h-002
-    split: holdout
-    level: L1
-    category: null
-    status: draft
-    batch: 1
-
-  - case_id: tae-l1h-003
-    split: holdout
-    level: L1
-    category: null
-    status: draft
-    batch: 1
-
-  - case_id: tae-l2h-001
-    split: holdout
-    level: L2
-    category: null
-    status: draft
-    batch: 1
-
-  - case_id: tae-l3h-001
-    split: holdout
-    level: L3
-    category: null
-    status: draft
-    batch: 1
-
-  - case_id: tae-l3h-002
-    split: holdout
-    level: L3
-    category: null
-    status: draft
-    batch: 1
-
-# --- Slots pendientes (Batch 2-5), declarados ex-ante en HOLDOUT_SET_V1_DESIGN.md ---
-# No se listan aqui como 'cases' hasta que existan como YAML real en el
-# repo privado -- este manifest solo registra casos ya escritos.
+  - {case_id: tae-l1h-001, split: holdout, level: L1, status: reviewed, batch: 1}
+  - {case_id: tae-l1h-002, split: holdout, level: L1, status: reviewed, batch: 1}
+  - {case_id: tae-l1h-003, split: holdout, level: L1, status: reviewed, batch: 1}
+  - {case_id: tae-l2h-001, split: holdout, level: L2, status: reviewed, batch: 1}
+  - {case_id: tae-l3h-001, split: holdout, level: L3, status: reviewed, batch: 1}
+  - {case_id: tae-l3h-002, split: holdout, level: L3, status: reviewed, batch: 1}
+  - {case_id: tae-l4h-001, split: holdout, level: L4, status: reviewed, batch: 2}
+  - {case_id: tae-l4h-002, split: holdout, level: L4, status: reviewed, batch: 2}
+  - {case_id: tae-l4h-003, split: holdout, level: L4, status: reviewed, batch: 2}
+  - {case_id: tae-l5h-001, split: holdout, level: L5, status: reviewed, batch: 2}
+  - {case_id: tae-l5h-002, split: holdout, level: L5, status: reviewed, batch: 2}
+  - {case_id: tae-l6h-001, split: holdout, level: L6, status: reviewed, batch: 2}
+  - {case_id: tae-l8h-001, split: holdout, level: L8, status: reviewed, batch: 3}
+  - {case_id: tae-l8h-002, split: holdout, level: L8, status: reviewed, batch: 3}
+  - {case_id: tce-ambiguityh-001, split: holdout, level: null, status: reviewed, batch: 4}
+  - {case_id: tce-entitycorrectionh-001, split: holdout, level: null, status: reviewed, batch: 4}
+  - {case_id: tce-metriccorrectionh-001, split: holdout, level: null, status: reviewed, batch: 4}
+  - {case_id: tce-multianalysish-001, split: holdout, level: null, status: reviewed, batch: 5}
+  - {case_id: tce-multianalysish-002, split: holdout, level: null, status: reviewed, batch: 5}
+  - {case_id: tce-challengeh-001, split: holdout, level: null, status: reviewed, batch: 5}
+  - {case_id: tce-causalh-001, split: holdout, level: null, status: reviewed, batch: 5}
