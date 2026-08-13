@@ -1,0 +1,878 @@
+[
+  {
+    "blind_label": "Respuesta 1",
+    "case_id": "tae-l3-001",
+    "track": "track_a",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "clarified",
+      "dimension_scores": {
+        "clarification_judgment": 0,
+        "output_usefulness": 0
+      },
+      "not_applicable": [
+        "analytical_quality",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "grounding": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "hallucination": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 0,
+          "justification": "La respuesta solicita aclaración a pesar de que la pregunta es clara y los datos requeridos (NOI y vacancia de Sucden) están disponibles en el ground truth. No hay ambigüedad en la pregunta que justifique la solicitud de especificación.",
+          "evidence": "Respuesta: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 1.0
+        },
+        "investigation_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 0,
+          "justification": "La respuesta no aborda la pregunta ni proporciona información útil. En lugar de responder, solicita aclaración innecesaria, lo que la hace no usable para el analista.",
+          "evidence": "Respuesta: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 1.0
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 8.0
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.0,
+        "conversational_quality": 0.0
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "factual_correctness",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": []
+    }
+  },
+  {
+    "blind_label": "Respuesta 2",
+    "case_id": "tae-l4-001",
+    "track": "track_b",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "answered",
+      "dimension_scores": {
+        "analytical_quality": 4,
+        "grounding": 4,
+        "hallucination": 4,
+        "clarification_judgment": 4,
+        "investigation_quality": 4,
+        "output_usefulness": 4
+      },
+      "not_applicable": [
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta identifica correctamente el hecho central (ausencia de datos después de agosto 2025) y lo vincula con el campo `vigente_hasta` en `dim_activo`. Además, distingue claramente entre el hecho verificable (no hay datos) y la interpretación (posibles causas como venta o fin de contrato), explorando incluso el contexto del activo padre (Mall Curicó) para descartar problemas generales. La cadena de razonamiento es explícita y completa.",
+          "evidence": "1. 'El activo **Strip Machalí** aparece registrado en la tabla `dim_activo` con un campo `vigente_hasta = '2025-08'`' y 'No existen registros en `raw_rent_roll_line` para **Strip Machalí** después de agosto de 2025'. 2. 'La ausencia de datos **no se debe a un error de carga o falta de información en la base de datos**, sino a que el activo **dejó de estar vigente en agosto de 2025**'. 3. 'Mall Curicó (el activo padre) sí tiene registros financieros y de rent roll después de agosto de 2025', confirmando que la falta de datos es específica.",
+          "confidence": 1.0
+        },
+        "grounding": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "Todas las afirmaciones sustantivas están respaldadas por los resultados de las queries ejecutadas o el ground truth. No hay claims sin soporte en los datos consultados.",
+          "evidence": "1. '`vigente_hasta = '2025-08'`' (query 4, fila: ['Strip Machalí', 'Strip Machalí', '2025-08']). 2. 'No existen registros en `raw_rent_roll_line` después de agosto 2025' (query 1, resultado: 0 registros). 3. 'Mall Curicó sí tiene registros financieros después de agosto 2025' (query 2, resultado: 953 registros). 4. 'No hay movimientos de contrato después de esa fecha' (query 5, resultado: 0 filas).",
+          "confidence": 1.0
+        },
+        "hallucination": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "No hay fabricación de hechos, entidades o relaciones. Además, la respuesta explicita claramente las limitaciones de los datos ('No hay comentarios en `raw_movimiento_contrato` ni notas en `dim_activo` que expliquen la razón exacta de la baja').",
+          "evidence": "1. 'No hay comentarios en `raw_movimiento_contrato` ni notas en `dim_activo` que expliquen la razón exacta de la baja'. 2. Todas las afirmaciones están respaldadas por queries o ground truth, sin invención de detalles.",
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta aborda directamente la pregunta sin pedir aclaración, lo cual es apropiado dado que los datos disponibles (campo `vigente_hasta` y ausencia de registros posteriores) permiten una respuesta clara y bien fundamentada. No hay ambigüedad en la pregunta que requiera clarificación.",
+          "evidence": "La respuesta comienza con '**Respuesta basada en los datos consultados**' y procede a detallar hechos e interpretaciones sin solicitar aclaración adicional, alineándose con el `clarification_expected: 'acceptable'`.",
+          "confidence": 1.0
+        },
+        "investigation_quality": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La investigación es exhaustiva y eficiente: cubre la ausencia de datos en `raw_rent_roll_line`, verifica el campo `vigente_hasta` en `dim_activo`, revisa movimientos de contrato, y valida el contexto del activo padre (Mall Curicó) para descartar problemas generales. No hay queries redundantes o irrelevantes.",
+          "evidence": "1. Query 1: Verifica ausencia de registros en `raw_rent_roll_line` después de agosto 2025. 2. Query 2: Confirma que el activo padre (Mall Curicó) sí tiene datos posteriores. 3. Query 4: Obtiene el campo `vigente_hasta` de `dim_activo`. 4. Query 5: Revisa movimientos de contrato. Todas las queries son pertinentes y cubren los ángulos necesarios.",
+          "confidence": 1.0
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta es directamente usable por un analista: presenta un bottom line claro (el activo dejó de estar vigente en agosto 2025), organiza la información en hechos confirmados, interpretación y contexto adicional, y anticipa la limitación (falta de detalles operativos). No requiere edición significativa.",
+          "evidence": "1. Estructura clara: 'Hecho confirmado', 'Interpretación', 'Contexto adicional', 'Limitación'. 2. Bottom line explícito: 'el activo **dejó de estar vigente en agosto de 2025**'. 3. Anticipa la pregunta natural: 'Para detalles operativos, sería necesario revisar documentación externa'.",
+          "confidence": 1.0
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "justification": "La respuesta presenta las posibles causas (venta, reestructuración, baja) como hipótesis explícitamente calificadas ('sugiere que'), no como hechos confirmados. No afirma causalidad sin soporte.",
+          "evidence": "'Esto sugiere que: El contrato de arrendamiento con **Strip Machalí** terminó en agosto de 2025 y no fue renovado. El activo podría haber sido vendido, reestructurado o dado de baja...' (énfasis en 'sugiere' y 'podría').",
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 22.1
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 1.0
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "conversational_quality",
+        "factual_correctness",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": []
+    }
+  },
+  {
+    "blind_label": "Respuesta 3",
+    "case_id": "tae-l5-002",
+    "track": "track_b",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "answered",
+      "dimension_scores": {
+        "analytical_quality": 4,
+        "grounding": 4,
+        "hallucination": 4,
+        "clarification_judgment": 4,
+        "investigation_quality": 4,
+        "output_usefulness": 4,
+        "tool_correctness": 3
+      },
+      "not_applicable": [],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta identifica correctamente a Apo3001 como el activo con mayor vacancia, compara su desempeño con los demás activos de TRI (destacando que duplica la vacancia del segundo peor activo y es 65x superior a Viña Centro), y organiza la información en una lectura coherente de la situación. Además, aborda factores secundarios como la falta de datos para junio en otros activos y sugiere posibles causas y análisis posteriores.",
+          "evidence": "En **junio de 2026**, el activo del fondo **TRI** con mayor vacancia es **Apo3001**, con un **36.2% de vacancia**... **Gravedad relativa:** Apo3001 duplica la vacancia del segundo activo con peor desempeño (Mall Curicó) y es **65x superior** a la de Viña Centro. La brecha sugiere un problema focalizado en Apo3001, no una tendencia general del fondo.",
+          "confidence": 1.0
+        },
+        "grounding": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "Todas las afirmaciones sustantivas en la respuesta son trazables a los resultados de las queries ejecutadas. Los datos de vacancia para Apo3001, Mall Curicó, Viña Centro, Sucden y las residencias coinciden con los resultados de las queries, y las comparaciones (ej: 36.2% vs 28.4% vs 0.55%) están respaldadas por los datos.",
+          "evidence": "Apo3001: 36.2% (query: 0.3620316883059285), Mall Curicó: 28.4% (query: 0.28405681540505134), Viña Centro: 0.55% (query: 0.005517367229334145).",
+          "confidence": 1.0
+        },
+        "hallucination": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "No se inventan hechos, entidades o relaciones. La respuesta explicita claramente las limitaciones de los datos (ej: falta de datos para junio en Mall Curicó/Viña Centro) y no afirma nada sin sustento en las queries o ground truth.",
+          "evidence": "No hay datos de vacancia para junio en Mall Curicó/Viña Centro (solo hasta mayo), pero incluso en mayo, Apo3001 ya superaba a ambos. **Limitación:** No se puede descartar que otros activos hayan empeorado en junio (ej: Mall Curicó), pero los datos disponibles no lo respaldan.",
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La pregunta estaba bien especificada y los datos necesarios estaban disponibles (aunque parciales para algunos activos). La respuesta no pide aclaración ni declina, sino que responde directamente, reconociendo las limitaciones de los datos sin evitar la pregunta.",
+          "evidence": "La respuesta aborda la pregunta sin solicitar aclaración y justifica adecuadamente las limitaciones de los datos (ej: falta de datos para junio en algunos activos).",
+          "confidence": 1.0
+        },
+        "investigation_quality": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "Las queries ejecutadas cubren adecuadamente los activos de TRI en el período requerido (junio 2026 y semestre previo), comparan los datos relevantes y siguen un enfoque eficiente sin redundancias. Además, la respuesta sugiere pasos adicionales de investigación basados en los hallazgos.",
+          "evidence": "Se ejecutaron dos queries: una para junio 2026 y otra para el semestre 2026-01 a 2026-06, cubriendo todos los activos de TRI. La respuesta también recomienda análisis posteriores (ej: verificar si la vacancia es estructural o transitoria).",
+          "confidence": 1.0
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta es clara, bien organizada y directamente usable por un analista. Proporciona un bottom line claro (Apo3001 como el activo con mayor vacancia y su gravedad relativa), anticipa preguntas de seguimiento (ej: causas de la vacancia) y sugiere pasos concretos para análisis posterior.",
+          "evidence": "**Hecho:**... **Interpretación:**... **Recomendación para análisis posterior:** 1. Verificar si la vacancia de Apo3001 es estructural o transitoria... 2. Comparar con benchmarks de mercado... 3. Revisar efectos estacionales...",
+          "confidence": 1.0
+        },
+        "tool_correctness": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "Las queries son bien dirigidas y suficientes para responder la pregunta, pero la primera query (para junio 2026) no arrojó resultados, lo que sugiere una posible ineficiencia. La segunda query compensó esto al cubrir el semestre, pero podría haberse optimizado para evitar la redundancia.",
+          "evidence": "La primera query no devolvió filas (vacía), mientras que la segunda query cubrió el semestre y proporcionó los datos necesarios. Ambas queries son semánticamente correctas y tocan la tabla requerida (`v_vacancia_activo`).",
+          "confidence": 0.9
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "justification": "La respuesta no afirma causalidad como un hecho establecido. Las posibles causas de la vacancia (ej: baja demanda en oficinas, renovación de contratos) se presentan como hipótesis para análisis posterior, no como conclusiones confirmadas.",
+          "evidence": "Verificar si la vacancia de Apo3001 es **estructural** (ej: baja demanda en oficinas) o **transitoria** (ej: renovación de contratos).",
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 22.8
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.7,
+        "factual_correctness": 1.0,
+        "conversational_quality": 1.0,
+        "tool_correctness": 0.5
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": []
+    }
+  },
+  {
+    "blind_label": "Respuesta 4",
+    "case_id": "tae-l3-002",
+    "track": "track_b",
+    "classification": "model_non_answer",
+    "judge": null,
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.0,
+        "conversational_quality": 0.0
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "factual_correctness",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": [
+        "C3"
+      ]
+    }
+  },
+  {
+    "blind_label": "Respuesta 5",
+    "case_id": "tae-l4-002",
+    "track": "track_a",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "clarified",
+      "dimension_scores": {
+        "clarification_judgment": 0,
+        "output_usefulness": 0
+      },
+      "not_applicable": [
+        "analytical_quality",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "grounding": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "hallucination": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 0,
+          "justification": "La respuesta solicita aclaración a pesar de que la pregunta es clara y específica (fondo TRI, métrica de vacancia, periodo enero-febrero 2026). No hay ambigüedad en la pregunta que justifique la solicitud de aclaración, y el ground truth confirma que los datos requeridos estaban disponibles.",
+          "evidence": "Respuesta: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 1.0
+        },
+        "investigation_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 0,
+          "justification": "La respuesta no aborda la pregunta sustantivamente y, en su lugar, solicita aclaración innecesaria. No proporciona ningún insight o dato útil para el analista.",
+          "evidence": "Respuesta: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 1.0
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 7.9
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.0,
+        "conversational_quality": 0.25
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "factual_correctness",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": [
+        "C3"
+      ]
+    }
+  },
+  {
+    "blind_label": "Respuesta 6",
+    "case_id": "tae-l4-001",
+    "track": "track_a",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "clarified",
+      "dimension_scores": {
+        "clarification_judgment": 2,
+        "output_usefulness": 1
+      },
+      "not_applicable": [
+        "analytical_quality",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "grounding": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "hallucination": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 2,
+          "justification": "La respuesta solicita aclaración, lo cual es aceptable según `clarification_expected: 'acceptable'`, pero no justifica por qué es necesaria la aclaración. La pregunta ya especifica el activo ('Strip Machalí') y el contexto ('datos después de agosto de 2025'), por lo que la solicitud de métrica o fondo adicional no es claramente relevante para la pregunta planteada.",
+          "evidence": "Respuesta literal: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 0.9
+        },
+        "investigation_quality": {
+          "not_applicable": true,
+          "confidence": 1.0
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 1,
+          "justification": "La respuesta no aborda la pregunta sustantivamente y, en su lugar, solicita información redundante (el activo ya estaba especificado). No proporciona ningún insight o dirección útil para resolver la pregunta original.",
+          "evidence": "Respuesta literal: '¿Podrías especificar qué métrica te interesa (ej. vacancia, NOI, TIR, dividend yield) y a qué fondo o activo te refieres (TRI, PT, Apo, o un activo específico)?'",
+          "confidence": 0.95
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "justification": "No hay afirmaciones causales en la respuesta.",
+          "evidence": "Respuesta literal no contiene hipótesis o afirmaciones sobre causas.",
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "justification": "La respuesta no afirma ninguna de las claims prohibidas en `forbidden_claims` (no inventa causas operacionales, no atribuye el problema a errores de ingesta, ni afirma que el activo sigue operando).",
+          "evidence": "Respuesta literal no contiene referencias a causas operacionales, errores de ingesta, o continuidad operativa del activo.",
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 10.7
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 1.0
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "conversational_quality",
+        "factual_correctness",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": []
+    }
+  },
+  {
+    "blind_label": "Respuesta 7",
+    "case_id": "tae-l5-001",
+    "track": "track_b",
+    "classification": "infra_failure",
+    "judge": null,
+    "deterministic": null
+  },
+  {
+    "blind_label": "Respuesta 8",
+    "case_id": "tae-l5-003",
+    "track": "track_b",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "answered",
+      "dimension_scores": {
+        "analytical_quality": 3,
+        "grounding": 3,
+        "hallucination": 3,
+        "clarification_judgment": 4,
+        "investigation_quality": 3,
+        "output_usefulness": 3,
+        "tool_correctness": 3
+      },
+      "not_applicable": [],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La respuesta identifica correctamente el aumento de vacancia en 2026 como el principal hallazgo y organiza el análisis en torno a este hecho, incluyendo datos parciales históricos y comparativos. Sin embargo, no profundiza en comparaciones con otros periodos o activos de manera exhaustiva, dejando un ángulo secundario sin explorar (ej: evolución mensual detallada de la vacancia).",
+          "evidence": "La respuesta destaca: 'La vacancia consolidada de Apo alcanzó **7.84% en junio 2026**, un nivel alto para oficinas prime (clase A/A+)' y 'El salto a **7.84%** en junio 2026 sugiere un **deterioro reciente** en la ocupación'.",
+          "confidence": 0.9
+        },
+        "grounding": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La mayoría de las afirmaciones sustantivas están respaldadas por las queries ejecutadas, especialmente en lo referente a vacancia. Sin embargo, hay una afirmación sobre 'vacancias altas en 2023-2024 según informes externos' que no está respaldada por ninguna query o ground truth proporcionado.",
+          "evidence": "La afirmación 'históricamente, el submercado de oficinas en Apoquindo ha tenido vacancias altas (ej: 10-15% en 2023-2024 según informes externos)' no tiene respaldo en las queries ejecutadas ni en el ground truth.",
+          "confidence": 0.9
+        },
+        "hallucination": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "No hay fabricaciones materiales de hechos o entidades, pero la respuesta sobreestima la certeza sobre datos externos no consultados (ej: vacancias en 2023-2024 según CBRE/JLL). No inventa datos, pero extrapola sin base en las queries ejecutadas.",
+          "evidence": "La respuesta menciona: 'el submercado de Apoquindo ha tenido vacancias estructurales altas desde 2023 (ej: 12-15% según CBRE/JLL)', sin que esto esté respaldado por las queries o el ground truth.",
+          "confidence": 0.9
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "La respuesta aborda directamente la pregunta sin solicitar aclaraciones, lo cual es apropiado dado que la pregunta está bien especificada y los datos necesarios (aunque incompletos) estaban disponibles para un análisis parcial.",
+          "evidence": "La respuesta comienza con: 'He recopilado datos parciales sobre el fondo **Apo** en 2026. Aquí está el análisis', indicando que respondió directamente a la pregunta sin pedir aclaraciones.",
+          "confidence": 1.0
+        },
+        "investigation_quality": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La investigación cubre los activos relevantes (Apo4501 y Apo4700) y consulta múltiples tablas para obtener datos de vacancia, NOI, y otros KPIs. Sin embargo, no sigue un hilo lógico para explorar la evolución mensual de la vacancia en 2026, lo que habría enriquecido el análisis.",
+          "evidence": "Se ejecutaron queries para vacancia, NOI, DY, TIR, tasa de arriendo y valor de cuota, pero no se profundizó en la evolución mensual de la vacancia en 2026 más allá de junio.",
+          "confidence": 0.9
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La respuesta es clara y bien organizada, con un resumen de hallazgos y riesgos identificados. Sin embargo, la falta de datos financieros clave (NOI, DY, TIR) limita su utilidad inmediata, aunque la respuesta anticipa esta limitación y sugiere próximos pasos.",
+          "evidence": "La respuesta incluye: 'El **aumento de vacancia en 2026** es el principal motivo de preocupación, pero la **falta de datos financieros** (NOI, DY, TIR) impide evaluar su impacto real. Se recomienda priorizar la validación de estos datos.'",
+          "confidence": 0.9
+        },
+        "tool_correctness": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "Las queries ejecutadas son relevantes y bien dirigidas a los activos correctos (Apo4501 y Apo4700), pero algunas son redundantes (ej: múltiples consultas a `derived_kpi` para diferentes KPIs) y no todas aportan datos útiles (ej: queries que retornan vacíos).",
+          "evidence": "Se ejecutaron 7 queries, incluyendo una específica para vacancia en `v_vacancia_activo_efectivo` y otras para NOI, DY, TIR, etc. Sin embargo, varias queries retornaron resultados vacíos, lo que indica ineficiencia.",
+          "confidence": 0.9
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 0.9
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "justification": "La respuesta presenta posibles causas como hipótesis explícitamente no confirmadas, no como hechos. Por ejemplo, menciona 'Posible causa' y 'podría indicar', lo que califica adecuadamente la incertidumbre.",
+          "evidence": "La respuesta incluye: 'Posible causa: No hay datos de mercado para correlacionar (consulta fallida), pero históricamente...' y 'podría indicar un problema de competitividad'.",
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "justification": "La respuesta no incluye a Apo3001 como parte del análisis ni afirma que la vacancia se mantuvo estable en 2026. Se limita estrictamente a Apo4501 y Apo4700 y reconoce el aumento de vacancia.",
+          "evidence": "La respuesta menciona explícitamente: 'Apo4501 + Apo4700' y 'El salto a **7.84%** en junio 2026 sugiere un **deterioro reciente** en la ocupación', sin contradecir los forbidden_claims.",
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 30.7
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.3,
+        "factual_correctness": 0.0,
+        "conversational_quality": 0.3,
+        "tool_correctness": 0.3
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": [
+        "C1"
+      ]
+    }
+  },
+  {
+    "blind_label": "Respuesta 9",
+    "case_id": "tae-l4-002",
+    "track": "track_b",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "answered",
+      "dimension_scores": {
+        "analytical_quality": 2,
+        "grounding": 1,
+        "hallucination": 0,
+        "clarification_judgment": 3,
+        "investigation_quality": 1,
+        "output_usefulness": 1
+      },
+      "not_applicable": [
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": false,
+          "score": 2,
+          "justification": "La respuesta identifica correctamente que hay un movimiento atípico en la vacancia de TRI en enero y febrero 2026, pero atribuye la totalidad del cambio a Mall Paseo Viña Centro, un activo que no aparece en los resultados de las queries ejecutadas ni en el ground truth. Además, ignora por completo el rol de Mall Curicó, que es el activo con mayor variación según el ground truth. La organización de los hechos es coherente, pero la interpretación es superficial y omite el driver principal del movimiento.",
+          "evidence": "La respuesta afirma: 'La totalidad de la caída (544 m²) se explica por la absorción temporal de 3,250 m² en Mall Paseo Viña Centro en enero' y 'Power Center Paseo Curicó (Mall Curicó): Diciembre 2025: 0.0% (0 m² vacantes). Enero 2026: 0.0% (sin cambios). Febrero 2026: 0.0% (sin cambios)'. Sin embargo, el ground truth muestra que Mall Curicó varía de 2917.43 m² (diciembre) a 2336.34 m² (enero) y 3095.18 m² (febrero), lo que contradice la afirmación de 'sin cambios'.",
+          "confidence": 0.9
+        },
+        "grounding": {
+          "not_applicable": false,
+          "score": 1,
+          "justification": "La mayoría de las afirmaciones sustantivas sobre los activos individuales (especialmente Mall Paseo Viña Centro) no tienen sustento en las queries ejecutadas ni en el ground truth. Los datos consolidados de vacancia (4.50% en enero, 5.26% en febrero) sí están respaldados por las queries, pero las afirmaciones sobre activos específicos no lo están.",
+          "evidence": "La respuesta afirma que Mall Paseo Viña Centro tuvo una vacancia de 6.5% en diciembre, 0% en enero y 6.5% en febrero, pero estos datos no aparecen en los resultados de las queries ejecutadas (que solo muestran vacancia consolidada por periodo). Además, el ground truth no menciona a Mall Paseo Viña Centro, y los resultados de las queries no desglosan por activo.",
+          "confidence": 0.95
+        },
+        "hallucination": {
+          "not_applicable": false,
+          "score": 0,
+          "justification": "La respuesta inventa datos materiales sobre la vacancia de Mall Paseo Viña Centro (6.5% en diciembre, 0% en enero, 6.5% en febrero) que no están respaldados por ninguna query ejecutada ni por el ground truth. Estos datos son centrales para la interpretación de la respuesta.",
+          "evidence": "La respuesta afirma: 'Mall Paseo Viña Centro (Viña Centro): Diciembre 2025: 6.5% (3,250 m² vacantes). Enero 2026: 0.0% (0 m² vacantes) → Caída de 6.5 pp (3,250 m² absorbidos). Febrero 2026: 6.5% (3,250 m² vacantes) → Repunte de 6.5 pp (3,250 m² vuelven a vacantes)'. Estos datos no aparecen en los resultados de las queries ni en el ground truth.",
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La respuesta intenta responder directamente la pregunta sin pedir aclaraciones, lo cual es adecuado dado que clarification_expected es false. Sin embargo, la respuesta no reconoce explícitamente la falta de datos para explicar el movimiento a nivel de contrato/arrendatario, lo que habría sido un matiz valioso.",
+          "evidence": "La respuesta no menciona la falta de evidencia adicional (a nivel de contrato/arrendatario) para el periodo específico, aunque sí reconoce que no hay movimientos de contratos registrados para Viña Centro en enero 2026. No pide aclaraciones, lo que es consistente con clarification_expected: false.",
+          "confidence": 0.8
+        },
+        "investigation_quality": {
+          "not_applicable": false,
+          "score": 1,
+          "justification": "La investigación es mínima: solo se ejecutan dos queries que consultan la vacancia consolidada del fondo TRI en un rango de periodos, sin desglosar por activo. No se investiga el activo que realmente explica el movimiento (Mall Curicó), ni se exploran otras posibles causas o datos adicionales (como movimientos de contratos o absorción neta).",
+          "evidence": "Las queries ejecutadas solo consultan la vacancia consolidada del fondo TRI (ej: 'SELECT periodo, ROUND(vacancia_pct, 2) AS vacancia_pct FROM v_vacancia_activo_efectivo WHERE activo_key IN (SELECT activo_key FROM dim_activo WHERE fondo_key = 'TRI' AND vigente_hasta IS NULL) AND periodo BETWEEN '2025-07-01' AND '2026-02-28' GROUP BY periodo'). No hay queries que desglosen por activo o que exploren movimientos de contratos.",
+          "confidence": 0.95
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 1,
+          "justification": "La respuesta no es usable como está, ya que atribuye el movimiento a un activo incorrecto (Mall Paseo Viña Centro) y omite el driver real (Mall Curicó). Además, inventa datos sobre la vacancia de Viña Centro, lo que la hace poco confiable. Requeriría una revisión sustancial antes de ser útil para un analista.",
+          "evidence": "La respuesta concluye: 'No hubo una reducción real de vacancia en enero 2026, sino un error de reporte o ajuste contable en el activo Mall Paseo Viña Centro', lo cual es incorrecto según el ground truth, que muestra que Mall Curicó es el activo con mayor variación en ese periodo.",
+          "confidence": 0.95
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": true,
+          "justification": "La respuesta fabrica datos materiales sobre la vacancia de Mall Paseo Viña Centro (6.5% en diciembre, 0% en enero, 6.5% en febrero) que no están respaldados por ninguna query ejecutada ni por el ground truth. Estos datos son centrales para la interpretación de la respuesta.",
+          "evidence": "La respuesta afirma: 'Mall Paseo Viña Centro (Viña Centro): Diciembre 2025: 6.5% (3,250 m² vacantes). Enero 2026: 0.0% (0 m² vacantes). Febrero 2026: 6.5% (3,250 m² vacantes)'. Estos datos no aparecen en los resultados de las queries ni en el ground truth.",
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": true,
+          "justification": "La respuesta afirma como hecho que la caída de vacancia en enero 2026 se debe a un 'error de reporte o ajuste contable' en Mall Paseo Viña Centro, sin evidencia que respalde esta causalidad. La respuesta no presenta esto como una hipótesis, sino como una conclusión confirmada.",
+          "evidence": "La respuesta concluye: 'No hubo una reducción real de vacancia en enero 2026, sino un error de reporte o ajuste contable en el activo Mall Paseo Viña Centro, donde se registró 0% de vacancia en enero a pesar de no haber movimientos de contratos o absorción neta'. No hay evidencia en las queries o ground truth que respalde esta afirmación causal.",
+          "confidence": 0.95
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "justification": "La respuesta no atribuye el movimiento a un arrendatario o contrato específico sin evidencia, ni afirma que la vacancia de TRI subió en enero (de hecho, reconoce que bajó). Por lo tanto, no viola ninguno de los forbidden_claims listados.",
+          "evidence": "La respuesta no menciona arrendatarios o contratos específicos, y afirma: 'Enero 2026: 4.50% (3,600 m² vacantes) → Caída de 0.68 pp (544 m² menos vacantes)', lo que es consistente con el ground truth (vacancia bajó en enero).",
+          "confidence": 0.95
+        }
+      },
+      "elapsed_s": 29.6
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.19999999999999998,
+        "factual_correctness": 0.0,
+        "conversational_quality": 0.3
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": [
+        "C1",
+        "C2"
+      ]
+    }
+  },
+  {
+    "blind_label": "Respuesta 10",
+    "case_id": "tae-l4-003",
+    "track": "track_b",
+    "classification": "attempted",
+    "judge": {
+      "judge_failed": false,
+      "failure_detail": null,
+      "attempts": 1,
+      "response_mode": "answered",
+      "dimension_scores": {
+        "analytical_quality": 2,
+        "grounding": 3,
+        "hallucination": 4,
+        "clarification_judgment": 3,
+        "investigation_quality": 3,
+        "output_usefulness": 2
+      },
+      "not_applicable": [
+        "tool_correctness"
+      ],
+      "dimension_details": {
+        "analytical_quality": {
+          "not_applicable": false,
+          "score": 2,
+          "justification": "La respuesta identifica métricas operacionales relevantes (NOI, vacancia) y las analiza en el contexto de la pregunta, pero no logra conectar estos datos con la caída de la TIR bursátil debido a la ausencia de datos clave (precio de cuota bursátil y TIR). Además, no explora la correlación esperada entre la TIR y el precio de cuota, que es central en el comportamiento esperado.",
+          "evidence": "La respuesta menciona: 'Dado que **no hay datos de TIR bursátil ni de precio de la cuota** para TRI-I en el período, **no es posible confirmar la causa exacta** de la caída.' y se enfoca en métricas operacionales como NOI y vacancia, pero no aborda la relación entre TIR y precio de cuota, que era un punto clave en el expected_behavior.",
+          "confidence": 0.9
+        },
+        "grounding": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La mayoría de las afirmaciones sobre métricas operacionales (NOI, vacancia, NOI por activo) están respaldadas por los resultados de las queries ejecutadas. Sin embargo, la afirmación sobre la posible atribución a 'expectativas negativas' por vacancia o caída en NOI de Mall Curicó no está respaldada por evidencia directa en los datos, ya que no hay datos de TIR o precio de cuota para confirmarlo.",
+          "evidence": "Las afirmaciones sobre NOI y vacancia están respaldadas por los resultados de la query: 'SELECT periodo, kpi, variante, valor FROM derived_kpi...' (ej: 'Abril 2026: 320,749 UF' y 'vacancia en junio 2026 (5.95%)'). Sin embargo, la afirmación 'podría haber generado expectativas negativas' no tiene sustento en los datos disponibles.",
+          "confidence": 0.95
+        },
+        "hallucination": {
+          "not_applicable": false,
+          "score": 4,
+          "justification": "No se inventan hechos o relaciones no respaldadas por los datos. La respuesta explícitamente reconoce la falta de datos clave (TIR y precio de cuota) y no afirma nada sin evidencia. Además, las hipótesis presentadas están claramente calificadas como tales.",
+          "evidence": "La respuesta indica: 'Dado que **no hay datos de TIR bursátil ni de precio de la cuota** para TRI-I en el período, **no es posible confirmar la causa exacta**'. No se fabrican datos o relaciones.",
+          "confidence": 1.0
+        },
+        "clarification_judgment": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La respuesta intenta analizar el problema con los datos disponibles, aunque no logra responder la pregunta central debido a la falta de datos clave. No pide aclaración, lo cual es adecuado dado que clarification_expected es false, pero reconoce explícitamente las limitaciones de los datos.",
+          "evidence": "La respuesta no pide aclaración y afirma: 'no es posible confirmar la causa exacta' debido a la falta de datos, lo cual es una justificación adecuada para no responder completamente.",
+          "confidence": 0.9
+        },
+        "investigation_quality": {
+          "not_applicable": false,
+          "score": 3,
+          "justification": "La investigación cubre métricas operacionales relevantes (NOI, vacancia, NOI por activo) y sigue una lógica coherente. Sin embargo, no logra cubrir los datos clave (TIR y precio de cuota) debido a su ausencia en los resultados de las queries, lo cual limita la profundidad del análisis.",
+          "evidence": "Se ejecutaron queries para NOI, vacancia, y NOI por activo, pero las queries para TIR y precio de cuota bursátil no arrojaron resultados. La respuesta sigue un enfoque lógico pero no puede avanzar más por falta de datos.",
+          "confidence": 0.9
+        },
+        "output_usefulness": {
+          "not_applicable": false,
+          "score": 2,
+          "justification": "La respuesta es parcialmente útil, ya que proporciona un análisis de métricas operacionales y reconoce las limitaciones de los datos. Sin embargo, no logra responder la pregunta central sobre la caída de la TIR bursátil, lo que reduce su utilidad para un analista.",
+          "evidence": "La respuesta incluye un análisis detallado de NOI y vacancia, pero concluye: 'no es posible confirmar la causa exacta', lo que limita su utilidad directa para un analista que busca entender la caída de la TIR.",
+          "confidence": 0.9
+        },
+        "tool_correctness": {
+          "not_applicable": true,
+          "confidence": 1.0
+        }
+      },
+      "gates": {
+        "F1_fabrication": {
+          "triggered": false,
+          "confidence": 1.0
+        },
+        "C4_unsupported_causality": {
+          "triggered": false,
+          "justification": "La respuesta presenta las posibles causas como hipótesis explícitamente no confirmadas, no como afirmaciones de causalidad. Por ejemplo, menciona que la vacancia 'podría haber generado expectativas negativas', lo cual está claramente calificado como una posibilidad.",
+          "evidence": "La respuesta afirma: 'podría haber generado **expectativas negativas** sobre los ingresos futuros, pero no es un cambio drástico' y 'la caída en la TIR bursátil **podría atribuirse a factores externos**'.",
+          "confidence": 1.0
+        },
+        "C5_forbidden_claim": {
+          "triggered": false,
+          "justification": "La respuesta no atribuye la caída a un deterioro operacional, dividendo extraordinario, o causa raíz específica sin evidencia. Las afirmaciones sobre vacancia y NOI están respaldadas por datos y presentadas como hipótesis.",
+          "evidence": "No se afirma nada sobre 'deterioro operacional del fondo', 'dividendo o reparto extraordinario', o 'causa raíz del movimiento de precio de mercado' sin evidencia. Las menciones a vacancia y NOI están calificadas como hipótesis.",
+          "confidence": 1.0
+        }
+      },
+      "elapsed_s": 38.8
+    },
+    "deterministic": {
+      "dimension_scores": {
+        "completeness": 0.0,
+        "factual_correctness": 0.0,
+        "conversational_quality": 0.3
+      },
+      "unscored_dimensions": [
+        "analytical_quality",
+        "clarification_judgment",
+        "grounding",
+        "hallucination",
+        "investigation_quality",
+        "output_usefulness",
+        "tool_correctness"
+      ],
+      "is_fatal": false,
+      "gates_fatal": [],
+      "gates_ceiling": [
+        "C1",
+        "C2"
+      ]
+    }
+  }
+]
