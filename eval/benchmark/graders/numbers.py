@@ -57,6 +57,14 @@ def extract_numbers(text: str) -> list[float]:
     return out
 
 
+def has_numbers(text: str) -> bool:
+    """Whether the text asserts any number at all. Used to distinguish 'stated
+    a wrong number' (gate C1/C2 material) from 'stated no number' -- e.g. a
+    clarification or decline, which is a different failure mode and must not
+    be scored as a wrong numeric claim (see gates.py C1/C2)."""
+    return bool(extract_numbers(text))
+
+
 def value_in_text(value: float, text: str, tolerance_pct: float = 0.0, tolerance_abs: float = 0.0) -> bool:
     """True if some number in `text` matches `value` within tolerance.
 

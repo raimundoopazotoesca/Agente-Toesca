@@ -71,8 +71,13 @@
 
         "expected_entities": {
           "type": "object",
-          "additionalProperties": {"type": "string"},
-          "description": "Keys: fondo | activo | serie | sociedad."
+          "additionalProperties": {
+            "oneOf": [
+              {"type": "string"},
+              {"type": "array", "items": {"type": "string"}, "minItems": 1}
+            ]
+          },
+          "description": "Keys: fondo | activo | serie | sociedad. Value is one entity key, or a list of several of the same type for comparisons (e.g. {fondo: [PT, Apo]}) that must all be mentioned."
         },
         "expected_period": {"$ref": "#/definitions/period"},
         "forbidden_claims": {

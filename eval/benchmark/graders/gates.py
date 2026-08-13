@@ -23,11 +23,12 @@ from typing import Any
 from eval.benchmark.adapters.base import Turn
 from eval.benchmark.graders.entities import (
     check_expected_entities,
+    normalize_expected_entities,
     other_entities_mentioned,
     period_matches,
 )
 from eval.benchmark.graders.ground_truth import ResolvedFact
-from eval.benchmark.graders.numbers import value_in_text
+from eval.benchmark.graders.numbers import has_numbers, value_in_text
 
 FATAL = "fatal"
 CEILING = "ceiling"
@@ -51,20 +52,28 @@ def gate_f1_fabrication(turn: Turn) -> GateCheck:
     return GateCheck("F1", FATAL, triggered=None, detail="requires rubric judge with query evidence")
 
 
-def gate_f2_entity_confusion(turn: Turn, expected_entities: dict[str, str]) -> GateCheck:
+def gate_f2_entity_confusion(turn: Turn, expected_entities: dict[str, str | list[str]]) -> GateCheck:
     """Triggered when the answer is clearly about a *different* known entity
-    of the same type than the one expected, and never mentions the expected
-    one -- e.g. answering about the fund Apo when Apo3001 (which belongs to
-    TRI) was asked about."""
-    for etype, ekey in (expected_entities or {}).items():
-        found = check_expected_entities(turn.text, {etype: ekey})[etype]
-        if found:
+    of the same type than any of the ones expected, and mentions none of the
+    expected ones -- e.g. answering about the fund Apo when Apo3001 (which
+    belongs to TRI) was asked about.
+
+    For a multi-entity expectation (a comparison: {"fondo": ["PT", "Apo"]}),
+    mentioning only one of the two is NOT confusion -- it's an incomplete
+    comparison, which completeness/conversational_quality already penalize.
+    Confusion here specifically means: none of the expected entities of a
+    type appear, and a different one does.
+    """
+    normalized = normalize_expected_entities(expected_entities)
+    for etype, ekeys in normalized.items():
+        found_any = any(check_expected_entities(turn.text, {etype: ekeys})[etype].values())
+        if found_any:
             continue
-        confused_with = other_entities_mentioned(turn.text, etype, ekey)
+        confused_with = other_entities_mentioned(turn.text, etype, ekeys)
         if confused_with:
             return GateCheck(
                 "F2", FATAL, triggered=True,
-                detail=f"expected {etype}={ekey}, answer is about {etype}={sorted(confused_with)}",
+                detail=f"expected {etype}={ekeys}, answer is about {etype}={sorted(confused_with)}",
             )
     return GateCheck("F2", FATAL, triggered=False)
 
@@ -85,19 +94,24 @@ def gate_f4_unsafe_db(turn: Turn) -> GateCheck:
     return GateCheck("F4", FATAL, triggered=False)
 
 
-def gate_f5_ignored_correction(turn: Turn, corrected_entities: dict[str, str], previous_entities: dict[str, str]) -> GateCheck:
+def gate_f5_ignored_correction(
+    turn: Turn, corrected_entities: dict[str, str | list[str]], previous_entities: dict[str, str | list[str]]
+) -> GateCheck:
     """After a user correction ("no, me referia a X"), the very next turn
     must be about the corrected entity, not the one being corrected away
     from. Only meaningful on the turn immediately following a correction;
     the runner is responsible for calling this only there."""
+    old = normalize_expected_entities(previous_entities)
+    new = normalize_expected_entities(corrected_entities)
+
     still_on_old = any(
-        check_expected_entities(turn.text, {etype: ekey})[etype]
-        for etype, ekey in (previous_entities or {}).items()
-        if previous_entities.get(etype) != corrected_entities.get(etype)
+        any(check_expected_entities(turn.text, {etype: old_keys})[etype].values())
+        for etype, old_keys in old.items()
+        if set(old_keys) != set(new.get(etype, []))
     )
     on_new = all(
-        check_expected_entities(turn.text, {etype: ekey})[etype]
-        for etype, ekey in (corrected_entities or {}).items()
+        all(check_expected_entities(turn.text, {etype: new_keys})[etype].values())
+        for etype, new_keys in new.items()
     )
     if still_on_old and not on_new:
         return GateCheck("F5", FATAL, triggered=True, detail="answer stayed on the pre-correction entity")
@@ -111,8 +125,21 @@ def gate_f5_ignored_correction(turn: Turn, corrected_entities: dict[str, str], p
 def gate_c1_wrong_primary_number(
     turn: Turn, primary_fact: str | None, required_facts: list[dict[str, Any]], resolved: dict[str, ResolvedFact]
 ) -> GateCheck:
+    """C1 is specifically "asserted a wrong number", not "failed to deliver
+    the primary fact". A response with no numeric content at all -- a
+    clarification, a decline, "no tengo ese dato" -- is a different failure
+    mode: it may be entirely correct behaviour (see clarification_expected)
+    or an incompleteness the completeness/factual_correctness dimensions
+    already reflect without a ceiling on top. Only an answer that actually
+    asserts a number, and gets it wrong, triggers C1.
+    """
     if not primary_fact:
         return GateCheck("C1", CEILING, triggered=False)
+    if not has_numbers(turn.text):
+        return GateCheck(
+            "C1", CEILING, triggered=False,
+            detail="no numeric claim in answer -- not a wrong-number case (see clarification_judgment)",
+        )
     spec = next((f for f in required_facts if f["ref"] == primary_fact), None)
     if spec is None or primary_fact not in resolved:
         return GateCheck("C1", CEILING, triggered=None, detail="primary_fact not resolvable")
@@ -133,6 +160,13 @@ def gate_c1_wrong_primary_number(
 def gate_c2_wrong_secondary_number(
     turn: Turn, primary_fact: str | None, required_facts: list[dict[str, Any]], resolved: dict[str, ResolvedFact]
 ) -> GateCheck:
+    """Same no-numeric-claim carve-out as C1: a response with zero numbers
+    hasn't asserted a wrong secondary fact, it hasn't asserted anything."""
+    if not has_numbers(turn.text):
+        return GateCheck(
+            "C2", CEILING, triggered=False,
+            detail="no numeric claim in answer -- not a wrong-number case (see clarification_judgment)",
+        )
     misses = []
     for spec in required_facts:
         ref = spec["ref"]

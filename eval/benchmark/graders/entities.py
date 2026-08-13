@@ -67,23 +67,41 @@ def entity_mentioned(text: str, entity_type: str, entity_key: str) -> bool:
     return False
 
 
-def other_entities_mentioned(text: str, entity_type: str, exclude_key: str) -> set[str]:
-    """Keys of the same entity_type, other than exclude_key, whose aliases
+def other_entities_mentioned(text: str, entity_type: str, exclude_keys: str | set[str] | list[str]) -> set[str]:
+    """Keys of the same entity_type, other than exclude_keys, whose aliases
     appear in text. Used for entity-confusion detection (gate F2)."""
+    excluded = {exclude_keys} if isinstance(exclude_keys, str) else set(exclude_keys)
     hits = set()
     for key in _alias_index().get(entity_type, {}):
-        if key == exclude_key:
+        if key in excluded:
             continue
         if entity_mentioned(text, entity_type, key):
             hits.add(key)
     return hits
 
 
-def check_expected_entities(text: str, expected_entities: dict[str, str]) -> dict[str, bool]:
-    """{entity_type: found?} for each key in expected_entities."""
+def normalize_expected_entities(
+    expected_entities: dict[str, str | list[str]] | None,
+) -> dict[str, list[str]]:
+    """A case's `expected_entities` may name one entity per type ({"fondo":
+    "PT"}) or several of the same type ({"fondo": ["PT", "Apo"]}) -- e.g. a
+    comparison question that must mention both. Normalize both shapes to
+    {type: [keys...]} so callers only handle one form."""
+    out: dict[str, list[str]] = {}
+    for etype, value in (expected_entities or {}).items():
+        out[etype] = [value] if isinstance(value, str) else list(value)
+    return out
+
+
+def check_expected_entities(
+    text: str, expected_entities: dict[str, str | list[str]] | None
+) -> dict[str, dict[str, bool]]:
+    """{entity_type: {entity_key: found?}} for every key in expected_entities,
+    single or multi-valued per type."""
+    normalized = normalize_expected_entities(expected_entities)
     return {
-        etype: entity_mentioned(text, etype, ekey)
-        for etype, ekey in (expected_entities or {}).items()
+        etype: {ekey: entity_mentioned(text, etype, ekey) for ekey in ekeys}
+        for etype, ekeys in normalized.items()
     }
 
 

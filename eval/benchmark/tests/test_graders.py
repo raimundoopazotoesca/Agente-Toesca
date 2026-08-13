@@ -13,12 +13,13 @@ from eval.benchmark.graders.deterministic import score_turn
 from eval.benchmark.graders.entities import (
     check_expected_entities,
     entity_mentioned,
+    normalize_expected_entities,
     other_entities_mentioned,
     period_matches,
     periods_mentioned,
 )
 from eval.benchmark.graders.ground_truth import ResolvedFact
-from eval.benchmark.graders.numbers import extract_numbers, value_in_text
+from eval.benchmark.graders.numbers import extract_numbers, has_numbers, value_in_text
 
 
 # --- numbers -----------------------------------------------------------
@@ -66,9 +67,25 @@ def test_other_entities_mentioned_flags_wrong_fondo():
     assert "Apo" in hits
 
 
-def test_check_expected_entities_multi_key():
+def test_check_expected_entities_single_value():
     result = check_expected_entities("NOI de Vina Centro este mes", {"activo": "Viña Centro"})
-    assert result == {"activo": True}
+    assert result == {"activo": {"Viña Centro": True}}
+
+
+def test_normalize_expected_entities_accepts_str_or_list():
+    assert normalize_expected_entities({"fondo": "PT"}) == {"fondo": ["PT"]}
+    assert normalize_expected_entities({"fondo": ["PT", "Apo"]}) == {"fondo": ["PT", "Apo"]}
+    assert normalize_expected_entities(None) == {}
+
+
+def test_check_expected_entities_multi_value_per_type():
+    result = check_expected_entities("el LTV de PT es alto", {"fondo": ["PT", "Apo"]})
+    assert result == {"fondo": {"PT": True, "Apo": False}}
+
+
+def test_has_numbers():
+    assert has_numbers("el NOI fue 1.000.000")
+    assert not has_numbers("¿Podrías especificar la métrica y el fondo?")
 
 
 def test_period_extraction_iso_and_month_name():
@@ -95,6 +112,21 @@ def test_gate_f2_passes_when_expected_entity_present():
     turn = Turn(text="TRI tiene vacancia de 5%")
     check = gates.gate_f2_entity_confusion(turn, {"fondo": "TRI"})
     assert check.triggered is False
+
+
+def test_gate_f2_multi_entity_partial_mention_is_not_confusion():
+    """Mentioning only one of two expected entities (PT, not Apo) is an
+    incomplete comparison, not entity confusion -- completeness/
+    conversational_quality penalize it, F2 must not fatal it."""
+    turn = Turn(text="el LTV de PT es 81%")
+    check = gates.gate_f2_entity_confusion(turn, {"fondo": ["PT", "Apo"]})
+    assert check.triggered is False
+
+
+def test_gate_f2_multi_entity_triggers_on_wholly_different_fondo():
+    turn = Turn(text="el LTV de TRI es 61%")
+    check = gates.gate_f2_entity_confusion(turn, {"fondo": ["PT", "Apo"]})
+    assert check.triggered is True
 
 
 def test_gate_f3_session_leak():
@@ -140,6 +172,26 @@ def test_gate_c1_wrong_primary_number():
     check = gates.gate_c1_wrong_primary_number(bad_turn, "noi", required, resolved)
     assert check.triggered is True
     assert check.ceiling == 0.30
+
+
+def test_gate_c1_does_not_trigger_on_clarification_with_no_numbers():
+    """A response with zero numeric content (clarification/decline) is not
+    'a wrong number' -- that's a different failure mode, left to
+    clarification_judgment (judge, still unscored)."""
+    resolved = {"noi": ResolvedFact(ref="noi", value=1_000_000, unit="CLP")}
+    required = [{"ref": "noi", "tolerance_pct": 1.0}]
+    turn = Turn(text="¿Podrías especificar el activo y el período?")
+    check = gates.gate_c1_wrong_primary_number(turn, "noi", required, resolved)
+    assert check.triggered is False
+    assert check.ceiling is None
+
+
+def test_gate_c2_does_not_trigger_on_clarification_with_no_numbers():
+    resolved = {"noi": ResolvedFact(ref="noi", value=1_000_000, unit="CLP")}
+    required = [{"ref": "noi", "tolerance_pct": 1.0}, {"ref": "gastos", "tolerance_pct": 1.0}]
+    turn = Turn(text="No tengo ese dato disponible.")
+    check = gates.gate_c2_wrong_secondary_number(turn, "noi", required, resolved)
+    assert check.triggered is False
 
 
 def test_gate_c2_wrong_secondary_number():
@@ -214,6 +266,54 @@ def test_score_turn_wrong_primary_number_caps_score():
     assert result.dimension_scores["factual_correctness"] == 0.0
     # conversational_quality (entity was right) is capped, not zeroed
     assert 0 < result.dimension_scores["conversational_quality"] <= 0.30
+
+
+def test_score_turn_legitimate_clarification_is_not_penalized():
+    """tae-l8-001 shape: clarification_expected=acceptable, no data source
+    for the metric, Track A declines with a generic clarify. Must not score
+    factual_correctness=0 or conversational_quality=0 for that -- both go
+    unscored, leaving room for the (future) judge to decide if declining
+    was the right call."""
+    turn = Turn(text="¿Podrías especificar qué métrica te interesa y a qué fondo o activo te refieres?")
+    turn_spec = {
+        "question": "morosidad de Viña Centro este mes",
+        "expected_entities": {"activo": "Viña Centro"},
+        "clarification_expected": "acceptable",
+    }
+    result = score_turn(turn, turn_spec, resolved={})
+    assert not result.is_fatal
+    assert not result.gate_verdict.ceiling_triggered
+    assert "factual_correctness" in result.unscored_dimensions
+    assert "conversational_quality" in result.unscored_dimensions
+    assert result.no_numeric_claim is True
+
+
+def test_score_turn_same_shape_but_clarification_not_expected_is_still_penalized():
+    """Same non-answer, but the case demands a direct answer
+    (clarification_expected=false): conversational_quality is NOT suppressed
+    -- the entity miss still counts against it."""
+    turn = Turn(text="¿Podrías especificar qué métrica te interesa?")
+    turn_spec = {
+        "question": "vacancia de TRI en junio 2026",
+        "expected_entities": {"fondo": "TRI"},
+        "clarification_expected": False,
+    }
+    result = score_turn(turn, turn_spec, resolved={})
+    assert result.dimension_scores["conversational_quality"] == 0.0
+
+
+def test_score_turn_multi_entity_comparison_partial_credit():
+    """tae-l2-001 shape: comparison expecting both PT and Apo mentioned.
+    Answer only covers PT -- partial conversational_quality credit, not a
+    fatal entity-confusion gate."""
+    turn = Turn(text="el LTV de PT es 81,2%")
+    turn_spec = {
+        "question": "Compara el LTV de PT y Apo en junio de 2026",
+        "expected_entities": {"fondo": ["PT", "Apo"]},
+    }
+    result = score_turn(turn, turn_spec, resolved={})
+    assert not result.is_fatal
+    assert result.dimension_scores["conversational_quality"] == 0.5
 
 
 def test_score_turn_entity_confusion_is_fatal_and_zeroes_everything():
