@@ -1,0 +1,64 @@
+id: tae-l4-002
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Diagnosis: la vacancia del fondo TRI cae en enero 2026 y repunta en
+  febrero. El driver real (verificado contra el snapshot, con
+  superseded_at IS NULL -- raw_vacancia_manual tiene múltiples versiones
+  re-ingestadas por periodo) es Mall Curicó: m2 vacantes 2.917 (dic) ->
+  2.336 (ene) -> 3.095 (feb), mientras el resto de los activos de TRI se
+  mantiene practicamente plano en el mismo tramo. El rent roll normalizado
+  (raw_rent_roll_line) solo cubre 2026-05/06, asi que NO hay evidencia de
+  que arrendatario/contrato especifico explica el movimiento de
+  enero-febrero -- el caso exige reconocer ese limite, no inventarlo.
+
+turns:
+  - question: "¿Qué explica la caída de vacancia del fondo TRI en enero de 2026 y su repunte en febrero?"
+    required_facts:
+      - {ref: vacancia_tri_2025_12, tolerance_abs: 0.1}
+      - {ref: vacancia_tri_2026_01, tolerance_abs: 0.1}
+      - {ref: vacancia_tri_2026_02, tolerance_abs: 0.1}
+    acceptable_facts:
+      - {ref: mall_curico_vac_2025_12, tolerance_pct: 5.0}
+      - {ref: mall_curico_vac_2026_01, tolerance_pct: 5.0}
+      - {ref: mall_curico_vac_2026_02, tolerance_pct: 5.0}
+    primary_fact: vacancia_tri_2026_01
+    expected_entities: {fondo: "TRI", activo: "Mall Curicó"}
+    expected_period: {from: "2025-12", to: "2026-02"}
+    clarification_expected: false
+    forbidden_claims:
+      - "atribuir el movimiento a un arrendatario o contrato especifico sin evidencia de rent roll para ese periodo (el rent roll normalizado solo cubre 2026-05/06)"
+      - "afirmar que la vacancia de TRI subio en enero cuando en realidad bajo respecto a diciembre"
+    expected_behavior:
+      - identificar que la vacancia de TRI bajo en enero y subio en febrero 2026
+      - aislar que Mall Curicó es el activo que mas se mueve en ese tramo, no un movimiento parejo de todo el portafolio
+      - reconocer que no hay evidencia adicional (a nivel de contrato/arrendatario) disponible para ese periodo especifico
+    rubric_focus: [analytical_quality, grounding, investigation_quality]
+
+ground_truth_refs:
+  vacancia_tri_2025_12:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2025-12'"
+    unit: pct
+  vacancia_tri_2026_01:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2026-01'"
+    unit: pct
+  vacancia_tri_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2026-02'"
+    unit: pct
+  mall_curico_vac_2025_12:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2025-12' AND superseded_at IS NULL
+    unit: m2
+  mall_curico_vac_2026_01:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: m2
+  mall_curico_vac_2026_02:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-02' AND superseded_at IS NULL
+    unit: m2

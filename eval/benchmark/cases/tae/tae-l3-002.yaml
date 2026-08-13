@@ -1,0 +1,45 @@
+id: tae-l3-002
+suite: analyst
+level: L3
+tier: L3
+split: dev
+notes: >
+  Analytical summary sobre el fondo PT (oficinas + comercial), agregando
+  sus dos activos principales. El snapshot pinneado solo tiene noi_mensual
+  para PT Torre A / PT Boulevard hasta 2026-02 (no hay recompute posterior
+  en este pin) -- un buen analista deberia responder con lo disponible y,
+  idealmente, no aparentar cobertura de meses que no tiene. No se exige
+  que lo declare explicitamente (eso es clarification_judgment / juicio,
+  pendiente del judge), pero required_period acota la pregunta a lo que
+  el snapshot realmente respalda.
+
+turns:
+  - question: "Dame una lectura rápida de Parque Titanium en lo que va de 2026."
+    required_facts:
+      - {ref: noi_torre_a_2026_02, tolerance_pct: 2.0}
+      - {ref: noi_boulevard_2026_02, tolerance_pct: 2.0}
+    acceptable_facts:
+      - {ref: noi_torre_a_2026_01, tolerance_pct: 2.0}
+      - {ref: noi_boulevard_2026_01, tolerance_pct: 2.0}
+    primary_fact: noi_torre_a_2026_02
+    expected_entities: {fondo: "PT"}
+    expected_period: {from: "2026-01", to: "2026-02"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el NOI de ambos activos (Torre A domina, Boulevard es menor)
+      - dar una lectura combinada del fondo, no solo un activo
+    rubric_focus: [analytical_quality, completeness, output_usefulness]
+
+ground_truth_refs:
+  noi_torre_a_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Torre A' AND periodo = '2026-02'"
+    unit: UF
+  noi_boulevard_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Boulevard' AND periodo = '2026-02'"
+    unit: UF
+  noi_torre_a_2026_01:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Torre A' AND periodo = '2026-01'"
+    unit: UF
+  noi_boulevard_2026_01:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Boulevard' AND periodo = '2026-01'"
+    unit: UF

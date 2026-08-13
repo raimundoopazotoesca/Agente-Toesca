@@ -1,0 +1,54 @@
+id: tae-l5-002
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Investigation/agentic: ranking de vacancia entre los activos de TRI.
+  raw_vacancia_manual con superseded_at IS NULL para 2026-06: Apo3001
+  36,3% (1.632,6/4.493,55 m2), Mall Curicó 22,75% (2.476/10.881,86),
+  Viña Centro 0,78%, INMOSA y Sucden 0%. Apo3001 destaca muy por encima
+  del resto -- señal real y verificable, no fabricada.
+
+turns:
+  - question: "¿Cuál de los activos del fondo TRI tiene mayor vacancia en junio de 2026, y qué tan grave es comparado con los demás?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_06, tolerance_pct: 10.0}
+    acceptable_facts:
+      - {ref: vac_pct_mallcurico_2026_06, tolerance_pct: 10.0}
+      - {ref: vac_m2_vina_2026_06, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_06
+    expected_entities: {fondo: "TRI", activo: "Apo3001"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [raw_vacancia_manual]
+    forbidden_claims:
+      - "afirmar que la vacancia esta pareja entre los activos de TRI"
+      - "identificar Mall Curicó, Viña Centro, INMOSA o Sucden como el de mayor vacancia (Apo3001 es claramente el mas alto)"
+    expected_behavior:
+      - consultar la vacancia de varios activos de TRI, no solo el mas alto
+      - identificar a Apo3001 como el activo con mayor vacancia, notoriamente por encima del resto (~36% vs bajo 25% en el resto)
+      - dar una lectura de severidad relativa, no solo el numero aislado
+    rubric_focus: [investigation_quality, analytical_quality, grounding]
+
+ground_truth_refs:
+  vac_pct_apo3001_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+  vac_pct_mallcurico_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+  vac_m2_vina_2026_06:
+    sql: >
+      SELECT SUM(m2_vacantes)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Viña Centro' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: m2

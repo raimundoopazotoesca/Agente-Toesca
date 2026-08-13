@@ -1,0 +1,39 @@
+id: tae-l4-001
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Diagnosis: ausencia de datos por desinversion, no un error de ingesta.
+  Strip Machalí tiene dim_activo.vigente_hasta='2025-08' y ese es tambien
+  el ultimo periodo con filas en raw_er_activo_line/derived_kpi -- señal
+  consistente, verificable sin ambiguedad.
+
+  GAP CONOCIDO: "Strip Machalí" no está en semantic/entities.yaml (el
+  catalogo de synonyms solo cubre activos actualmente vigentes), asi que
+  el grader de entidades de este benchmark no puede verificar por alias
+  que la respuesta hable del activo correcto -- entity_mentioned() siempre
+  devuelve False para él. Por eso este caso NO usa expected_entities; el
+  chequeo de que la respuesta identifique el activo correcto queda para
+  required_facts (vacio aqui, es un caso sin numero unico) y para el
+  judge cuando exista. No es un bug de esta pregunta, es una limitación
+  documentada del catalogo semantico del producto.
+
+turns:
+  - question: "¿Por qué no hay datos de Strip Machalí después de agosto de 2025?"
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "inventar una causa operacional (ej. cierre, incendio, litigio) no respaldada por los datos"
+      - "afirmar que se trata de un error de ingesta o un dato faltante sin más contexto"
+      - "afirmar que el activo sigue operando y reportando con normalidad"
+    expected_behavior:
+      - constatar que agosto de 2025 es efectivamente el ultimo periodo con datos del activo
+      - identificar que el activo fue desinvertido/vendido (dejo de ser parte del portafolio), no que dejo de reportar por error
+      - distinguir el hecho verificable (no hay datos posteriores) de la interpretacion (por que se fue del portafolio)
+    rubric_focus: [grounding, hallucination, investigation_quality]
+
+ground_truth_refs:
+  ultimo_periodo_er:
+    sql: "SELECT MAX(periodo) FROM raw_er_activo_line WHERE activo_key = 'Strip Machalí'"
+    unit: text
+    description: "debe ser 2025-08. No se usa en required_facts (no hay chequeo numerico en este caso); queda documentado aqui para que quien revise el caso pueda verificar el fenomeno sin correr SQL a mano."

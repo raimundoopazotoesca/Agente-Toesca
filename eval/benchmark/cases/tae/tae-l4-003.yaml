@@ -1,0 +1,58 @@
+id: tae-l4-003
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Diagnosis sobre rentabilidad bursatil, dominio distinto (no operacional)
+  de los otros dos casos de diagnosis. tir_bursatil_desde_inicio de la
+  serie I de TRI (nemotecnico CFITOERI1I) cae de -0,81% (abril 2026) a
+  -11,91% (junio 2026), SIN dato de mayo en derived_kpi. La causa
+  verificable en el snapshot es un desplome del precio de cuota bursatil
+  (precio_uf): 0,7347 (30-abr) -> 0,2709 (25-may) -> 0,2695 (30-jun), ~63%
+  de caida, sin dividendos registrados para esa serie en el periodo que
+  expliquen la caida como reparto de capital. El caso NO exige que el
+  sistema explique la causa RAIZ del desplome de precio (no hay datos de
+  mercado/noticias en el snapshot para eso) -- exige que conecte TIR con
+  precio de cuota como el driver inmediato, y que no invente una causa
+  operacional/negocio para algo que es un movimiento de precio bursatil.
+
+  GAP: expected_entities no incluye la serie (entity_type "serie" no esta
+  indexado en graders/entities.py -- el catalogo semantico solo cubre
+  fondo/activo/sociedad). Se usa fondo=TRI como proxy parcial.
+
+turns:
+  - question: "¿Qué explica la caída de la TIR bursátil desde inicio de la serie I de TRI entre abril y junio de 2026?"
+    required_facts:
+      - {ref: tir_serie_i_2026_04, tolerance_abs: 0.3}
+      - {ref: tir_serie_i_2026_06, tolerance_abs: 0.5}
+    acceptable_facts:
+      - {ref: precio_uf_serie_i_abr, tolerance_pct: 5.0}
+      - {ref: precio_uf_serie_i_jun, tolerance_pct: 5.0}
+    primary_fact: tir_serie_i_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {from: "2026-04", to: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "atribuir la caida a un deterioro operacional del fondo (NOI, vacancia, arriendos) sin verificarlo contra esos datos"
+      - "atribuir la caida a un dividendo o reparto extraordinario sin evidencia de un dividendo registrado en el periodo"
+      - "afirmar la causa raiz del movimiento de precio de mercado (ej. una noticia especifica) sin evidencia en la base de datos"
+    expected_behavior:
+      - reportar la magnitud de la caida de TIR desde inicio (de aprox -0,8% a aprox -11,9%)
+      - conectar la caida de TIR con la caida del precio de cuota bursatil de la serie en el mismo periodo
+      - distinguir esa correlacion (precio bursatil) de una causa de negocio/operacional, y no afirmar esta ultima sin evidencia
+    rubric_focus: [analytical_quality, grounding, investigation_quality]
+
+ground_truth_refs:
+  tir_serie_i_2026_04:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'tir_bursatil_desde_inicio' AND entidad_key = 'CFITOERI1I' AND periodo = '2026-04'"
+    unit: pct
+  tir_serie_i_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'tir_bursatil_desde_inicio' AND entidad_key = 'CFITOERI1I' AND periodo = '2026-06'"
+    unit: pct
+  precio_uf_serie_i_abr:
+    sql: "SELECT precio_uf FROM raw_valor_cuota_bursatil WHERE nemotecnico = 'CFITOERI1I' AND fecha = '2026-04-30'"
+    unit: UF
+  precio_uf_serie_i_jun:
+    sql: "SELECT precio_uf FROM raw_valor_cuota_bursatil WHERE nemotecnico = 'CFITOERI1I' AND fecha = '2026-06-30'"
+    unit: UF

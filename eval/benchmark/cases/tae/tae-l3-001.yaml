@@ -1,0 +1,46 @@
+id: tae-l3-001
+suite: analyst
+level: L3
+tier: L3
+split: dev
+notes: >
+  Analytical summary sobre un activo estable y de bajo drama a proposito:
+  Sucden es industrial, monoarrendatario, 0% vacancia y NOI plano en 2026.
+  Un buen analista debe reconocer "sin problemas" como una lectura valida,
+  no inventar preocupaciones para sonar mas analitico. Dominio distinto
+  (industrial) y metrica distinta (NOI + vacancia) de los casos L1/L2
+  existentes -- no toca LTV.
+
+turns:
+  - question: "¿Cómo viene Sucden?"
+    required_facts:
+      - {ref: noi_sucden_2026_06, tolerance_pct: 2.0}
+      - {ref: vacancia_sucden_2026_06, tolerance_abs: 1.0}
+    acceptable_facts:
+      - {ref: noi_sucden_2025_12, tolerance_pct: 2.0}
+    primary_fact: noi_sucden_2026_06
+    expected_entities: {activo: "Sucden"}
+    clarification_expected: false
+    forbidden_claims:
+      - "afirmar que Sucden tiene vacancia o arrendatarios en riesgo cuando la vacancia registrada es 0%"
+      - "inventar una preocupacion u observacion negativa no respaldada por los datos"
+    expected_behavior:
+      - reportar el NOI reciente y la vacancia (0%)
+      - caracterizar el activo como estable/sano si los datos no muestran deterioro, sin forzar un hallazgo negativo
+      - opcionalmente notar que es un activo industrial monoarrendatario (bajo volatilidad esperada)
+    rubric_focus: [analytical_quality, grounding, output_usefulness]
+
+ground_truth_refs:
+  noi_sucden_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Sucden' AND periodo = '2026-06'"
+    unit: UF
+  noi_sucden_2025_12:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Sucden' AND periodo = '2025-12'"
+    unit: UF
+  vacancia_sucden_2026_06:
+    sql: >
+      SELECT COALESCE(SUM(m2_vacantes), 0)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Sucden' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: m2
+    description: "m2 vacantes de Sucden -- debe ser 0. superseded_at IS NULL es obligatorio: la tabla tiene versiones re-ingestadas del mismo periodo."
