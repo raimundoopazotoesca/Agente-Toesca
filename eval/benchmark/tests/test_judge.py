@@ -237,6 +237,20 @@ def test_run_judge_extracts_json_even_with_surrounding_prose():
     assert not result.judge_failed
 
 
+def test_run_judge_correction_message_is_actionable_not_a_schema_dump():
+    """Regression guard for the live-run finding: jsonschema's default
+    ValidationError message is a multi-paragraph schema dump, not
+    something a retry prompt should hand back. The correction nudge must
+    be a short, specific instruction."""
+    bad = _valid_payload()
+    bad["dimensions"]["grounding"]["evidence"] = ["punto uno", "punto dos"]  # list instead of string
+    chat_fn = _fake_chat([json.dumps(bad), json.dumps(_valid_payload())])
+    judge.run_judge(_minimal_input(), chat_fn, model="test-model")
+    correction = chat_fn.calls[1][-1]["content"]
+    assert "STRING" in correction or "string" in correction
+    assert len(correction) < 500  # not a raw schema dump
+
+
 def test_run_judge_gate_result_shape():
     payload = _valid_payload()
     payload["gates"]["C4_unsupported_causality"] = {
