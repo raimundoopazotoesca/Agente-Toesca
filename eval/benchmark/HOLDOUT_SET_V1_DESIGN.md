@@ -74,19 +74,29 @@ mount ni working-directory listado para agentes de desarrollo.
   `cases_loader._check_semantics` sigue exigiendo que todo `split:
   holdout` viva bajo una ruta que contenga `holdout` en sus partes, así
   que la estructura de directorios es real, solo que sin contenido.
-- `HOLDOUT_MANIFEST.yaml` — metadata de cobertura (nivel, behavior,
-  dominio, entidad, período, métricas, tablas), nunca pregunta/SQL/
-  forbidden_claims.
-- `HOLDOUT_SET_V1_FREEZE_SPEC.md` + `compute_freeze_manifest.py` —
-  infraestructura de freeze reproducible.
+- `HOLDOUT_MANIFEST.yaml` — **minimizado** (corrección post Batch-1-review):
+  solo `case_id, split, level, category, status, batch` por caso, más
+  agregados no ligados a un caso individual. Sin entidad, período,
+  métrica, tablas, `primary_behavior`/`secondary_behaviors` ni
+  `similarity_reason` — esa metadata semántica case-level se movió al
+  repo privado (`MANIFEST_FULL.yaml`), porque dejarla aquí derrotaba
+  parcialmente el aislamiento físico (permitía reconstruir de qué trata
+  cada caso sin tocar el repo privado).
+- `HOLDOUT_FREEZE_MANIFEST_SPEC.md` + `EVALUATION_RUN_MANIFEST_SPEC.md`
+  + `compute_freeze_manifest.py` — infraestructura de freeze
+  reproducible, con la identidad del contenido separada de la identidad
+  de cada corrida (ver §D).
 - `holdout_runs.md` — bitácora de corridas autorizadas (vacía hasta la
   primera corrida real).
 - `tests/test_holdout_not_leaked.py` — capa lógica (segunda capa, no
   sustituto de la física): (1) falla si aparece un `*.yaml` real bajo
-  `cases/holdout/`; (2) falla si el manifest contiene campos de
-  contenido (`question`, `sql`, `forbidden_claims`, etc.); (3) falla si
-  un `case_id` de holdout aparece en superficies de tuning (prompts,
-  few-shots, verified queries, synonyms, entity resolver).
+  `cases/holdout/`; (2) falla si una entrada de `cases:` en el manifest
+  tiene algún campo fuera del set mínimo de gobernanza; (3) escaneo de
+  todo el archivo (no solo `cases:`) contra una lista negra de claves
+  semánticas/de contenido, para bloquear una fuga futura por un bloque
+  nuevo (ej. un resumen agregado por entidad); (4) falla si un `case_id`
+  de holdout aparece en superficies de tuning (prompts, few-shots,
+  verified queries, synonyms, entity resolver).
 
 **No se modificó `cases_loader.py`**: `load_cases(root=...)` ya acepta
 una raíz arbitraria, así que montar el holdout real durante una corrida
@@ -109,31 +119,60 @@ atacante con acceso al filesystem del usuario.
 - 6 + 12 = 18. Esta cifra no se ajusta después de ver resultados de
   ninguna corrida.
 
-## D. Freeze reproducible (spec creada, freeze real pendiente)
+## D. Freeze reproducible — Freeze Manifest vs Evaluation Run Manifest (corregido)
 
-Ver `HOLDOUT_SET_V1_FREEZE_SPEC.md` para el detalle completo. Resumen: el
-freeze de una corrida de evaluación debe fijar 10 campos — commit SHA del
-código evaluado, sha256 del snapshot, hash de `judge.py`, hash de
-`rubric.yaml`, hash de `case.schema.json`, hash de config/prompts del
-runner/adapters, modelo evaluado (nombre+versión resuelta), modelo juez
-(nombre+versión resuelta, no un alias `-latest` sin resolver), parámetros
-de inferencia relevantes, fecha de evaluación real. `compute_freeze_manifest.py`
-calcula los hashes automáticamente; no ejecuta ninguna evaluación.
+**Corrección post Batch-1-review**: el freeze del *contenido* del Holdout
+Set y la identidad de *cada corrida* de evaluación son ahora dos
+documentos formalmente separados, no un único spec de 10 campos:
 
-Esto es distinto del freeze del **contenido** del Holdout Set
-(`HOLDOUT_SET_V1_FREEZE.md`, análogo a `DEV_SET_V1_FREEZE.md`), que se
-crea cuando los 21 casos estén completos y aprobados — ver criterio en
+- **`HOLDOUT_FREEZE_MANIFEST_SPEC.md`** — identidad del contenido:
+  `holdout_id`, conteo/lista de `case_ids`, `snapshot_sha256` +
+  `snapshot_source_commit`, `case_schema_sha256`,
+  `private_repo_commit_sha` + `private_repo_content_sha256`,
+  `frozen_at`, `human_signoff`. **No incluye modelo evaluado, modelo
+  juez, parámetros de inferencia ni fecha de evaluación** — el mismo
+  `holdout_id` se corre contra múltiples modelos/jueces a lo largo del
+  tiempo sin volver a congelarse.
+- **`EVALUATION_RUN_MANIFEST_SPEC.md`** — identidad de una corrida:
+  referencia obligatoria a un `holdout_id` ya congelado, más
+  `code_commit_sha`, `evaluated_model`, `judge_model_resolved` (versión
+  resuelta, nunca un alias `-latest` sin resolver), hashes de
+  `judge.py`/`rubric.yaml`/`runner.py`/adapters (el motor de scoring sí
+  puede cambiar entre corridas del mismo holdout), parámetros de
+  inferencia, `eval_date`, `purpose`, `tuning_contamination_flag`.
+
+`compute_freeze_manifest.py` implementa ambos como funciones separadas
+(`build_holdout_freeze_manifest()` / `build_evaluation_run_manifest()`) y
+subcomandos de CLI (`freeze` / `run`); ninguno ejecuta una evaluación.
+Probado con datos de humo (no un freeze real) — ver reporte de esta
+corrección.
+
+El freeze de **contenido** real (`HOLDOUT_SET_V1_FREEZE.md`, análogo a
+`DEV_SET_V1_FREEZE.md`, que produce el primer `holdout_id`) se crea
+cuando los 21 casos estén completos y aprobados — ver criterio en
 §Freeze final más abajo.
 
-## E. Manifest de cobertura (implementado)
+## E. Manifest de cobertura (implementado, corregido post Batch-1-review)
 
-`HOLDOUT_MANIFEST.yaml`, campos por caso: `case_id, split, level,
-category, primary_behavior, secondary_behaviors, domain, entities,
-periods, metrics, source_tables, dev_case_checked_against,
-most_similar_dev_case, similarity_reason, status, batch`. No extiende
-`case.schema.json`. Permite auditar Dev vs Holdout (nivel+dominio+
-behavior+entidad+período+métrica) sin exponer contenido. `status`:
-`draft` → `reviewed` → `frozen`.
+Dos manifests, no uno:
+
+- **`HOLDOUT_MANIFEST.yaml`** (repo principal, minimizado) — campos por
+  caso: `case_id, split, level, category, status, batch`. Solo lo
+  necesario para gobernanza (progreso por batch, estado de revisión,
+  distribución estructural por nivel). No permite reconstruir de qué
+  trata ningún caso.
+- **`MANIFEST_FULL.yaml`** (repo privado, junto al contenido real) —
+  todo lo anterior más `primary_behavior, secondary_behaviors, domain,
+  entities, periods, metrics, source_tables,
+  dev_case_checked_against, most_similar_dev_case, similarity_reason`.
+  Es el manifest que efectivamente sirve para auditar solapamiento
+  Dev vs Holdout con detalle — vive donde vive el contenido, no en
+  `automation_agent`.
+
+Ninguno de los dos extiende `case.schema.json`. `status`: `draft` →
+`reviewed` → `frozen`, sincronizado entre ambos manifests manualmente
+(no hay automatización de sync todavía — riesgo conocido, ver
+`PENDING.md`-equivalente si se agrega).
 
 ## F. Slots ex-ante (sin decisiones post-hoc)
 
@@ -244,9 +283,10 @@ Cada batch se detiene para human review antes de iniciar el siguiente
   por batch registrado.
 - Sin overlap no documentado contra Dev — `similarity_reason` completo
   para cada caso.
-- Se genera `HOLDOUT_SET_V1_FREEZE.md` (análogo a
-  `DEV_SET_V1_FREEZE.md`) fijando los 10 campos de
-  `HOLDOUT_SET_V1_FREEZE_SPEC.md` para la corrida de referencia.
-- Post-freeze: toda corrida holdout se registra en `holdout_runs.md`;
-  cualquier uso para tuning contamina los casos usados y obliga a su
-  reemplazo en v2.
+- Se genera `HOLDOUT_SET_V1_FREEZE.md` (análogo a `DEV_SET_V1_FREEZE.md`)
+  fijando los campos de `HOLDOUT_FREEZE_MANIFEST_SPEC.md` y produciendo
+  el primer `holdout_id` real.
+- Post-freeze: toda corrida holdout produce su propio Evaluation Run
+  Manifest (`EVALUATION_RUN_MANIFEST_SPEC.md`, referenciando ese
+  `holdout_id`) y se registra en `holdout_runs.md`; cualquier uso para
+  tuning contamina los casos usados y obliga a su reemplazo en v2.

@@ -22,6 +22,12 @@ C:\Users\raimundo.opazo\toesca-benchmark-holdout-private\
   cases\holdout\tce\*.yaml
 ```
 
+Ese repositorio también contiene `MANIFEST_FULL.yaml`, la versión
+completa del manifest de cobertura con metadata semántica case-level
+(entidad, período, métrica, tablas, behavior, comparación contra Dev).
+El `HOLDOUT_MANIFEST.yaml` de este repo es una versión minimizada, solo
+para gobernanza — ver la nota al principio de ese archivo.
+
 Ese repositorio:
 
 - no es un submódulo ni un remoto de `automation_agent`;

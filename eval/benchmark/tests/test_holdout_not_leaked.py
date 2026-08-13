@@ -36,29 +36,67 @@ _LEAK_SURFACE_GLOBS = [
     "**/entity_resolver*.py",
 ]
 
-# Manifest fields that are metadata-only. Anything outside this set showing
-# up in a case entry is a signal someone started copying real content
-# (question text, forbidden_claims, sql) into the manifest.
+# Manifest fields that are metadata-only and non-semantic: they identify
+# a case for governance (which batch, what structural level, review
+# status) without revealing what it is *about*. Anything outside this set
+# showing up in a case entry is a signal someone started copying
+# case-level semantic content (or worse, question/ground-truth content)
+# into the manifest that lives in the dev-facing repo.
+#
+# Deliberately excluded (must live only in the private repo's
+# MANIFEST_FULL.yaml, never here): primary_behavior, secondary_behaviors,
+# domain, entities, periods, metrics, source_tables,
+# dev_case_checked_against, most_similar_dev_case, similarity_reason.
+# These were present in an earlier version of this manifest and were
+# removed after Batch 1 review precisely because they leak enough to
+# reconstruct what a case tests.
 _ALLOWED_MANIFEST_CASE_FIELDS = {
     "case_id",
     "split",
     "level",
     "category",
-    "primary_behavior",
-    "secondary_behaviors",
-    "domain",
-    "entities",
-    "periods",
-    "metrics",
-    "source_tables",
-    "dev_case_checked_against",
-    "most_similar_dev_case",
-    "similarity_reason",
     "status",
     "batch",
 }
 
-_SUSPECT_MANIFEST_FIELDS = {"question", "sql", "required_facts", "forbidden_claims", "ground_truth_refs", "expected_behavior"}
+# Any of these keys appearing ANYWHERE in the manifest (not just inside a
+# case entry -- also top-level, or nested under some future summary block)
+# is a leak signal. Union of case-level semantic fields and raw
+# question/ground-truth content fields.
+_FORBIDDEN_SEMANTIC_FIELDS = {
+    "primary_behavior",
+    "secondary_behaviors",
+    "domain",
+    "entities",
+    "entity",
+    "periods",
+    "period",
+    "metrics",
+    "metric",
+    "source_tables",
+    "dev_case_checked_against",
+    "most_similar_dev_case",
+    "similarity_reason",
+    "question",
+    "sql",
+    "required_facts",
+    "forbidden_claims",
+    "ground_truth_refs",
+    "expected_behavior",
+}
+
+
+def _all_keys(node) -> set[str]:
+    """Recursively collect every mapping key in a parsed YAML structure."""
+    keys: set[str] = set()
+    if isinstance(node, dict):
+        for k, v in node.items():
+            keys.add(str(k))
+            keys |= _all_keys(v)
+    elif isinstance(node, list):
+        for item in node:
+            keys |= _all_keys(item)
+    return keys
 
 
 def test_holdout_dirs_contain_no_case_files():
@@ -83,19 +121,30 @@ def _manifest_case_ids() -> list[str]:
     return [c["case_id"] for c in data.get("cases", [])]
 
 
-def test_manifest_has_no_question_or_ground_truth_content():
-    """HOLDOUT_MANIFEST.yaml is metadata for auditing, never the case
-    content itself (case.schema.json is deliberately not extended for
-    this). A leaked question/sql here would defeat the physical
-    isolation for anyone who only reads the main repo."""
+def test_manifest_case_entries_are_minimal():
+    """Each case entry in HOLDOUT_MANIFEST.yaml carries only governance
+    fields (case_id/split/level/category/status/batch). Anything else --
+    including case-level semantic metadata like domain/entities/periods/
+    metrics, not just raw question/sql content -- belongs in the private
+    repo's MANIFEST_FULL.yaml, never here."""
     if not MANIFEST_PATH.exists():
         pytest.skip("HOLDOUT_MANIFEST.yaml not present yet")
     data = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) or {}
     for case in data.get("cases", []):
         unexpected = set(case) - _ALLOWED_MANIFEST_CASE_FIELDS
         assert not unexpected, f"{case.get('case_id')}: unexpected manifest fields {unexpected}"
-        suspect = set(case) & _SUSPECT_MANIFEST_FIELDS
-        assert not suspect, f"{case.get('case_id')}: manifest contains content fields {suspect}"
+
+
+def test_manifest_has_no_semantic_content_anywhere():
+    """Whole-file scan, not just inside `cases:` entries. Guards against a
+    future summary block, aggregate-by-entity table, or any other
+    structure that reintroduces case-level semantic metadata into the
+    dev-facing repo through a side door."""
+    if not MANIFEST_PATH.exists():
+        pytest.skip("HOLDOUT_MANIFEST.yaml not present yet")
+    data = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8")) or {}
+    found = _all_keys(data) & _FORBIDDEN_SEMANTIC_FIELDS
+    assert not found, f"HOLDOUT_MANIFEST.yaml contains forbidden semantic/content keys: {found}"
 
 
 def test_no_holdout_case_ids_referenced_outside_manifest_and_docs():
