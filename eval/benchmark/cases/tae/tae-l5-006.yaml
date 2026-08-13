@@ -1,0 +1,55 @@
+id: tae-l5-006
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Batch 2 (investigación cruzada rent roll + vacancia, solo dentro de la
+  cobertura temporal real del rent roll: 2026-05/2026-06). Mall Curicó
+  solo tiene rent roll en 2026-05 (no en 06), asi que el caso usa ese
+  periodo para ambas fuentes. Hallazgo real, verificado antes de escribir
+  el caso: las dos fuentes NO coinciden -- raw_vacancia_manual reporta
+  2.476/10.881,86 m2 (~22,75%) mientras que sumar las filas del rent roll
+  con arrendatario='Vacante' da 3.095,18/10.888,78 m2 (~28,4%). Esto no es
+  un bug del producto que haya que ocultar ni "resolver" con una sola
+  cifra -- es una discrepancia real entre dos fuentes del snapshot, y el
+  comportamiento correcto es exponerla, no promediarla ni elegir una
+  arbitrariamente ni inventar su causa.
+
+turns:
+  - question: "Cruza el rent roll y la vacancia oficial de Mall Curicó en mayo de 2026. ¿Ambas fuentes coinciden en el nivel de vacancia?"
+    required_facts:
+      - {ref: vac_pct_oficial_curico_2026_05, tolerance_pct: 3.0}
+      - {ref: vac_pct_rentroll_curico_2026_05, tolerance_pct: 3.0}
+    primary_fact: vac_pct_oficial_curico_2026_05
+    expected_entities: {fondo: "TRI", activo: "Mall Curicó"}
+    expected_period: {exact: "2026-05"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [raw_vacancia_manual, raw_rent_roll_line]
+    forbidden_claims:
+      - "reportar una sola cifra de vacancia sin mencionar que las dos fuentes difieren"
+      - "promediar o conciliar las dos cifras en un número único presentado como si fuera un consenso"
+      - "inventar una causa específica de la discrepancia (ej. error de digitación, unidades en remodelación, timing de cierre) sin evidencia en los datos"
+    expected_behavior:
+      - calcular la vacancia desde raw_vacancia_manual (~22,75%) y desde el rent roll (~28,4%, sumando unidades marcadas 'Vacante')
+      - identificar explícitamente que las dos cifras no coinciden
+      - señalar la discrepancia como un hallazgo a verificar, sin resolverla de forma no respaldada
+    rubric_focus: [investigation_quality, grounding, hallucination]
+
+ground_truth_refs:
+  vac_pct_oficial_curico_2026_05:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-05' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia oficial (raw_vacancia_manual), Mall Curicó, 2026-05. ~22.75%."
+  vac_pct_rentroll_curico_2026_05:
+    sql: >
+      SELECT 100.0 * SUM(CASE WHEN arrendatario = 'Vacante' THEN m2 ELSE 0 END) / SUM(m2)
+      FROM raw_rent_roll_line
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-05' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia implicita del rent roll (m2 con arrendatario='Vacante' / m2 totales), Mall Curicó, 2026-05. ~28.4%. No coincide con la cifra oficial."

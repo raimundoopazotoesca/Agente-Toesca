@@ -1,0 +1,54 @@
+id: tae-l4-004
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Batch 2 (diagnosis LTV/deuda). LTV de TRI baja de ~61.4% (2025-09) a
+  ~59.3% (2025-10) y vuelve a subir a ~61.9% (2025-12). Verificado contra
+  deuda_consolidada y dim_credito antes de escribir el caso: la baja de
+  octubre coincide exactamente con TRI_STRIPMACHALI_LEASING pasando a
+  estado PAGADO (fecha_vencimiento 2025-09) -- señal real y verificable.
+  El alza de diciembre NO tiene un crédito nuevo que la explique en
+  dim_credito (el siguiente crédito, TRI_SUCDEN_BICE, parte recién en
+  2026-01-26); ese tramo debe quedar como hecho no explicado, no como
+  narrativa inventada. Caso deliberadamente diseñado para separar
+  "hecho observado -> explicación respaldada" (la baja) de
+  "hecho observado -> sin causa demostrada en los datos" (el alza).
+
+turns:
+  - question: "El LTV de TRI bajó de ~61,4% en septiembre de 2025 a ~59,3% en octubre, y volvió a subir a ~61,9% en diciembre. ¿Qué explica estos movimientos?"
+    required_facts:
+      - {ref: ltv_tri_2025_09, tolerance_pct: 1.0}
+      - {ref: ltv_tri_2025_10, tolerance_pct: 1.0}
+      - {ref: ltv_tri_2025_12, tolerance_pct: 1.0}
+    acceptable_facts:
+      - {ref: credito_stripmachali_estado}
+    primary_fact: ltv_tri_2025_10
+    expected_entities: {fondo: "TRI"}
+    expected_period: {from: "2025-09", to: "2025-12"}
+    clarification_expected: false
+    forbidden_claims:
+      - "atribuir la baja de octubre a una causa distinta del pago del crédito leasing de Strip Machalí (queda PAGADO con vencimiento 2025-09, coincidiendo con la caída de deuda consolidada de TRI)"
+      - "inventar una causa específica para el alza de diciembre (ej. nuevo crédito, refinanciamiento, tasación) sin evidencia -- dim_credito no registra ningún crédito nuevo de TRI en ese periodo"
+      - "presentar el alza de diciembre como si tuviera la misma certeza explicativa que la baja de octubre"
+    expected_behavior:
+      - identificar que la baja de octubre coincide con el pago del crédito leasing de Strip Machalí
+      - reconocer explícitamente que el alza de diciembre no tiene una causa identificable en los datos disponibles
+      - distinguir el tramo demostrado del tramo sin explicación verificable, en vez de ofrecer una narrativa única para ambos
+    rubric_focus: [grounding, hallucination, investigation_quality]
+
+ground_truth_refs:
+  ltv_tri_2025_09:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2025-09'"
+    unit: pct
+  ltv_tri_2025_10:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2025-10'"
+    unit: pct
+  ltv_tri_2025_12:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2025-12'"
+    unit: pct
+  credito_stripmachali_estado:
+    sql: "SELECT estado FROM dim_credito WHERE credito_key = 'TRI_STRIPMACHALI_LEASING'"
+    unit: text
+    description: "PAGADO, fecha_vencimiento 2025-09 -- coincide con la baja de LTV de octubre."

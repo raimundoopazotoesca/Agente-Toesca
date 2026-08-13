@@ -1,0 +1,53 @@
+id: tae-l6-001
+suite: analyst
+level: L6
+tier: L4
+split: dev
+notes: >
+  Batch 2 (decision support: priorización, no decisión de inversión).
+  Distinto de tae-l5-002 (que solo pide identificar y rankear al de mayor
+  vacancia): este caso pide una recomendación de priorización para
+  revisión de comité, y exige verificar que la vacancia de Apo3001 es
+  persistente (sin cambio en los últimos 6 meses, ene-jun 2026: siempre
+  1.632,6/4.493,55 m2) -- una señal más fuerte que "es alta" para
+  justificar una prioridad de revisión, y una segunda query obligatoria
+  además del punto único.
+
+turns:
+  - question: "Con la información disponible, ¿qué activo del fondo TRI debería priorizarse para revisión en el próximo comité de gestión, y por qué?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_06, tolerance_pct: 10.0}
+    acceptable_facts:
+      - {ref: vac_apo3001_2026_01, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_06
+    expected_entities: {fondo: "TRI", activo: "Apo3001"}
+    expected_period: {from: "2026-01", to: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [raw_vacancia_manual]
+    forbidden_claims:
+      - "describir la vacancia de Apo3001 como empeorando progresivamente (se mantiene estable en ~36% durante los últimos 6 meses, no en deterioro activo)"
+      - "recomendar un activo distinto de Apo3001 sin justificar por datos por qué sería más urgente"
+      - "formular la recomendación como una decisión de inversión (comprar/vender/invertir) en vez de una priorización de revisión"
+    expected_behavior:
+      - priorizar Apo3001 por tener la vacancia más alta entre los activos de TRI, sostenida sin cambios en los últimos 6 meses
+      - fundamentar la recomendación comparando con al menos otro activo o periodo, no solo citando el número aislado
+      - encuadrar la conclusión como una priorización de revisión respaldada por los datos, no como una decisión de inversión
+    rubric_focus: [analytical_quality, investigation_quality, output_usefulness]
+
+ground_truth_refs:
+  vac_pct_apo3001_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia Apo3001, 2026-06. ~36.3%."
+  vac_apo3001_2026_01:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia Apo3001, 2026-01. Idéntica a 2026-06 (~36.3%) -- confirma persistencia, no deterioro."

@@ -1,0 +1,34 @@
+id: tae-l8-003
+suite: analyst
+level: L8
+tier: L2
+split: dev
+notes: >
+  Batch 2 (CapEx: insufficient-info, verificado antes de escribir el
+  caso que NO es reconstruible razonablemente). dim_cuenta_eeff no tiene
+  ninguna cuenta de capex/mejoras/mantenimiento (0 coincidencias). La
+  cuenta mas cercana, EFE.flujos_inversion, es un neto que mezcla compra
+  y venta de activos financieros, venta de inmuebles y otras partidas de
+  inversion en una sola linea -- usarla como proxy de capex sería una
+  cifra que suena defendible pero no lo es (mezcla flujos no relacionados
+  a mejoras de propiedades). Por eso este caso es de insuficiencia real,
+  no un gap forzado.
+
+turns:
+  - question: "¿Cuánto invirtió TRI en CapEx (mejoras y mantenimiento de sus propiedades) durante 2025?"
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "presentar el flujo de inversión (EFE.flujos_inversion) como si fuera el CapEx (ese monto neto mezcla compra/venta de activos financieros, venta de inmuebles y otras partidas de inversión, no aísla mejoras de propiedades)"
+      - "inventar una cifra de CapEx no respaldada por una cuenta específica del plan de cuentas"
+      - "afirmar que el dato simplemente 'no está disponible' sin explicar por qué (el plan de cuentas EEFF no tiene una cuenta de capex aislable, no es un problema de cobertura temporal)"
+    expected_behavior:
+      - reconocer que no existe una cuenta de CapEx aislada en el plan de cuentas EEFF del snapshot
+      - explicar que el flujo de inversión combinado no permite aislar el capex sin mezclar otras partidas (compra/venta de activos financieros, venta de inmuebles)
+      - no ofrecer una cifra numérica como respuesta
+    rubric_focus: [grounding, hallucination]
+
+ground_truth_refs:
+  n_cuentas_capex:
+    sql: "SELECT COUNT(*) FROM dim_cuenta_eeff WHERE cuenta_codigo LIKE '%capex%' OR descripcion LIKE '%mejora%' OR descripcion LIKE '%mantenimiento%'"
+    unit: count
+    description: "0 -- no existe ninguna cuenta de capex/mejoras/mantenimiento en el plan de cuentas. No referenciada en required_facts (no hay chequeo numérico en la respuesta esperada), queda documentada para quien revise el caso."

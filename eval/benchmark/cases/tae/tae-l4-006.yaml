@@ -1,0 +1,36 @@
+id: tae-l4-006
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Batch 2 (entity-hierarchy trap, nivel sociedad dentro de PT). Gap
+  identificado en el inventario: el único trap de jerarquía existente
+  (Apo3001 pertenece a TRI, no a Apo) opera a nivel fondo<->activo; este
+  caso agrega el nivel sociedad<->activo<->fondo, real y verificable en
+  dim_sociedad/dim_activo/dim_credito. "Inmobiliaria Boulevard PT SpA"
+  (sociedad_key BlvdSpA) es la sociedad vehiculo del activo Boulevard,
+  dentro del fondo PT -- distinta de "Torre A.S.A." (sociedad del otro
+  activo de PT) y de cualquier sociedad de TRI/Apo (Chañarcillo,
+  CuricoSpA, SeniorAssist, VCSpA, ApoquindoSpA, MachaliSpA).
+
+turns:
+  - question: "El crédito 'Security' está asociado a la sociedad Inmobiliaria Boulevard PT SpA. ¿A qué activo y fondo pertenece esa sociedad, y cuál es la deuda inicial del crédito en UF?"
+    required_facts:
+      - {ref: deuda_inicial_boulevard_security, tolerance_pct: 1.0}
+    primary_fact: deuda_inicial_boulevard_security
+    expected_entities: {fondo: "PT", activo: "Boulevard", sociedad: "BlvdSpA"}
+    clarification_expected: false
+    forbidden_claims:
+      - "confundir Inmobiliaria Boulevard PT SpA con Torre A.S.A. (la sociedad del otro activo de PT)"
+      - "asociar la sociedad a un fondo distinto de PT, o tratar 'Boulevard' como si fuera un fondo en sí mismo en vez de un activo dentro de PT"
+    expected_behavior:
+      - identificar que la sociedad corresponde al activo Boulevard, dentro del fondo PT
+      - reportar la deuda inicial del crédito en UF
+    rubric_focus: [output_usefulness, grounding]
+
+ground_truth_refs:
+  deuda_inicial_boulevard_security:
+    sql: "SELECT deuda_inicial_uf FROM dim_credito WHERE credito_key = 'PT_BOULEVARD_SECURITY'"
+    unit: UF
+    description: "Credito Security del activo Boulevard (sociedad BlvdSpA / Inmobiliaria Boulevard PT SpA), fondo PT. ~1.081.306 UF."

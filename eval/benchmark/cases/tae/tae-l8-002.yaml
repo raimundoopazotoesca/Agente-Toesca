@@ -1,0 +1,39 @@
+id: tae-l8-002
+suite: analyst
+level: L8
+tier: L2
+split: dev
+notes: >
+  Batch 2 (DSCR: dato EXISTENTE pero no validado -- distinto de
+  tae-l8-001, que es morosidad, un dato que directamente no existe en el
+  schema). derived_kpi tiene dscr para TRI en 2026-06 (0.61), pero
+  PENDING.md documenta explícitamente que este KPI "está en derived_kpi
+  pero no validado contra CDG... Solo casos cualitativos, nunca
+  expected_value" -- no es que el dato falte, es que su confiabilidad no
+  está confirmada. El comportamiento correcto es reportar el valor
+  disponible Y calificar su confiabilidad, no tratarlo como inexistente
+  ni como una cifra confirmada.
+
+turns:
+  - question: "¿Cuál es el DSCR de TRI en junio de 2026, y qué tan confiable es esa cifra?"
+    required_facts:
+      - {ref: dscr_tri_2026_06, tolerance_pct: 10.0}
+    primary_fact: dscr_tri_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "presentar el DSCR como una cifra validada o confirmada contra una fuente externa (CDG), sin matizar que no lo está"
+      - "afirmar que el DSCR no existe o no está disponible (sí existe en derived_kpi, el problema es la validación, no la disponibilidad)"
+      - "usar el DSCR como fundamento único y definitivo de una conclusión de riesgo de repago"
+    expected_behavior:
+      - reportar el valor de DSCR disponible en la base
+      - aclarar explícitamente que este KPI no ha sido validado contra una fuente externa, distinguiendo disponibilidad de confiabilidad
+      - evitar apoyar una conclusión definitiva únicamente en esta cifra
+    rubric_focus: [grounding, hallucination, output_usefulness]
+
+ground_truth_refs:
+  dscr_tri_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: count
+    description: "DSCR TRI 2026-06 (~0.61). Dato existente en derived_kpi pero no validado contra CDG -- ver PENDING.md."

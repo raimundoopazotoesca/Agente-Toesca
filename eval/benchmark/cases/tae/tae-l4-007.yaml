@@ -1,0 +1,44 @@
+id: tae-l4-007
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Batch 2 (desinversión con forbidden_claims, distinto de tae-l4-001 y
+  tae-l1-009). tae-l4-001 pregunta por qué no hay datos después de la
+  fecha; tae-l1-009 es retrieval simple del conteo. Este caso presenta
+  DOS hechos verificables y cercanos en el tiempo -- dim_activo.vigente_hasta
+  de Strip Machalí = 2025-08 y dim_credito.fecha_vencimiento del crédito
+  leasing asociado = 2025-09, estado PAGADO -- y exige que la respuesta
+  reconozca la proximidad temporal sin convertirla en una relación causal
+  no demostrada (no hay dato de orden de eventos, motivo de venta, ni
+  vínculo explícito entre el pago del crédito y la salida del activo).
+  Mismo gap de catálogo semántico que tae-l4-001: "Strip Machalí" no está
+  en semantic/entities.yaml, así que no se usa expected_entities.
+
+turns:
+  - question: "Strip Machalí dejó de reportar en agosto de 2025, y su crédito leasing aparece PAGADO con vencimiento en septiembre de 2025. ¿Qué relación hay entre ambos hechos?"
+    required_facts:
+      - {ref: vigente_hasta_stripmachali}
+      - {ref: fecha_vencimiento_credito_stripmachali}
+    primary_fact: vigente_hasta_stripmachali
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "afirmar que el pago del crédito causó la venta del activo, o que la venta se hizo para pagar el crédito, sin evidencia directa de esa relación en los datos"
+      - "inventar detalles de la transacción de venta (comprador, precio, motivo comercial) no presentes en la base"
+      - "afirmar que ambos eventos no tienen relación en absoluto (la proximidad temporal es real y debe mencionarse, solo no debe convertirse en causalidad)"
+    expected_behavior:
+      - constatar que ambas fechas están en una ventana cercana (agosto-septiembre 2025)
+      - señalar que esa correlación temporal no es evidencia suficiente de causalidad con los datos disponibles
+      - distinguir explícitamente el hecho observado (fechas cercanas) de cualquier interpretación sobre el motivo
+    rubric_focus: [grounding, hallucination, investigation_quality]
+
+ground_truth_refs:
+  vigente_hasta_stripmachali:
+    sql: "SELECT vigente_hasta FROM dim_activo WHERE activo_key = 'Strip Machalí'"
+    unit: date
+    description: "2025-08, último periodo vigente del activo en dim_activo."
+  fecha_vencimiento_credito_stripmachali:
+    sql: "SELECT fecha_vencimiento FROM dim_credito WHERE credito_key = 'TRI_STRIPMACHALI_LEASING'"
+    unit: date
+    description: "2025-09, vencimiento del crédito leasing asociado, estado PAGADO."

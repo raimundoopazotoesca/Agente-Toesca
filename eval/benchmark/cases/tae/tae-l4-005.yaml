@@ -1,0 +1,67 @@
+id: tae-l4-005
+suite: analyst
+level: L4
+tier: L4
+split: dev
+notes: >
+  Batch 2 (diagnosis EEFF). GAP DE MAPEO CONOCIDO, verificado antes de
+  escribir el caso: cuenta_codigo_canonical='ESF.total_pasivo' en
+  raw_eeff_line es idéntico a 'ESF.total_activo' en todos los periodos de
+  TRI/PT/Apo (probable mapeo a "total pasivo y patrimonio", no a pasivo
+  puro) -- por eso este caso NO usa esa cuenta. En su lugar deriva el
+  pasivo real como total_activo - patrimonio_neto, ambas cuentas limpias
+  y consistentes. TRI: pasivo real cae de ~42.0B (2025-03) a ~9.5B CLP
+  (2025-06) mientras el patrimonio neto se mantiene estable
+  (84.5B -> 85.7B) -- una caída real y grande, verificada contra
+  deuda_consolidada (que en UF se mantiene practicamente plana en el
+  mismo periodo) y contra raw_ar_event (sin eventos de TRI en 2025) y
+  dim_activo (ningún activo de TRI se desinvierte entre marzo y junio
+  2025 -- Strip Machalí sigue vigente hasta agosto). No hay una cuenta
+  mas granular en el snapshot para descomponer que partida especifica del
+  pasivo bajó; el caso exige reconocer el hecho sin inventar una causa.
+
+turns:
+  - question: "El pasivo total de TRI cayó fuertemente entre marzo y junio de 2025 mientras el patrimonio se mantuvo estable. ¿Qué lo explica?"
+    required_facts:
+      - {ref: pasivo_real_tri_2025_03, tolerance_pct: 3.0}
+      - {ref: pasivo_real_tri_2025_06, tolerance_pct: 3.0}
+    acceptable_facts:
+      - {ref: patrimonio_tri_2025_03, tolerance_pct: 1.0}
+      - {ref: patrimonio_tri_2025_06, tolerance_pct: 1.0}
+    primary_fact: pasivo_real_tri_2025_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {from: "2025-03", to: "2025-06"}
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "inventar una causa específica (venta de un activo, refinanciamiento, reclasificación contable puntual) sin evidencia -- no hay eventos en raw_ar_event ni desinversiones en dim_activo de TRI en ese periodo"
+      - "afirmar que el pasivo de TRI bajó por una reducción de deuda financiera (deuda_consolidada en UF se mantiene prácticamente plana en el mismo periodo, así que la caída no es explicada por la deuda financiera)"
+      - "usar la cuenta ESF.total_pasivo de raw_eeff_line para esta pregunta (en este snapshot es idéntica a total_activo en todos los periodos y fondos, no aísla el pasivo)"
+    expected_behavior:
+      - calcular el pasivo real como total_activo menos patrimonio_neto (no usar la cuenta ESF.total_pasivo directamente)
+      - cuantificar la magnitud de la caída y notar que el patrimonio se mantuvo estable en el mismo periodo
+      - reconocer que el snapshot no tiene el detalle contable suficiente para identificar qué partida específica del pasivo bajó, en vez de ofrecer una causa no verificable
+    rubric_focus: [grounding, hallucination, investigation_quality]
+
+ground_truth_refs:
+  pasivo_real_tri_2025_03:
+    sql: >
+      SELECT
+        (SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.total_activo' AND periodo='2025-03' AND superseded_at IS NULL)
+        -
+        (SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.patrimonio_neto' AND periodo='2025-03' AND superseded_at IS NULL)
+    unit: CLP
+    description: "Pasivo real TRI (activo - patrimonio), 2025-03. ~42.0B CLP."
+  pasivo_real_tri_2025_06:
+    sql: >
+      SELECT
+        (SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.total_activo' AND periodo='2025-06' AND superseded_at IS NULL)
+        -
+        (SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.patrimonio_neto' AND periodo='2025-06' AND superseded_at IS NULL)
+    unit: CLP
+    description: "Pasivo real TRI (activo - patrimonio), 2025-06. ~9.5B CLP."
+  patrimonio_tri_2025_03:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.patrimonio_neto' AND periodo='2025-03' AND superseded_at IS NULL"
+    unit: CLP
+  patrimonio_tri_2025_06:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key='TRI' AND cuenta_codigo_canonical='ESF.patrimonio_neto' AND periodo='2025-06' AND superseded_at IS NULL"
+    unit: CLP

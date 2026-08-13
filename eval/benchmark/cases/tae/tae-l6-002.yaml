@@ -1,0 +1,60 @@
+id: tae-l6-002
+suite: analyst
+level: L6
+tier: L4
+split: dev
+notes: >
+  Batch 2 (multi-dominio tipo preparación de comité, sin una única
+  respuesta numérica). Fondo Apo: patrimonio neto crece con fuerza
+  interanual (~36.8B a ~43.1B CLP, dic-2024 a dic-2025, +~17%), LTV se
+  mantiene estable/mejorando levemente (~74.1% a ~73.5% entre 2026-01 y
+  2026-06), NOI del agregado 'Apoquindo' (entidad legacy documentada en
+  CLAUDE.md -- Apo4501+Apo4700 a nivel fondo) es volátil mes a mes
+  (11.7k-16.0k UF, ene-may 2026) sin tendencia clara. No hay vacancia a
+  nivel fondo Apo en derived_kpi -- el caso exige reconocer esa ausencia
+  en vez de inventar una cifra. Conclusiones defendibles pero abiertas:
+  hay más de un ángulo válido (crecimiento patrimonial vs volatilidad de
+  NOI vs LTV relativamente alto en términos absolutos), por eso no hay
+  expected_sql único.
+
+turns:
+  - question: "Prepara los puntos clave para el comité sobre el fondo Apo: ¿qué muestran su apalancamiento, patrimonio y NOI en el último año, y qué conclusión sacas?"
+    required_facts:
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+      - {ref: patrimonio_apo_2025_12, tolerance_pct: 1.0}
+      - {ref: patrimonio_apo_2024_12, tolerance_pct: 1.0}
+    acceptable_facts:
+      - {ref: noi_apoquindo_2026_05, tolerance_pct: 10.0}
+      - {ref: noi_apoquindo_2026_02, tolerance_pct: 10.0}
+    primary_fact: patrimonio_apo_2025_12
+    expected_entities: {fondo: "Apo"}
+    expected_period: {from: "2024-12", to: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "presentar el LTV de Apo como si estuviera empeorando (está estable o mejorando levemente en el periodo)"
+      - "inventar una cifra de vacancia a nivel fondo Apo (no existe en derived_kpi para esa entidad en el snapshot)"
+      - "ignorar el crecimiento de patrimonio al construir la conclusión (creció ~17% interanual, es la señal más fuerte del fondo)"
+    expected_behavior:
+      - reportar el crecimiento de patrimonio neto interanual (dic-2024 a dic-2025)
+      - reportar el LTV como estable/en leve mejora, no en deterioro
+      - reconocer que no hay dato de vacancia a nivel fondo Apo en el snapshot, en vez de inventarlo
+      - concluir con una lectura matizada que combine al menos dos de las tres señales (patrimonio, LTV, NOI), no solo una
+    rubric_focus: [analytical_quality, completeness, output_usefulness]
+
+ground_truth_refs:
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+  patrimonio_apo_2025_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto' AND periodo = '2025-12' AND superseded_at IS NULL"
+    unit: CLP
+  patrimonio_apo_2024_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto' AND periodo = '2024-12' AND superseded_at IS NULL"
+    unit: CLP
+  noi_apoquindo_2026_05:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Apoquindo' AND periodo = '2026-05'"
+    unit: UF
+    description: "Entidad legacy 'Apoquindo' (documentada en CLAUDE.md): agregado Apo4501+Apo4700 a nivel fondo, mal etiquetada entidad_tipo='activo'."
+  noi_apoquindo_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Apoquindo' AND periodo = '2026-02'"
+    unit: UF

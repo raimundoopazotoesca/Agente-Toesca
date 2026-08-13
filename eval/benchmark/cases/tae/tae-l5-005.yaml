@@ -1,0 +1,61 @@
+id: tae-l5-005
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Batch 2 (investigation portfolio a 3 fondos). Distinto de tae-l2-003
+  (comparación de snapshot puntual): aquí la investigación es sobre
+  TENDENCIA de 12 meses, no solo nivel. Verificado: ningún fondo empeora
+  su LTV en el último año -- TRI baja de ~61.6% (2025-06) a ~61.0%
+  (2026-06), Apo baja de ~75.4% a ~73.5%, PT se mantiene plano en ~81.2%
+  todo el periodo. La trampa es doble: (a) no inventar un fondo en
+  deterioro cuando los tres están estables o mejorando levemente, y
+  (b) no confundir "más alto en nivel" (PT) con "empeorando en tendencia"
+  (ninguno lo está) -- son preguntas distintas y la respuesta correcta
+  distingue ambas.
+
+turns:
+  - question: "De los tres fondos del portafolio (TRI, PT, Apo), ¿alguno muestra un deterioro de apalancamiento en el último año? ¿Cuál requiere más atención y por qué?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_pt_2025_06, tolerance_pct: 1.0}
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_tri_2025_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2025_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    expected_period: {from: "2025-06", to: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [derived_kpi]
+    forbidden_claims:
+      - "afirmar que algún fondo muestra un deterioro de apalancamiento en el último año (los tres están estables o mejorando levemente)"
+      - "justificar que PT merece más atención por una tendencia negativa (su LTV está plano, no empeorando -- el motivo real es el nivel absoluto, no la trayectoria)"
+    expected_behavior:
+      - reportar el LTV de los tres fondos en ambos extremos del periodo (2025-06 y 2026-06)
+      - concluir que ningún fondo empeora su apalancamiento en el año
+      - identificar a PT como el que requiere más atención por su nivel absoluto de LTV (~81%, el más alto), no por una tendencia de deterioro
+    rubric_focus: [investigation_quality, analytical_quality, grounding]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  ltv_pt_2025_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2025-06'"
+    unit: pct
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  ltv_tri_2025_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2025-06'"
+    unit: pct
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+  ltv_apo_2025_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2025-06'"
+    unit: pct

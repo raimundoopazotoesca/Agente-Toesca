@@ -1,0 +1,50 @@
+id: tae-l5-004
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Batch 2 (investigation PT, hoy poco cubierto -- ningún caso L5 previo
+  tenia a PT como foco principal). Combina LTV (el más alto de los 3
+  fondos, ~81%, estable desde 2025-01) con NOI a nivel fondo
+  (entidad_key 'PT' en derived_kpi, agregado, no el legacy 'PT Torre A'/
+  'PT Boulevard' de los activos individuales) -- NOI mensual estable
+  entre 14.6k y 15.0k UF en el primer semestre 2026, sin tendencia de
+  deterioro. El caso no tiene una única cifra de "riesgo"; exige combinar
+  ambas señales y concluir de forma matizada (alto apalancamiento
+  estructural, parcialmente mitigado por operación estable).
+
+turns:
+  - question: "Investiga la situación financiera de Parque Titanium (PT) combinando apalancamiento y desempeño operacional. ¿Qué riesgos destacan?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    acceptable_facts:
+      - {ref: noi_pt_2026_06, tolerance_pct: 5.0}
+      - {ref: noi_pt_2026_01, tolerance_pct: 5.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {from: "2026-01", to: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [derived_kpi]
+    forbidden_claims:
+      - "afirmar que el NOI de PT muestra una tendencia de deterioro en el periodo (se mantiene estable, sin caída sostenida)"
+      - "ignorar el LTV al evaluar el riesgo (es el más alto de los 3 fondos y es la señal estructural principal)"
+    expected_behavior:
+      - reportar el LTV de PT como el más alto entre los 3 fondos del portafolio
+      - reportar que el NOI mensual se mantiene relativamente estable en el periodo, sin señal de deterioro operacional
+      - "concluir de forma matizada: alto apalancamiento estructural, parcialmente mitigado por una operación estable, no un riesgo inminente de flujo"
+    rubric_focus: [investigation_quality, analytical_quality, grounding]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  noi_pt_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: UF
+    description: "NOI mensual agregado a nivel fondo PT (entidad_key='PT'), distinto de los NOI por activo 'PT Torre A'/'PT Boulevard'."
+  noi_pt_2026_01:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT' AND periodo = '2026-01'"
+    unit: UF
