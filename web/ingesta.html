@@ -499,6 +499,33 @@
     position: absolute; right: 10px; font-size: 12px; font-weight: 700;
     color: #a0a0a0; pointer-events: none;
   }
+
+  /* ── Pantallas de carga (skeletons) ─────────────────────────────── */
+  @keyframes skel-shimmer { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+  .skel {
+    background: linear-gradient(90deg, #ececec 25%, #f6f6f6 37%, #ececec 63%);
+    background-size: 600px 100%; animation: skel-shimmer 1.4s linear infinite;
+    border-radius: 3px;
+  }
+  .skel-card {
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 18px 20px;
+  }
+  .skel-line { height: 11px; margin-bottom: 10px; }
+  .skel-line.w-60 { width: 60%; } .skel-line.w-40 { width: 40%; } .skel-line.w-80 { width: 80%; }
+  .skel-line.title { height: 15px; width: 55%; margin-bottom: 14px; }
+  .skel-bar { height: 8px; border-radius: 4px; margin: 14px 0; }
+  .skel-mini { height: 78px; border-radius: 4px; flex: 0 1 260px; }
+  @media (prefers-reduced-motion: reduce) {
+    .skel { animation: none; }
+  }
+
+  .loading-overlay {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 40px 20px; color: var(--muted); font-size: 12.5px; font-weight: 600;
+  }
+  .loading-overlay .status-spinner { width: 22px; height: 22px; border-width: 3px; }
+  .loading-overlay.inline { flex-direction: row; padding: 14px 0; }
 </style>
 </head>
 <body>
@@ -538,8 +565,14 @@
       <option value="freq-quarter-first">Trimestrales - mensuales</option>
     </select>
   </div>
-  <div id="inicio-cards" class="inicio-cards"></div>
-  <div id="inicio-mini-cards" class="inicio-mini-cards"></div>
+  <div id="inicio-cards" class="inicio-cards">
+    <div class="skel-card"><div class="skel skel-line title"></div><div class="skel skel-line w-80"></div><div class="skel skel-bar"></div><div class="skel skel-line w-60"></div><div class="skel skel-line w-40"></div></div>
+    <div class="skel-card"><div class="skel skel-line title"></div><div class="skel skel-line w-80"></div><div class="skel skel-bar"></div><div class="skel skel-line w-60"></div><div class="skel skel-line w-40"></div></div>
+    <div class="skel-card"><div class="skel skel-line title"></div><div class="skel skel-line w-80"></div><div class="skel skel-bar"></div><div class="skel skel-line w-60"></div><div class="skel skel-line w-40"></div></div>
+  </div>
+  <div id="inicio-mini-cards" class="inicio-mini-cards">
+    <div class="skel skel-mini"></div><div class="skel skel-mini"></div><div class="skel skel-mini"></div>
+  </div>
   <div class="inicio-mini-header">
     <button id="btn-refrescar-mini" class="inicio-action-btn" type="button">Actualizar UF / USD / Cuota</button>
     <span id="refrescar-mini-status" class="mini-refresh-status"></span>
