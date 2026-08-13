@@ -1,0 +1,29 @@
+id: tae-l1-006
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Batch 1 (cobertura portfolio a nivel de los 3 fondos). Conteo simple
+  sobre dim_activo agregando TRI+PT+Apo -- no existe hoy ningun caso que
+  pregunte por el portafolio completo en vez de un fondo individual.
+  Nota: el total incluye Strip Machalí (desinvertido, vigente_hasta
+  2025-08); la pregunta es "cuantos activos tiene" sin acotar a vigentes,
+  asi que 17 es la respuesta correcta para dim_activo sin filtrar.
+
+turns:
+  - question: "¿Cuántos activos en total agrupan los fondos TRI, PT y Apo?"
+    required_facts:
+      - {ref: n_activos_portfolio, tolerance_abs: 0}
+    primary_fact: n_activos_portfolio
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el conteo total de activos across los tres fondos
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  n_activos_portfolio:
+    sql: "SELECT COUNT(*) FROM dim_activo WHERE fondo_key IN ('TRI', 'PT', 'Apo')"
+    unit: count
+    description: "17 activos totales en dim_activo para los 3 fondos, incluye Strip Machalí (desinvertido)."

@@ -1,0 +1,44 @@
+id: tae-l3-003
+suite: analyst
+level: L3
+tier: L3
+split: dev
+notes: >
+  Batch 1 (cobertura EEFF, analytical_summary). Evolucion del patrimonio
+  neto de PT entre los dos ultimos periodos EEFF del snapshot (2025-12 y
+  2026-03), cuenta ESF.patrimonio_neto. Variacion pequeña y positiva
+  (~+1.4%) -- trampa simetrica a tae-l3-001 (Sucden): no inventar un
+  deterioro o un evento relevante donde solo hay una variacion menor.
+
+turns:
+  - question: "¿Cómo evolucionó el patrimonio neto de PT entre diciembre de 2025 y marzo de 2026?"
+    required_facts:
+      - {ref: patrimonio_pt_2025_12, tolerance_pct: 1.0}
+      - {ref: patrimonio_pt_2026_03, tolerance_pct: 1.0}
+    primary_fact: patrimonio_pt_2026_03
+    expected_entities: {fondo: "PT"}
+    expected_period: {from: "2025-12", to: "2026-03"}
+    clarification_expected: false
+    forbidden_claims:
+      - "describir la variacion como una caida o deterioro del patrimonio (la variacion es positiva, ~+1.4%)"
+      - "atribuir la variacion a un evento operacional especifico no respaldado por los datos (ej. venta, aumento de capital)"
+    expected_behavior:
+      - reportar el patrimonio neto en ambos periodos
+      - caracterizar la variacion como leve/estable, no como un cambio significativo
+    rubric_focus: [analytical_quality, grounding, output_usefulness]
+
+ground_truth_refs:
+  patrimonio_pt_2025_12:
+    sql: >
+      SELECT monto_clp FROM raw_eeff_line
+      WHERE fondo_key = 'PT' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto'
+        AND periodo = '2025-12' AND superseded_at IS NULL
+    unit: CLP
+    description: "Total patrimonio neto ESF, fondo PT, periodo 2025-12."
+  patrimonio_pt_2026_03:
+    sql: >
+      SELECT monto_clp FROM raw_eeff_line
+      WHERE fondo_key = 'PT' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto'
+        AND periodo = '2026-03' AND superseded_at IS NULL
+    unit: CLP
+    description: "Total patrimonio neto ESF, fondo PT, periodo 2026-03 (ultimo EEFF del snapshot)."

@@ -1,0 +1,31 @@
+id: tae-l1-007
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Batch 1 (cobertura parking). Ground truth verificada en el snapshot
+  pinneado: "Parking PT" es un activo registrado en dim_activo
+  (fondo_key=PT) con datos reales de ingreso mensual en
+  raw_parking_ingreso_line (2023-01 a 2026-06). El monto se arma sumando
+  varias lineas de concepto (dim_concepto_parking) del mismo periodo.
+
+turns:
+  - question: "¿Cuál fue el ingreso de Parking PT en junio de 2026?"
+    required_facts:
+      - {ref: ingreso_parking_pt_2026_06, tolerance_pct: 1.0}
+    primary_fact: ingreso_parking_pt_2026_06
+    expected_entities: {fondo: "PT", activo: "Parking PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el ingreso total de Parking PT en el periodo
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  ingreso_parking_pt_2026_06:
+    sql: >
+      SELECT SUM(monto_clp) FROM raw_parking_ingreso_line
+      WHERE activo_key = 'Parking PT' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: CLP
+    description: "Suma de todas las lineas de ingreso (por concepto) de Parking PT en 2026-06."

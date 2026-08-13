@@ -1,0 +1,35 @@
+id: tae-l1-008
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Batch 1 (cobertura mercado). Dato de mercado externo (JLL), no de un
+  fondo Toesca -- verificado antes de escribir el caso: raw_mercado_oficinas
+  tiene fila unica para (periodo, submercado, clase, proveedor). No hay
+  columna en dim_activo que ligue un activo a un submercado, asi que este
+  caso queda como retrieval puro de mercado, sin expected_entities de
+  fondo/activo. No se fuerza una comparacion activo-vs-mercado porque esa
+  vinculacion no es reproducible por SQL en el snapshot actual.
+
+turns:
+  - question: "Según JLL, ¿cuál es la vacancia de oficinas en el submercado Las Condes (CBD) al segundo trimestre de 2026?"
+    required_facts:
+      - {ref: vacancia_lascondes_cbd_2026_06, tolerance_pct: 5.0}
+    primary_fact: vacancia_lascondes_cbd_2026_06
+    clarification_expected: false
+    expected_behavior:
+      - reportar la vacancia de oficinas de Las Condes (CBD) segun JLL, periodo 2026-06
+      - no atribuir el dato a ningun fondo o activo de Toesca (es un dato de mercado, no de portafolio propio)
+    forbidden_claims:
+      - "presentar la cifra como si fuera la vacancia de un activo o fondo de Toesca"
+    rubric_focus: [output_usefulness, grounding]
+
+ground_truth_refs:
+  vacancia_lascondes_cbd_2026_06:
+    sql: >
+      SELECT vacancia_pct FROM raw_mercado_oficinas
+      WHERE periodo = '2026-06' AND submercado = 'Las Condes (CBD)'
+        AND clase = 'Total' AND proveedor = 'JLL' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia de oficinas totales, submercado Las Condes (CBD), proveedor JLL, dato de mercado externo."

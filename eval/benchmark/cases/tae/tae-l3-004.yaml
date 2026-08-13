@@ -1,0 +1,39 @@
+id: tae-l3-004
+suite: analyst
+level: L3
+tier: L3
+split: dev
+notes: >
+  Batch 1 (cobertura rent roll, dentro de su cobertura temporal real --
+  raw_rent_roll_line solo tiene 2026-05 y 2026-06 en el snapshot, se usa
+  el mas reciente). Torre A tiene concentracion extrema: Scotiabank Azul
+  ocupa ~19,958 de ~20,198 m2 totales (~98.8%), repartido en 507 filas
+  (unidades/subcontratos del mismo arrendatario). Se excluye explicitamente
+  "Vacante" del conteo de arrendatarios via forbidden_claims -- no es un
+  arrendatario real.
+
+turns:
+  - question: "¿Qué tan concentrado está el rent roll de Torre A en junio de 2026? ¿Hay un arrendatario dominante?"
+    required_facts:
+      - {ref: pct_concentracion_scotiabank_torrea_2026_06, tolerance_pct: 5.0}
+    primary_fact: pct_concentracion_scotiabank_torrea_2026_06
+    expected_entities: {fondo: "PT", activo: "Torre A"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "contar 'Vacante' como un arrendatario real al evaluar concentracion"
+      - "describir el rent roll como diversificado o sin concentracion relevante"
+    expected_behavior:
+      - identificar a Scotiabank Azul como el arrendatario dominante
+      - cuantificar la concentracion (~98% de los m2 arrendados)
+      - señalar el riesgo de concentracion en un solo arrendatario
+    rubric_focus: [analytical_quality, grounding, investigation_quality]
+
+ground_truth_refs:
+  pct_concentracion_scotiabank_torrea_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(CASE WHEN arrendatario = 'Scotiabank Azul' THEN m2 ELSE 0 END) / SUM(m2)
+      FROM raw_rent_roll_line
+      WHERE activo_key = 'Torre A' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+    description: "m2 ocupados por Scotiabank Azul sobre el total de m2 del rent roll de Torre A, 2026-06 (~98.8%)."

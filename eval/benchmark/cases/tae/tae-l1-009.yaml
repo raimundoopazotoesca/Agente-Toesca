@@ -1,0 +1,32 @@
+id: tae-l1-009
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Batch 1 (cobertura desinversiones como dominio propio, no como
+  diagnostico). Distinto de tae-l4-001: ese caso diagnostica por que un
+  activo especifico dejo de reportar; este caso es retrieval simple sobre
+  el catalogo de desinversiones del portafolio (dim_activo.vigente_hasta
+  no nulo). Unico activo desinvertido en TRI/PT/Apo hoy: Strip Machalí,
+  vigente_hasta 2025-08. "Strip Machalí" no esta en semantic/entities.yaml
+  (mismo gap documentado en tae-l4-001), asi que no se usa expected_entities
+  aqui tampoco -- el chequeo del nombre correcto queda en expected_behavior.
+
+turns:
+  - question: "¿Cuántos activos ha desinvertido el fondo TRI y hasta cuándo estuvieron vigentes?"
+    required_facts:
+      - {ref: n_desinversiones_tri, tolerance_abs: 0}
+    primary_fact: n_desinversiones_tri
+    expected_entities: {fondo: "TRI"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar que TRI tiene un activo desinvertido en el snapshot
+      - identificar el activo como Strip Machalí, vigente hasta agosto de 2025
+    rubric_focus: [output_usefulness, grounding]
+
+ground_truth_refs:
+  n_desinversiones_tri:
+    sql: "SELECT COUNT(*) FROM dim_activo WHERE fondo_key = 'TRI' AND vigente_hasta IS NOT NULL"
+    unit: count
+    description: "Activos de TRI con vigente_hasta no nulo -- 1 (Strip Machalí, hasta 2025-08)."

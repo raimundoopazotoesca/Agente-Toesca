@@ -1,0 +1,31 @@
+id: tae-l1-005
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Batch 1 (cobertura EEFF). Retrieval simple sobre raw_eeff_line, cuenta
+  ESF.total_activo. cuenta_codigo_canonical filtra por el codigo normalizado
+  del plan de cuentas (dim_cuenta_eeff), no por el codigo de fuente crudo,
+  para evitar arrastrar variantes historicas del mismo concepto.
+
+turns:
+  - question: "¿Cuál era el total de activos de Parque Titanium según el último EEFF disponible?"
+    required_facts:
+      - {ref: total_activo_pt_2026_03, tolerance_pct: 1.0}
+    primary_fact: total_activo_pt_2026_03
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-03"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el total de activos del EEFF a marzo 2026 (ultimo periodo disponible en el snapshot)
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  total_activo_pt_2026_03:
+    sql: >
+      SELECT monto_clp FROM raw_eeff_line
+      WHERE fondo_key = 'PT' AND cuenta_codigo_canonical = 'ESF.total_activo'
+        AND periodo = '2026-03' AND superseded_at IS NULL
+    unit: CLP
+    description: "Total activo ESF, fondo PT, ultimo EEFF trimestral del snapshot (2026-03)."

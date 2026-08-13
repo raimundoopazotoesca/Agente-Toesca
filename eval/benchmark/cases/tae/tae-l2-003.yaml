@@ -1,0 +1,39 @@
+id: tae-l2-003
+suite: analyst
+level: L2
+tier: L2
+split: dev
+notes: >
+  Batch 1 (cobertura comparisons 3-way). Extiende el patron de
+  tae-l2-001 (2 fondos) a los 3 fondos simultaneamente -- gap identificado
+  en el inventario: ningun caso preguntaba por TRI+PT+Apo a la vez.
+  LTV disponible para los 3 en derived_kpi (formula ltv_v1) en 2026-06.
+
+turns:
+  - question: "Compara el LTV de TRI, PT y Apo en junio de 2026. Ordénalos de mayor a menor apalancamiento."
+    required_facts:
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el LTV de los tres fondos
+      - "ordenarlos correctamente de mayor a menor: PT (~81%), Apo (~73%), TRI (~61%)"
+    rubric_focus: [analytical_quality, output_usefulness]
+
+ground_truth_refs:
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+    description: "LTV formula ltv_v1, fondo TRI, expresado en %."
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+    description: "LTV formula ltv_v1, fondo PT, expresado en %."
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+    description: "LTV formula ltv_v1, fondo Apo, expresado en %."

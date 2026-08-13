@@ -1,0 +1,40 @@
+id: tae-l2-002
+suite: analyst
+level: L2
+tier: L2
+split: dev
+notes: >
+  Batch 1 (cobertura comparisons activo-vs-activo, dentro del mismo
+  fondo). No se uso vacancia por falta de m2_gla para los activos de PT
+  y Apo en raw_vacancia_manual (gap real, verificado antes de escribir el
+  caso -- solo hay m2_vacantes ahi, sin base para %). NOI mensual si tiene
+  cobertura real para ambos activos via derived_kpi, entidad_key con
+  prefijo "PT " (distinto del activo_key canonico "Torre A"/"Boulevard"
+  usado en dim_activo y semantic/entities.yaml) -- se usa el nombre
+  canonico en expected_entities y el entidad_key real solo en el SQL.
+  Ultimo periodo con datos para ambos activos: 2026-02 (mismo limite que
+  tae-l3-002).
+
+turns:
+  - question: "Compara el NOI mensual de Torre A y Boulevard dentro de Parque Titanium en febrero de 2026. ¿Cuál aporta más?"
+    required_facts:
+      - {ref: noi_torrea_2026_02, tolerance_pct: 2.0}
+      - {ref: noi_boulevard_2026_02, tolerance_pct: 2.0}
+    primary_fact: noi_torrea_2026_02
+    expected_entities: {fondo: "PT", activo: ["Torre A", "Boulevard"]}
+    expected_period: {exact: "2026-02"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el NOI mensual de ambos activos
+      - identificar que Torre A aporta significativamente más NOI que Boulevard (~12.1k UF vs ~3.1k UF)
+    rubric_focus: [analytical_quality, output_usefulness]
+
+ground_truth_refs:
+  noi_torrea_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Torre A' AND periodo = '2026-02'"
+    unit: UF
+    description: "NOI mensual, activo Torre A (entidad_key derived_kpi = 'PT Torre A')."
+  noi_boulevard_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Boulevard' AND periodo = '2026-02'"
+    unit: UF
+    description: "NOI mensual, activo Boulevard (entidad_key derived_kpi = 'PT Boulevard')."
