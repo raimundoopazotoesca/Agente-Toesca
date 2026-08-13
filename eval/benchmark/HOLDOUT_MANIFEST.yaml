@@ -1,0 +1,127 @@
+# Toesca Analyst Benchmark v1 — Holdout coverage manifest
+#
+# Auditoría de metadata Dev vs Holdout, independiente de case.schema.json.
+# NUNCA contiene texto de pregunta, required_facts, forbidden_claims ni SQL
+# de ground_truth_refs -- solo metadata de cobertura, para poder detectar
+# solapamiento con Dev de forma (semi)automática sin necesitar acceso al
+# contenido real del holdout (que vive fuera de este repo, ver
+# cases/holdout/README.md).
+#
+# `status`: draft (escrito, no revisado) | reviewed (pasó human review del
+# batch) | frozen (congelado en HOLDOUT_SET_V1_FREEZE_SPEC.md).
+#
+# Cobertura objetivo del Holdout Set v1 completo: 21 casos (14 TAE + 7 TCE,
+# 18 turnos TCE). Ver HOLDOUT_SET_V1_DESIGN.md para el diseño completo.
+
+version: 1
+benchmark_version: v1
+generated_for_batch: 1
+total_target: 21
+total_registered: 6
+
+cases:
+  - case_id: tae-l1h-001
+    split: holdout
+    level: L1
+    category: null
+    primary_behavior: factual_retrieval
+    secondary_behaviors: []
+    domain: valor_cuota_tir
+    entities: {fondo: TRI, serie: A}
+    periods: ["2025-02"]
+    metrics: [precio_cuota_bursatil]
+    source_tables: [fact_precio_cuota]
+    dev_case_checked_against: [tae-l1-001, tae-l1-002, tae-l1-003, tae-l1-004, tae-l1-005, tae-l1-006, tae-l1-007, tae-l1-008, tae-l1-009]
+    most_similar_dev_case: tae-l1-005
+    similarity_reason: "Ambos son L1 factual retrieval de una sola cifra. Difieren en dominio completo (valor cuota bursatil vs total activo EEFF), entidad (serie A vs fondo PT), tabla fuente (fact_precio_cuota vs raw_eeff_line) y periodo (2025-02 vs 2026-03). No hay dev case en valor cuota/TIR."
+    status: draft
+    batch: 1
+
+  - case_id: tae-l1h-002
+    split: holdout
+    level: L1
+    category: null
+    primary_behavior: factual_retrieval
+    secondary_behaviors: []
+    domain: deuda
+    entities: {fondo: Apo, activo: Apo4501}
+    periods: ["2026-03"]
+    metrics: [saldo_deuda_uf]
+    source_tables: [dim_credito, raw_saldo_deuda]
+    dev_case_checked_against: [tae-l2-001, tae-l2-003]
+    most_similar_dev_case: tae-l2-001
+    similarity_reason: "Unico solapamiento tematico (deuda) en Dev L1-L3, pero L2-001 es LTV agregado a nivel fondo (PT vs Apo, junio 2026) via derived_kpi; este caso es saldo de un credito individual (Apo4501/Euroamerica) via dim_credito+raw_saldo_deuda, periodo distinto, nivel L1 no L2, sin comparacion entre fondos."
+    status: draft
+    batch: 1
+
+  - case_id: tae-l1h-003
+    split: holdout
+    level: L1
+    category: null
+    primary_behavior: factual_retrieval
+    secondary_behaviors: [insufficient_information]
+    domain: vacancia
+    entities: {fondo: Apo, activo: "Fondo Apoquindo"}
+    periods: ["2025-12"]
+    metrics: [m2_vacantes_oficinas]
+    source_tables: [raw_vacancia_manual]
+    dev_case_checked_against: [tae-l1-002]
+    most_similar_dev_case: tae-l1-002
+    similarity_reason: "Unico dev case de vacancia en L1-L3 es fondo=TRI, vacancia_pct via derived_kpi, junio 2026. Este caso es activo agregado legacy 'Fondo Apoquindo' por tipo_unidad=Oficinas, m2 absolutos (no %, porque el GLA no existe para ese periodo/fuente), diciembre 2025, via raw_vacancia_manual directo. La trampa epistemica (no inventar una tasa sin denominador) no existe en tae-l1-002."
+    status: draft
+    batch: 1
+
+  - case_id: tae-l2h-001
+    split: holdout
+    level: L2
+    category: null
+    primary_behavior: comparison
+    secondary_behaviors: []
+    domain: valor_cuota_tir
+    entities: {fondo: TRI, serie: [A, C]}
+    periods: ["2025-12"]
+    metrics: [dividendo_por_cuota_clp]
+    source_tables: [raw_dividendo]
+    dev_case_checked_against: [tae-l2-001, tae-l2-002, tae-l2-003]
+    most_similar_dev_case: tae-l2-002
+    similarity_reason: "Ambos son L2 comparison de dos entidades del mismo nivel. L2-002 compara NOI mensual entre dos activos de PT en febrero 2026; este caso compara dividendo por cuota entre dos series de TRI en el pago de diciembre 2025 -- dominio, metrica, tipo de entidad comparada (serie vs activo) y periodo todos distintos."
+    status: draft
+    batch: 1
+
+  - case_id: tae-l3h-001
+    split: holdout
+    level: L3
+    category: null
+    primary_behavior: temporal_reasoning
+    secondary_behaviors: [comparison]
+    domain: vacancia
+    entities: {fondo: PT, activo: PT_consolidado}
+    periods: ["2024-12", "2025-12", "2026-06"]
+    metrics: [vacancia_pct_locales_comerciales]
+    source_tables: [raw_vacancia_manual]
+    dev_case_checked_against: [tae-l3-001, tae-l3-002, tae-l3-003, tae-l3-004]
+    most_similar_dev_case: tae-l3-003
+    similarity_reason: "Ambos son L3 con ventana temporal explicita sobre PT. L3-003 es patrimonio neto ESF entre 2 periodos consecutivos (dic25-mar26, EEFF). Este caso es vacancia por tipo_unidad entre 3 periodos NO consecutivos (dic24, dic25, jun26), exige sintetizar una trayectoria no monotona, no solo reportar 2 cifras y su delta."
+    status: draft
+    batch: 1
+
+  - case_id: tae-l3h-002
+    split: holdout
+    level: L3
+    category: null
+    primary_behavior: temporal_reasoning
+    secondary_behaviors: [comparison]
+    domain: noi_er
+    entities: {fondo: TRI, activo: INMOSA}
+    periods: ["2025-01", "2025-02", "2025-03", "2026-01", "2026-02", "2026-03"]
+    metrics: [noi_trimestral_clp]
+    source_tables: [raw_er_activo_line]
+    dev_case_checked_against: [tae-l1-001, tae-l3-001, tae-l3-002, tae-l3-003, tae-l3-004]
+    most_similar_dev_case: tae-l1-001
+    similarity_reason: "Unico dev case de NOI en L1-L3 es tae-l1-001 (Viña Centro, un solo mes, junio 2026, L1 factual retrieval). Este caso es INMOSA (activo no tocado en Dev L1-L3), agregacion trimestral en 2 anos distintos, comparacion YoY, L3 temporal_reasoning -- combinacion de nivel, entidad, grano temporal y comportamiento totalmente distinta."
+    status: draft
+    batch: 1
+
+# --- Slots pendientes (Batch 2-5), declarados ex-ante en HOLDOUT_SET_V1_DESIGN.md ---
+# No se listan aqui como 'cases' hasta que existan como YAML real en el
+# repo privado -- este manifest solo registra casos ya escritos.
