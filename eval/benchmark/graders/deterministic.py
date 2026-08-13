@@ -13,7 +13,7 @@ from eval.benchmark.adapters.base import Turn
 from eval.benchmark.graders import gates
 from eval.benchmark.graders.entities import check_expected_entities, period_matches
 from eval.benchmark.graders.ground_truth import ResolvedFact
-from eval.benchmark.graders.numbers import value_in_text
+from eval.benchmark.graders.numbers import has_numbers, value_in_text
 
 DIMENSIONS = [
     "factual_correctness",
@@ -36,8 +36,15 @@ class DeterministicResult:
     gate_verdict: gates.GateVerdict | None = None
     facts_found: list[str] = field(default_factory=list)
     facts_missing: list[str] = field(default_factory=list)
-    entities_found: dict[str, bool] = field(default_factory=dict)
+    entities_found: dict[str, dict[str, bool]] = field(default_factory=dict)
     period_ok: bool | None = None
+    # True when the answer asserted zero numbers at all (e.g. a clarification
+    # or decline). Bookkeeping only -- it is what lets C1/C2 and the entity/
+    # period components of conversational_quality avoid penalizing a
+    # legitimate non-answer, but it is NOT a verdict on whether declining was
+    # the right call. That judgment stays with clarification_judgment (judge,
+    # still unscored) -- see gates.py module docstring on F1/C4/C5.
+    no_numeric_claim: bool = False
 
     @property
     def is_fatal(self) -> bool:
@@ -90,29 +97,43 @@ def score_turn(
     corrected_entities), passed only on the turn right after a correction.
     """
     result = DeterministicResult()
+    result.no_numeric_claim = not has_numbers(turn.text)
 
     completeness, found, missing = _score_facts(turn, turn_spec, resolved)
     result.facts_found, result.facts_missing = found, missing
     result.dimension_scores["completeness"] = completeness
 
     required = turn_spec.get("required_facts", [])
-    if required:
+    if required and not result.no_numeric_claim:
         result.dimension_scores["factual_correctness"] = len(found) / len(required)
     else:
+        # No required_facts at all, OR the answer asserted no number -- in
+        # the latter case correctness can't be judged (there is no claim to
+        # be right or wrong about); completeness above already reflects that
+        # the fact wasn't delivered.
         result.unscored_dimensions.add("factual_correctness")
 
+    # A legitimate non-answer (clarification/decline where the case allows
+    # it) must not be scored as if it failed to mention the right entity or
+    # period -- neither was ever promised. Whether declining was the *right*
+    # call is still clarification_judgment's job (judge, unscored below).
+    clarification_expected = turn_spec.get("clarification_expected")
+    non_answer = clarification_expected in (True, "acceptable") and result.no_numeric_claim
+
     expected_entities = turn_spec.get("expected_entities") or {}
+    entity_score = None
     if expected_entities:
         result.entities_found = check_expected_entities(turn.text, expected_entities)
-        entity_score = sum(result.entities_found.values()) / len(result.entities_found)
-    else:
-        entity_score = None
+        if not non_answer:
+            all_hits = [hit for ekeys in result.entities_found.values() for hit in ekeys.values()]
+            entity_score = (sum(all_hits) / len(all_hits)) if all_hits else None
 
     expected_period = turn_spec.get("expected_period")
     period_ok = period_matches(turn.text, expected_period) if expected_period else None
     result.period_ok = period_ok
+    period_component = None if non_answer else (1.0 if period_ok else (0.0 if period_ok is False else None))
 
-    conv_components = [v for v in (entity_score, 1.0 if period_ok else (0.0 if period_ok is False else None)) if v is not None]
+    conv_components = [v for v in (entity_score, period_component) if v is not None]
     if conv_components:
         result.dimension_scores["conversational_quality"] = sum(conv_components) / len(conv_components)
     else:
