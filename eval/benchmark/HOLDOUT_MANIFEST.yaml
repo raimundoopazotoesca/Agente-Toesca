@@ -13,24 +13,24 @@ total_tce: 7
 total_tce_turns: 18
 
 cases:
-  - {case_id: tae-l1h-001, split: holdout, level: L1, status: reviewed, batch: 1}
-  - {case_id: tae-l1h-002, split: holdout, level: L1, status: reviewed, batch: 1}
-  - {case_id: tae-l1h-003, split: holdout, level: L1, status: reviewed, batch: 1}
-  - {case_id: tae-l2h-001, split: holdout, level: L2, status: reviewed, batch: 1}
-  - {case_id: tae-l3h-001, split: holdout, level: L3, status: reviewed, batch: 1}
-  - {case_id: tae-l3h-002, split: holdout, level: L3, status: reviewed, batch: 1}
-  - {case_id: tae-l4h-001, split: holdout, level: L4, status: reviewed, batch: 2}
-  - {case_id: tae-l4h-002, split: holdout, level: L4, status: reviewed, batch: 2}
-  - {case_id: tae-l4h-003, split: holdout, level: L4, status: reviewed, batch: 2}
-  - {case_id: tae-l5h-001, split: holdout, level: L5, status: reviewed, batch: 2}
-  - {case_id: tae-l5h-002, split: holdout, level: L5, status: reviewed, batch: 2}
-  - {case_id: tae-l6h-001, split: holdout, level: L6, status: reviewed, batch: 2}
-  - {case_id: tae-l8h-001, split: holdout, level: L8, status: reviewed, batch: 3}
-  - {case_id: tae-l8h-002, split: holdout, level: L8, status: reviewed, batch: 3}
-  - {case_id: tce-ambiguityh-001, split: holdout, level: null, status: reviewed, batch: 4}
-  - {case_id: tce-entitycorrectionh-001, split: holdout, level: null, status: reviewed, batch: 4}
-  - {case_id: tce-metriccorrectionh-001, split: holdout, level: null, status: reviewed, batch: 4}
-  - {case_id: tce-multianalysish-001, split: holdout, level: null, status: reviewed, batch: 5}
-  - {case_id: tce-multianalysish-002, split: holdout, level: null, status: reviewed, batch: 5}
-  - {case_id: tce-challengeh-001, split: holdout, level: null, status: reviewed, batch: 5}
-  - {case_id: tce-causalh-001, split: holdout, level: null, status: reviewed, batch: 5}
+  - {case_id: tae-l1h-001, split: holdout, level: L1, status: frozen, batch: 1}
+  - {case_id: tae-l1h-002, split: holdout, level: L1, status: frozen, batch: 1}
+  - {case_id: tae-l1h-003, split: holdout, level: L1, status: frozen, batch: 1}
+  - {case_id: tae-l2h-001, split: holdout, level: L2, status: frozen, batch: 1}
+  - {case_id: tae-l3h-001, split: holdout, level: L3, status: frozen, batch: 1}
+  - {case_id: tae-l3h-002, split: holdout, level: L3, status: frozen, batch: 1}
+  - {case_id: tae-l4h-001, split: holdout, level: L4, status: frozen, batch: 2}
+  - {case_id: tae-l4h-002, split: holdout, level: L4, status: frozen, batch: 2}
+  - {case_id: tae-l4h-003, split: holdout, level: L4, status: frozen, batch: 2}
+  - {case_id: tae-l5h-001, split: holdout, level: L5, status: frozen, batch: 2}
+  - {case_id: tae-l5h-002, split: holdout, level: L5, status: frozen, batch: 2}
+  - {case_id: tae-l6h-001, split: holdout, level: L6, status: frozen, batch: 2}
+  - {case_id: tae-l8h-001, split: holdout, level: L8, status: frozen, batch: 3}
+  - {case_id: tae-l8h-002, split: holdout, level: L8, status: frozen, batch: 3}
+  - {case_id: tce-ambiguityh-001, split: holdout, level: null, status: frozen, batch: 4}
+  - {case_id: tce-entitycorrectionh-001, split: holdout, level: null, status: frozen, batch: 4}
+  - {case_id: tce-metriccorrectionh-001, split: holdout, level: null, status: frozen, batch: 4}
+  - {case_id: tce-multianalysish-001, split: holdout, level: null, status: frozen, batch: 5}
+  - {case_id: tce-multianalysish-002, split: holdout, level: null, status: frozen, batch: 5}
+  - {case_id: tce-challengeh-001, split: holdout, level: null, status: frozen, batch: 5}
+  - {case_id: tce-causalh-001, split: holdout, level: null, status: frozen, batch: 5}
