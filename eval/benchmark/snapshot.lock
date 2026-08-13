@@ -1,0 +1,19 @@
+{
+  "benchmark_version": "v1",
+  "benchmark_today": "2026-08-13",
+  "source_path": "memory/agente_toesca_v2.db",
+  "git_commit": "c9b1dd543b275b8d1ac7c7569bc95b126b319e4c",
+  "blob_sha": "62096848256f276bab3542510206075085e36f31",
+  "sha256": "592399a8e34c7111e4a9aaa84dd0002532d7a24ffb26f27c90e186647294125c",
+  "pinned_at": "2026-08-13",
+  "row_counts": {
+    "dim_fondo": 3,
+    "dim_activo": 17,
+    "raw_er_activo_line": 15987,
+    "raw_vacancia_manual": 3932,
+    "raw_rent_roll_line": 2230,
+    "raw_eeff_line": 36793,
+    "derived_kpi": 14599
+  },
+  "note": "Snapshot + benchmark_today are one reproducible version. Do not refresh in place; new data or a new date means v2."
+}
