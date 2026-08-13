@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from eval.round_b.b0 import B0Runner, ProviderSpec, classify_error, default_specs, synthetic_fixtures
+from eval.round_b.b0 import B0Runner, ProviderSpec, classify_error, default_specs, load_b0_env, synthetic_fixtures
 
 
 def test_synthetic_fixtures_are_generic_and_contain_all_probe_inputs():
@@ -37,3 +37,20 @@ def test_default_catalog_preserves_requested_models_without_substitution():
     assert specs["qwen"] == "qwen3.8-max"
     assert specs["kimi"] == "kimi-k3"
     assert specs["groq"] == "openai/gpt-oss-120b"
+
+
+def test_external_env_file_is_loaded_without_exposing_its_secret(tmp_path):
+    secret = "do-not-report-this-value"
+    env_file = tmp_path / "local.env"
+    env_file.write_text(f"OPENAI_API_KEY={secret}\n", encoding="utf-8")
+    env = load_b0_env({"B0_ENV_FILE": str(env_file)})
+    result = B0Runner(env=env).run_one(ProviderSpec("demo", "demo-model", "OPENAI_API_KEY", "openai"))
+    assert result.probes["credential"].status == "present"
+    assert secret not in repr(result)
+
+
+def test_http_error_is_sanitized_of_authorization_header():
+    secret = "Bearer private-token"
+    result = B0Runner(env={}).sanitize_error(f"401 Authorization: {secret}")
+    assert "private-token" not in result
+    assert "Authorization" not in result

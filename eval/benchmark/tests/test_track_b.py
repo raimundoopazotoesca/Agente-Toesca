@@ -209,7 +209,10 @@ def test_two_sessions_do_not_share_history(sandbox):
 def test_track_b_satisfies_adapter_contract(sandbox):
     """Real construction (loads semantic context + schema summary against
     the real sandbox), no mocked chat needed for this check."""
-    adapter = TrackBFrontier(sandbox=sandbox)
+    adapter = TrackBFrontier(
+        sandbox=sandbox,
+        provider={"api_key": "offline-test-key", "base_url": "https://example.invalid/v1", "model": _MODEL},
+    )
     assert adapter.name == "track_b_frontier"
     session = adapter.new_session("contract-check")
     assert hasattr(session, "ask")

@@ -4,8 +4,37 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Mapping
+
+from dotenv import dotenv_values
+
+
+_SECRET_ASSIGNMENT = re.compile(r"(?i)(authorization\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+")
+
+
+def load_b0_env(base_env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Load process env plus an explicitly selected *external* dotenv file.
+
+    The path is opt-in via B0_ENV_FILE and files inside this worktree are
+    rejected, so secrets are never copied or implicitly discovered.
+    """
+    env = dict(os.environ if base_env is None else base_env)
+    path_value = env.get("B0_ENV_FILE")
+    if not path_value:
+        return env
+    path = Path(path_value).expanduser().resolve()
+    repo_root = Path(__file__).resolve().parents[2]
+    if path == repo_root / ".env" or repo_root in path.parents:
+        raise ValueError("B0_ENV_FILE must point outside the Round B worktree")
+    if not path.is_file():
+        raise ValueError("B0_ENV_FILE does not exist")
+    for name, value in dotenv_values(path).items():
+        if name and value is not None and not env.get(name):
+            env[name] = value
+    return env
 
 
 def synthetic_fixtures() -> dict[str, object]:
@@ -106,6 +135,11 @@ class B0Runner:
         result.probes["credential"] = Probe("present")
         return result
 
+    @staticmethod
+    def sanitize_error(message: str) -> str:
+        """Keep diagnostics useful without allowing auth values into results."""
+        return _SECRET_ASSIGNMENT.sub("[redacted authorization]", message or "")
+
     def record_metadata(self, spec: ProviderSpec, opaque_metadata: str | bytes | None) -> dict[str, object]:
         if opaque_metadata is None:
             return {"present": False}
@@ -115,7 +149,7 @@ class B0Runner:
 
 def main() -> None:
     """Credential-only B0 pass; network adapters activate only after keys exist."""
-    runner = B0Runner()
+    runner = B0Runner(env=load_b0_env())
     rows = []
     for spec in default_specs():
         result = runner.run_one(spec)
