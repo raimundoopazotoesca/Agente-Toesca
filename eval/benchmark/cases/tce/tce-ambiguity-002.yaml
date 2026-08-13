@@ -1,0 +1,44 @@
+id: tce-ambiguity-002
+suite: conversation
+category: ambiguity_reasonable_inference
+split: dev
+notes: >
+  Batch 3 (contexto suficientemente claro -- NO debe pedir aclaración).
+  "¿Y cómo se compara con el trimestre anterior?" hereda entidad (TRI) y
+  métrica (LTV) del turno 1 sin ambigüedad real, y "trimestre anterior"
+  desde 2026-06 tiene una lectura estándar única: 2026-03 (el cierre de
+  trimestre inmediatamente anterior). No hay una segunda interpretación
+  plausible que cambie la respuesta -- por eso clarification aquí sería
+  fricción injustificada, distinto de tce-ambiguity-001.
+
+turns:
+  - question: "¿Cuál es el LTV de TRI a junio de 2026?"
+    required_facts:
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_tri_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+
+  - question: "¿Y cómo se compara con el trimestre anterior?"
+    required_facts:
+      - {ref: ltv_tri_2026_03, tolerance_pct: 1.0}
+    primary_fact: ltv_tri_2026_03
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-03"}
+    clarification_expected: false
+    forbidden_claims:
+      - "preguntar de nuevo la entidad o la métrica (TRI y LTV siguen siendo el contexto, sin ambigüedad)"
+      - "pedir que el usuario especifique qué trimestre quiere decir (2026-03 es la lectura estándar única de 'el trimestre anterior' desde junio 2026)"
+    expected_behavior:
+      - inferir el periodo correcto (2026-03) sin pedir aclaración, manteniendo entidad (TRI) y métrica (LTV) del turno anterior
+      - comparar ambos valores (junio vs marzo 2026)
+    rubric_focus: [clarification_judgment, conversational_quality, factual_correctness]
+
+ground_truth_refs:
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  ltv_tri_2026_03:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-03'"
+    unit: pct

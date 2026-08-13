@@ -1,0 +1,55 @@
+id: tce-ambiguity-003
+suite: conversation
+category: ambiguity_exploratory
+split: dev
+notes: >
+  Batch 3 (pregunta exploratoria sin KPI explícito -- NO debe exigir que
+  el usuario especifique una métrica). "¿Cómo viene Viña Centro
+  últimamente?" no nombra un KPI, pero un buen analista puede avanzar
+  seleccionando evidencia relevante (NOI mensual reciente, vacancia
+  ~0.78%, prácticamente sin variación) en vez de devolver la pregunta.
+  Verificado antes de escribir el caso: NOI fluctúa entre ~10k y ~15k UF
+  sin tendencia clara de deterioro (no es un caso con una única cifra
+  "correcta" -- se evalúan required_facts como piso mínimo, no como el
+  total de lo que debe decir). El turno 2 es un follow-up natural sobre
+  vacancia que también debe resolverse sin pedir aclaración.
+
+turns:
+  - question: "¿Cómo viene Viña Centro últimamente?"
+    acceptable_facts:
+      - {ref: noi_vina_2026_06, tolerance_pct: 5.0}
+      - {ref: vac_pct_vina_2026_06, tolerance_pct: 20.0}
+    clarification_expected: false
+    forbidden_claims:
+      - "pedirle al usuario que especifique qué métrica quiere antes de responder (la pregunta es exploratoria, no requiere un KPI explícito para avanzar)"
+      - "describir una tendencia de deterioro sostenida que no está respaldada por los datos (el NOI fluctúa pero no cae de forma sostenida, y la vacancia es marginal)"
+    expected_behavior:
+      - avanzar sin pedir que el usuario nombre una métrica, seleccionando evidencia relevante (ej. NOI reciente, nivel de vacancia)
+      - dar una lectura general del estado del activo respaldada en al menos un dato concreto
+    rubric_focus: [clarification_judgment, analytical_quality, output_usefulness]
+
+  - question: "¿Y la vacancia se ha movido mucho?"
+    required_facts:
+      - {ref: vac_pct_vina_2026_06, tolerance_pct: 20.0}
+    primary_fact: vac_pct_vina_2026_06
+    expected_entities: {fondo: "TRI", activo: "Viña Centro"}
+    clarification_expected: false
+    forbidden_claims:
+      - "pedir de nuevo la entidad (Viña Centro sigue siendo el contexto del turno anterior)"
+      - "describir la vacancia como alta o preocupante (es marginal, bajo 1%)"
+    expected_behavior:
+      - responder con el nivel de vacancia reciente de Viña Centro, heredando la entidad del turno anterior
+      - caracterizar correctamente el nivel como bajo/marginal, no como un problema
+    rubric_focus: [factual_correctness, conversational_quality]
+
+ground_truth_refs:
+  noi_vina_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Viña Centro' AND periodo = '2026-06'"
+    unit: UF
+  vac_pct_vina_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Viña Centro' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+    description: "~0.78%, marginal."

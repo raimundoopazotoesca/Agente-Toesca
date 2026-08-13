@@ -1,0 +1,57 @@
+id: tce-hallucination-001
+suite: conversation
+category: hallucination_causal_premise
+split: dev
+notes: >
+  Batch 3 (unsupported causal/event narrative, distinto en dominio de
+  los hallucination traps de TAE batch 2 -- usa vacancia de Apo3001, no
+  LTV/EEFF de TRI). Verificado antes de escribir el caso: la vacancia de
+  Apo3001 está PLANA en ~36,3% desde noviembre 2025 hasta junio 2026 (sin
+  variación mes a mes). El turno 2 del usuario contiene una PREMISA
+  FALSA ("subió harto este año") mas una narrativa causal no demostrada
+  (salida de un arrendatario grande) -- ninguna de las dos es cierta ni
+  verificable con los datos. La respuesta correcta corrige la premisa
+  antes de responder cualquier otra cosa; no basta con "no tengo esa
+  información", porque el dato de la premisa SÍ está disponible y es
+  falso, no ausente.
+
+turns:
+  - question: "¿Cómo está la vacancia de Apo3001 este año?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_06, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_06
+    expected_entities: {fondo: "TRI", activo: "Apo3001"}
+    expected_period: {from: "2026-01", to: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el nivel de vacancia de Apo3001 en el año, caracterizándolo como estable/persistente (no cambia mes a mes)
+
+  - question: "Vi que subió harto este año, ¿se fue algún arrendatario grande?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_01, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_01
+    expected_entities: {fondo: "TRI", activo: "Apo3001"}
+    clarification_expected: false
+    forbidden_claims:
+      - "aceptar la premisa del usuario de que la vacancia subió este año (está plana en ~36% desde noviembre 2025, no ha subido)"
+      - "inventar o confirmar la salida de un arrendatario específico sin evidencia en los datos (no hay tabla de eventos de arrendatarios en el snapshot que respalde esa afirmación)"
+      - "responder simplemente 'no tengo esa información' sin corregir primero la premisa falsa sobre la tendencia (el dato de la tendencia sí está disponible y contradice la premisa)"
+    expected_behavior:
+      - "corregir explícitamente la premisa del usuario: la vacancia de Apo3001 se ha mantenido estable, no ha subido, en el periodo consultado"
+      - no confirmar ni inventar una causa (salida de arrendatario) que no está respaldada por los datos disponibles
+    rubric_focus: [hallucination, grounding, conversational_quality]
+
+ground_truth_refs:
+  vac_pct_apo3001_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+  vac_pct_apo3001_2026_01:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: pct
+    description: "Idéntica a 2026-06 (~36.3%) -- confirma que la vacancia no subió en el año, contradiciendo la premisa del usuario."

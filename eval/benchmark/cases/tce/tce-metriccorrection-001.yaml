@@ -1,0 +1,44 @@
+id: tce-metriccorrection-001
+suite: conversation
+category: metric_correction
+split: dev
+notes: >
+  Batch 3 (metric correction). Misma entidad (PT) y periodo (2026-06) en
+  ambos turnos; el usuario corrige qué métrica quería (LTV -> NOI
+  mensual). La trampa es que el sistema mantenga silenciosamente el LTV
+  ya entregado en vez de responder la métrica nueva -- por eso
+  forbidden_claims explícitamente prohíbe repetir el LTV como si
+  respondiera la pregunta. Entidad y periodo SE MANTIENEN; solo la
+  métrica se REEMPLAZA.
+
+turns:
+  - question: "¿Cuál es el LTV de PT a junio de 2026?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+
+  - question: "En realidad no era el LTV lo que necesitaba, era el NOI mensual."
+    required_facts:
+      - {ref: noi_pt_2026_06, tolerance_pct: 2.0}
+    primary_fact: noi_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "repetir o reafirmar el LTV como si fuera la respuesta a la pregunta corregida"
+      - "pedir de nuevo la entidad o el periodo (siguen siendo PT y 2026-06, no cambiaron)"
+    expected_behavior:
+      - reemplazar la métrica (LTV -> NOI mensual) mientras mantiene entidad (PT) y periodo (2026-06)
+      - responder con el NOI mensual de PT en 2026-06, no con el LTV
+    rubric_focus: [conversational_quality, factual_correctness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  noi_pt_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: UF

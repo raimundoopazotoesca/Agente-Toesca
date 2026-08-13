@@ -1,0 +1,45 @@
+id: tce-topicreset-001
+suite: conversation
+category: topic_reset
+split: dev
+notes: >
+  Batch 3 (explicit topic reset). Turno 1 establece fondo=PT,
+  métrica=LTV, periodo=2026-06. Turno 2 es un cambio de tema explícito
+  y real (fondo, métrica y dominio distintos) -- no una corrección.
+  TODO el contexto del turno 1 debe DESCARTARSE: no debe heredar fondo,
+  métrica ni periodo. La trampa específica es que "junio de 2026" no
+  debe filtrarse a la pregunta nueva, que no tiene periodo (es un conteo
+  atemporal de dim_activo).
+
+turns:
+  - question: "¿Cuál es el LTV de PT a junio de 2026?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+
+  - question: "Cambiando de tema completamente: ¿cuántos activos tiene el fondo Apo?"
+    required_facts:
+      - {ref: n_activos_apo, tolerance_abs: 0}
+    primary_fact: n_activos_apo
+    expected_entities: {fondo: "Apo"}
+    clarification_expected: false
+    forbidden_claims:
+      - "mencionar o mezclar el LTV de PT en la respuesta (el tema cambió por completo)"
+      - "asumir que la pregunta se refiere a junio de 2026 (el conteo de activos no tiene periodo, y el usuario no lo mencionó)"
+      - "responder sobre PT en vez de Apo"
+    expected_behavior:
+      - descartar por completo el contexto del turno anterior (fondo PT, métrica LTV, periodo 2026-06)
+      - responder únicamente con el conteo de activos de Apo
+    rubric_focus: [conversational_quality, factual_correctness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  n_activos_apo:
+    sql: "SELECT COUNT(*) FROM dim_activo WHERE fondo_key = 'Apo'"
+    unit: count
+    description: "2 activos (Apo4501, Apo4700)."

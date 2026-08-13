@@ -1,0 +1,46 @@
+id: tce-entitycorrection-001
+suite: conversation
+category: entity_correction
+split: dev
+notes: >
+  Batch 3 (entity correction). Turno 1 establece fondo=PT, métrica=LTV,
+  periodo=2026-06. Turno 2 el usuario corrige la entidad ("me refería a
+  Apo") -- debe REEMPLAZAR fondo PT->Apo, MANTENER métrica (LTV) y
+  periodo (2026-06) sin que el usuario los repita, y no debe seguir
+  hablando de PT ni mezclar cifras de ambos fondos en la respuesta final.
+  No se evalúa que el turno 2 repita literalmente "LTV" o "2026-06" --
+  se evalúa que la cifra final sea la correcta para Apo en ese periodo.
+
+turns:
+  - question: "¿Cuál es el LTV de PT a junio de 2026?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    notes: "Establece el contexto inicial: fondo PT, metrica LTV, periodo 2026-06."
+
+  - question: "Perdón, en realidad me refería a Apo, no a PT."
+    required_facts:
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_apo_2026_06
+    expected_entities: {fondo: "Apo"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "seguir respondiendo sobre PT, o reportar el LTV de PT como si fuera el de Apo"
+      - "pedir de nuevo la métrica o el periodo (ya están establecidos por el turno anterior y siguen siendo razonables)"
+      - "mezclar o promediar las cifras de PT y Apo en la respuesta"
+    expected_behavior:
+      - reemplazar la entidad (PT -> Apo) mientras mantiene la métrica (LTV) y el periodo (2026-06) heredados del turno anterior
+      - responder con el LTV de Apo, no el de PT
+    rubric_focus: [conversational_quality, factual_correctness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct

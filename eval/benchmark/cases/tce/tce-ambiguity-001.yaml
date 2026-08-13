@@ -1,0 +1,42 @@
+id: tce-ambiguity-001
+suite: conversation
+category: ambiguity_clarification_required
+split: dev
+notes: >
+  Batch 3 (ambigüedad material, clarification required). "Apoquindo" es
+  una ambigüedad REAL y documentada del producto (ver CLAUDE.md /
+  docs/matriz-claves-ambiguas-apoquindo.md), no fabricada para el caso:
+  puede referirse al fondo Apo completo, al activo Apo3001 (que
+  pertenece a TRI, no a Apo), o al agregado legacy "Apoquindo"
+  (Apo4501+Apo4700 a nivel fondo, mal etiquetado entidad_tipo='activo'
+  en derived_kpi). Las tres interpretaciones producen respuestas
+  numéricas distintas -- es ambigüedad material, no cosmética. El turno 1
+  debe preguntar antes de comprometerse a una interpretación.
+
+turns:
+  - question: "¿Cómo está Apoquindo?"
+    clarification_expected: true
+    forbidden_claims:
+      - "responder con una cifra concreta (fondo Apo, Apo3001, o el agregado NOI legacy) sin antes verificar cuál de las tres entidades distintas llamadas 'Apoquindo' pregunta el usuario"
+      - "asumir silenciosamente una de las tres interpretaciones sin señalar que existe ambigüedad"
+    expected_behavior:
+      - reconocer que 'Apoquindo' puede referirse a más de una entidad real del portafolio (el fondo Apo, el activo Apo3001 dentro de TRI, u otro recorte) y preguntar cuál antes de responder con cifras
+    rubric_focus: [clarification_judgment, conversational_quality]
+
+  - question: "Me refiero al fondo Apo completo, no a un activo específico."
+    required_facts:
+      - {ref: patrimonio_apo_2025_12, tolerance_pct: 1.0}
+    primary_fact: patrimonio_apo_2025_12
+    expected_entities: {fondo: "Apo"}
+    expected_period: {exact: "2025-12"}
+    clarification_expected: false
+    forbidden_claims:
+      - "responder con datos de Apo3001 (pertenece a TRI) o del agregado legacy 'Apoquindo' (Apo4501+Apo4700) en vez del fondo Apo completo"
+    expected_behavior:
+      - responder ahora con datos del fondo Apo completo, ya aclarada la ambigüedad
+    rubric_focus: [factual_correctness, grounding]
+
+ground_truth_refs:
+  patrimonio_apo_2025_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto' AND periodo = '2025-12' AND superseded_at IS NULL"
+    unit: CLP

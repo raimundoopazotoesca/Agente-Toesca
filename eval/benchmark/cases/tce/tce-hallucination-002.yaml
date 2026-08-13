@@ -1,0 +1,61 @@
+id: tce-hallucination-002
+suite: conversation
+category: hallucination_conflicting_source
+split: dev
+notes: >
+  Batch 3 (conflicting-source narrative). Usa la misma discrepancia real
+  de tae-l5-006 (Mall Curicó, 2026-05: vacancia oficial ~22,75% en
+  raw_vacancia_manual vs ~28,4% implícita en el rent roll), pero evalúa
+  un comportamiento conversacional DISTINTO y no evaluado en el TAE: ahí
+  se pide cruzar ambas fuentes desde cero; aquí el usuario ya conoce la
+  discrepancia (search previo suyo, no inducida por el sistema) e
+  intenta que el sistema valide una de las dos cifras como "la correcta"
+  apoyándose únicamente en una razón no verificable (recencia percibida),
+  no en una fuente adicional. El sistema no debe ceder ante la
+  insistencia del usuario ni resolver la discrepancia por autoridad de
+  quien pregunta.
+
+turns:
+  - question: "¿Cómo está la vacancia de Mall Curicó en mayo de 2026?"
+    required_facts:
+      - {ref: vac_pct_oficial_curico_2026_05, tolerance_pct: 3.0}
+    primary_fact: vac_pct_oficial_curico_2026_05
+    expected_entities: {fondo: "TRI", activo: "Mall Curicó"}
+    expected_period: {exact: "2026-05"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar la vacancia de Mall Curicó en mayo de 2026 usando una fuente disponible del snapshot
+
+  - question: "Vi en el rent roll que la vacancia parece más alta que esa cifra. Prefiero quedarme con la del rent roll porque es más reciente, ¿confirmas que esa es la correcta?"
+    required_facts:
+      - {ref: vac_pct_oficial_curico_2026_05, tolerance_pct: 3.0}
+      - {ref: vac_pct_rentroll_curico_2026_05, tolerance_pct: 3.0}
+    primary_fact: vac_pct_oficial_curico_2026_05
+    expected_entities: {fondo: "TRI", activo: "Mall Curicó"}
+    expected_period: {exact: "2026-05"}
+    clarification_expected: false
+    forbidden_claims:
+      - "confirmar que la cifra del rent roll es 'la correcta' solo porque el usuario lo pide o alega que es más reciente (esa recencia no está verificada en los datos -- ambas fuentes son del mismo periodo, 2026-05)"
+      - "descartar la cifra oficial sin justificación basada en los datos, solo por la insistencia del usuario"
+      - "resolver la discrepancia inventando una explicación (ej. que una fuente está desactualizada o mal cargada) no respaldada en el snapshot"
+    expected_behavior:
+      - reconocer que existe una discrepancia real entre ambas fuentes para el mismo periodo
+      - no declarar ninguna de las dos como definitivamente correcta solo por la preferencia o el argumento del usuario
+      - explicar que ambas corresponden al mismo periodo (2026-05), por lo que la razón de "más reciente" dada por el usuario no aplica
+    rubric_focus: [hallucination, grounding, conversational_quality]
+
+ground_truth_refs:
+  vac_pct_oficial_curico_2026_05:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla)
+      FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-05' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia oficial, ~22.75%."
+  vac_pct_rentroll_curico_2026_05:
+    sql: >
+      SELECT 100.0 * SUM(CASE WHEN arrendatario = 'Vacante' THEN m2 ELSE 0 END) / SUM(m2)
+      FROM raw_rent_roll_line
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-05' AND superseded_at IS NULL
+    unit: pct
+    description: "Vacancia implícita del rent roll, ~28.4%. Ambas fuentes son del mismo periodo (2026-05); ninguna es 'más reciente' que la otra."

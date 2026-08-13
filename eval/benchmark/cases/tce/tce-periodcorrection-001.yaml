@@ -1,0 +1,43 @@
+id: tce-periodcorrection-001
+suite: conversation
+category: period_correction
+split: dev
+notes: >
+  Batch 3 (period correction). Misma entidad (Viña Centro) y métrica
+  (NOI mensual) en ambos turnos; el usuario corrige el periodo (abril ->
+  mayo 2026). Entidad y métrica SE MANTIENEN; solo el periodo se
+  REEMPLAZA. Distinto del follow-up implícito de tce-followup-001 (que
+  usa "el mes anterior" sin decir un mes explícito) -- aquí el usuario
+  corrige explícitamente el mes que dijo antes.
+
+turns:
+  - question: "¿Cuál fue el NOI de Viña Centro en abril de 2026?"
+    required_facts:
+      - {ref: noi_vina_2026_04, tolerance_pct: 2.0}
+    primary_fact: noi_vina_2026_04
+    expected_entities: {fondo: "TRI", activo: "Viña Centro"}
+    expected_period: {exact: "2026-04"}
+    clarification_expected: false
+
+  - question: "Perdón, quise decir mayo, no abril."
+    required_facts:
+      - {ref: noi_vina_2026_05, tolerance_pct: 2.0}
+    primary_fact: noi_vina_2026_05
+    expected_entities: {fondo: "TRI", activo: "Viña Centro"}
+    expected_period: {exact: "2026-05"}
+    clarification_expected: false
+    forbidden_claims:
+      - "seguir respondiendo con el NOI de abril, o presentarlo como si fuera el de mayo"
+      - "pedir de nuevo la entidad (Viña Centro no cambió)"
+    expected_behavior:
+      - reemplazar el periodo (abril -> mayo 2026) mientras mantiene entidad (Viña Centro) y métrica (NOI mensual)
+      - responder con el NOI de mayo, no el de abril
+    rubric_focus: [conversational_quality, factual_correctness]
+
+ground_truth_refs:
+  noi_vina_2026_04:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Viña Centro' AND periodo = '2026-04'"
+    unit: UF
+  noi_vina_2026_05:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Viña Centro' AND periodo = '2026-05'"
+    unit: UF
