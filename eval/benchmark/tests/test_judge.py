@@ -320,6 +320,29 @@ def test_run_judge_gate_triggered_requires_justification():
     assert result.attempts == 2
 
 
+def test_run_judge_tolerates_vestigial_empty_justification_on_untriggered_gate():
+    """Some models emit justification/evidence as "" on a non-triggered
+    gate or not_applicable dimension instead of omitting the key -- that's
+    semantically complete (nothing to justify), so it should not count as
+    invalid output. This is a harness-robustness fix, not a rubric change."""
+    payload = _valid_payload()
+    payload["gates"]["F1_fabrication"] = {"triggered": False, "justification": "", "evidence": "", "confidence": 0.9}
+    chat_fn = _fake_chat([json.dumps(payload)])
+    result = judge.run_judge(_minimal_input(), chat_fn, model="test-model")
+    assert not result.judge_failed
+    assert result.gates["F1_fabrication"]["triggered"] is False
+
+
+def test_run_judge_still_rejects_empty_justification_when_actually_required():
+    """The tolerance above must not swallow a genuine violation -- an empty
+    justification on a TRIGGERED gate is still invalid."""
+    bad = _valid_payload()
+    bad["gates"]["F1_fabrication"] = {"triggered": True, "justification": "", "evidence": "algo", "confidence": 0.9}
+    chat_fn = _fake_chat([json.dumps(bad), json.dumps(_valid_payload())])
+    result = judge.run_judge(_minimal_input(), chat_fn, model="test-model")
+    assert result.attempts == 2  # first rejected, second accepted
+
+
 def test_run_judge_extracts_json_even_with_surrounding_prose():
     payload = _valid_payload()
     wrapped = f"Aqui esta mi analisis:\n```json\n{json.dumps(payload)}\n```\nListo."

@@ -253,6 +253,33 @@ def _describe_schema_error(exc: jsonschema.ValidationError) -> str:
     return f"En '{path}': {exc.message}"
 
 
+def _drop_vestigial_empty_strings(payload: dict[str, Any]) -> None:
+    """Some models emit `justification`/`evidence` as `""` on a gate that
+    isn't triggered, or a dimension that's not_applicable, instead of
+    omitting the key -- harmless (those fields aren't required in that
+    state), but the schema's minLength:1 correctly rejects an empty string
+    when the key is present at all. Drop such vestigial empty keys before
+    validation rather than rejecting output that's semantically complete.
+    Only touches keys that are optional given the object's own triggered/
+    not_applicable flag; never touches score/confidence or anything
+    required in the current state.
+    """
+    for dim in payload.get("dimensions", {}).values():
+        if not isinstance(dim, dict):
+            continue
+        if dim.get("not_applicable"):
+            for key in ("justification", "evidence"):
+                if dim.get(key) == "":
+                    del dim[key]
+    for gate in payload.get("gates", {}).values():
+        if not isinstance(gate, dict):
+            continue
+        if not gate.get("triggered"):
+            for key in ("justification", "evidence"):
+                if gate.get(key) == "":
+                    del gate[key]
+
+
 def _validate_and_parse(text: str, schema: dict[str, Any]) -> dict[str, Any]:
     match = _JSON_BLOCK_RE.search(text or "")
     if not match:
@@ -261,6 +288,8 @@ def _validate_and_parse(text: str, schema: dict[str, Any]) -> dict[str, Any]:
         payload = json.loads(match.group(0))
     except json.JSONDecodeError as exc:
         raise ValueError(f"JSON invalido: {exc}. Revisa comas, comillas y llaves.") from exc
+    if isinstance(payload, dict):
+        _drop_vestigial_empty_strings(payload)
     try:
         jsonschema.validate(payload, schema)
     except jsonschema.ValidationError as exc:
