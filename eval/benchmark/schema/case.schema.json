@@ -130,7 +130,7 @@
       "additionalProperties": false,
       "properties": {
         "sql": {"type": "string", "minLength": 1},
-        "unit": {"enum": ["CLP", "UF", "pct", "m2", "count", "date", "text"]},
+        "unit": {"enum": ["CLP", "UF", "pct", "m2", "count", "ratio", "date", "text"]},
         "description": {"type": "string"}
       }
     },

@@ -73,9 +73,9 @@ ground_truth_refs:
     unit: pct
   dscr_apo_2026_06:
     sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'Apo' AND periodo = '2026-06'"
-    unit: count
+    unit: ratio
     description: "~0.376, no validado -- ver PENDING.md / tae-l8-002."
   dscr_pt_2026_06:
     sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'PT' AND periodo = '2026-06'"
-    unit: count
+    unit: ratio
     description: "~0.604, no validado."

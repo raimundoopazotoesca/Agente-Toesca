@@ -35,5 +35,5 @@ turns:
 ground_truth_refs:
   dscr_tri_2026_06:
     sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'TRI' AND periodo = '2026-06'"
-    unit: count
+    unit: ratio
     description: "DSCR TRI 2026-06 (~0.61). Dato existente en derived_kpi pero no validado contra CDG -- ver PENDING.md."
