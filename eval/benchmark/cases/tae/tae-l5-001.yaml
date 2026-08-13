@@ -1,0 +1,50 @@
+id: tae-l5-001
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Investigation/agentic: concentracion de NOI por activo dentro de TRI.
+  Requiere consultar varios activos (no una sola query cerrada), rankear,
+  y cuantificar la concentracion -- no hay un unico SQL esperado. Viña
+  Centro concentra ~51% del NOI de los 4 activos de TRI con dato en
+  2026-06 (Apo3001 no tiene noi_mensual para ese periodo en el snapshot
+  pinneado -- no se exige mencionarlo, y no se prohibe si el sistema lo
+  investiga y reporta correctamente que no hay dato).
+
+turns:
+  - question: "Investiga si existe concentración de riesgo por activo en el fondo TRI: ¿qué activo representa la mayor parte del NOI en junio de 2026?"
+    required_facts:
+      - {ref: noi_vina_2026_06, tolerance_pct: 2.0}
+      - {ref: noi_inmosa_2026_06, tolerance_pct: 2.0}
+    acceptable_facts:
+      - {ref: noi_sucden_2026_06, tolerance_pct: 2.0}
+      - {ref: noi_mallcurico_2026_06, tolerance_pct: 2.0}
+    primary_fact: noi_vina_2026_06
+    expected_entities: {fondo: "TRI", activo: "Viña Centro"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [derived_kpi]
+    forbidden_claims:
+      - "afirmar que el NOI esta distribuido de forma pareja entre los activos de TRI"
+    expected_behavior:
+      - consultar el NOI de multiples activos de TRI, no solo uno
+      - identificar a Viña Centro como el activo que mas concentra NOI (aprox. mitad del total entre los activos con dato)
+      - caracterizar el nivel de concentracion (alto/significativo), no solo listar numeros
+    rubric_focus: [investigation_quality, analytical_quality, grounding]
+
+ground_truth_refs:
+  noi_vina_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Viña Centro' AND periodo = '2026-06'"
+    unit: UF
+  noi_inmosa_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'INMOSA' AND periodo = '2026-06'"
+    unit: UF
+  noi_sucden_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Sucden' AND periodo = '2026-06'"
+    unit: UF
+  noi_mallcurico_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Mall Curicó' AND periodo = '2026-06'"
+    unit: UF

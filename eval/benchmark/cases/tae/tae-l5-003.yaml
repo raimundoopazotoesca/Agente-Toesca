@@ -1,0 +1,61 @@
+id: tae-l5-003
+suite: analyst
+level: L5
+tier: L4
+split: dev
+notes: >
+  Investigation/agentic abierta sobre el fondo Apo, reforzando en un
+  contexto analitico (no de retrieval simple) la misma disciplina de
+  entidades que tae-l1-004: Apo3001 pertenece a TRI, NO a Apo -- un
+  analisis de "el fondo Apo" que incluye a Apo3001 esta mezclando datos
+  de otro fondo. La señal real a encontrar: vacancia creciente en 2026 en
+  ambos activos de Apo (m2 vacantes, superseded_at IS NULL): Apo4501
+  340->1.287->1.507 m2 (ene->feb->jun), Apo4700 831->1.531 m2 (mar->abr,
+  se mantiene). Ambos activos aproximadamente duplican o mas su vacancia
+  en el semestre.
+
+turns:
+  - question: "Analiza el fondo Apo (Apoquindo) y dime qué te preocupa, si algo, sobre lo que ha pasado en 2026."
+    required_facts:
+      - {ref: vac_apo4501_2026_01, tolerance_pct: 10.0}
+      - {ref: vac_apo4501_2026_06, tolerance_pct: 10.0}
+    acceptable_facts:
+      - {ref: vac_apo4700_2026_01, tolerance_pct: 10.0}
+      - {ref: vac_apo4700_2026_06, tolerance_pct: 10.0}
+    primary_fact: vac_apo4501_2026_06
+    expected_entities: {fondo: "Apo", activo: ["Apo4501", "Apo4700"]}
+    expected_period: {from: "2026-01", to: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [raw_vacancia_manual]
+    forbidden_claims:
+      - "incluir a Apoquindo 3001 (Apo3001) como parte del analisis del fondo Apo -- Apo3001 pertenece al fondo TRI"
+      - "afirmar que la vacancia de Apo4501 o Apo4700 se mantuvo estable en 2026 cuando en realidad aumento de forma marcada"
+    expected_behavior:
+      - limitar el analisis a los activos que realmente pertenecen al fondo Apo (Apo4501, Apo4700)
+      - identificar el aumento de vacancia en ambos activos durante el primer semestre 2026 como la señal a destacar
+      - expresar la preocupacion de forma proporcional a los datos (aumento real, no catastrofico) sin inventar una causa especifica
+    rubric_focus: [investigation_quality, grounding, hallucination]
+
+ground_truth_refs:
+  vac_apo4501_2026_01:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo4501' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: m2
+  vac_apo4501_2026_06:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo4501' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: m2
+  vac_apo4700_2026_01:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo4700' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: m2
+  vac_apo4700_2026_06:
+    sql: >
+      SELECT SUM(m2_vacantes) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo4700' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: m2
