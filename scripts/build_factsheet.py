@@ -7107,6 +7107,23 @@ const OCUPACION_INMOSA_PALETTE = {
   5: "#3FC97E", 6: "#1B6E5C", 7: "#2E6FD9", 8: "#D3272C",
 };
 
+function limitOcupacionInmosaData(data, cutoff){
+  if (!data || !data.years || !data.years.length || !cutoff) return data;
+  const [cutoffYear, cutoffMonth] = cutoff.split("-");
+  const monthLimit = parseInt(cutoffMonth, 10);
+  const years = data.years.filter(year => year <= cutoffYear);
+  const series = {};
+  years.forEach(year => {
+    const values = (data.series[year] || []).slice(0, 12);
+    while (values.length < 12) values.push(null);
+    if (year === cutoffYear) {
+      for (let month = monthLimit; month < 12; month++) values[month] = null;
+    }
+    series[year] = values;
+  });
+  return { ...data, years, series };
+}
+
 function renderOcupacionInmosaChart(containerId, data){
   const el = document.getElementById(containerId);
   if (!data || !data.years || !data.years.length){
@@ -8653,7 +8670,10 @@ function render(){
         td.classList.remove("placeholder");
       }
     });
-    renderOcupacionInmosaChart("chart-ocupacion-inmossa", F.page6.ocupacion_inmosa);
+    renderOcupacionInmosaChart(
+      "chart-ocupacion-inmossa",
+      limitOcupacionInmosaData(F.page6.ocupacion_inmosa, usadoOp),
+    );
   }
 
   // Página 7 (TRI): donuts GLA/Ingresos + superficie/vacancia reales de
