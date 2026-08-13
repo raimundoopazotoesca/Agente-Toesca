@@ -1,26 +1,93 @@
-# Toesca Analyst Benchmark -- Rubric Judge v1 scoring anchors.
+# Toesca Analyst Benchmark -- Rubric Judge v1.1 scoring anchors.
 #
 # Single source of truth for what each 0-4 score means. judge.py loads this
 # file and renders it into the judge prompt verbatim -- editing the rubric
 # means editing this file, not code.
 #
 # Every dimension is scored 0 (worst) - 4 (best), or marked not_applicable
-# when the case genuinely doesn't call for it (e.g. investigation_quality
-# on a single-lookup L1 case). The judge never invents its own scale.
+# when the case genuinely doesn't call for it. See not_applicable_policy
+# below -- v1.1 tightens this after calibration showed it being used as an
+# escape hatch. The judge never invents its own scale.
 #
 # Deterministic graders (graders/gates.py, graders/deterministic.py) remain
 # authoritative for anything they can verify -- these dimensions are the
 # ones deliberately left unscored there because they require reading
 # comprehension, not string/number matching. See design doc section 9.
+#
+# CHANGELOG
+#   v1.1 (2026-08-13): first human calibration round (10 blind responses,
+#   see eval/benchmark/results/human_vs_judge_v1_comparison_2026-08-13.md)
+#   found systematic grade inflation -- judge scored >= human on every
+#   comparable case, worst on a response the judge rated near-perfect that
+#   a human caught fabricating a causal narrative. Root causes and the
+#   general-principle fixes applied here (not case-specific patches):
+#     1. not_applicable was following response_mode (clarified/declined)
+#        rather than whether the dimension genuinely didn't apply --
+#        added an explicit per-dimension policy below.
+#     2. grounding/hallucination were reading fluency/confidence/structure
+#        as evidence -- added an explicit non-evidence rule.
+#     3. F1 under-fired on unsourced external citations and on a supported
+#        fact silently transformed into a different, more specific,
+#        unsupported fact -- both added as general F1 patterns.
+#     4. tool_correctness was gated on tool_requirements being set and
+#        implicitly rewarded query count -- decoupled from both.
+#     5. analytical_quality had no explicit ceiling for "well-structured
+#        but wrong driver" -- added a cap rule.
+#     6. investigation_quality anchors implied quantity was the signal --
+#        reworded around evidence coverage and identifier resolution.
+
+not_applicable_policy: >
+  not_applicable is a claim about the DIMENSION, not about how the system
+  responded. response_mode (answered / clarified / declined) is never by
+  itself a reason to mark something not_applicable -- decide per dimension:
+    - analytical_quality: not_applicable ONLY if clarifying/declining was
+      itself the objectively correct call (the question was genuinely
+      ambiguous or unanswerable from available data -- see
+      clarification_judgment). If the task was answerable and the system
+      avoided it anyway, score analytical_quality 0. Never not_applicable
+      just because the response was short or was a clarifying question.
+    - investigation_quality: same rule as analytical_quality. N/A only
+      when clarifying/declining was correct; otherwise score it (0 if a
+      real investigation was needed and none happened).
+    - output_usefulness: always scorable on any non-empty response,
+      including a clarification or a decline -- a clarifying question can
+      itself be more or less useful (well-targeted vs. generic and
+      redundant with what the user already said). Never not_applicable
+      for visible text; empty text is model_non_answer territory, decided
+      before the judge ever runs, not scored here at all.
+    - hallucination: 4 is achievable, and IS the not_applicable-like case,
+      for a response with no material factual claims -- score it 4
+      ("nothing to hallucinate" is a real, good answer to "did it
+      hallucinate", not an inapplicable question). Reserve not_applicable
+      for hallucination only if the turn produced no evaluable text at
+      all (which again should already be model_non_answer, not a judge
+      call).
+    - grounding: not_applicable only when the response contains literally
+      zero factual claims to ground (e.g. a pure clarifying question with
+      no assertions of any kind). One factual claim is enough to score it.
+    - tool_correctness: see its own entry below -- no longer gated on
+      tool_requirements.
+    - clarification_judgment: always scorable; every turn has an implicit
+      or explicit expectation about whether answering, clarifying, or
+      declining was right.
 
 dimensions:
   analytical_quality:
     question: >
       Does the response correctly identify what matters in the data and
       organize it into a coherent read of the situation?
+    cap_rule: >
+      HARD CEILING, checked before scoring: if the response's main driver,
+      explanation, or conclusion contradicts the ground truth or the
+      executed query results, analytical_quality cannot exceed 1 --
+      regardless of how well-organized, detailed, or confident the writing
+      is. Good structure wrapped around the wrong answer is not partial
+      credit toward "good analysis"; it is exactly the failure mode this
+      dimension exists to catch. Apply the cap first, then decide whether
+      it's a 0 or a 1 using the anchors below.
     anchors:
       0: "No analysis attempted, or the response is unrelated to the question's analytical intent."
-      1: "Restates raw data with no synthesis; fails to identify which facts are relevant to the question asked."
+      1: "Restates raw data with no synthesis; fails to identify which facts are relevant to the question asked -- OR the response is well-organized but its main driver/conclusion contradicts ground truth (see cap_rule: this is a ceiling, not a floor, for that case)."
       2: "Identifies some relevant facts but the organization/reasoning is superficial, or misses an obvious driver/comparison the data itself supports."
       3: "Correctly identifies the main relevant facts and organizes them into a coherent read of the situation; minor gaps in depth or a secondary angle left unexplored."
       4: "Thorough: identifies the primary driver(s), addresses secondary factors, and the reasoning chain from data to conclusion is explicit and sound."
@@ -29,6 +96,16 @@ dimensions:
     question: >
       Is every substantive claim in the response traceable to a query the
       system actually executed, or to the provided ground truth?
+    not_evidence: >
+      Fluency, confidence, structure, level of detail, and professional
+      tone are NOT evidence of grounding. A response can be well-written
+      and completely ungrounded, or terse and fully grounded -- judge the
+      traceability of each material claim to an executed query result,
+      the provided ground truth, or a source explicitly available to the
+      system, independent of how well it reads. When in doubt whether a
+      claim is "traceable," check: does a specific row/value in
+      query_results or ground_truth actually say this, or does the
+      response just sound like it would know?
     anchors:
       0: "Central claims contradict the executed query results or the provided ground truth outright."
       1: "Most substantive claims are not traceable to any executed query or provided ground truth."
@@ -44,12 +121,21 @@ dimensions:
       C1/C2 territory, already scored deterministically. This is about
       claims that have no query/ground-truth basis at all. See "F1 vs
       C1/C2" below before scoring.
+    not_evidence: >
+      Same rule as grounding: fluency, confidence, structure, detail, and
+      professional tone are NOT evidence of truthfulness. A confidently
+      stated claim is not thereby a grounded one.
+    scoring_a_response_with_no_material_claims: >
+      A response that makes no material factual claims at all (e.g. it
+      only asks a clarifying question) has nothing to hallucinate --
+      score this 4, not not_applicable. Absence of unsupported claims is
+      itself the thing this dimension measures.
     anchors:
       0: "Fabricates a material fact, entity, or relationship with no basis in any executed query or ground truth."
       1: "Contains a fabricated but non-material detail that doesn't change the substance of the answer."
       2: "Overstates confidence/certainty beyond what the evidence supports, without inventing new facts."
       3: "No fabrication; does not notably overstate certainty."
-      4: "No fabrication, and explicit, correctly-calibrated acknowledgment of any evidence gaps (e.g. says plainly what it couldn't confirm)."
+      4: "No fabrication, and explicit, correctly-calibrated acknowledgment of any evidence gaps (e.g. says plainly what it couldn't confirm) -- OR the response makes no material claims at all, so there is nothing to hallucinate."
 
   clarification_judgment:
     question: >
@@ -66,14 +152,24 @@ dimensions:
   investigation_quality:
     question: >
       For questions that require exploration (comparisons, diagnosis,
-      open-ended investigation): did the system query enough, and the right
-      things, before concluding?
+      open-ended investigation): did the system find and cross-check the
+      relevant evidence, correctly resolve the entities/identifiers it
+      needed, and go deep where the data called for it?
+    not_a_quantity_metric: >
+      Number of tool calls is NOT a proxy for quality in either direction.
+      One well-targeted query that finds the right evidence outscores five
+      queries that miss it. A system that repeatedly queries with the
+      wrong identifier/entity key and never corrects it should score LOW
+      here even if it made many attempts -- persistence on a wrong
+      identifier is a failure to investigate correctly, not effort that
+      partially counts. Judge whether the right evidence was found and
+      correctly resolved, not how many queries it took.
     anchors:
-      0: "No investigation: concludes without querying anything the case requires, or the query attempts are entirely unrelated to the question."
-      1: "Minimal investigation: a single query where the question clearly needed comparison across entities/periods."
-      2: "Investigates but stops short of an obvious next step the data itself suggested (e.g. finds a discrepancy but never checks the adjacent period/entity that would explain it)."
-      3: "Investigates adequately: covers the entities/periods/angles the question requires with reasonable efficiency."
-      4: "Thorough and efficient: covers every angle the question needs, follows up on what the data reveals, without redundant or pointless queries."
+      0: "No investigation: concludes without querying anything the case requires, or the query attempts are entirely unrelated to the question, or every query uses a wrong/unresolved identifier so nothing relevant is ever actually found regardless of attempt count."
+      1: "Minimal investigation: a single query where the question clearly needed comparison across entities/periods, OR repeated queries that never correctly resolve the entity/identifier needed."
+      2: "Investigates but stops short of an obvious next step the data itself suggested (e.g. finds a discrepancy but never checks the adjacent period/entity that would explain it), or resolves identifiers correctly but doesn't cross-check findings against an available comparison."
+      3: "Investigates adequately: finds and cross-checks the relevant evidence, correctly resolves the entities/identifiers the question requires, with reasonable efficiency."
+      4: "Thorough and efficient: covers every angle the question needs, correctly resolves all identifiers on the first attempt or self-corrects promptly, follows up on what the data reveals, without redundant or pointless queries."
 
   output_usefulness:
     question: >
@@ -87,20 +183,31 @@ dimensions:
 
   tool_correctness:
     question: >
-      Semantic layer only -- use when the case's tool_requirements need
-      judgment beyond what graders/deterministic.py already checked
-      (query count, tables touched, artifacts produced). This asks: were
-      the queries actually WELL-TARGETED for the question, not just
-      present in the right quantity/tables? not_applicable when the case
-      has no tool_requirements, OR when the deterministic tool_correctness
-      check already fully resolved the question (rare -- most cases still
-      benefit from this semantic pass when tool_requirements is set).
+      Were the tool calls the system actually made -- table/view choice,
+      field/column choice, identifier resolution, and interpretation of
+      what came back -- correct and reasonably efficient? This applies
+      WHENEVER the response contains any tool calls, regardless of
+      whether the case's tool_requirements field is set (that field only
+      drives the deterministic count/table checks in
+      graders/deterministic.py -- it is not a gate on this dimension).
+    when_not_applicable: >
+      not_applicable only when there were no tool calls AND none were
+      genuinely needed to answer correctly (e.g. the answer follows
+      directly from ground truth already given, or the question doesn't
+      require querying anything). If no tool calls were made but the
+      question genuinely required querying data to answer correctly,
+      that is not not_applicable -- score it 0.
+    not_a_quantity_metric: >
+      Do not reward number of queries. A single correctly-targeted query
+      beats many. A system that insists on a wrong table, field, or
+      identifier across multiple calls -- without ever correcting course
+      -- must score low, not get partial credit for the volume of effort.
     anchors:
-      0: "Queries run are unrelated to what's needed to answer the question."
-      1: "Queries are on-topic but use the wrong grain/filter such that the results couldn't support the required facts even in principle."
-      2: "Queries are roughly right but inefficient or redundant (repeats the same query, or queries far more than needed)."
-      3: "Queries are well-targeted and sufficient, with minor inefficiency."
-      4: "Queries are precisely targeted, minimal, and sufficient to support the answer."
+      0: "No tool calls were made despite the question genuinely requiring them to answer correctly -- OR the queries run are unrelated to what's needed, or persistently use a wrong table/field/identifier without ever correcting it."
+      1: "Queries are on-topic but use the wrong grain/filter/identifier such that the results couldn't support the required facts even in principle."
+      2: "Queries are roughly right (correct tables/identifiers) but inefficient, redundant, or the results are misinterpreted once resolved."
+      3: "Queries are well-targeted, identifiers correctly resolved, results correctly interpreted, with at most minor inefficiency."
+      4: "Queries are precisely targeted, identifiers correctly resolved on the first attempt, minimal, and sufficient to support the answer, with results interpreted correctly."
 
 # ---------------------------------------------------------------------------
 # Gates the judge decides (F1, C4, C5). F2/F3/F4/F5/C1/C2/C3 are fully
@@ -116,18 +223,46 @@ gates:
       relationship, event, or data point that is not supported by any
       executed query result or the provided ground truth, where the claim
       is not simply a numeric value pulled from a real query and reported
-      inaccurately.
+      inaccurately. Two patterns beyond an outright invented data point
+      also count, both general principles, not tied to any one case:
+        (a) External-source attribution without access to that source.
+            A material claim attributed to an outside source the system
+            never queried or was never given -- "segun Source X, el
+            benchmark es Y" -- is F1 even though it names a source,
+            because naming a source does not make the claim verifiable
+            from anything the system actually has. This does NOT cover
+            the system correctly citing something it WAS given (its own
+            ground truth, its own query results, or context explicitly
+            provided to it) -- only claims attributed to something
+            outside what it consulted or received.
+        (b) Fact transformation: taking a real, supported fact and
+            silently turning it into a different, more specific fact that
+            the original does not actually establish. General shape: data
+            point P is confirmed by a query; the response asserts a more
+            specific claim Q that would explain or follow from P, without
+            P actually entailing Q. Conceptual example: a query confirms
+            an asset stopped being active as of a given date; that does
+            NOT by itself establish WHY (e.g. that a lease ended and
+            wasn't renewed) -- asserting the more specific unestablished
+            reason as fact is F1, even though the underlying date is real.
     explicitly_not_f1: >
       A number that came from an executed query but is wrong, mis-rounded,
       or from the wrong period/entity is C1/C2 territory (already scored
       deterministically) -- do NOT trigger F1 for that. F1 requires that
       the underlying claim itself (not just its numeric value) has no
       grounding in anything actually queried or given as ground truth.
+      General knowledge or a hypothesis explicitly presented as such
+      ("una posible explicacion seria...", "podria deberse a...") is not
+      F1 either -- do not convert every hypothesis or piece of background
+      knowledge into fabrication. The line is whether the claim is
+      presented AS VERIFIED FACT: a qualified hypothesis is not; an
+      unqualified assertion sourced to nothing the system has is.
     trigger_test: >
       Ask: "if I strip out every number, is there still a claim here that
-      no executed query or ground truth fact supports?" If yes -> F1
-      triggered. If the ungrounded part is only the wrong number, it is not
-      F1.
+      no executed query or ground truth fact supports, presented as if it
+      were verified rather than hypothesized?" If yes -> F1 triggered. If
+      the ungrounded part is only the wrong number, or the claim is
+      explicitly flagged as an unconfirmed hypothesis, it is not F1.
 
   C4_unsupported_causality:
     kind: ceiling

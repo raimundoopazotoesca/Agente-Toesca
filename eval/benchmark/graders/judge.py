@@ -73,11 +73,30 @@ def classify_response(turn, infra_error: str | None) -> str:
     return "attempted"
 
 
+# Keys rendered generically per dimension, in this order, beyond
+# question/anchors -- any dimension can carry a subset of these. Extending
+# a dimension with a new rule field only requires adding it here once.
+_DIMENSION_NOTE_KEYS = [
+    ("cap_rule", "HARD CEILING"),
+    ("not_evidence", "NOT evidence"),
+    ("scoring_a_response_with_no_material_claims", "No material claims"),
+    ("when_not_applicable", "not_applicable"),
+    ("not_a_quantity_metric", "Not a quantity metric"),
+]
+
+
 def _render_rubric_text(rubric: dict[str, Any]) -> str:
     lines = []
+    if "not_applicable_policy" in rubric:
+        lines.append("## not_applicable policy (applies to every dimension below)")
+        lines.append(rubric["not_applicable_policy"].strip())
+        lines.append("")
     for name, spec in rubric["dimensions"].items():
         lines.append(f"### {name}")
         lines.append(spec["question"].strip())
+        for key, label in _DIMENSION_NOTE_KEYS:
+            if key in spec:
+                lines.append(f"{label}: {spec[key].strip()}")
         for score in range(5):
             lines.append(f"  {score}: {spec['anchors'][score]}")
         lines.append("")
@@ -103,13 +122,30 @@ Reglas estrictas:
 - No reevalues nada que ya este decidido en `deterministic_grader_results` (gates \
 F2/F3/F4/F5/C1/C2/C3, dimension_scores ya presentes). Esos son autoridad; tu trabajo \
 es solo lo que falta.
-- Si una dimension no aplica genuinamente a este caso, marca not_applicable=true y \
-no inventes un score.
+- not_applicable NUNCA se decide por response_mode (clarified/declined no es motivo \
+por si solo). Sigue la not_applicable policy de la rubrica, dimension por dimension \
+-- si la tarea era respondible y el sistema la evito, analytical_quality e \
+investigation_quality van en 0, no not_applicable. output_usefulness siempre es \
+evaluable en texto no vacio. hallucination puede ser 4 sin ser not_applicable \
+cuando no hay afirmaciones materiales que alucinar.
+- tool_correctness aplica siempre que haya tool calls, sin importar si el caso tiene \
+tool_requirements. Si no hubo tool calls pero eran necesarios, es 0, no not_applicable.
+- Nunca uses fluidez, confianza, estructura, detalle o tono profesional como evidencia \
+de grounding -- solo cuenta lo que un query/resultado o el ground truth realmente dice.
+- No premies cantidad de tool calls en investigation_quality ni en tool_correctness: \
+un agente que insiste con un identificador equivocado en muchas queries puntua bajo, \
+no recibe credito por el esfuerzo.
+- Si el driver o conclusion principal de la respuesta contradice el ground truth, \
+analytical_quality no puede pasar de 1, sin importar que tan bien escrita este.
 - Cada score debe venir con evidencia CONCRETA (una cita literal de la respuesta o \
 de los resultados de query), no una justificacion generica.
-- F1 (fabrication) es SOLO para afirmaciones sin ningun sustento en las queries \
+- F1 (fabrication) es para afirmaciones materiales sin ningun sustento en las queries \
 ejecutadas o el ground truth -- un numero incorrecto que si vino de una query real \
-NO es F1 (eso ya esta cubierto por C1/C2, no lo toques).
+NO es F1 (eso ya esta cubierto por C1/C2, no lo toques). Tambien es F1: (a) atribuir \
+una afirmacion material a una fuente externa que el sistema no consulto ni recibio \
+(nombrar la fuente no la hace verificable), y (b) transformar un hecho respaldado en \
+un hecho mas especifico que ese dato no establece por si solo. No conviertas \
+hipotesis calificadas o conocimiento general en F1.
 - C4 (causalidad no sustentada) NO se dispara si la respuesta presenta la causa \
 explicitamente como hipotesis no confirmada.
 - C5 (forbidden claim) se evalua literalmente contra cada claim listado en \

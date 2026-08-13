@@ -50,6 +50,9 @@ def test_rubric_text_renders_without_error():
     text = judge._render_rubric_text(judge.load_rubric())
     assert "analytical_quality" in text
     assert "F1_fabrication" in text
+    assert "not_applicable policy" in text
+    assert "HARD CEILING" in text
+    assert "Not a quantity metric" in text
 
 
 # --- classify_response (deterministic, pre-judge) -------------------------
