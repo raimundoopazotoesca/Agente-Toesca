@@ -1,0 +1,89 @@
+id: tce-decisioncommittee-001
+suite: conversation
+category: decision_committee_priority
+split: dev
+notes: >
+  Batch 4, caso E (priorización para comité, 4 turnos). Distinto de
+  tae-l6-001 (decisión de un solo turno sobre Apo3001 dentro de TRI):
+  aquí la habilidad evaluada es si la recomendación final SINTETIZA la
+  evidencia acumulada de los tres turnos anteriores (vacancia % de
+  Apo3001 y Mall Curicó, persistencia de Apo3001, y m2 vacantes
+  absolutos de cada uno) en vez de responder la pregunta final como si
+  fuera la primera del hilo. Usa vacancia OFICIAL únicamente (no la del
+  rent roll) -- no reabre la discrepancia de tae-l5-006/tce-hallucination-002,
+  es un dato de fondo para una decisión distinta.
+
+turns:
+  - question: "¿Qué activos del fondo TRI tienen vacancia relevante hoy?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_06, tolerance_pct: 10.0}
+      - {ref: vac_pct_curico_2026_06, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_06
+    expected_entities: {fondo: "TRI", activo: ["Apo3001", "Mall Curicó"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - identificar a Apo3001 (~36.3%) y Mall Curicó (~22.75%) como los dos activos con vacancia relevante de TRI
+
+  - question: "¿Alguno de los dos muestra una tendencia de empeorar, o están estables?"
+    required_facts:
+      - {ref: vac_pct_apo3001_2026_01, tolerance_pct: 10.0}
+    primary_fact: vac_pct_apo3001_2026_01
+    expected_entities: {fondo: "TRI", activo: ["Apo3001", "Mall Curicó"]}
+    expected_period: {from: "2026-01", to: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "describir a Apo3001 o Mall Curicó como empeorando progresivamente si los datos no muestran esa tendencia"
+    expected_behavior:
+      - reportar que la vacancia de Apo3001 se mantiene estable en el periodo (sin variación mes a mes)
+    notes: "Mantiene ambos activos en foco; agrega la dimensión de tendencia."
+
+  - question: "Aparte del porcentaje, ¿cuál pesa más en metros cuadrados vacíos reales?"
+    required_facts:
+      - {ref: vac_m2_apo3001_2026_06, tolerance_pct: 5.0}
+      - {ref: vac_m2_curico_2026_06, tolerance_pct: 5.0}
+    primary_fact: vac_m2_curico_2026_06
+    expected_entities: {fondo: "TRI", activo: ["Apo3001", "Mall Curicó"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "ignorar que en m2 absolutos Mall Curicó tiene más superficie vacía (2.476 m2) que Apo3001 (1.632,6 m2), aunque el % de Apo3001 sea más alto"
+    expected_behavior:
+      - reportar que Mall Curicó tiene más m2 vacantes en términos absolutos pese a tener un % menor que Apo3001
+    notes: "Agrega una tercera dimensión (m2 absolutos) que compite con el % para la decisión final."
+
+  - question: "Entonces, ¿qué llevarías primero a comité y por qué?"
+    expected_entities: {fondo: "TRI", activo: ["Apo3001", "Mall Curicó"]}
+    clarification_expected: false
+    forbidden_claims:
+      - "responder solo con uno de los tres datos (% de un activo, tendencia, o m2 absolutos) ignorando los otros dos ya establecidos en la conversación"
+      - "empezar el análisis desde cero como si ningún dato se hubiera reunido antes"
+      - "formular la respuesta como una decisión de inversión (comprar/vender) en vez de una priorización de revisión"
+    expected_behavior:
+      - sintetizar los tres hallazgos acumulados (Apo3001 tiene el % más alto y persistente; Mall Curicó tiene más m2 vacantes en términos absolutos) para dar una recomendación de priorización razonada, reconociendo el trade-off entre ambas dimensiones
+    notes: "Turno de síntesis final -- debe usar la evidencia de los 3 turnos anteriores, no reabrir el análisis."
+    rubric_focus: [analytical_quality, conversational_quality, output_usefulness]
+
+ground_truth_refs:
+  vac_pct_apo3001_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+  vac_pct_curico_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla) FROM raw_vacancia_manual
+      WHERE activo_key = 'Mall Curicó' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct
+  vac_pct_apo3001_2026_01:
+    sql: >
+      SELECT 100.0 * SUM(m2_vacantes) / SUM(m2_gla) FROM raw_vacancia_manual
+      WHERE activo_key = 'Apo3001' AND periodo = '2026-01' AND superseded_at IS NULL
+    unit: pct
+    description: "Idéntico a 2026-06 -- confirma estabilidad."
+  vac_m2_apo3001_2026_06:
+    sql: "SELECT SUM(m2_vacantes) FROM raw_vacancia_manual WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL"
+    unit: m2
+  vac_m2_curico_2026_06:
+    sql: "SELECT SUM(m2_vacantes) FROM raw_vacancia_manual WHERE activo_key = 'Mall Curicó' AND periodo = '2026-06' AND superseded_at IS NULL"
+    unit: m2

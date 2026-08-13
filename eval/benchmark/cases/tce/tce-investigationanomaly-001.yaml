@@ -1,0 +1,93 @@
+id: tce-investigationanomaly-001
+suite: conversation
+category: investigation_anomaly
+split: dev
+notes: >
+  Batch 4, caso D (investigación con discrepancia/anomalía, 4 turnos).
+  Anomalía NUEVA, no reutiliza Strip Machalí ni Mall Curicó. Verificado
+  antes de escribir el caso: Apo no reparte dividendos desde 2022-10
+  (raw_dividendo), y dy=0.0 en derived_kpi para todos los periodos
+  2025-06 a 2026-03 -- dos fuentes independientes confirman la ausencia,
+  reduciendo la probabilidad de que sea un error de carga puntual. El
+  patrimonio de Apo sigue creciendo en el mismo periodo (ver
+  tce-investigation-hypothesis-001). GAP CONOCIDO deliberadamente
+  evitado: 'caja_minima' para Apo en derived_kpi está mal calculado
+  (coincide exactamente con total_activo/pasivo por el mismo problema de
+  mapeo EEFF documentado en tae-l4-005) -- NO se usa como evidencia aquí,
+  y forbidden_claims lo prohíbe explícitamente para que el sistema no lo
+  use como si fuera confiable. El caso debe terminar reconociendo que el
+  motivo de la retención no está documentado en el snapshot, no
+  inventando una política de reinversión o restricción legal.
+
+turns:
+  - question: "Noto que Apo no reparte dividendos hace tiempo. ¿Cuándo fue el último?"
+    required_facts:
+      - {ref: ultimo_periodo_dividendo_apo}
+    primary_fact: ultimo_periodo_dividendo_apo
+    expected_entities: {fondo: "Apo"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar que el último dividendo registrado de Apo es de octubre de 2022
+    notes: "Detecta la anomalía: fecha concreta y verificable."
+
+  - question: "¿Eso se confirma con otros datos, o podría ser un error de carga?"
+    required_facts:
+      - {ref: dy_apo_2026_03, tolerance_abs: 0.01}
+    acceptable_facts:
+      - {ref: dy_apo_2025_06, tolerance_abs: 0.01}
+    primary_fact: dy_apo_2026_03
+    expected_entities: {fondo: "Apo"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [raw_dividendo, derived_kpi]
+    expected_behavior:
+      - contrastar con una segunda fuente independiente (dividend yield en derived_kpi, en 0.0 de forma sostenida) para reducir la probabilidad de que sea un error puntual de carga
+      - concluir que la ausencia de dividendos está confirmada por dos fuentes, no es un artefacto aislado
+    notes: "Busca una segunda fuente antes de aceptar la anomalía como real -- no se conforma con una sola tabla."
+    rubric_focus: [investigation_quality, grounding]
+
+  - question: "¿Por qué no estarían repartiendo si el patrimonio ha crecido tanto?"
+    required_facts:
+      - {ref: n_ar_events_apo_recientes, tolerance_abs: 0}
+    primary_fact: n_ar_events_apo_recientes
+    expected_entities: {fondo: "Apo"}
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "usar el KPI 'caja_minima' de Apo en derived_kpi como evidencia de restricción de caja (ese KPI está mal calculado para Apo en este snapshot -- coincide con el total del balance, no con un mínimo de caja real)"
+      - "inventar una política de reinversión, restricción legal o decisión del comité de inversiones no documentada en los datos"
+      - "afirmar con certeza una causa específica de la retención"
+    expected_behavior:
+      - buscar evidencia disponible (ej. eventos de capital en raw_ar_event, que tampoco muestran actividad reciente) sin inventar una causa
+      - reconocer que el snapshot no documenta el motivo de la decisión de no repartir dividendos
+    notes: "El sistema debe detenerse aquí: no hay más evidencia disponible en la base para explicar el 'por qué'. GAP: caja_minima de Apo no es confiable, no debe usarse."
+    rubric_focus: [grounding, hallucination, investigation_quality]
+
+  - question: "Entonces, ¿qué se puede afirmar con confianza y qué no?"
+    clarification_expected: false
+    forbidden_claims:
+      - "presentar el motivo de la retención de dividendos como si estuviera demostrado (no lo está)"
+      - "restar certeza a los hechos que sí están bien respaldados (fecha del último dividendo, dy=0 sostenido, crecimiento de patrimonio)"
+    expected_behavior:
+      - separar claramente lo demostrado (sin dividendos desde oct-2022, confirmado por dos fuentes; patrimonio creciendo en el mismo periodo) de lo no demostrado (el motivo de la retención)
+      - no forzar una conclusión causal donde el snapshot no la respalda
+    notes: "Turno de cierre: distingue explícitamente hecho de hipótesis no resuelta."
+    rubric_focus: [grounding, hallucination, analytical_quality]
+
+ground_truth_refs:
+  ultimo_periodo_dividendo_apo:
+    sql: "SELECT MAX(periodo) FROM raw_dividendo WHERE fondo_key = 'Apo' AND superseded_at IS NULL"
+    unit: date
+    description: "2022-10."
+  dy_apo_2026_03:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dy' AND entidad_key = 'Apo' AND periodo = '2026-03'"
+    unit: pct
+    description: "0.0 -- consistente con la ausencia de dividendos."
+  dy_apo_2025_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dy' AND entidad_key = 'Apo' AND periodo = '2025-06'"
+    unit: pct
+    description: "0.0 -- mismo valor, confirma que no es un evento aislado de un solo periodo."
+  n_ar_events_apo_recientes:
+    sql: "SELECT COUNT(*) FROM raw_ar_event WHERE fondo_key = 'Apo' AND fecha >= '2022-10-01'"
+    unit: count
+    description: "0 -- tampoco hay aportes/disminuciones/canjes registrados desde entonces."

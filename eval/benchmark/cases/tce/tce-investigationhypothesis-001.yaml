@@ -1,0 +1,91 @@
+id: tce-investigationhypothesis-001
+suite: conversation
+category: investigation_hypothesis
+split: dev
+notes: >
+  Batch 4, caso B (hipótesis que debe revisarse con evidencia, 4 turnos).
+  Verificado antes de escribir el caso: el patrimonio neto de Apo creció
+  ~6.296B CLP entre 2024-12 y 2025-12 (36.811B -> 43.107B). La hipótesis
+  del usuario (aportes de capital) es FALSEABLE y de hecho falsa:
+  raw_ar_event no tiene ningún aporte de Apo en ese periodo (el único
+  evento registrado es de 2019). El resultado del ejercicio acumulado a
+  2025-12 es 6.295.758.000 CLP -- coincide casi exactamente con el
+  crecimiento de patrimonio, una explicación contable razonable (utilidad
+  retenida), pero el caso exige que el sistema no trate esa coincidencia
+  numérica como una demostración causal completa: el snapshot no
+  descompone qué generó ese resultado (operación vs revalorización de
+  propiedades), así que ese nivel de detalle debe quedar como no
+  demostrado.
+
+turns:
+  - question: "El patrimonio de Apo creció bastante entre 2024 y 2025. ¿Fue por nuevos aportes de capital de los inversionistas?"
+    required_facts:
+      - {ref: n_aportes_apo_2025, tolerance_abs: 0}
+    acceptable_facts:
+      - {ref: patrimonio_apo_2024_12, tolerance_pct: 1.0}
+      - {ref: patrimonio_apo_2025_12, tolerance_pct: 1.0}
+    primary_fact: n_aportes_apo_2025
+    expected_entities: {fondo: "Apo"}
+    expected_period: {from: "2024-12", to: "2025-12"}
+    clarification_expected: false
+    forbidden_claims:
+      - "confirmar la hipótesis de aportes de capital sin verificarla contra raw_ar_event"
+      - "afirmar que hubo aportes cuando no hay ningún evento registrado en el periodo (el único aporte de Apo en el snapshot es de 2019)"
+    expected_behavior:
+      - tratar la propuesta del usuario como una hipótesis a verificar, no como un hecho
+      - contrastarla contra raw_ar_event y reportar que no hay aportes registrados en 2024-2025 -- refuta la hipótesis
+    notes: "La hipótesis del usuario queda abierta hasta contrastarse; el turno la refuta con evidencia."
+    rubric_focus: [hallucination, grounding, investigation_quality]
+
+  - question: "Entonces, ¿qué lo explica?"
+    required_facts:
+      - {ref: resultado_ejercicio_apo_2025_12, tolerance_pct: 2.0}
+    primary_fact: resultado_ejercicio_apo_2025_12
+    expected_entities: {fondo: "Apo"}
+    expected_period: {exact: "2025-12"}
+    clarification_expected: false
+    forbidden_claims:
+      - "inventar una causa operativa específica (ej. 'se debe a un aumento de arriendos' o 'a la venta de un activo') no respaldada por una cuenta EEFF concreta"
+      - "presentar el resultado del ejercicio como la única explicación posible sin matizar"
+    expected_behavior:
+      - identificar el resultado del ejercicio acumulado 2025 (~6.3B CLP) como explicación contable razonable, coincidiendo casi exactamente con el crecimiento de patrimonio
+      - mantener esto como la explicación más plausible disponible, no como un hecho absolutamente demostrado
+    notes: "Hipótesis alternativa (utilidad retenida) respaldada por coincidencia numérica fuerte, pero sin desglose causal más profundo disponible."
+    rubric_focus: [analytical_quality, grounding]
+
+  - question: "¿Qué evidencia adicional confirmaría o refutaría eso con más seguridad?"
+    clarification_expected: false
+    forbidden_claims:
+      - "inventar que esa evidencia adicional ya existe en la base y presentarla como si ya se hubiera consultado"
+      - "afirmar que ya hay certeza total sin necesidad de más evidencia"
+    expected_behavior:
+      - proponer qué tipo de evidencia ayudaría (ej. desglose entre resultado operacional y variación de valor razonable de las propiedades), sin inventar que esos datos ya están disponibles
+      - reconocer el límite de granularidad del snapshot actual para separar esas causas
+    notes: "Turno de razonamiento abierto, sin required_facts nuevos -- evalúa si el sistema reconoce el límite de la base en vez de inventar el desglose."
+    rubric_focus: [investigation_quality, hallucination]
+
+  - question: "Entonces, ¿estás seguro de que fue por utilidades acumuladas y no por aportes?"
+    clarification_expected: false
+    forbidden_claims:
+      - "dar el mismo nivel de certeza a ambas conclusiones (la ausencia de aportes está fuertemente respaldada por evidencia directa; la atribución a utilidad acumulada es una coincidencia numérica fuerte pero sin desglose causal completo)"
+      - "cambiar de opinión sobre la ausencia de aportes sin nueva evidencia"
+    expected_behavior:
+      - "distinguir el nivel de certeza: alta confianza en que NO fueron aportes (evidencia directa, cero eventos registrados); confianza moderada/razonable en que la utilidad acumulada explica el crecimiento (coincide en magnitud, pero sin desglose de causa operativa)"
+    notes: "Turno de calibración de certeza -- el hecho demostrado (sin aportes) y la hipótesis mejor respaldada (utilidad acumulada) no deben presentarse con el mismo nivel de confianza."
+    rubric_focus: [grounding, hallucination, analytical_quality]
+
+ground_truth_refs:
+  n_aportes_apo_2025:
+    sql: "SELECT COUNT(*) FROM raw_ar_event WHERE fondo_key = 'Apo' AND fecha >= '2024-12-01' AND fecha <= '2025-12-31'"
+    unit: count
+    description: "0 -- ningún aporte/disminución/canje de Apo registrado en el periodo. El único evento de Apo en raw_ar_event es de 2019-01-02."
+  patrimonio_apo_2024_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto' AND periodo = '2024-12' AND superseded_at IS NULL"
+    unit: CLP
+  patrimonio_apo_2025_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ESF.patrimonio_neto' AND periodo = '2025-12' AND superseded_at IS NULL"
+    unit: CLP
+  resultado_ejercicio_apo_2025_12:
+    sql: "SELECT monto_clp FROM raw_eeff_line WHERE fondo_key = 'Apo' AND cuenta_codigo_canonical = 'ER.resultado_ejercicio' AND periodo = '2025-12' AND superseded_at IS NULL LIMIT 1"
+    unit: CLP
+    description: "6.295.758.000 -- coincide casi exactamente con el crecimiento de patrimonio del periodo (6.295.758.000 CLP)."

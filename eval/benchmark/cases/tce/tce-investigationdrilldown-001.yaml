@@ -1,0 +1,101 @@
+id: tce-investigationdrilldown-001
+suite: conversation
+category: investigation_drilldown
+split: dev
+notes: >
+  Batch 4, caso A (drill-down portfolio -> fondo -> activo, 4 turnos).
+  Jerarquía real en cada turno: portfolio (3 fondos) -> fondo PT ->
+  activo Torre A (dentro de PT) -> hallazgo de concentración de
+  arrendatario en Torre A. Distinto de tae-l2-003/l5-005 (comparación/
+  tendencia de snapshot) y de tae-l3-004 (concentración de Torre A en
+  un solo turno aislado): aquí la habilidad evaluada es si el sistema
+  navega la jerarquía correctamente turno a turno sin perder ni mezclar
+  el nivel activo con el nivel fondo, y sin perder el hilo de por qué se
+  llegó a Torre A. GAP DE PERIODO real y documentado en las notas de los
+  turnos: el LTV de PT es a nivel fondo (2026-06), pero el NOI por
+  activo (Torre A/Boulevard) solo llega a 2026-02 en el snapshot -- el
+  sistema debe usar el periodo correcto para cada nivel, no forzar
+  2026-06 al dato de activo.
+
+turns:
+  - question: "De los tres fondos del portafolio, ¿cuál merece más atención ahora mismo?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    acceptable_facts:
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - comparar los tres fondos y concluir que PT merece más atención por tener el LTV más alto (~81%)
+    notes: "Nivel portfolio. Sin activo ni sociedad todavía."
+
+  - question: "Profundicemos en PT entonces. ¿Qué hay dentro de ese fondo que explique el nivel de apalancamiento?"
+    required_facts:
+      - {ref: noi_torrea_2026_02, tolerance_pct: 5.0}
+      - {ref: noi_boulevard_2026_02, tolerance_pct: 5.0}
+    primary_fact: noi_torrea_2026_02
+    expected_entities: {fondo: "PT", activo: ["Torre A", "Boulevard"]}
+    expected_period: {exact: "2026-02"}
+    clarification_expected: false
+    forbidden_claims:
+      - "presentar el NOI de los activos como si fuera del mismo periodo que el LTV del turno anterior (el NOI por activo solo llega a 2026-02 en el snapshot, no a 2026-06)"
+      - "abandonar el fondo PT y hablar de TRI o Apo (el drill-down bajó de nivel, no cambió de fondo)"
+    expected_behavior:
+      - mantener el fondo activo (PT), bajando ahora al nivel de sus dos activos
+      - reportar el NOI de ambos activos e identificar que Torre A concentra la mayor parte del NOI de PT
+      - señalar, si corresponde, que el dato de activo es de un periodo distinto (2026-02) al del LTV consultado antes (2026-06)
+    notes: "Nivel fondo -> activo. Fondo PT se mantiene; entidad activa pasa a Torre A/Boulevard."
+    rubric_focus: [investigation_quality, grounding]
+
+  - question: "Entonces Torre A es el que concentra el peso. ¿Hay algo específico dentro de Torre A que sea un riesgo en sí mismo?"
+    required_facts:
+      - {ref: pct_concentracion_scotiabank_torrea_2026_06, tolerance_pct: 5.0}
+    primary_fact: pct_concentracion_scotiabank_torrea_2026_06
+    expected_entities: {fondo: "PT", activo: "Torre A"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "hablar de Boulevard en este turno como si aún estuviera en foco (el usuario ya acotó a Torre A específicamente)"
+    expected_behavior:
+      - mantener el drill-down dentro de Torre A (no volver a Boulevard ni a PT en general)
+      - identificar la concentración del rent roll en un solo arrendatario (Scotiabank Azul, ~98.8% de los m2) como el riesgo específico
+    notes: "Nivel activo -> hallazgo específico dentro del activo. Entidad se acota aún más: solo Torre A."
+    rubric_focus: [investigation_quality, grounding]
+
+  - question: "Entonces, resumiendo la cadena: ¿por qué PT es el fondo que más atención requiere?"
+    expected_entities: {fondo: "PT", activo: "Torre A"}
+    clarification_expected: false
+    forbidden_claims:
+      - "responder solo con el LTV de PT sin mencionar la cadena completa (PT -> Torre A -> concentración de Scotiabank Azul) construida en los turnos anteriores"
+      - "empezar el análisis desde cero como si fuera una pregunta nueva, ignorando lo ya establecido en la conversación"
+    expected_behavior:
+      - "sintetizar la cadena completa: PT tiene el LTV más alto del portafolio, dentro de PT Torre A concentra la mayor parte del NOI, y dentro de Torre A un solo arrendatario concentra casi toda la superficie arrendada"
+      - no limitarse a repetir el primer dato (LTV) como si los turnos intermedios no hubieran ocurrido
+    notes: "Turno de síntesis. Debe integrar los tres niveles ya establecidos, no reabrir la investigación."
+    rubric_focus: [analytical_quality, conversational_quality, output_usefulness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+  noi_torrea_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Torre A' AND periodo = '2026-02'"
+    unit: UF
+  noi_boulevard_2026_02:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'PT Boulevard' AND periodo = '2026-02'"
+    unit: UF
+  pct_concentracion_scotiabank_torrea_2026_06:
+    sql: >
+      SELECT 100.0 * SUM(CASE WHEN arrendatario = 'Scotiabank Azul' THEN m2 ELSE 0 END) / SUM(m2)
+      FROM raw_rent_roll_line
+      WHERE activo_key = 'Torre A' AND periodo = '2026-06' AND superseded_at IS NULL
+    unit: pct

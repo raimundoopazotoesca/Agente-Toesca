@@ -1,0 +1,91 @@
+id: tce-investigationmultidomain-001
+suite: conversation
+category: investigation_multidomain
+split: dev
+notes: >
+  Batch 4, caso C (cruce multi-dominio: deuda + NOI, 4 turnos). Combina
+  dim_credito (vencimientos, cuota_mensual_uf) con derived_kpi
+  (noi_mensual) para evaluar si un vencimiento próximo es realmente un
+  riesgo -- ninguna de las dos tablas por separado responde eso. El
+  crédito vigente de TRI con vencimiento más próximo desde
+  BENCHMARK_TODAY (2026-08-13) es TRI_SUCDEN_BICE (2028-01-01, activo
+  Sucden). El NOI mensual de Sucden (~1.782 UF) cubre cómodamente la
+  cuota mensual del crédito (~1.068 UF, ratio ~1.67x) -- calculado
+  directamente NOI/cuota, sin usar el KPI 'dscr' (no validado, ver
+  tae-l8-002/PENDING.md). El valor del caso está en integrar ambas
+  fuentes para responder si hay riesgo real, no en dos queries aisladas.
+
+turns:
+  - question: "¿Cómo está el nivel de deuda de TRI en general?"
+    required_facts:
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_tri_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    notes: "Nivel fondo. Establece LTV como métrica de apalancamiento general."
+
+  - question: "¿Hay algún crédito de TRI por vencer que debiéramos vigilar de cerca?"
+    required_facts:
+      - {ref: proximo_vencimiento_tri}
+    primary_fact: proximo_vencimiento_tri
+    expected_entities: {fondo: "TRI", activo: "Sucden"}
+    clarification_expected: false
+    forbidden_claims:
+      - "ignorar la fecha de BENCHMARK_TODAY (2026-08-13) y reportar un crédito ya vencido o pagado como si fuera el próximo a vencer"
+      - "reportar el crédito de Chañarcillo (fecha_vencimiento nula, leasing sin plazo fijo) como 'el próximo a vencer' -- no tiene fecha, no puede ser el más próximo"
+    expected_behavior:
+      - "identificar el crédito vigente con vencimiento más próximo desde hoy: Sucden, con Bice, vencimiento 2028-01-01"
+    notes: "Cambia el dominio de LTV (fondo) a dim_credito (crédito específico, activo Sucden). Fondo TRI se mantiene como contexto."
+    rubric_focus: [investigation_quality, grounding]
+
+  - question: "¿El NOI de Sucden alcanza cómodamente para esa cuota mensual?"
+    required_facts:
+      - {ref: noi_sucden_2026_06, tolerance_pct: 3.0}
+      - {ref: cuota_mensual_sucden}
+    primary_fact: noi_sucden_2026_06
+    expected_entities: {fondo: "TRI", activo: "Sucden"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    tool_requirements:
+      min_distinct_queries: 2
+      must_touch_tables: [derived_kpi, dim_credito]
+    forbidden_claims:
+      - "usar el KPI 'dscr' de derived_kpi para responder esta pregunta (no está validado -- ver tae-l8-002; el cálculo correcto aquí es NOI mensual dividido por la cuota mensual del crédito específico)"
+      - "afirmar que el NOI no alcanza cuando el cálculo (NOI/cuota ~1.67x) muestra cobertura cómoda"
+    expected_behavior:
+      - dividir el NOI mensual de Sucden por la cuota mensual del crédito (no usar el KPI dscr) para estimar la cobertura
+      - concluir que la cobertura es cómoda (~1.6-1.7x la cuota)
+    notes: "Cruce real: dim_credito (cuota) + derived_kpi (NOI). Ninguna tabla sola responde la pregunta."
+    rubric_focus: [investigation_quality, analytical_quality, grounding]
+
+  - question: "Entonces, ¿ese crédito es un riesgo real para TRI en este momento?"
+    expected_entities: {fondo: "TRI", activo: "Sucden"}
+    clarification_expected: false
+    forbidden_claims:
+      - "tratar el vencimiento de 2028 como una urgencia inminente (faltan más de un año y medio desde BENCHMARK_TODAY)"
+      - "ignorar la cobertura cómoda calculada en el turno anterior al responder"
+    expected_behavior:
+      - "sintetizar ambos hallazgos: el vencimiento está lejano (2028) y la cobertura de NOI sobre la cuota es cómoda -- concluir que no es un riesgo inminente, distinguiéndolo del nivel de apalancamiento general del fondo (LTV ~61%, que es un tema aparte)"
+    notes: "Turno de síntesis multi-dominio: LTV (fondo) + vencimiento (crédito) + cobertura (NOI/cuota)."
+    rubric_focus: [analytical_quality, output_usefulness]
+
+ground_truth_refs:
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  proximo_vencimiento_tri:
+    sql: >
+      SELECT credito_key, activo_key, fecha_vencimiento FROM dim_credito
+      WHERE fondo_key = 'TRI' AND estado = 'VIGENTE' AND fecha_vencimiento IS NOT NULL
+        AND fecha_vencimiento >= '2026-08-13'
+      ORDER BY fecha_vencimiento ASC LIMIT 1
+    unit: text
+    description: "TRI_SUCDEN_BICE, activo Sucden, vencimiento 2028-01-01 -- el más próximo desde BENCHMARK_TODAY."
+  noi_sucden_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'noi_mensual' AND entidad_key = 'Sucden' AND periodo = '2026-06'"
+    unit: UF
+  cuota_mensual_sucden:
+    sql: "SELECT cuota_mensual_uf FROM dim_credito WHERE credito_key = 'TRI_SUCDEN_BICE'"
+    unit: UF
+    description: "~1.068 UF/mes. NOI Sucden (~1.782 UF) / cuota (~1.068 UF) = ~1.67x de cobertura."

@@ -1,0 +1,81 @@
+id: tce-decisionchallenge-001
+suite: conversation
+category: decision_challenge
+split: dev
+notes: >
+  Batch 4, caso F (challenge / cambio de criterio, 3 turnos). El usuario
+  cuestiona la recomendación inicial con un dato real (Apo tiene el DSCR
+  más bajo de los 3 fondos: 0.376 vs 0.604 PT vs 0.610 TRI). La objeción
+  es válida en el sentido de que el número existe y es efectivamente el
+  más bajo -- pero DSCR NO está validado en este snapshot (mismo gap que
+  tae-l8-002/PENDING.md). El caso exige que el sistema ni ignore la
+  objeción (sería aferrarse a la primera conclusión sin razón) ni la
+  acepte sin matices (sería tratar un KPI no validado como si fuera
+  definitivo). La respuesta correcta reconoce el mérito del punto,
+  aclara la limitación del DSCR, y da una posición final razonada
+  (mantenida o revisada, cualquiera es aceptable si está bien
+  fundamentada).
+
+turns:
+  - question: "Entre TRI, PT y Apo, ¿cuál fondo priorizarías para revisión en el próximo comité?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    acceptable_facts:
+      - {ref: ltv_tri_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - recomendar PT como prioridad, fundamentado en tener el LTV más alto de los tres fondos (~81%)
+
+  - question: "Pero yo tenía entendido que Apo tiene peor cobertura de deuda (DSCR). ¿No debería priorizarse ese en cambio?"
+    required_facts:
+      - {ref: dscr_apo_2026_06, tolerance_pct: 10.0}
+    acceptable_facts:
+      - {ref: dscr_pt_2026_06, tolerance_pct: 10.0}
+    primary_fact: dscr_apo_2026_06
+    expected_entities: {fondo: ["Apo", "PT"]}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    forbidden_claims:
+      - "descartar la objeción del usuario sin verificarla (el DSCR de Apo, ~0.38, efectivamente es más bajo que el de PT, ~0.60 -- el dato es real)"
+      - "aceptar el DSCR como una cifra validada y usarla para invalidar por completo la recomendación anterior sin matiz"
+      - "ignorar que el DSCR no ha sido validado contra una fuente externa en este snapshot (mismo gap documentado en tae-l8-002)"
+    expected_behavior:
+      - "verificar el dato: el DSCR de Apo es efectivamente el más bajo de los tres fondos"
+      - aclarar que ese KPI no está validado en la base, así que debe tratarse como una señal a confirmar, no como una prueba definitiva
+    notes: "El usuario introduce una objeción válida basada en un dato real pero no validado. El sistema debe reconocer el mérito sin sobre-confiar en el número."
+    rubric_focus: [grounding, hallucination, conversational_quality]
+
+  - question: "Entonces, ¿mantienes tu recomendación o la cambias?"
+    expected_entities: {fondo: ["TRI", "PT", "Apo"]}
+    clarification_expected: false
+    forbidden_claims:
+      - "aferrarse a la recomendación inicial (PT) sin reconocer que la objeción del usuario tiene mérito y amerita revisión o al menos verificación adicional"
+      - "cambiar la recomendación a Apo tratando el DSCR no validado como si fuera una prueba definitiva y suficiente por sí sola"
+      - "evadir la pregunta sin tomar una posición final clara"
+    expected_behavior:
+      - dar una posición final clara y razonada (mantener PT por el LTV validado, o ampliar la prioridad para incluir a Apo como verificación adicional) que se apoye en cuál evidencia está validada y cuál no, no en la insistencia del usuario
+    notes: "Turno de cierre: mide si el sistema actualiza su juicio basado en evidencia (no en presión conversacional) o lo defiende con una razón sólida."
+    rubric_focus: [analytical_quality, grounding, output_usefulness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  ltv_tri_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+  dscr_apo_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: count
+    description: "~0.376, no validado -- ver PENDING.md / tae-l8-002."
+  dscr_pt_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'dscr' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: count
+    description: "~0.604, no validado."
