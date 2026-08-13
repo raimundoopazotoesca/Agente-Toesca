@@ -1,0 +1,19 @@
+id: tae-l1-004
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Trampa clasica de entidades (ver CLAUDE.md, matriz-claves-ambiguas-apoquindo):
+  Apo3001 es un activo del fondo TRI, no del fondo Apo, pese al nombre.
+  Confundir el fondo aqui es gate F2 (entity_confusion) via
+  other_entities_mentioned, no un simple error de dato numerico -- por eso
+  este caso no lleva required_facts, solo expected_entities/forbidden_claims.
+
+turns:
+  - question: "¿A qué fondo pertenece Apoquindo 3001?"
+    expected_entities: {activo: "Apo3001", fondo: "TRI"}
+    clarification_expected: false
+    forbidden_claims:
+      - "afirmar que Apoquindo 3001 pertenece al fondo Apo"
+    rubric_focus: [output_usefulness]

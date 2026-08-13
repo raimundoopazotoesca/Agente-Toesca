@@ -1,0 +1,21 @@
+id: tae-l1-003
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: "Conteo simple sobre dim_activo, sin pasar por derived_kpi."
+
+turns:
+  - question: "¿Cuántos activos tiene el fondo PT?"
+    required_facts:
+      - {ref: n_activos_pt, tolerance_abs: 0}
+    primary_fact: n_activos_pt
+    expected_entities: {fondo: "PT"}
+    clarification_expected: false
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  n_activos_pt:
+    sql: "SELECT COUNT(*) FROM dim_activo WHERE fondo_key = 'PT'"
+    unit: count
+    description: "activos vigentes del fondo PT en dim_activo"

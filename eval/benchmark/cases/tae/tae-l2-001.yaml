@@ -1,0 +1,33 @@
+id: tae-l2-001
+suite: analyst
+level: L2
+tier: L2
+split: dev
+notes: "Comparacion simple de LTV entre dos fondos, mismo periodo."
+
+turns:
+  - question: "Compara el LTV de PT y Apo en junio de 2026. ¿Cuál está más apalancado?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    expected_behavior:
+      - reportar el LTV de ambos fondos
+      - identificar que PT tiene mayor LTV (mas apalancado) que Apo en este periodo
+    rubric_focus: [analytical_quality, output_usefulness]
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+    description: >
+      LTV formula ltv_v1, fondo PT. derived_kpi.valor guarda la razon (0.81);
+      se multiplica por 100 aqui porque el grader busca numeros tal como
+      aparecerian en una respuesta ("81%"), no la razon cruda.
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct
+    description: "LTV formula ltv_v1, fondo Apo, expresado en % (ver nota en ltv_pt_2026_06)"

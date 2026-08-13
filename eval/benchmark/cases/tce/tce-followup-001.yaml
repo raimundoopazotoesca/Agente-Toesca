@@ -1,0 +1,31 @@
+id: tce-followup-001
+suite: conversation
+category: simple_followup
+split: dev
+notes: "Segundo turno hereda fondo, cambia solo el periodo implicito (mes anterior)."
+
+turns:
+  - question: "¿Cuál es la vacancia del fondo TRI en junio de 2026?"
+    required_facts:
+      - {ref: vacancia_tri_2026_06, tolerance_abs: 0.05}
+    primary_fact: vacancia_tri_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+
+  - question: "¿Y el mes anterior?"
+    required_facts:
+      - {ref: vacancia_tri_2026_05, tolerance_abs: 0.05}
+    primary_fact: vacancia_tri_2026_05
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-05"}
+    clarification_expected: false
+    notes: "debe heredar fondo=TRI y metrica=vacancia_pct del turno anterior sin que el usuario los repita"
+
+ground_truth_refs:
+  vacancia_tri_2026_06:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2026-06'"
+    unit: pct
+  vacancia_tri_2026_05:
+    sql: "SELECT valor FROM derived_kpi WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2026-05'"
+    unit: pct

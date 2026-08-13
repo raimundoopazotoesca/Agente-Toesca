@@ -1,0 +1,31 @@
+id: tce-entityswap-001
+suite: conversation
+category: entity_replacement
+split: dev
+notes: "Segundo turno reemplaza la entidad (PT -> Apo), mantiene metrica y periodo."
+
+turns:
+  - question: "¿Cuál es el LTV del fondo PT en junio de 2026?"
+    required_facts:
+      - {ref: ltv_pt_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_pt_2026_06
+    expected_entities: {fondo: "PT"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+
+  - question: "Ahora Apo"
+    required_facts:
+      - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
+    primary_fact: ltv_apo_2026_06
+    expected_entities: {fondo: "Apo"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    notes: "debe heredar metrica=ltv y periodo=2026-06, cambiar solo el fondo"
+
+ground_truth_refs:
+  ltv_pt_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'PT' AND periodo = '2026-06'"
+    unit: pct
+  ltv_apo_2026_06:
+    sql: "SELECT valor * 100 FROM derived_kpi WHERE kpi = 'ltv' AND entidad_key = 'Apo' AND periodo = '2026-06'"
+    unit: pct

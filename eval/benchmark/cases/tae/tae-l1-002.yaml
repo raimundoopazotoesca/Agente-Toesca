@@ -1,0 +1,27 @@
+id: tae-l1-002
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  vacancia_pct en derived_kpi solo existe a nivel fondo para TRI (no por
+  activo) en el snapshot pinneado -- ver inventario en PENDING.md/DB
+  inspection. Caso simple de una sola cifra.
+
+turns:
+  - question: "¿Cuál es la vacancia del fondo TRI en junio de 2026?"
+    required_facts:
+      - {ref: vacancia_tri_2026_06, tolerance_abs: 0.05}
+    primary_fact: vacancia_tri_2026_06
+    expected_entities: {fondo: "TRI"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  vacancia_tri_2026_06:
+    sql: >
+      SELECT valor FROM derived_kpi
+      WHERE kpi = 'vacancia_pct' AND entidad_key = 'TRI' AND periodo = '2026-06'
+    unit: pct
+    description: "derived_kpi.vacancia_pct, entidad fondo=TRI"

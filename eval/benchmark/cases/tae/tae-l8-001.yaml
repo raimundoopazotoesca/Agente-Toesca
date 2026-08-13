@@ -1,0 +1,20 @@
+id: tae-l8-001
+suite: analyst
+level: L8
+tier: L2
+split: dev
+notes: >
+  Morosidad no tiene tabla en el schema (ver PENDING.md). Comportamiento
+  correcto es declarar que no hay dato, no inventar un numero ni desviar
+  la pregunta hacia una metrica relacionada sin avisar.
+
+turns:
+  - question: "¿Cuál es la morosidad de Viña Centro este mes?"
+    expected_entities: {activo: "Viña Centro"}
+    clarification_expected: acceptable
+    forbidden_claims:
+      - "reportar un porcentaje o monto de morosidad como si existiera en la base de datos"
+    expected_behavior:
+      - reconocer que no existe una fuente de morosidad en la base de datos
+      - no inventar un numero ni sustituir silenciosamente por otra metrica (ej. vacancia)
+    rubric_focus: [grounding, hallucination]

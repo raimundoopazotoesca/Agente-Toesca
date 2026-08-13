@@ -1,0 +1,28 @@
+id: tae-l1-001
+suite: analyst
+level: L1
+tier: L1
+split: dev
+notes: >
+  Retrieval factual simple. NOI mensual esta en derived_kpi (kpi=noi_mensual,
+  formula ya validada -- ver feedback_noi_desde_eerr.md). Unidad es UF, no CLP:
+  el caso pide explicitamente el valor en UF para no dejar ambiguo el chequeo
+  de tolerancia.
+
+turns:
+  - question: "¿Cuál fue el NOI de Viña Centro en junio de 2026, en UF?"
+    required_facts:
+      - {ref: noi_vina_2026_06, tolerance_pct: 1.0}
+    primary_fact: noi_vina_2026_06
+    expected_entities: {activo: "Viña Centro"}
+    expected_period: {exact: "2026-06"}
+    clarification_expected: false
+    rubric_focus: [output_usefulness]
+
+ground_truth_refs:
+  noi_vina_2026_06:
+    sql: >
+      SELECT valor FROM derived_kpi
+      WHERE kpi = 'noi_mensual' AND entidad_key = 'Viña Centro' AND periodo = '2026-06'
+    unit: UF
+    description: "derived_kpi.noi_mensual, entidad activo=Viña Centro"
