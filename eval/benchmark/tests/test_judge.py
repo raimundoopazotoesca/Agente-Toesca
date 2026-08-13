@@ -325,6 +325,56 @@ def test_rubric_c4_requires_both_conditional_framing_and_evidence_gap_for_except
     assert "full stop" in text or "override" in text
 
 
+def test_rubric_f1_audit_names_all_four_claim_classifications():
+    """The claim-evidence audit must give the judge an explicit procedure
+    with all four buckets, not just the two named fabrication shapes --
+    a claim that doesn't match pattern (a) or (b) verbatim still needs
+    somewhere to land."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "directly supported" in text
+    assert "reasonably inferred" in text
+    assert "explicitly hypothetical" in text
+    assert "unsupported" in text
+
+
+def test_rubric_f1_audit_does_not_escalate_supported_facts():
+    """A claim that a specific row/value in an executed query or ground
+    truth actually states must land in the supported bucket, not be
+    treated as a candidate for F1 -- the audit is not guilty-until-proven,
+    it starts from what's actually in evidence."""
+    text = " ".join(judge._render_rubric_text(judge.load_rubric()).split())
+    assert "a specific row/value in an executed query result or the provided ground truth" in text
+
+
+def test_rubric_f1_audit_flags_unsupported_transformation_as_fact():
+    """Generalized version of fact transformation: a claim that goes
+    beyond what's directly supported or reasonably inferred, and is
+    presented as settled rather than flagged as inferred, is the general
+    shape that triggers F1 -- independent of any specific case's wording."""
+    text = " ".join(judge._render_rubric_text(judge.load_rubric()).split())
+    assert "goes beyond what is directly supported or reasonably inferred" in text
+    assert "not flagged as a hypothesis" in text
+
+
+def test_rubric_f1_audit_does_not_escalate_qualified_hypothesis():
+    """An explicitly hypothetical claim -- conditional wording, or an
+    acknowledged evidence gap -- must not automatically become F1 just
+    because the underlying topic is uncertain."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "explicitly hypothetical" in text
+    assert "not F1 by virtue of being" in text
+
+
+def test_rubric_f1_audit_covers_unsupported_causal_or_event_claim():
+    """The audit must generalize beyond the two named shapes (external
+    citation, fact transformation) to any unsupported claim asserted as
+    fact -- including an unproven causal driver or event presented as
+    though it happened, not just the two illustrated patterns."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "BOTH unsupported AND" in text
+    assert "presented as established fact" in text
+
+
 def test_rubric_c4_still_fires_on_unqualified_causal_conclusion():
     """The narrowing must not have swallowed the original, legitimate C4
     case: a causal claim stated as settled fact with no hedge at all."""

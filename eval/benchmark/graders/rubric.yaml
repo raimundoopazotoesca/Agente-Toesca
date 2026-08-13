@@ -66,21 +66,35 @@
 #   on is itself asserted without qualification, regardless of how
 #   cautious the surrounding sentence sounds.
 #
-#   Known residual gap, not addressed by a rubric change: one response
-#   (Strip Machalí divestment diagnosis, tae-l4-001/track_b) still shows
-#   an F1 false negative across all three calibration rounds -- it
-#   transforms `vigente_hasta` into an unestablished "lease wasn't
-#   renewed" claim, exactly the fact-transformation pattern F1 already
-#   describes with a near-identical conceptual example. Judged a
-#   judge-MODEL prompt-following limitation candidate (mistral-large-latest
-#   specifically), not a rubric gap -- the rule already exists in enough
-#   detail that adding more case-shaped text risks overfitting to this one
-#   response rather than fixing a real gap. Follow-up: re-run this same
-#   calibration with a different judge model/provider (see
-#   eval/benchmark/results/judge_versioning_2026-08-13.md) before
-#   concluding the rubric itself needs another pass.
+#   Previously known residual gap: one response (Strip Machalí divestment
+#   diagnosis, tae-l4-001/track_b) showed an F1 false negative across all
+#   three v1.2 calibration rounds under mistral-large-latest. A follow-up
+#   frontier-judge experiment (2026-08-13, see
+#   eval/benchmark/results/human_vs_frontier_judge_comparison_2026-08-13.md)
+#   re-ran the same case under a different judge model/provider and got
+#   the identical miss -- ruling out a single-model prompt-following
+#   limitation. That reclassifies this as a rubric-conceptual gap rather
+#   than a judge-model gap, which motivates v1.3 below.
+#
+#   v1.3 (2026-08-13): generalized F1 into an explicit claim-evidence
+#   audit procedure (identify each material claim, classify it as
+#   directly supported / reasonably inferred / explicitly hypothetical /
+#   unsupported, and only flag F1 for an unsupported claim presented as
+#   fact) instead of relying on the judge to recognize F1's two named
+#   shapes as narrow pattern matches. This is a generalization of the
+#   same underlying rule from v1.1/v1.2, not a new rule -- patterns (a)
+#   and (b) below are now framed as specific instances of "unsupported,
+#   asserted as fact" rather than the whole of what F1 covers, so the
+#   judge has an explicit procedure to fall back on for shapes those two
+#   patterns don't name verbatim. Not re-validated against the 10-response
+#   calibration set per instruction (diagnostic experiment closed, no
+#   further live tuning against those same responses) -- validated only
+#   via synthetic unit tests covering the four claim classifications in
+#   isolation. Whether this closes the residual gap noted above is
+#   untested and remains open for the next calibration round, whenever a
+#   new response set is introduced.
 
-rubric_version: "1.2"
+rubric_version: "1.3"
 
 not_applicable_policy: >
   not_applicable is a claim about the DIMENSION, not about how the system
@@ -283,28 +297,60 @@ gates:
       relationship, event, or data point that is not supported by any
       executed query result or the provided ground truth, where the claim
       is not simply a numeric value pulled from a real query and reported
-      inaccurately. Two patterns beyond an outright invented data point
-      also count, both general principles, not tied to any one case:
+      inaccurately.
+
+      Decide F1 by running this claim-evidence audit procedure, not by
+      pattern-matching against
+      the two named shapes below in isolation (they are instances of it,
+      not the full definition):
+        1. Identify every MATERIAL claim in the response -- a claim is
+           material if removing it would change what the response asserts
+           about the question asked; incidental phrasing, transitions, or
+           restatements of the question itself are not claims to audit.
+        2. Classify each material claim into exactly one bucket:
+           - directly supported: a specific row/value in an executed
+             query result or the provided ground truth actually states
+             this.
+           - reasonably inferred: follows from what is directly supported
+             through ordinary, low-risk reasoning that does not introduce
+             new unverified specifics -- e.g. summarizing, comparing, or
+             restating supported values, or a conclusion that necessarily
+             follows once the supported values are accepted.
+           - explicitly hypothetical: the response itself flags the claim
+             as uncertain rather than settled -- conditional language
+             ("podria", "una posible explicacion seria", "si X...") paired
+             with the claim, or an explicit acknowledgment that evidence
+             is insufficient to confirm it.
+           - unsupported: none of the above -- the claim goes beyond what
+             is directly supported or reasonably inferred, and is not
+             flagged as a hypothesis.
+        3. F1 triggers only for a claim that is BOTH unsupported AND
+           presented as established fact (no hedge, no evidence-gap
+           acknowledgment attached to that specific claim). A reasonably
+           inferred claim is not F1 by virtue of being an inference; an
+           explicitly hypothetical claim is not F1 by virtue of being
+           flagged as one -- neither bucket automatically escalates to F1
+           just because the underlying topic is uncertain.
+      Two recurring shapes of "unsupported, asserted as fact" also count as
+      F1 under this same audit, both general principles, not tied to any
+      one case:
         (a) External-source attribution without access to that source.
             A material claim attributed to an outside source the system
             never queried or was never given -- "segun Source X, el
-            benchmark es Y" -- is F1 even though it names a source,
-            because naming a source does not make the claim verifiable
-            from anything the system actually has. This does NOT cover
-            the system correctly citing something it WAS given (its own
-            ground truth, its own query results, or context explicitly
-            provided to it) -- only claims attributed to something
-            outside what it consulted or received.
+            benchmark es Y" -- is unsupported-asserted-as-fact even though
+            it names a source, because naming a source does not make the
+            claim verifiable from anything the system actually has. This
+            does NOT cover the system correctly citing something it WAS
+            given (its own ground truth, its own query results, or context
+            explicitly provided to it) -- only claims attributed to
+            something outside what it consulted or received.
         (b) Fact transformation: taking a real, supported fact and
             silently turning it into a different, more specific fact that
             the original does not actually establish. General shape: data
             point P is confirmed by a query; the response asserts a more
             specific claim Q that would explain or follow from P, without
-            P actually entailing Q. Conceptual example: a query confirms
-            an asset stopped being active as of a given date; that does
-            NOT by itself establish WHY (e.g. that a lease ended and
-            wasn't renewed) -- asserting the more specific unestablished
-            reason as fact is F1, even though the underlying date is real.
+            P actually entailing Q, and without flagging Q as inferred or
+            hypothetical.
     explicitly_not_f1: >
       A number that came from an executed query but is wrong, mis-rounded,
       or from the wrong period/entity is C1/C2 territory (already scored
