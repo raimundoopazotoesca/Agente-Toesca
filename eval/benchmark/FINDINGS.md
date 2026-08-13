@@ -96,3 +96,53 @@ not yet produced a live analytical response.** The live pilot run against
 Track B is the next step once a provider has headroom (retry after the
 Groq quota window, or supply a fresh key for any OpenAI-tool-calling-
 compatible provider other than Gemini).
+
+---
+
+## 2026-08-13 — Track B live pilot run: completed on Mistral, gpt-oss-120b/llama-70b unusable in practice
+
+Retried the same 8 L3–L5 cases. Isolated availability probes (trivial
+non-tool call, then a real tool-calling call) in priority order:
+
+| Priority | Provider/model | Probe result |
+|---|---|---|
+| 1 | groq / openai/gpt-oss-120b | Tool-calling probe succeeded on 3 separate accounts (keys 1/2/3) but the account's 8000 TPM (tokens-per-minute) ceiling was hit on the **first real call** every time — Track B's system prompt (semantic context + full DB schema) alone is ~5800–6100 tokens, ~72–76% of the whole per-minute budget. Structural, not account-specific. |
+| 2 | groq / llama-3.3-70b-versatile | Trivial ping succeeded (near-zero tokens), but the real system-prompt-sized call hit each account's **daily** quota (TPD) at 98,000+/100,000 on all 3 keys — consumed cumulatively by this session's own Track A pilot runs and probes. |
+| 3 | mistral / mistral-large-latest | Available. Used for the full run. |
+| 4 (sambanova) | not probed — priority 3 succeeded, so per instructions did not fall further |
+
+Pinned mistral-large-latest for the whole run, no cross-model fallback.
+Runner-level retry with visible backoff around whole `ask()` calls (not
+inside Track B's loop) handled Mistral's own rate limiting, which was
+frequent (15s cooldown, up to 8 attempts). **Full transcript**:
+`eval/benchmark/results/track_b_l3l5_pilot_2026-08-13.txt`.
+
+**Outcome: 6/8 cases produced a real answer, 2/8 exhausted retries
+(infra, not a Track B defect) — a categorically different result from
+Track A's 0/8.** See the chat report for the full per-case breakdown;
+summary here:
+
+- **Best case** (`tae-l4-001`, Strip Machalí divestment diagnosis): 5 tool
+  calls, correctly used `dim_activo.vigente_hasta`, correctly concluded
+  "fund exit, not a data error" — the target behavior for that case.
+- **Best quantitative case** (`tae-l5-002`, vacancia ranking): identified
+  Apo3001 at 36.2% vacancy (ground truth: 36.3%), transparently flagged
+  that some peer assets only had data through May, not June. Full marks
+  on `factual_correctness`/`conversational_quality`.
+- **Real grounding failure found** (`tae-l4-002`, TRI vacancia swing):
+  attributed the dip/rebound to **Viña Centro**, when the SQL-verified
+  driver is **Mall Curicó** — then invented an unsupported "reporting
+  error" hypothesis on top of the wrong attribution. This is exactly the
+  kind of failure `forbidden_claims`/grounding scoring exists to catch;
+  currently un-caught because the judge isn't built yet.
+- **Appropriate hedge, not a failure** (`tae-l4-003`, TIR serie I): never
+  found the right nemotécnico (`CFITOERI1I`; it searched `TRI-I`), got no
+  rows, and explicitly said it could not confirm a cause rather than
+  inventing a number — good epistemic behavior wrapped around a real
+  retrieval miss.
+- **2 infra failures** (`tae-l3-001`, `tae-l5-001`): exhausted 8 retries
+  against Mistral's rate limiter before an answer was produced. Not
+  scored as model failures — no response was ever generated.
+
+**Gemini's incompatibility remains an adapter/protocol issue, not a model
+capability judgment** — untouched this pass, exactly as instructed.
