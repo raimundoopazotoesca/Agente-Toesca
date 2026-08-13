@@ -161,7 +161,7 @@ Por qué esto y no las alternativas:
 
 Detalles:
 
-- **Fecha congelada**: el snapshot fija `BENCHMARK_TODAY = 2026-08-13`. Todo "este año", "el mes pasado", "últimos 3 meses" se resuelve contra esa fecha, inyectada al adapter. Sin esto, los casos relativos se pudren solos.
+- **Fecha congelada**: el snapshot fija `BENCHMARK_TODAY = 2026-08-13`. Snapshot + fecha forman **una sola versión reproducible** (`benchmark_version: v1`); no se refrescan silenciosamente. Datos o fecha nuevos ⇒ **v2**, no un v1 actualizado. Todo "este año", "el mes pasado", "últimos 3 meses" se resuelve contra esa fecha, inyectada al adapter. Sin esto, los casos relativos se pudren solos.
 - **Acceso read-only** (`file:...?mode=ro`) + wrapper que registra queries y aborta DDL/DML. Sirve también al hard gate de seguridad de DB.
 - **Sin datos sensibles adicionales**: no se copia nada que no esté ya en la DB versionada.
 - Re-pin del snapshot ⇒ re-validación de todos los `expected_value` mediante `verify_ground_truth.py` (§8.1), y bump de `benchmark_version`.
@@ -283,22 +283,43 @@ Sin score único. Cada caso produce un vector de dimensiones en [0,1], solo las 
 
 ---
 
-## 8. Hard gates
+## 8. Política de gates: fatal vs. ceiling
 
-Un gate no resta puntos: **anula el caso** (todas las dimensiones → 0) y se cuenta aparte en `gate_violations`. Un track con estilo excelente y un gate disparado no puede ganar.
+Anular el caso completo ante *cualquier* error factual destruye señal diagnóstica: no permite distinguir "respondió bien y erró un número secundario" de "respondió cualquier cosa". Por eso hay **dos niveles**, y la diferencia no es la gravedad percibida sino **si el error invalida la respuesta como objeto de evaluación**.
 
-| Gate | Detección |
-|---|---|
-| `G1 wrong_number` | dato financiero/operacional fuera de tolerancia vs ground truth | determinista |
-| `G2 fabrication` | cifra/entidad/hecho en la respuesta que no aparece en ningún resultado de query ejecutada | determinista + judge |
-| `G3 entity_confusion` | responde de otro activo/fondo (el clásico Apo3001 → fondo Apo) | determinista |
-| `G4 wrong_period` | período distinto al pedido/heredado sin declararlo | determinista |
-| `G5 unsupported_causality` | afirma causa sin evidencia consultada | judge con evidencia de `queries` |
-| `G6 session_leak` | menciona entidad/dato que solo existe en otra sesión | determinista |
-| `G7 unsafe_db` | intento de DDL/DML/PRAGMA/attach, o lectura fuera del snapshot | wrapper de DB |
-| `G8 ignored_correction` | tras "no, me refería a X", sigue respondiendo Y | determinista (entidad del turno siguiente) |
+### 8.1 Fatal gates — anulan el caso
 
-Seis de ocho son deterministas. Solo G5 requiere judge, y con la evidencia a la vista.
+Todas las dimensiones → 0, se cuenta en `gate_violations`. Criterio: **la respuesta no es sobre lo que se preguntó, o su contenido no proviene de los datos.** Puntuar "calidad analítica" sobre eso sería puntuar ficción.
+
+| Gate | Por qué es fatal | Detección |
+|---|---|---|
+| `F1 fabrication` | cifra/entidad/hecho que no aparece en ningún resultado ejecutado — la respuesta no está anclada a datos | determinista + judge |
+| `F2 entity_confusion` | responde de otro activo/fondo (Apo3001 → fondo Apo): es la respuesta a otra pregunta | determinista |
+| `F3 session_leak` | usa contexto de otra sesión — defecto de aislamiento, no de análisis | determinista |
+| `F4 unsafe_db` | DDL/DML/PRAGMA/attach o lectura fuera del snapshot | wrapper de DB |
+| `F5 ignored_correction` | tras "no, me refería a X" sigue en Y: el sistema dejó de responder al usuario | determinista |
+
+`F2` es fatal solo cuando la entidad equivocada es **el sujeto** de la respuesta. Si la respuesta correcta menciona de paso una entidad mal atribuida, es `C2`.
+
+### 8.2 Ceiling caps — techo fuerte, señal preservada
+
+No anulan. Imponen un **máximo a la puntuación total del caso** y siempre ponen a 0 la dimensión directamente afectada. Las demás dimensiones se puntúan normalmente, así que el reporte sigue mostrando *qué* hizo bien. Se cuentan aparte en `ceiling_hits`.
+
+| Cap | Efecto | Detección |
+|---|---|---|
+| `C1 wrong_primary_number` — el número que responde la pregunta está fuera de tolerancia | ceiling **0,30**; `factual_correctness = 0` | determinista |
+| `C2 wrong_secondary_number` — cifra de apoyo errada, la principal correcta | ceiling **0,60**; `factual_correctness ≤ 0,5` | determinista |
+| `C3 wrong_period` — período distinto al pedido/heredado **sin declararlo** | ceiling **0,40** | determinista |
+| `C4 unsupported_causality` — afirma causa sin evidencia consultada | ceiling **0,50**; `grounding = 0` | judge con `queries` a la vista |
+| `C5 forbidden_claim` — dispara un `forbidden_claims` del caso | ceiling **0,50** | judge |
+
+Si el período equivocado **se declara explícitamente** ("no hay dato de julio, muestro junio"), no hay cap: es comportamiento correcto y suma en `clarification_judgment`.
+
+Múltiples caps ⇒ se aplica el **mínimo** de los ceilings. Un fatal domina a cualquier cap.
+
+Consecuencia que se preserva del diseño original: un sistema con estilo excelente y datos incorrectos no puede sacar buen score — su techo es 0,30. Pero sí queda registro de que su investigación fue buena, que es exactamente la información que necesitamos para decidir arquitectura.
+
+Nueve de diez señales son deterministas o casi; solo `C4`/`C5` requieren judge, y con la evidencia a la vista.
 
 ---
 
@@ -310,7 +331,19 @@ Tres capas, en este orden:
 
 **2. Rubric judge** (LLM), solo para lo genuinamente subjetivo. Recibe: pregunta, respuesta, **los hechos verificados y las queries ejecutadas**, y la rúbrica del caso. No recibe: identidad del modelo/track, ni la respuesta "de referencia" de otro sistema. Puntúa cada dimensión 0–4 con anclas escritas y exige una justificación citando la respuesta.
 
-**3. Calibración humana** (periódica, no continua). Muestra estratificada del 15% de los casos por ronda, revisada a ciegas por una persona. Se mide correlación judge↔humano (Spearman) y desacuerdos >1 punto. Si la correlación cae bajo un umbral acordado, la rúbrica se corrige antes de aceptar resultados. Los casos L5/L6 con desacuerdo persistente se marcan `human_only`.
+**3. Revisión humana — calibra y audita graders, no puntúa corridas.** No se revisa un % fijo por modelo/configuración; eso escala con el número de candidatos y no aporta señal nueva.
+
+*Durante desarrollo — revisión dirigida*, disparada por el runner, no por muestreo. Se encola un caso para revisión cuando:
+- hay **desacuerdo entre graders** (determinista dice ok, judge castiga, o doble judge discrepa >1 punto);
+- el judge reporta **baja confianza**;
+- el caso es **analítico complejo** (L5/L6) y es su primera corrida bajo una rúbrica nueva;
+- dos sistemas quedan **muy cerca** (Δ score dentro del ruido estimado) en un caso que inclina la comparación.
+
+Cada revisión corrige la **rúbrica o el grader**, no el score de esa corrida. Lo que se versiona es el grader.
+
+*En hitos — panel blind.* ~8–12 casos estratificados por tier y categoría, las **mismas preguntas para todos los sistemas**, respuestas anonimizadas y en orden randomizado. Sirve a dos fines: decidir donde el automático no alcanza, y medir correlación humano↔judge (Spearman) para validar que el judge sigue siendo usable. Si la correlación cae bajo el umbral acordado, la rúbrica se corrige antes de aceptar los resultados del hito.
+
+Los casos L5/L6 con desacuerdo persistente se marcan `human_only` y quedan fuera del agregado automático.
 
 ### 9.1 Anti-sesgo del judge
 
@@ -328,9 +361,9 @@ Riesgos documentados y su mitigación:
 ## 10. Dev vs holdout
 
 - **dev = 70%** (17 TCE + 34 TAE), **holdout = 30%** (7 TCE + 14 TAE), estratificado por categoría y tier.
-- El holdout vive en `eval/benchmark/cases/holdout/` con un `README` que dice qué está prohibido, y se corre **solo en hitos de decisión** (elegir modelo, elegir arquitectura, aprobar routing), no en el ciclo de tuning.
+- El dev set se usa durante toda la iteración. El holdout vive en `eval/benchmark/cases/holdout/` con un `README` que dice qué está prohibido, y se corre **solo en hitos de decisión** (elegir modelo, elegir arquitectura, aprobar routing) y **con el candidato/configuración congelado** — nunca como parte de un ciclo de ajuste.
 - Regla operativa: el texto de los casos holdout **no puede aparecer** en system prompts, few-shots, `tools/analyst/verified_queries/`, `semantic/synonyms.yaml` ni en tests funcionales. Un test del benchmark (`test_holdout_not_leaked.py`) hace grep de n-gramas de las preguntas holdout sobre esos archivos y falla si hay coincidencia.
-- Cada corrida del holdout se registra con fecha y motivo. Correrlo más de ~1 vez por hito lo degrada a dev; eso se documenta, no se prohíbe informalmente.
+- Cada corrida del holdout se registra en `eval/benchmark/holdout_runs.md` con fecha, motivo y configuración evaluada. Si empieza a usarse repetidamente para optimizar, se declara **contaminado**: pasa a dev y se rota escribiendo casos nuevos. Correrlo más de ~1 vez por hito es la señal de alarma.
 
 ---
 
@@ -364,10 +397,10 @@ Reporte de decisión: matriz por tier y dimensión, más costo. La pregunta "¿c
 | Automatizable hoy | Requiere revisión humana |
 |---|---|
 | Ejecución de casos y captura de traza | Redacción de `required_facts` / `forbidden_claims` |
-| Todos los graders deterministas | 6 de 8 gates son automáticos; G5 necesita spot-check |
-| 6 de 8 hard gates | Casos L5/L6 marcados `human_only` |
-| Materialización de ground truth por SQL | Aprobar el re-pin del snapshot cuando cambian valores |
-| Costo, latencia, tokens | Calibración del judge (15% por ronda) |
+| Todos los graders deterministas | `C4`/`C5` necesitan spot-check |
+| 5 fatal gates + `C1`–`C3` | Casos L5/L6 marcados `human_only` |
+| Materialización de ground truth por SQL | Aprobar el paso a v2 cuando cambian datos o fecha |
+| Costo, latencia, tokens | Revisión dirigida + panel blind de hito (8–12 casos) |
 | Test anti-leak del holdout | Decidir si un caso pasa a PENDING por falta de datos |
 
 Estimación honesta: ~75% del scoring corre solo; el 25% restante es donde está el valor real y no conviene automatizarlo.
