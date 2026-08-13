@@ -1,0 +1,156 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "toesca-analyst-benchmark/case.schema.json",
+  "title": "Toesca Analyst Benchmark case",
+  "type": "object",
+  "required": ["id", "suite", "split", "turns"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(tae|tce)-[a-z0-9]+-[0-9]{3}$",
+      "description": "tae-l4-007 / tce-ambiguity-002"
+    },
+    "suite": {"enum": ["analyst", "conversation"]},
+    "category": {
+      "type": "string",
+      "description": "Conversation suite category (followup, entity_replacement, ...)"
+    },
+    "level": {
+      "enum": ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"],
+      "description": "Analyst suite level. Absent for conversation cases."
+    },
+    "tier": {
+      "enum": ["L1", "L2", "L3", "L4"],
+      "description": "Difficulty tier, drives model-routing analysis."
+    },
+    "split": {"enum": ["dev", "holdout"]},
+    "capability": {
+      "type": ["string", "null"],
+      "description": "Product capability required (e.g. xlsx_export). Tracks lacking it score 'unscored', not 'fail'."
+    },
+    "human_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "Persistent judge/human disagreement: excluded from the automatic aggregate."
+    },
+    "notes": {"type": "string"},
+    "turns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/definitions/turn"}
+    },
+    "ground_truth_refs": {
+      "type": "object",
+      "description": "Named facts resolved by running SQL against the pinned snapshot. Never hardcoded numbers.",
+      "additionalProperties": {"$ref": "#/definitions/ground_truth_ref"}
+    }
+  },
+  "definitions": {
+    "turn": {
+      "type": "object",
+      "required": ["question"],
+      "additionalProperties": false,
+      "properties": {
+        "question": {"type": "string", "minLength": 1},
+
+        "required_facts": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/fact_expectation"},
+          "description": "Must appear in the answer, within tolerance."
+        },
+        "acceptable_facts": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/fact_expectation"},
+          "description": "Credit towards completeness; not mandatory."
+        },
+        "primary_fact": {
+          "type": "string",
+          "description": "ref of the fact that actually answers the question. Getting it wrong is C1; any other required fact is C2."
+        },
+
+        "expected_entities": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Keys: fondo | activo | serie | sociedad."
+        },
+        "expected_period": {"$ref": "#/definitions/period"},
+        "forbidden_claims": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Natural-language descriptions of claims that trigger C5."
+        },
+        "tool_requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_distinct_queries": {"type": "integer", "minimum": 1},
+            "must_touch_tables": {"type": "array", "items": {"type": "string"}},
+            "must_produce_artifacts": {
+              "type": "array",
+              "items": {"enum": ["table", "chart", "xlsx", "file"]}
+            }
+          }
+        },
+        "clarification_expected": {
+          "enum": [true, false, "acceptable"],
+          "description": "true: must ask. false: asking is friction and penalised. acceptable: either is fine."
+        },
+
+        "expected_behavior": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Rubric anchors. Never expected_sql."
+        },
+        "rubric_focus": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/dimension"}
+        },
+        "notes": {"type": "string"}
+      }
+    },
+    "fact_expectation": {
+      "type": "object",
+      "required": ["ref"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {"type": "string"},
+        "tolerance_pct": {"type": "number", "minimum": 0},
+        "tolerance_abs": {"type": "number", "minimum": 0}
+      }
+    },
+    "ground_truth_ref": {
+      "type": "object",
+      "required": ["sql", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "sql": {"type": "string", "minLength": 1},
+        "unit": {"enum": ["CLP", "UF", "pct", "m2", "count", "date", "text"]},
+        "description": {"type": "string"}
+      }
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
+        "to": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
+        "exact": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"}
+      }
+    },
+    "dimension": {
+      "enum": [
+        "factual_correctness",
+        "completeness",
+        "tool_correctness",
+        "analytical_quality",
+        "grounding",
+        "hallucination",
+        "conversational_quality",
+        "clarification_judgment",
+        "investigation_quality",
+        "output_usefulness"
+      ]
+    }
+  }
+}
