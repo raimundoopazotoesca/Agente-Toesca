@@ -142,6 +142,20 @@ dimensions:
       Given what the case calls for (clarification_expected) and what data
       was actually available, was answering / clarifying / declining the
       right call, and was it justified?
+    scope: >
+      Judge ONLY the initial decision of whether to answer, clarify, or
+      decline -- not what happened afterward. If the question was clear
+      enough and available data made it answerable, and the system
+      correctly chose to attempt an answer, that choice was right
+      regardless of how the attempt then went. Do not lower
+      clarification_judgment because of a wrong identifier, a failed
+      retrieval, a wrong conclusion, or any other execution problem that
+      happened after the decision to answer was already made -- those
+      failures belong to analytical_quality, grounding, investigation_quality,
+      tool_correctness, and the fatal/ceiling gates, not to this dimension.
+      This dimension answers exactly one question: was attempting vs.
+      clarifying vs. declining the right call at the moment the system
+      decided which one to do.
     anchors:
       0: "Declines or asks for clarification when the data was clearly available and directly answerable (unjustified avoidance); OR answers directly when the question was genuinely ambiguous, silently picking one interpretation without flagging it."
       1: "Clarifies/declines with weak justification when a reasonable attempt was possible, or answers an ambiguous case without acknowledging the ambiguity existed."
@@ -257,32 +271,67 @@ gates:
       knowledge into fabrication. The line is whether the claim is
       presented AS VERIFIED FACT: a qualified hypothesis is not; an
       unqualified assertion sourced to nothing the system has is.
+      Retrieval failure is also NOT F1: a query built on a wrong
+      identifier/table/filter that returns zero rows, after which the
+      system concludes (correctly or not) that no data exists, is a tool
+      or investigation failure, not fabrication -- nothing was invented,
+      the retrieval itself just failed. Score that through
+      tool_correctness (wrong identifier/query), grounding (claim not
+      actually checked against the right data), investigation_quality
+      (didn't find or didn't cross-check the real evidence), and
+      analytical_quality (wrong conclusion) as applicable -- do not also
+      reach for F1 unless the response goes further and asserts a
+      specific invented fact beyond "I found nothing."
     trigger_test: >
       Ask: "if I strip out every number, is there still a claim here that
       no executed query or ground truth fact supports, presented as if it
       were verified rather than hypothesized?" If yes -> F1 triggered. If
       the ungrounded part is only the wrong number, or the claim is
-      explicitly flagged as an unconfirmed hypothesis, it is not F1.
+      explicitly flagged as an unconfirmed hypothesis, it is not F1. If
+      the response's failure is that a wrong query returned nothing and it
+      said so, that is retrieval failure, not F1 -- see explicitly_not_f1.
 
   C4_unsupported_causality:
     kind: ceiling
     definition: >
-      Asserts "X caused/explains Y" as settled fact without evidentiary
-      support for the causal link itself (correlation/co-occurrence in the
-      data is not causal evidence unless the case's ground truth
-      establishes the mechanism).
+      Do not trigger C4 merely because causal LANGUAGE is present ("porque",
+      "debido a", "explica", "causo") -- judge the epistemic commitment
+      level of the claim, not its vocabulary. Two shapes to tell apart:
+        - Unsupported causal conclusion: the response commits to a causal relationship
+          between X and Y as settled fact, without evidence
+          for the causal link itself (correlation/co-occurrence in the
+          data is not causal evidence unless the case's ground truth
+          establishes the mechanism). -> C4.
+        - Explicitly qualified hypothesis: "una posible explicacion seria
+          Y, pero no tenemos evidencia suficiente para confirmarlo" -- the
+          response proposes Y as one possible account and visibly flags
+          that it isn't confirmed. -> NOT C4 on its own.
+      A response can also cross the line indirectly: if it treats an
+      UNPROVEN event as the effective explanation for a phenomenon --
+      e.g. inferring that a specific transaction, error, or decision
+      occurred and then using that inferred event to explain the data,
+      without the event itself being established by any query or ground
+      truth -- that is C4 even if the surrounding language reads as
+      cautious, because the response is still resting its explanation on
+      a fact it does not have.
     explicitly_not_c4: >
       A clearly-hedged hypothesis ("una hipotesis posible seria X, pero no
       puedo confirmarlo con los datos disponibles", "podria explicarse
-      por...") is NOT unsupported causality -- appropriate hedging is
-      exactly the behavior several cases expect. Only trigger C4 when the
-      causal claim is stated as fact, not as an explicitly qualified
-      possibility.
+      por...") is NOT unsupported causality by itself -- appropriate
+      hedging is exactly the behavior several cases expect. Only trigger
+      C4 when the causal claim is stated as fact, or when a hedged-sounding
+      explanation is actually built on an unproven event treated as if it
+      happened (see definition above) -- hedging the LANGUAGE around an
+      inferred event does not un-commit to that event being real.
     trigger_test: >
-      Would a careful reader come away believing the system has CONFIRMED
-      the cause, when the underlying queries only show co-occurrence or
-      nothing at all? If yes -> C4. If the response visibly flags it as an
-      unconfirmed hypothesis -> not C4.
+      Ask two questions. (1) Would a careful reader come away believing the
+      system has CONFIRMED the cause, when the underlying queries only show
+      co-occurrence or nothing at all? (2) Even if the language hedges, does
+      the explanation depend on a specific event/fact that was never
+      established, used as if it were real? If yes to either -> C4. A
+      genuinely hedged hypothesis that doesn't quietly lean on an unproven
+      event -- flagged as an unconfirmed possibility and not doing that --
+      is not C4.
 
   C5_forbidden_claim:
     kind: ceiling

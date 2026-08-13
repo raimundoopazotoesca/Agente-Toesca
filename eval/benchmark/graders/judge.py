@@ -77,6 +77,7 @@ def classify_response(turn, infra_error: str | None) -> str:
 # question/anchors -- any dimension can carry a subset of these. Extending
 # a dimension with a new rule field only requires adding it here once.
 _DIMENSION_NOTE_KEYS = [
+    ("scope", "SCOPE"),
     ("cap_rule", "HARD CEILING"),
     ("not_evidence", "NOT evidence"),
     ("scoring_a_response_with_no_material_claims", "No material claims"),
@@ -145,9 +146,21 @@ NO es F1 (eso ya esta cubierto por C1/C2, no lo toques). Tambien es F1: (a) atri
 una afirmacion material a una fuente externa que el sistema no consulto ni recibio \
 (nombrar la fuente no la hace verificable), y (b) transformar un hecho respaldado en \
 un hecho mas especifico que ese dato no establece por si solo. No conviertas \
-hipotesis calificadas o conocimiento general en F1.
-- C4 (causalidad no sustentada) NO se dispara si la respuesta presenta la causa \
-explicitamente como hipotesis no confirmada.
+hipotesis calificadas o conocimiento general en F1. Tampoco es F1 una falla de \
+retrieval: una query con identificador/tabla equivocada que devuelve 0 filas, tras \
+lo cual el sistema concluye que no hay datos, es un fallo de herramienta o \
+investigacion, no fabricacion -- nada fue inventado. Puntualo via tool_correctness, \
+grounding, investigation_quality y analytical_quality, no via F1, salvo que ademas \
+invente un dato especifico mas alla de "no encontre nada".
+- C4 (causalidad no sustentada) NO se dispara solo porque hay lenguaje causal \
+("porque", "explica", "se debe a"). Evalua el nivel de compromiso epistemologico: \
+una hipotesis explicitamente calificada como no confirmada NO es C4. Pero si la \
+respuesta se apoya en un evento o hecho NO demostrado como si fuera real para \
+explicar el fenomeno -- aunque el lenguaje suene cauteloso -- eso SI es C4.
+- clarification_judgment juzga SOLO la decision inicial de responder/aclarar/declinar. \
+Si la pregunta era clara y respondible y el sistema decidio bien intentar responder, \
+un identificador equivocado o un retrieval fallido POSTERIOR no debe bajar este \
+puntaje -- eso va en analytical_quality/grounding/investigation_quality/tool_correctness.
 - C5 (forbidden claim) se evalua literalmente contra cada claim listado en \
 forbidden_claims, no contra tu propio juicio de que esta mal.
 - response_mode: "answered" si intento responder sustantivamente; "clarified" si \
@@ -282,6 +295,32 @@ def _to_judge_result(payload: dict[str, Any], attempts: int) -> JudgeResult:
     return result
 
 
+def _enforce_tool_correctness_policy(result: JudgeResult, judge_input: JudgeInput) -> None:
+    """Deterministic safety net for tool_correctness's `when_not_applicable`
+    rule (rubric.yaml): the judge sometimes marks not_applicable out of
+    habit even when the structural signal is unambiguous. This corrects
+    exactly one shape, fully decidable from JudgeInput itself rather than
+    from the judge's own narrative -- not a case-specific patch, it applies
+    to any future case with this same shape: no tool call was ever made,
+    yet the turn had materialized ground truth (so data existed to query).
+    That is "tools were needed and never used", which the rubric defines
+    as a hard 0, never not_applicable. Does not touch any other dimension.
+    """
+    if "tool_correctness" not in result.not_applicable:
+        return
+    no_tools_used = not judge_input.executed_sql and not judge_input.tool_trace
+    data_was_available = bool(judge_input.ground_truth)
+    if no_tools_used and data_was_available:
+        result.not_applicable.discard("tool_correctness")
+        result.dimension_scores["tool_correctness"] = 0
+        detail = dict(result.dimension_details.get("tool_correctness", {}))
+        detail["overridden"] = (
+            "deterministic: no tool calls were made despite ground truth "
+            "data being available for this turn (rubric when_not_applicable rule)"
+        )
+        result.dimension_details["tool_correctness"] = detail
+
+
 DEFAULT_MAX_OUTPUT_TOKENS = 3000
 
 
@@ -327,7 +366,9 @@ def run_judge(
             response = chat_fn(model=model, messages=attempt_messages, temperature=0.0, max_tokens=max_output_tokens)
             content = response.choices[0].message.content
             payload = _validate_and_parse(content, schema)
-            return _to_judge_result(payload, attempt)
+            result = _to_judge_result(payload, attempt)
+            _enforce_tool_correctness_policy(result, judge_input)
+            return result
         except Exception as exc:  # noqa: BLE001 -- any failure here is a retry/unscore signal, not a crash
             last_error = f"{type(exc).__name__}: {exc}"
 

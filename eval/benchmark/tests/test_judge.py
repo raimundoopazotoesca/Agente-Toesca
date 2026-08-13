@@ -55,6 +55,20 @@ def test_rubric_text_renders_without_error():
     assert "Not a quantity metric" in text
 
 
+def test_rubric_prompt_separates_retrieval_failure_from_fabrication_and_causality():
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "retrieval failure" in text
+    assert "wrong query" in text
+    assert "causal relationship" in text
+    assert "hedged hypothesis" in text
+
+
+def test_rubric_prompt_scopes_clarification_judgment_to_the_initial_decision():
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "initial decision" in text
+    assert "Do not lower clarification_judgment" in text
+
+
 # --- classify_response (deterministic, pre-judge) -------------------------
 
 def test_classify_infra_failure_takes_priority():
@@ -196,6 +210,80 @@ def test_run_judge_valid_output_first_try():
     assert result.dimension_scores["analytical_quality"] == 3
     assert "tool_correctness" in result.not_applicable
     assert "tool_correctness" not in result.dimension_scores
+
+
+def test_run_judge_scores_missing_required_tool_as_zero_not_na():
+    payload = _valid_payload()
+    judge_input = JudgeInput(
+        question="¿Cuál es el NOI del activo?",
+        expected_behavior=["reportar el NOI"],
+        forbidden_claims=[],
+        ground_truth={"noi": {"value": 100, "unit": "UF"}},
+        response_text="No tengo el dato.",
+        executed_sql=[],
+        query_results=[],
+        artifacts=[],
+        tool_trace=[],
+        deterministic={},
+        tool_requirements=None,
+        clarification_expected=False,
+    )
+    result = judge.run_judge(
+        judge_input,
+        _fake_chat([json.dumps(payload)]),
+        model="test-model",
+    )
+    assert result.dimension_scores["tool_correctness"] == 0
+    assert "tool_correctness" not in result.not_applicable
+
+
+def test_run_judge_tool_correctness_override_does_not_fire_when_tools_were_used():
+    """The deterministic safety net only corrects the 'no tools ever ran,
+    yet data existed' shape. If tool calls did happen, whatever the judge
+    said about not_applicable is left alone -- this isn't a general
+    override of judge judgment, just the one fully-decidable case."""
+    payload = _valid_payload()
+    judge_input = JudgeInput(
+        question="q", expected_behavior=[], forbidden_claims=[],
+        ground_truth={"noi": {"value": 100, "unit": "UF"}},
+        response_text="x", executed_sql=["SELECT 1"], query_results=[], artifacts=[],
+        tool_trace=[], deterministic={}, tool_requirements=None, clarification_expected=None,
+    )
+    result = judge.run_judge(judge_input, _fake_chat([json.dumps(payload)]), model="test-model")
+    assert "tool_correctness" in result.not_applicable
+    assert "tool_correctness" not in result.dimension_scores
+
+
+def test_run_judge_tool_correctness_override_does_not_fire_without_ground_truth():
+    """No tools used AND no ground truth available -- genuinely nothing to
+    query, so not_applicable is legitimate and must not be overridden."""
+    payload = _valid_payload()
+    judge_input = JudgeInput(
+        question="q", expected_behavior=[], forbidden_claims=[], ground_truth={},
+        response_text="x", executed_sql=[], query_results=[], artifacts=[],
+        tool_trace=[], deterministic={}, tool_requirements=None, clarification_expected=None,
+    )
+    result = judge.run_judge(judge_input, _fake_chat([json.dumps(payload)]), model="test-model")
+    assert "tool_correctness" in result.not_applicable
+    assert "tool_correctness" not in result.dimension_scores
+
+
+def test_rubric_f1_retrieval_failure_carveout_points_to_other_dimensions():
+    """The F1-vs-retrieval-failure carve-out must redirect scoring to the
+    dimensions that actually cover it, not just say 'not F1' and stop."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "tool_correctness" in text
+    assert "investigation_quality" in text
+    # the carve-out sentence itself, not just the dimension existing elsewhere
+    assert "zero rows" in text or "returns zero rows" in text
+
+
+def test_rubric_c4_covers_unproven_event_used_as_explanation():
+    """C4 must fire on a hedged-sounding explanation that quietly leans on
+    an event never established by any query -- not just on bare 'X caused
+    Y' assertions."""
+    text = judge._render_rubric_text(judge.load_rubric())
+    assert "unproven event" in text
 
 
 def test_run_judge_retries_once_then_succeeds():
