@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES
+from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE, _schema_summary, _semantic_context
 from eval.benchmark.adapters.track_b_frontier import TrackBFrontier
 from eval.benchmark.cases_loader import CASES_DIR, load_cases
 from eval.benchmark.graders.deterministic import score_turn
@@ -47,12 +47,21 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _effective_contract_hashes() -> tuple[str, str]:
+    """UTF-8 exact rendered prompt; canonical JSON tool schema (sorted keys, compact separators)."""
+    sandbox = SnapshotSandbox()
+    prompt = _SYSTEM_PROMPT_TEMPLATE.format(semantic_context=_semantic_context(), schema_summary=_schema_summary(sandbox))
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    tool = json.dumps(_RUN_SQL_TOOL, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return prompt_hash, hashlib.sha256(tool.encode("utf-8")).hexdigest()
+
+
 def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -> dict[str, Any]:
     mini = validate_mini_dev()
     lock = load_lock()
+    prompt_hash, tool_hash = _effective_contract_hashes()
     return {"run_id": run_id, "run_kind": "mini_dev", "mini_dev": mini, "code_commit_sha": code_commit_sha, "track": "B",
-            "snapshot": lock, "system_prompt_sha256": _file_hash(ROOT / "eval/benchmark/adapters/track_b_frontier.py"),
-            "tool_schema_sha256": _file_hash(ROOT / "eval/benchmark/adapters/track_b_frontier.py"),
+            "snapshot": lock, "system_prompt_sha256": prompt_hash, "tool_schema_sha256": tool_hash,
             "inference_profile": "B1_STANDARD", "provider_configs": [p.__dict__ for p in B1_STANDARD_PROFILES],
             "max_model_tool_rounds": 5, "timeout_policy": "provider default", "retry_policy": "one: 429/5xx/network/timeout",
             "grader_versions": {"deterministic_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/deterministic.py"),

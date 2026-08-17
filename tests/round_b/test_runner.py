@@ -34,6 +34,14 @@ def test_manifest_run_id_changes_raw_serialized_identity():
     assert hashlib.sha256(json.dumps(a, sort_keys=True).encode()).hexdigest() != hashlib.sha256(json.dumps(b, sort_keys=True).encode()).hexdigest()
 
 
+def test_effective_tool_schema_hash_is_canonical_across_key_order():
+    import hashlib, json
+    left = {"b": 2, "a": {"y": 1, "x": 0}}
+    right = {"a": {"x": 0, "y": 1}, "b": 2}
+    digest = lambda x: hashlib.sha256(json.dumps(x, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert digest(left) == digest(right)
+
+
 def test_cost_is_unknown_without_price_or_usage_and_known_for_groq():
     assert estimate_cost("nvidia", "z-ai/glm-5.2", 10, 2, 0) is None
     assert estimate_cost("groq", "openai/gpt-oss-120b", 1_000_000, 1_000_000, 0) == {"currency": "USD", "amount": 0.75}
