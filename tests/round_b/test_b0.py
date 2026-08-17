@@ -25,6 +25,22 @@ class _ModelsUnavailableTransport(_SyntheticTransport):
         return super().request(method, url, headers=headers, json=json, timeout=timeout)
 
 
+class _NvidiaRetryTransport(_SyntheticTransport):
+    def __init__(self):
+        super().__init__()
+        self.multi_tool_attempts = 0
+        self.last_response_headers = {}
+
+    def request(self, method, url, *, headers=None, json=None, timeout=None):
+        if method == "POST" and json and "Use get_base" in str(json):
+            self.multi_tool_attempts += 1
+            if self.multi_tool_attempts == 1:
+                self.last_response_headers = {"retry-after": "0"}
+                return 429, {"message": "rate limit"}
+        self.last_response_headers = {}
+        return super().request(method, url, headers=headers, json=json, timeout=timeout)
+
+
 def test_synthetic_fixtures_are_generic_and_contain_all_probe_inputs():
     fixtures = synthetic_fixtures()
     assert set(fixtures) == {"completion", "structured", "tool_call", "tool_result", "multi_tool"}
@@ -108,3 +124,24 @@ def test_completion_can_establish_b0_evidence_when_models_endpoint_is_unavailabl
     )
     assert result.probes["credential"].status == "passed"
     assert result.probes["completion"].status == "passed"
+
+
+def test_nvidia_multi_tool_uses_one_retry_after_when_server_supplies_it():
+    transport = _NvidiaRetryTransport()
+    result = B0Runner(env={"NVIDIA_API_KEY": "secret"}, transport=transport).run_one(
+        ProviderSpec("nvidia", "z-ai/glm-5.2", "NVIDIA_API_KEY", "openai_compatible", "https://demo.invalid/v1")
+    )
+    assert transport.multi_tool_attempts == 2
+    assert result.probes["multi_tool"].status == "passed"
+    assert result.telemetry["nvidia_multi_tool_retry_count"] == 1
+    assert result.telemetry["retry_after_present"] is True
+
+
+def test_selected_probe_does_not_replay_other_b0_requests():
+    transport = _SyntheticTransport()
+    result = B0Runner(env={"NVIDIA_API_KEY": "secret"}, transport=transport).run_selected(
+        ProviderSpec("nvidia", "z-ai/glm-5.2", "NVIDIA_API_KEY", "openai_compatible", "https://demo.invalid/v1"),
+        {"multi_tool"},
+    )
+    assert result.probes["multi_tool"].status == "passed"
+    assert len(transport.calls) == 1

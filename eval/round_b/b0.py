@@ -114,6 +114,7 @@ class HttpxTransport:
 
     def request(self, method: str, url: str, *, headers: dict[str, str], json: dict[str, Any] | None, timeout: float):
         response = httpx.request(method, url, headers=headers, json=json, timeout=timeout)
+        self.last_response_headers = dict(response.headers)
         try:
             body = response.json()
         except ValueError:
@@ -162,6 +163,22 @@ class B0Runner:
             return result
         return self._run_openai_compatible(spec, result)
 
+    def run_selected(self, spec: ProviderSpec, probes: set[str]) -> B0Result:
+        """Run an explicitly selected synthetic probe without replaying B0."""
+        if probes - {"completion", "structured", "tool_call", "tool_result_replay", "multi_tool"}:
+            raise ValueError("selected B0 probe is not network-executable")
+        result = self._empty_result(spec)
+        if not self.env.get(spec.credential_env):
+            result.classification = "credential_missing"
+            result.error_taxonomy = "credential_missing"
+            result.probes["credential"] = Probe("missing")
+            return result
+        if spec.protocol != "openai_compatible":
+            raise ValueError("selected probes require an OpenAI-compatible adapter")
+        result.probes["credential"] = Probe("passed")
+        result.resolved_model = spec.requested_model
+        return self._run_openai_compatible(spec, result, selected=probes)
+
     def _base_url(self, spec: ProviderSpec) -> str:
         if spec.provider == "alibaba_dashscope":
             return self.env.get("DASHSCOPE_BASE_URL", "").rstrip("/")
@@ -196,6 +213,14 @@ class B0Runner:
         result.telemetry["requests"] = int(result.telemetry.get("requests", 0)) + 1
         return status, body if isinstance(body, Mapping) else {}, latency_ms
 
+    def _retry_after(self) -> float | None:
+        headers = getattr(self.transport, "last_response_headers", {})
+        raw = headers.get("retry-after") if isinstance(headers, Mapping) else None
+        try:
+            return max(0.0, float(raw)) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
     def _fail(self, result: B0Result, probe: str, status: int, body: Mapping[str, Any], latency_ms: float) -> B0Result:
         message = self.sanitize_error(str(body.get("message") or body.get("error") or f"HTTP {status}"))
         taxonomy = classify_error(f"{status} {message}")
@@ -205,10 +230,11 @@ class B0Runner:
         result.telemetry[f"{probe}_latency_ms"] = latency_ms
         return result
 
-    def _run_openai_compatible(self, spec: ProviderSpec, result: B0Result) -> B0Result:
-        status, body, latency = self._call(spec, result, "GET", "/models")
-        model_listing_available = 200 <= status < 300
-        result.probes["credential"] = Probe("passed" if model_listing_available else "not_run")
+    def _run_openai_compatible(self, spec: ProviderSpec, result: B0Result, selected: set[str] | None = None) -> B0Result:
+        if selected is None:
+            status, body, latency = self._call(spec, result, "GET", "/models")
+            model_listing_available = 200 <= status < 300
+            result.probes["credential"] = Probe("passed" if model_listing_available else "not_run")
         result.resolved_model = spec.requested_model
         payloads = {
             "completion": {"model": spec.requested_model, "messages": [{"role": "user", "content": synthetic_fixtures()["completion"]}], "max_tokens": 2048},
@@ -218,7 +244,17 @@ class B0Runner:
             "multi_tool": {"model": spec.requested_model, "messages": [{"role": "user", "content": "Use get_base then add_tax to calculate 10 plus 2."}], "tools": [{"type": "function", "function": {"name": "get_base", "parameters": {"type": "object", "properties": {}}}}, {"type": "function", "function": {"name": "add_tax", "parameters": {"type": "object", "properties": {}}}}], "max_tokens": 1024},
         }
         for probe, payload in payloads.items():
+            if selected is not None and probe not in selected:
+                continue
             status, body, latency = self._call(spec, result, "POST", "/chat/completions", payload)
+            if status == 429 and spec.provider == "nvidia" and probe == "multi_tool":
+                retry_after = self._retry_after()
+                result.telemetry["retry_after_present"] = retry_after is not None
+                if retry_after is not None:
+                    # The B0 retry budget permits one server-directed retry only.
+                    time.sleep(min(retry_after, 60.0))
+                    result.telemetry["nvidia_multi_tool_retry_count"] = 1
+                    status, body, latency = self._call(spec, result, "POST", "/chat/completions", payload)
             if status < 200 or status >= 300:
                 return self._fail(result, probe, status, body, latency)
             self._usage(result, body)
@@ -231,9 +267,12 @@ class B0Runner:
             choices = body.get("choices") or []
             if choices and isinstance(choices[0], Mapping) and choices[0].get("finish_reason") == "length":
                 result.probes[probe] = Probe("failed", "output_truncated_by_token_limit")
-        result.probes["usage_telemetry"] = Probe("passed")
-        result.probes["protocol_metadata"] = Probe("passed")
-        result.classification = "adapter_ready" if all(p.status == "passed" for p in result.probes.values()) else "adapter_work_needed"
+        if selected is None:
+            result.probes["usage_telemetry"] = Probe("passed")
+            result.probes["protocol_metadata"] = Probe("passed")
+            result.classification = "adapter_ready" if all(p.status == "passed" for p in result.probes.values()) else "adapter_work_needed"
+        else:
+            result.classification = "adapter_ready" if all(result.probes[name].status == "passed" for name in selected) else "adapter_work_needed"
         return result
 
     def _run_gemini(self, spec: ProviderSpec, result: B0Result) -> B0Result:
