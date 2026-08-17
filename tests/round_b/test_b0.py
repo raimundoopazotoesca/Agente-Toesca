@@ -37,6 +37,16 @@ def test_default_catalog_preserves_requested_models_without_substitution():
     assert specs["qwen"] == "qwen3.8-max"
     assert specs["kimi"] == "kimi-k3"
     assert specs["groq"] == "openai/gpt-oss-120b"
+    assert specs["nvidia"] == "z-ai/glm-5.2"
+    assert specs["alibaba_dashscope"] == "qwen3.8-max"
+
+
+def test_dashscope_base_url_is_recorded_only_as_a_boolean():
+    result = B0Runner(env={"DASHSCOPE_BASE_URL": "https://private.example"}).run_one(
+        ProviderSpec("alibaba_dashscope", "qwen3.8-max", "DASHSCOPE_API_KEY", "openai_compatible")
+    )
+    assert result.telemetry["base_url_configured"] is True
+    assert "private.example" not in repr(result)
 
 
 def test_external_env_file_is_loaded_without_exposing_its_secret(tmp_path):

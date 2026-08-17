@@ -78,7 +78,8 @@ def default_specs() -> tuple[ProviderSpec, ...]:
         ProviderSpec("groq", "openai/gpt-oss-120b", "GROQ_API_KEY", "groq"),
         ProviderSpec("deepseek", "deepseek-v4-pro", "DEEPSEEK_API_KEY", "openai_compatible"),
         ProviderSpec("glm", "glm-5.2", "ZAI_API_KEY", "openai_compatible"),
-        ProviderSpec("qwen", "qwen3.8-max", "DASHSCOPE_API_KEY", "openai_compatible"),
+        ProviderSpec("nvidia", "z-ai/glm-5.2", "NVIDIA_API_KEY", "openai_compatible"),
+        ProviderSpec("alibaba_dashscope", "qwen3.8-max", "DASHSCOPE_API_KEY", "openai_compatible"),
         ProviderSpec("xai", "grok-4.5", "XAI_API_KEY", "openai"),
         ProviderSpec("kimi", "kimi-k3", "MOONSHOT_API_KEY", "openai_compatible"),
     )
@@ -126,6 +127,8 @@ class B0Runner:
 
     def run_one(self, spec: ProviderSpec) -> B0Result:
         result = self._empty_result(spec)
+        if spec.provider == "alibaba_dashscope":
+            result.telemetry["base_url_configured"] = bool(self.env.get("DASHSCOPE_BASE_URL"))
         if not self.env.get(spec.credential_env):
             result.classification = "credential_missing"
             result.error_taxonomy = "credential_missing"
