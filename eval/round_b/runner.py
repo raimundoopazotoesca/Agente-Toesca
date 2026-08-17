@@ -4,12 +4,20 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import time
+import uuid
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES
+from eval.benchmark.adapters.track_b_frontier import TrackBFrontier
+from eval.benchmark.cases_loader import CASES_DIR, load_cases
+from eval.benchmark.graders.deterministic import score_turn
+from eval.benchmark.graders.ground_truth import resolve_ground_truth
+from eval.benchmark.snapshot import SnapshotSandbox
 from eval.benchmark.snapshot import load_lock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,3 +75,99 @@ def estimate_cost(provider: str, model: str, input_tokens: int | None, output_to
 
 def committed_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+
+ELIGIBLE_RETRY = ("429", "5", "timeout", "network", "connection")
+CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1")}
+
+
+def classify_execution_error(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "429" in text or "rate limit" in text or "quota" in text:
+        return "quota_rate_limit"
+    if "timeout" in text:
+        return "timeout"
+    if "connection" in text or "network" in text:
+        return "provider_infra"
+    if "sql" in text:
+        return "tool_sql_invalid"
+    return "adapter_protocol"
+
+
+class RoundBRunner:
+    """Persists deterministic-only Mini-Dev evidence; adapter is injectable for tests."""
+    def __init__(self, adapter_factory, output_root: Path, run_id: str | None = None):
+        self.adapter_factory, self.output_root = adapter_factory, output_root
+        self.run_id = run_id or f"round-b-{uuid.uuid4().hex[:12]}"
+
+    def preflight(self, code_sha: str) -> dict[str, Any]:
+        if code_sha != committed_head():
+            raise ValueError("code SHA is not current HEAD")
+        return build_run_manifest(code_sha, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+
+    def _cases(self):
+        checked = validate_mini_dev()
+        all_cases = {c.id: c for c in load_cases(CASES_DIR, split="dev")}
+        selected = [all_cases[x] for x in checked["ordered_case_ids"]]
+        if sum(len(c.turns) for c in selected) != 25:
+            raise ValueError("frozen Mini-Dev turn count drift")
+        return selected
+
+    def run_candidate(self, provider: str, model: str, code_sha: str) -> Path:
+        profile = next((p for p in B1_STANDARD_PROFILES if p.provider == provider and p.model == model), None)
+        if profile is None:
+            raise ValueError("candidate is not B1_STANDARD")
+        run_dir = self.output_root / self.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        manifest = self.preflight(code_sha)
+        manifest_path = run_dir / "run_manifest.json"
+        if not manifest_path.exists():
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8")
+        adapter = self.adapter_factory(provider, model, profile)
+        sandbox = adapter.sandbox
+        records: list[dict[str, Any]] = []
+        for case in self._cases():
+            session = adapter.new_session(f"{self.run_id}-{provider}-{case.id}")
+            resolved = resolve_ground_truth(case, sandbox) if case.ground_truth_refs else {}
+            for turn_index, turn_spec in enumerate(case.turns):
+                retries, error, turn = 0, None, None
+                for attempt in range(2):
+                    try:
+                        turn = session.ask(turn_spec["question"])
+                        break
+                    except Exception as exc:  # network boundary only
+                        error = classify_execution_error(exc)
+                        if attempt == 0 and any(x in str(exc).lower() for x in ELIGIBLE_RETRY):
+                            retries = 1
+                            continue
+                        break
+                if turn is None:
+                    records.append({"run_id": self.run_id, "candidate_id": provider, "case_id": case.id, "turn_index": turn_index,
+                        "provider": provider, "requested_model": model, "resolved_model": None, "final_answer": "", "status": "failed",
+                        "error_taxonomy": error, "model_rounds": 0, "tool_calls": [], "executed_sql": [], "input_tokens": None,
+                        "output_tokens": None, "reasoning_tokens": None, "cached_tokens": None, "latency_ms": None, "retries": retries,
+                        "deterministic_grading": None, "fatal_gates": [], "ceiling_gates": []})
+                    continue
+                scored = score_turn(turn, turn_spec, resolved)
+                verdict = scored.gate_verdict
+                usage = turn.usage
+                records.append({"run_id": self.run_id, "candidate_id": provider, "case_id": case.id, "turn_index": turn_index,
+                    "provider": provider, "requested_model": model, "resolved_model": usage.model, "final_answer": turn.text, "status": "completed",
+                    "error_taxonomy": None, "model_rounds": usage.calls, "tool_calls": [x.__dict__ for x in turn.tool_calls], "executed_sql": turn.queries,
+                    "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "reasoning_tokens": usage.reasoning_tokens,
+                    "cached_tokens": usage.cached_tokens, "latency_ms": usage.latency_ms, "retries": retries,
+                    "deterministic_grading": {"dimension_scores": scored.dimension_scores, "unscored_dimensions": sorted(scored.unscored_dimensions),
+                        "facts_missing": scored.facts_missing}, "fatal_gates": [x.gate for x in (verdict.fatal_triggered if verdict else [])],
+                    "ceiling_gates": [x.gate for x in (verdict.ceiling_triggered if verdict else [])]})
+        path = run_dir / f"{provider}_{model.replace('/', '_')}.jsonl"
+        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
+        return path
+
+
+def live_adapter_factory(provider: str, model: str, profile):
+    key_name, base_url = CANDIDATES[provider]
+    if provider == "dashscope":
+        base_url = os.environ.get("DASHSCOPE_BASE_URL")
+    if not os.environ.get(key_name) or not base_url:
+        raise RuntimeError("credential_missing")
+    return TrackBFrontier(provider={"api_key": os.environ[key_name], "base_url": base_url, "model": model}, inference_profile=profile)
