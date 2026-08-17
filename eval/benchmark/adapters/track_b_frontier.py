@@ -53,6 +53,33 @@ MAX_TOOL_ITERATIONS = 5
 MAX_ROWS_RETURNED = 50
 _CHART_BLOCK = re.compile(r"```chart\s*\n(.*?)```", re.DOTALL)
 
+
+@dataclass(frozen=True)
+class InferenceProfile:
+    provider: str
+    model: str
+    version: str
+    reasoning_effort: str | None = None
+
+    def request_kwargs(self) -> dict[str, str]:
+        return {"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}
+
+
+B1_STANDARD_PROFILES = (
+    InferenceProfile("groq", "openai/gpt-oss-120b", "B1_STANDARD", "medium"),
+    InferenceProfile("nvidia", "z-ai/glm-5.2", "B1_STANDARD"),
+    InferenceProfile("dashscope", "qwen3.8-max", "B1_STANDARD"),
+    InferenceProfile("mistral", "mistral-large-2512", "B1_STANDARD"),
+    InferenceProfile("sambanova", "MiniMax-M2.7", "B1_STANDARD"),
+)
+
+
+def resolve_b1_standard_profile(provider: str, model: str) -> InferenceProfile:
+    for profile in B1_STANDARD_PROFILES:
+        if profile.provider == provider and profile.model == model:
+            return profile
+    raise ValueError(f"no B1_STANDARD profile for {provider}/{model}")
+
 # Tables Track B's model is not meant to query directly: bookkeeping, not
 # business data. Keeping the schema summary focused on business tables is
 # about context budget, not a security boundary -- the sandbox authorizer
@@ -190,6 +217,7 @@ class _TrackBSession:
     system_prompt: str
     client: OpenAI
     model: str
+    inference_profile: InferenceProfile | None = None
     history: list[dict] = field(default_factory=list)
 
     def _run_tool(self, query: str) -> tuple[str, bool]:
@@ -224,8 +252,9 @@ class _TrackBSession:
             # One provider for the whole session (see TrackBFrontier docstring
             # on why: mixing providers mid-loop broke Gemini's OpenAI-compat
             # tool-call replay in practice, not just in theory).
+            kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
             resp = self.client.chat.completions.create(
-                model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="auto", temperature=0.0,
+                model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="auto", **kwargs,
             )
             api_calls += 1
             msg = resp.choices[0].message
@@ -267,11 +296,15 @@ class _TrackBSession:
         self.history.append({"role": "user", "content": message})
         self.history.append({"role": "assistant", "content": final_text})
 
+        raw_usage = getattr(resp, "usage", None)
+        details = getattr(raw_usage, "completion_tokens_details", None)
         return Turn(
             text=final_text,
             artifacts=_extract_artifacts(final_text),
             tool_calls=tool_calls_log,
-            usage=Usage(provider=self.model, model=self.model, calls=api_calls, latency_ms=elapsed_ms),
+            usage=Usage(provider=self.model, model=self.model, calls=api_calls, latency_ms=elapsed_ms,
+                input_tokens=getattr(raw_usage, "prompt_tokens", None), output_tokens=getattr(raw_usage, "completion_tokens", None),
+                reasoning_tokens=getattr(details, "reasoning_tokens", None), cached_tokens=getattr(getattr(raw_usage, "prompt_tokens_details", None), "cached_tokens", None)),
             queries=list(self.sandbox.log.statements),
             gate_violations=list(self.sandbox.log.violations),
             raw={"final_text": final_text},
@@ -299,7 +332,7 @@ class TrackBFrontier:
 
     name = "track_b_frontier"
 
-    def __init__(self, sandbox: SnapshotSandbox | None = None, provider: dict | None = None):
+    def __init__(self, sandbox: SnapshotSandbox | None = None, provider: dict | None = None, inference_profile: InferenceProfile | None = None):
         self.sandbox = sandbox or SnapshotSandbox()
         if provider is None:
             from tools import db_chat  # deferred: avoid importing db_chat (and its
@@ -309,6 +342,7 @@ class TrackBFrontier:
         self.provider = provider
         self.client = OpenAI(api_key=provider["api_key"], base_url=provider["base_url"])
         self.model = provider["model"]
+        self.inference_profile = inference_profile
         self._system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
             semantic_context=_semantic_context(),
             schema_summary=_schema_summary(self.sandbox),
@@ -321,4 +355,5 @@ class TrackBFrontier:
             system_prompt=self._system_prompt,
             client=self.client,
             model=self.model,
+            inference_profile=self.inference_profile,
         )

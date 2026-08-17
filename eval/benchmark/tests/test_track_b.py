@@ -24,6 +24,7 @@ from eval.benchmark.adapters.track_b_frontier import (
     _validate_sql,
     TrackBFrontier,
 )
+from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES, InferenceProfile, resolve_b1_standard_profile
 from eval.benchmark.snapshot import SnapshotSandbox
 
 
@@ -88,12 +89,14 @@ class _ScriptedClient:
 
     script: list
     calls: list[list[dict]] = field(default_factory=list)
+    calls_kwargs: list[dict] = field(default_factory=list)
 
     def __post_init__(self):
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, model, messages, **kwargs):
         self.calls.append(messages)
+        self.calls_kwargs.append(kwargs)
         idx = len(self.calls) - 1
         return self.script[idx]
 
@@ -222,3 +225,27 @@ def test_run_sql_tool_schema_shape():
     assert _RUN_SQL_TOOL["type"] == "function"
     assert _RUN_SQL_TOOL["function"]["name"] == "run_sql"
     assert "query" in _RUN_SQL_TOOL["function"]["parameters"]["properties"]
+
+
+def test_b1_standard_groq_explicitly_sends_medium_reasoning_without_sampling():
+    profile = resolve_b1_standard_profile("groq", "openai/gpt-oss-120b")
+    assert profile.request_kwargs() == {"reasoning_effort": "medium"}
+
+
+def test_b1_standard_other_candidates_omit_all_sampling_and_reasoning_overrides():
+    profile = resolve_b1_standard_profile("mistral", "mistral-large-2512")
+    assert profile.request_kwargs() == {}
+    assert len(B1_STANDARD_PROFILES) == 5
+
+
+def test_session_passes_profile_kwargs_and_records_only_reported_usage(sandbox):
+    response = _fake_response("respuesta")
+    response.usage = SimpleNamespace(prompt_tokens=11, completion_tokens=7, completion_tokens_details=SimpleNamespace(reasoning_tokens=3))
+    chat = _ScriptedClient(script=[response])
+    session = _TrackBSession(sandbox, "s", "p", chat, _MODEL, InferenceProfile("x", "m", "B1_STANDARD"))
+    turn = session.ask("q")
+    assert turn.usage.input_tokens == 11
+    assert turn.usage.output_tokens == 7
+    assert turn.usage.reasoning_tokens == 3
+    assert turn.usage.cached_tokens is None
+    assert "temperature" not in chat.calls_kwargs[0]
