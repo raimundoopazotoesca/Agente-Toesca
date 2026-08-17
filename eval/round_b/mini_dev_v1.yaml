@@ -1,0 +1,57 @@
+mini_dev_id: toesca-analyst-mini-dev-v1
+version: v1
+split: dev
+dev_freeze:
+  document: eval/benchmark/DEV_SET_V1_FREEZE.md
+  benchmark_version: v1
+  snapshot_sha256: 592399a8e34c7111e4a9aaa84dd0002532d7a24ffb26f27c90e186647294125c
+  round_b_commit: d423a2ead08db56296bf229f0a95cffef8b03050
+ordered_case_ids:
+  - tae-l1-008
+  - tae-l2-003
+  - tae-l3-004
+  - tae-l4-003
+  - tae-l4-004
+  - tae-l5-004
+  - tae-l5-006
+  - tae-l6-001
+  - tae-l8-001
+  - tae-l8-002
+  - tce-ambiguity-001
+  - tce-entitycorrection-001
+  - tce-decisionchallenge-001
+  - tce-investigationmultidomain-001
+  - tce-investigationdrilldown-001
+case_metadata:
+  tae-l1-008: {type: TAE, level: L1, turns: 1, coverage: [factual_retrieval, market_grounding]}
+  tae-l2-003: {type: TAE, level: L2, turns: 1, coverage: [comparison, ranking]}
+  tae-l3-004: {type: TAE, level: L3, turns: 1, coverage: [analytical_summary, concentration]}
+  tae-l4-003: {type: TAE, level: L4, turns: 1, coverage: [diagnosis, causal_restraint]}
+  tae-l4-004: {type: TAE, level: L4, turns: 1, coverage: [investigation, uncertainty]}
+  tae-l5-004: {type: TAE, level: L5, turns: 1, coverage: [multi_signal_analysis, tool_use]}
+  tae-l5-006: {type: TAE, level: L5, turns: 1, coverage: [cross_source_investigation, discrepancy]}
+  tae-l6-001: {type: TAE, level: L6, turns: 1, coverage: [decision_support, comparative_prioritization]}
+  tae-l8-001: {type: TAE, level: L8, turns: 1, coverage: [insufficient_information, hallucination_restraint]}
+  tae-l8-002: {type: TAE, level: L8, turns: 1, coverage: [data_reliability, uncertainty]}
+  tce-ambiguity-001: {type: TCE, level: null, turns: 2, coverage: [ambiguity, clarification]}
+  tce-entitycorrection-001: {type: TCE, level: null, turns: 2, coverage: [correction, conversational_continuity]}
+  tce-decisionchallenge-001: {type: TCE, level: null, turns: 3, coverage: [decision_support, evidence_challenge]}
+  tce-investigationmultidomain-001: {type: TCE, level: null, turns: 4, coverage: [multi_domain_investigation, tool_use, synthesis]}
+  tce-investigationdrilldown-001: {type: TCE, level: null, turns: 4, coverage: [sustained_conversation, analytical_drilldown, tool_use]}
+turn_counts:
+  tae-l1-008: 1
+  tae-l2-003: 1
+  tae-l3-004: 1
+  tae-l4-003: 1
+  tae-l4-004: 1
+  tae-l5-004: 1
+  tae-l5-006: 1
+  tae-l6-001: 1
+  tae-l8-001: 1
+  tae-l8-002: 1
+  tce-ambiguity-001: 2
+  tce-entitycorrection-001: 2
+  tce-decisionchallenge-001: 3
+  tce-investigationmultidomain-001: 4
+  tce-investigationdrilldown-001: 4
+content_sha256: dc4d8912986ac99e9a08853d55fa19668220032e41a89944c05d1cfcc573b976

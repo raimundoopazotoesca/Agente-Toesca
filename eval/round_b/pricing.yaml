@@ -1,0 +1,45 @@
+pricing_version: round-b-v1
+consulted_at: "2026-08-17"
+prices_are_planning_only: true
+providers:
+  - provider: groq
+    model: openai/gpt-oss-120b
+    currency: USD
+    input_per_mtok: 0.15
+    output_per_mtok: 0.60
+    cached_input_per_mtok: 0.075
+    status: public_price
+    source: https://console.groq.com/docs/model/openai/gpt-oss-120b
+  - provider: nvidia
+    model: z-ai/glm-5.2
+    currency: unknown
+    input_per_mtok: unknown
+    output_per_mtok: unknown
+    cached_input_per_mtok: unknown
+    status: unknown
+    source: https://docs.api.nvidia.com/nim/re/reference/z-ai-glm-5.2
+    note: NVIDIA API trial endpoint; no reliable public per-token tariff recorded.
+  - provider: dashscope
+    model: qwen3.8-max
+    currency: CNY
+    input_per_mtok: 12
+    output_per_mtok: 36
+    cached_input_per_mtok: unknown
+    status: public_price
+    source: https://help.aliyun.com/en/model-studio/model-pricing
+  - provider: mistral
+    model: mistral-large-2512
+    currency: USD
+    input_per_mtok: 0.50
+    output_per_mtok: 1.50
+    cached_input_per_mtok: unknown
+    status: public_price
+    source: https://docs.mistral.ai/models/model-selection-guide?models=mistral-small-3-1-25-03
+  - provider: sambanova
+    model: MiniMax-M2.7
+    currency: USD
+    input_per_mtok: 0.60
+    output_per_mtok: 2.40
+    cached_input_per_mtok: 0.06
+    status: public_price
+    source: https://cloud.sambanova.ai/plans/pricing
