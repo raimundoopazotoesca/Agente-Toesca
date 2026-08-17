@@ -1,0 +1,8 @@
+{
+  "run_id": "round-b-20260817-b6",
+  "manifest_sha256": "75ee51861aa0e89258a8eb7c0a97d1edaa257adf207a152fa75bfc8d7143ec95",
+  "dashscope_qwen": {"cases": 15, "turns": 25, "latency_ms": 1376924.0, "input_tokens": 338156, "output_tokens": 19667, "cached_tokens": 279552, "sql_calls": 256, "tool_calls": 270, "fatal_gates": 0},
+  "sambanova_minimax": {"cases": 15, "turns": 25, "latency_ms": 271843.0, "input_tokens": 234638, "output_tokens": 10133, "cached_tokens": 106496, "sql_calls": 157, "tool_calls": 227, "fatal_gates": 0},
+  "mistral": {"cases": 1, "turns": 1, "then": "429/rate-limit"},
+  "groq": {"cases": 0}, "nvidia": {"cases": 0}
+}
