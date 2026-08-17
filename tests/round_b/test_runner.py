@@ -18,12 +18,20 @@ def test_validate_mini_dev_uses_canonical_content_identity_not_file_bytes():
 
 
 def test_manifest_pins_b1_and_committed_code_sha():
-    manifest = build_run_manifest("abc123", "2026-08-17")
+    manifest = build_run_manifest("run-a", "abc123", "2026-08-17")
+    assert manifest["run_id"] == "run-a"
     assert manifest["track"] == "B"
     assert manifest["mini_dev"]["canonical_manifest_sha256"].startswith("dc4d8912")
     assert manifest["code_commit_sha"] == "abc123"
     assert manifest["inference_profile"] == "B1_STANDARD"
     assert manifest["judge_status"] == "not_scored_yet"
+
+
+def test_manifest_run_id_changes_raw_serialized_identity():
+    import hashlib, json
+    a = build_run_manifest("run-a", "abc123", "2026-08-17")
+    b = build_run_manifest("run-b", "abc123", "2026-08-17")
+    assert hashlib.sha256(json.dumps(a, sort_keys=True).encode()).hexdigest() != hashlib.sha256(json.dumps(b, sort_keys=True).encode()).hexdigest()
 
 
 def test_cost_is_unknown_without_price_or_usage_and_known_for_groq():

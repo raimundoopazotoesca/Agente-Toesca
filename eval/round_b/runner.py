@@ -47,10 +47,10 @@ def _file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def build_run_manifest(code_commit_sha: str, execution_date: str) -> dict[str, Any]:
+def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -> dict[str, Any]:
     mini = validate_mini_dev()
     lock = load_lock()
-    return {"run_kind": "mini_dev", "mini_dev": mini, "code_commit_sha": code_commit_sha, "track": "B",
+    return {"run_id": run_id, "run_kind": "mini_dev", "mini_dev": mini, "code_commit_sha": code_commit_sha, "track": "B",
             "snapshot": lock, "system_prompt_sha256": _file_hash(ROOT / "eval/benchmark/adapters/track_b_frontier.py"),
             "tool_schema_sha256": _file_hash(ROOT / "eval/benchmark/adapters/track_b_frontier.py"),
             "inference_profile": "B1_STANDARD", "provider_configs": [p.__dict__ for p in B1_STANDARD_PROFILES],
@@ -104,7 +104,7 @@ class RoundBRunner:
     def preflight(self, code_sha: str) -> dict[str, Any]:
         if code_sha != committed_head():
             raise ValueError("code SHA is not current HEAD")
-        return build_run_manifest(code_sha, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        return build_run_manifest(self.run_id, code_sha, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
     def _cases(self):
         checked = validate_mini_dev()
