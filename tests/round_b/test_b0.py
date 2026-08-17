@@ -145,3 +145,12 @@ def test_selected_probe_does_not_replay_other_b0_requests():
     )
     assert result.probes["multi_tool"].status == "passed"
     assert len(transport.calls) == 1
+
+
+def test_dashscope_records_optional_models_endpoint_and_resolves_model_from_chat_response():
+    result = B0Runner(
+        env={"DASHSCOPE_API_KEY": "secret", "DASHSCOPE_BASE_URL": "https://private.example/compatible-mode/v1"},
+        transport=_ModelsUnavailableTransport(),
+    ).run_one(ProviderSpec("alibaba_dashscope", "qwen3.8-max", "DASHSCOPE_API_KEY", "openai_compatible"))
+    assert result.telemetry["models_endpoint_supported"] is False
+    assert result.resolved_model == "demo-model"

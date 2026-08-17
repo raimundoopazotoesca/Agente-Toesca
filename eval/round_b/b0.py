@@ -235,6 +235,8 @@ class B0Runner:
             status, body, latency = self._call(spec, result, "GET", "/models")
             model_listing_available = 200 <= status < 300
             result.probes["credential"] = Probe("passed" if model_listing_available else "not_run")
+            if spec.provider == "alibaba_dashscope":
+                result.telemetry["models_endpoint_supported"] = model_listing_available
         result.resolved_model = spec.requested_model
         payloads = {
             "completion": {"model": spec.requested_model, "messages": [{"role": "user", "content": synthetic_fixtures()["completion"]}], "max_tokens": 2048},
@@ -258,6 +260,9 @@ class B0Runner:
             if status < 200 or status >= 300:
                 return self._fail(result, probe, status, body, latency)
             self._usage(result, body)
+            response_model = body.get("model")
+            if isinstance(response_model, str) and response_model:
+                result.resolved_model = response_model
             if result.probes["credential"].status != "passed":
                 # A successful authenticated inference is stronger evidence than
                 # an optional /models endpoint.
