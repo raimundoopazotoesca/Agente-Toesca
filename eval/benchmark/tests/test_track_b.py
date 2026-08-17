@@ -235,12 +235,24 @@ def test_b1_standard_groq_explicitly_sends_medium_reasoning_without_sampling():
 def test_b1_standard_other_candidates_omit_all_sampling_and_reasoning_overrides():
     profile = resolve_b1_standard_profile("mistral", "mistral-large-2512")
     assert profile.request_kwargs() == {}
-    assert len(B1_STANDARD_PROFILES) == 6
+    assert len(B1_STANDARD_PROFILES) == 7
 
 
 def test_b1_standard_fireworks_gpt_oss_uses_explicit_medium_reasoning():
     profile = resolve_b1_standard_profile("fireworks", "accounts/fireworks/models/gpt-oss-120b")
     assert profile.request_kwargs() == {"reasoning_effort": "medium"}
+
+
+def test_fireworks_glm_omits_reasoning_override_and_replays_reasoning_in_memory(sandbox):
+    profile = resolve_b1_standard_profile("fireworks", "accounts/fireworks/models/glm-5p2")
+    assert profile.request_kwargs() == {}
+    tc = _FakeToolCall(id="1", name="run_sql", arguments='{"query":"SELECT 1"}')
+    first = _fake_response(None, [tc]); first.choices[0].message.reasoning_content = "private chain"
+    chat = _ScriptedClient(script=[first, _fake_response("final")])
+    session = _TrackBSession(sandbox, "s", "p", chat, "accounts/fireworks/models/glm-5p2", profile)
+    turn = session.ask("q")
+    assert chat.calls[1][-2]["reasoning_content"] == "private chain"
+    assert "private chain" not in repr(turn.raw)
 
 
 def test_session_passes_profile_kwargs_and_records_only_reported_usage(sandbox):

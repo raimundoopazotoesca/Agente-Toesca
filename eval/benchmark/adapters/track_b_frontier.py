@@ -69,6 +69,7 @@ class InferenceProfile:
 B1_STANDARD_PROFILES = (
     InferenceProfile("groq", "openai/gpt-oss-120b", "B1_STANDARD", "medium"),
     InferenceProfile("fireworks", "accounts/fireworks/models/gpt-oss-120b", "B1_STANDARD", "medium"),
+    InferenceProfile("fireworks", "accounts/fireworks/models/glm-5p2", "B1_STANDARD"),
     InferenceProfile("nvidia", "z-ai/glm-5.2", "B1_STANDARD"),
     InferenceProfile("dashscope", "qwen3.8-max", "B1_STANDARD"),
     InferenceProfile("mistral", "mistral-large-2512", "B1_STANDARD"),
@@ -272,8 +273,7 @@ class _TrackBSession:
                 final_text = msg.content or ""
                 break
 
-            messages.append(
-                {
+            assistant_message = {
                     "role": "assistant",
                     "content": msg.content or "",
                     "tool_calls": [
@@ -285,7 +285,10 @@ class _TrackBSession:
                         for tc in msg.tool_calls
                     ],
                 }
-            )
+            reasoning_content = getattr(msg, "reasoning_content", None)
+            if reasoning_content:
+                assistant_message["reasoning_content"] = reasoning_content
+            messages.append(assistant_message)
             for tc in msg.tool_calls:
                 try:
                     args = json.loads(tc.function.arguments or "{}")
