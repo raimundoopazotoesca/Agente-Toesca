@@ -68,6 +68,7 @@ class InferenceProfile:
 
 B1_STANDARD_PROFILES = (
     InferenceProfile("groq", "openai/gpt-oss-120b", "B1_STANDARD", "medium"),
+    InferenceProfile("fireworks", "accounts/fireworks/models/gpt-oss-120b", "B1_STANDARD", "medium"),
     InferenceProfile("nvidia", "z-ai/glm-5.2", "B1_STANDARD"),
     InferenceProfile("dashscope", "qwen3.8-max", "B1_STANDARD"),
     InferenceProfile("mistral", "mistral-large-2512", "B1_STANDARD"),

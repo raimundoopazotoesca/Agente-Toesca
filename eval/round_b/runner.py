@@ -79,7 +79,7 @@ def committed_head() -> str:
 
 
 ELIGIBLE_RETRY = ("429", "5", "timeout", "network", "connection")
-CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1")}
+CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "fireworks": ("FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1")}
 
 
 def classify_execution_error(exc: Exception) -> str:

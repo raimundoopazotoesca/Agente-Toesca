@@ -8,4 +8,6 @@
 
 DashScope/Qwen and SambaNova/MiniMax completed 15/15 cases and 25 turns each. Mistral completed one case then encountered 429/rate-limit. Groq and NVIDIA were not executed in B6. Aggregated latency, tokens, SQL and tool calls are in `metrics.json`; deterministic evidence is in the blind comparison.
 
+`turns_recorded` counts persisted turn records. `substantive_final_answers` excludes the exact tool-loop sentinel `(no se alcanzo una respuesta final dentro del limite de iteraciones de herramientas)`: Qwen 3/25; MiniMax 7/25. The versioned v2 mapping aligns X with MiniMax and Y with Qwen; the immutable cache mapping is retained as historical evidence of the prior label swap.
+
 The blind qualitative review was fixed before revealing `qualitative_mapping_v2.json`: Qwen is the provisional qualitative winner and MiniMax the operational winner. Neither is production-ready. Provider 429s are provider-tier/coverage limits, not evidence of model incapacity. Holdout remains sealed and was never executed.

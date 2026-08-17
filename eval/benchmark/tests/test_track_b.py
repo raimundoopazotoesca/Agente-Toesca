@@ -235,7 +235,12 @@ def test_b1_standard_groq_explicitly_sends_medium_reasoning_without_sampling():
 def test_b1_standard_other_candidates_omit_all_sampling_and_reasoning_overrides():
     profile = resolve_b1_standard_profile("mistral", "mistral-large-2512")
     assert profile.request_kwargs() == {}
-    assert len(B1_STANDARD_PROFILES) == 5
+    assert len(B1_STANDARD_PROFILES) == 6
+
+
+def test_b1_standard_fireworks_gpt_oss_uses_explicit_medium_reasoning():
+    profile = resolve_b1_standard_profile("fireworks", "accounts/fireworks/models/gpt-oss-120b")
+    assert profile.request_kwargs() == {"reasoning_effort": "medium"}
 
 
 def test_session_passes_profile_kwargs_and_records_only_reported_usage(sandbox):

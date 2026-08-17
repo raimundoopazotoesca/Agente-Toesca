@@ -39,6 +39,11 @@ def test_cost_is_unknown_without_price_or_usage_and_known_for_groq():
     assert estimate_cost("groq", "openai/gpt-oss-120b", 1_000_000, 1_000_000, 0) == {"currency": "USD", "amount": 0.75}
 
 
+def test_fireworks_candidate_uses_external_key_and_inference_base_url():
+    from eval.round_b.runner import CANDIDATES
+    assert CANDIDATES["fireworks"] == ("FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1")
+
+
 class _FakeSession:
     def __init__(self, adapter): self.adapter, self.questions = adapter, []
     def ask(self, question):
