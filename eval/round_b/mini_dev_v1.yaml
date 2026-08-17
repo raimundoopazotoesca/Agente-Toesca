@@ -5,7 +5,7 @@ dev_freeze:
   document: eval/benchmark/DEV_SET_V1_FREEZE.md
   benchmark_version: v1
   snapshot_sha256: 592399a8e34c7111e4a9aaa84dd0002532d7a24ffb26f27c90e186647294125c
-  round_b_commit: d423a2ead08db56296bf229f0a95cffef8b03050
+  round_b_commit: 6c0dd57ec3b6e2268943f1e86323ba49d767383e
 ordered_case_ids:
   - tae-l1-008
   - tae-l2-003
@@ -54,4 +54,4 @@ turn_counts:
   tce-decisionchallenge-001: 3
   tce-investigationmultidomain-001: 4
   tce-investigationdrilldown-001: 4
-content_sha256: dc4d8912986ac99e9a08853d55fa19668220032e41a89944c05d1cfcc573b976
+content_sha256: df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f

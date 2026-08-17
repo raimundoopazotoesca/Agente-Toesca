@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_validate_mini_dev_uses_canonical_content_identity_not_file_bytes():
     checked = validate_mini_dev(ROOT / "eval/round_b/mini_dev_v1.yaml")
-    assert checked["canonical_manifest_sha256"] == "dc4d8912986ac99e9a08853d55fa19668220032e41a89944c05d1cfcc573b976"
+    assert checked["canonical_manifest_sha256"] == "df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f"
     assert checked["case_count"] == 15
     assert checked["turn_count"] == 25
 
@@ -21,7 +21,7 @@ def test_manifest_pins_b1_and_committed_code_sha():
     manifest = build_run_manifest("run-a", "abc123", "2026-08-17")
     assert manifest["run_id"] == "run-a"
     assert manifest["track"] == "B"
-    assert manifest["mini_dev"]["canonical_manifest_sha256"].startswith("dc4d8912")
+    assert manifest["mini_dev"]["canonical_manifest_sha256"].startswith("df8cd68c")
     assert manifest["code_commit_sha"] == "abc123"
     assert manifest["inference_profile"] == "B1_STANDARD"
     assert manifest["judge_status"] == "not_scored_yet"

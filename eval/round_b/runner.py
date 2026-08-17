@@ -24,7 +24,7 @@ from eval.benchmark.snapshot import load_lock
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "eval/round_b/mini_dev_v1.yaml"
 PRICING = ROOT / "eval/round_b/pricing.yaml"
-CANONICAL_SHA = "dc4d8912986ac99e9a08853d55fa19668220032e41a89944c05d1cfcc573b976"
+CANONICAL_SHA = "df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f"
 
 
 def _canonical_hash(data: dict[str, Any]) -> str:
