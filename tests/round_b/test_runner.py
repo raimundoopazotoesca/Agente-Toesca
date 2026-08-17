@@ -1,6 +1,10 @@
 from pathlib import Path
 
 from eval.round_b.runner import build_run_manifest, estimate_cost, validate_mini_dev
+from eval.round_b.runner import RoundBRunner
+from eval.round_b.incremental import IncrementalStore
+from eval.benchmark.adapters.base import Turn, Usage
+from eval.benchmark.snapshot import SnapshotSandbox
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,3 +29,30 @@ def test_manifest_pins_b1_and_committed_code_sha():
 def test_cost_is_unknown_without_price_or_usage_and_known_for_groq():
     assert estimate_cost("nvidia", "z-ai/glm-5.2", 10, 2, 0) is None
     assert estimate_cost("groq", "openai/gpt-oss-120b", 1_000_000, 1_000_000, 0) == {"currency": "USD", "amount": 0.75}
+
+
+class _FakeSession:
+    def __init__(self, adapter): self.adapter, self.questions = adapter, []
+    def ask(self, question):
+        self.questions.append(question)
+        for kind in ("provider_request_started", "provider_response_received"):
+            self.adapter.request_observer(kind, 0, None)
+        return Turn(text="sin cifras", usage=Usage(provider="groq", model="openai/gpt-oss-120b", calls=1))
+
+
+class _FakeAdapter:
+    def __init__(self): self.sandbox, self.sessions, self.request_observer = SnapshotSandbox(), [], None
+    def new_session(self, _):
+        s = _FakeSession(self); self.sessions.append(s); return s
+
+
+def test_runner_executes_tce_incrementally_with_one_session_and_auditable_events(tmp_path, monkeypatch):
+    adapter = _FakeAdapter()
+    runner = RoundBRunner(lambda *_: adapter, tmp_path, "no-new-run-id")
+    monkeypatch.setattr("eval.round_b.runner.committed_head", lambda: "sha")
+    runner.run_case("groq", "openai/gpt-oss-120b", "tce-ambiguity-001", "sha", IncrementalStore(tmp_path, "no-new-run-id"))
+    assert len(adapter.sessions) == 1 and len(adapter.sessions[0].questions) == 2
+    assert IncrementalStore(tmp_path, "no-new-run-id").checkpoint()["groq"]["tce-ambiguity-001"] == "completed"
+    events = (tmp_path / "events.jsonl").read_text().splitlines()
+    turns = (tmp_path / "turns.jsonl").read_text().splitlines()
+    assert len(events) == 4 and len(turns) == 2

@@ -174,11 +174,12 @@ class RoundBRunner:
         store.begin_case(provider, case_id)
         case = cases[case_id]; adapter = self.adapter_factory(provider, model, profile)
         active: dict[int, str] = {}
+        attempt = [0]
         def observe(kind, model_round, payload):
             if kind == "provider_request_started":
-                active[model_round] = store.event(kind, provider, case_id, current_turn[0], model_round, 0, requested_model=model)["event_id"]
+                active[model_round] = store.event(kind, provider, case_id, current_turn[0], model_round, attempt[0], requested_model=model)["event_id"]
             else:
-                store.event(kind, provider, case_id, current_turn[0], model_round, 0, request_event_id=active.pop(model_round), resolved_model=model)
+                store.event(kind, provider, case_id, current_turn[0], model_round, attempt[0], request_event_id=active.pop(model_round), resolved_model=model)
         adapter.request_observer = observe
         session = adapter.new_session(f"{self.run_id}-{provider}-{case_id}")
         resolved = resolve_ground_truth(case, adapter.sandbox) if case.ground_truth_refs else {}
@@ -186,10 +187,12 @@ class RoundBRunner:
             current_turn = [0]
             for index, spec in enumerate(case.turns):
                 current_turn[0] = index
-                try:
-                    turn = session.ask(spec["question"])
-                except Exception as exc:
-                    store.set_state(provider, case_id, "aborted"); raise
+                for attempt[0] in range(2):
+                    try:
+                        turn = session.ask(spec["question"]); break
+                    except Exception as exc:
+                        if attempt[0] == 0 and classify_execution_error(exc) in {"quota_rate_limit", "provider_infra", "timeout"}: continue
+                        store.set_state(provider, case_id, "aborted"); raise
                 grade = score_turn(turn, spec, resolved)
                 store.turn({"candidate_id": provider, "case_id": case_id, "turn_index": index, "provider": provider, "requested_model": model, "resolved_model": turn.usage.model, "final_answer": turn.text, "status": "completed", "model_rounds": turn.usage.calls, "tool_calls": [x.__dict__ for x in turn.tool_calls], "executed_sql": turn.queries, "input_tokens": turn.usage.input_tokens, "output_tokens": turn.usage.output_tokens, "cached_tokens": turn.usage.cached_tokens, "latency_ms": turn.usage.latency_ms, "deterministic_grading": {"dimension_scores": grade.dimension_scores, "unscored_dimensions": sorted(grade.unscored_dimensions)}})
             store.complete_case(provider, case_id)
