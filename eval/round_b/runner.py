@@ -18,6 +18,7 @@ from eval.benchmark.cases_loader import CASES_DIR, load_cases
 from eval.benchmark.graders.deterministic import score_turn
 from eval.benchmark.graders.ground_truth import resolve_ground_truth
 from eval.benchmark.snapshot import SnapshotSandbox
+from eval.round_b.incremental import IncrementalStore
 from eval.benchmark.snapshot import load_lock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -162,6 +163,39 @@ class RoundBRunner:
         path = run_dir / f"{provider}_{model.replace('/', '_')}.jsonl"
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records), encoding="utf-8")
         return path
+
+    def run_case(self, provider: str, model: str, case_id: str, code_sha: str, store: IncrementalStore) -> None:
+        """One safe shard; completed/aborted cases are never replayed."""
+        profile = next((p for p in B1_STANDARD_PROFILES if p.provider == provider and p.model == model), None)
+        if profile is None: raise ValueError("candidate/model is not frozen B1_STANDARD")
+        cases = {c.id: c for c in self._cases()}
+        if case_id not in cases: raise ValueError("case is not in frozen Mini-Dev")
+        if store.run_id != self.run_id: raise ValueError("store run id mismatch")
+        store.begin_case(provider, case_id)
+        case = cases[case_id]; adapter = self.adapter_factory(provider, model, profile)
+        active: dict[int, str] = {}
+        def observe(kind, model_round, payload):
+            if kind == "provider_request_started":
+                active[model_round] = store.event(kind, provider, case_id, current_turn[0], model_round, 0, requested_model=model)["event_id"]
+            else:
+                store.event(kind, provider, case_id, current_turn[0], model_round, 0, request_event_id=active.pop(model_round), resolved_model=model)
+        adapter.request_observer = observe
+        session = adapter.new_session(f"{self.run_id}-{provider}-{case_id}")
+        resolved = resolve_ground_truth(case, adapter.sandbox) if case.ground_truth_refs else {}
+        try:
+            current_turn = [0]
+            for index, spec in enumerate(case.turns):
+                current_turn[0] = index
+                try:
+                    turn = session.ask(spec["question"])
+                except Exception as exc:
+                    store.set_state(provider, case_id, "aborted"); raise
+                grade = score_turn(turn, spec, resolved)
+                store.turn({"candidate_id": provider, "case_id": case_id, "turn_index": index, "provider": provider, "requested_model": model, "resolved_model": turn.usage.model, "final_answer": turn.text, "status": "completed", "model_rounds": turn.usage.calls, "tool_calls": [x.__dict__ for x in turn.tool_calls], "executed_sql": turn.queries, "input_tokens": turn.usage.input_tokens, "output_tokens": turn.usage.output_tokens, "cached_tokens": turn.usage.cached_tokens, "latency_ms": turn.usage.latency_ms, "deterministic_grading": {"dimension_scores": grade.dimension_scores, "unscored_dimensions": sorted(grade.unscored_dimensions)}})
+            store.complete_case(provider, case_id)
+        except Exception:
+            if store.checkpoint().get(provider, {}).get(case_id) == "running": store.set_state(provider, case_id, "aborted")
+            raise
 
 
 def live_adapter_factory(provider: str, model: str, profile):

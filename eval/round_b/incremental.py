@@ -36,7 +36,8 @@ class IncrementalStore:
         self._append(self.events_path, value); return value
 
     def turn(self, record: dict[str, Any]) -> None:
-        clean = {k: v for k, v in record.items() if "reasoning" not in k.lower() and "thought" not in k.lower()}
+        forbidden = ("reasoning", "thought", "api_key", "authorization", "auth_header")
+        clean = {k: v for k, v in record.items() if not any(word in k.lower() for word in forbidden)}
         self._append(self.turns_path, {"run_id": self.run_id, **clean})
 
     def reconcile(self, candidate_id: str, case_id: str) -> None:
@@ -47,3 +48,13 @@ class IncrementalStore:
             self.event("request_outcome_unknown_due_process_termination", candidate_id, case_id, -1, -1, -1)
             self.set_state(candidate_id, case_id, "aborted")
             raise IncompleteRequestError(case_id)
+
+    def begin_case(self, candidate_id: str, case_id: str) -> None:
+        self.reconcile(candidate_id, case_id)
+        state = self.checkpoint().get(candidate_id, {}).get(case_id, "pending")
+        if state != "pending": raise RuntimeError(f"case is {state}")
+        self.set_state(candidate_id, case_id, "running")
+
+    def complete_case(self, candidate_id: str, case_id: str) -> None:
+        if self.checkpoint().get(candidate_id, {}).get(case_id) != "running": raise RuntimeError("case is not running")
+        self.set_state(candidate_id, case_id, "completed")

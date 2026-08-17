@@ -249,3 +249,12 @@ def test_session_passes_profile_kwargs_and_records_only_reported_usage(sandbox):
     assert turn.usage.reasoning_tokens == 3
     assert turn.usage.cached_tokens is None
     assert "temperature" not in chat.calls_kwargs[0]
+
+
+def test_each_model_round_emits_auditable_request_pair(sandbox):
+    tc = _FakeToolCall(id="1", name="run_sql", arguments='{"query":"SELECT 1"}')
+    chat = _ScriptedClient(script=[_fake_response(None, [tc]), _fake_response("final")])
+    events = []
+    session = _TrackBSession(sandbox, "s", "p", chat, _MODEL, None, request_observer=lambda kind, round, _: events.append((kind, round)))
+    session.ask("q")
+    assert events == [("provider_request_started", 0), ("provider_response_received", 0), ("provider_request_started", 1), ("provider_response_received", 1)]

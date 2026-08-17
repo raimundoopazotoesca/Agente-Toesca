@@ -41,6 +41,7 @@ import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from typing import Callable
 
 from openai import OpenAI
 
@@ -218,6 +219,7 @@ class _TrackBSession:
     client: OpenAI
     model: str
     inference_profile: InferenceProfile | None = None
+    request_observer: Callable[[str, int, object | None], None] | None = None
     history: list[dict] = field(default_factory=list)
 
     def _run_tool(self, query: str) -> tuple[str, bool]:
@@ -247,15 +249,21 @@ class _TrackBSession:
         final_text = ""
         api_calls = 0
 
-        for _ in range(MAX_TOOL_ITERATIONS):
+        for model_round in range(MAX_TOOL_ITERATIONS):
             call_started = time.monotonic()
             # One provider for the whole session (see TrackBFrontier docstring
             # on why: mixing providers mid-loop broke Gemini's OpenAI-compat
             # tool-call replay in practice, not just in theory).
             kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
-            resp = self.client.chat.completions.create(
-                model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="auto", **kwargs,
-            )
+            if self.request_observer: self.request_observer("provider_request_started", model_round, None)
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="auto", **kwargs,
+                )
+            except Exception as exc:
+                if self.request_observer: self.request_observer("provider_request_failed", model_round, exc)
+                raise
+            if self.request_observer: self.request_observer("provider_response_received", model_round, resp)
             api_calls += 1
             msg = resp.choices[0].message
 
@@ -332,7 +340,7 @@ class TrackBFrontier:
 
     name = "track_b_frontier"
 
-    def __init__(self, sandbox: SnapshotSandbox | None = None, provider: dict | None = None, inference_profile: InferenceProfile | None = None):
+    def __init__(self, sandbox: SnapshotSandbox | None = None, provider: dict | None = None, inference_profile: InferenceProfile | None = None, request_observer=None):
         self.sandbox = sandbox or SnapshotSandbox()
         if provider is None:
             from tools import db_chat  # deferred: avoid importing db_chat (and its
@@ -343,6 +351,7 @@ class TrackBFrontier:
         self.client = OpenAI(api_key=provider["api_key"], base_url=provider["base_url"])
         self.model = provider["model"]
         self.inference_profile = inference_profile
+        self.request_observer = request_observer
         self._system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(
             semantic_context=_semantic_context(),
             schema_summary=_schema_summary(self.sandbox),
@@ -356,4 +365,5 @@ class TrackBFrontier:
             client=self.client,
             model=self.model,
             inference_profile=self.inference_profile,
+            request_observer=self.request_observer,
         )
