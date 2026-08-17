@@ -5,9 +5,12 @@ import hashlib
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
+
+import httpx
 
 from dotenv import dotenv_values
 
@@ -65,6 +68,7 @@ class ProviderSpec:
     requested_model: str
     credential_env: str
     protocol: str
+    base_url: str | None = None
 
 
 def default_specs() -> tuple[ProviderSpec, ...]:
@@ -75,11 +79,14 @@ def default_specs() -> tuple[ProviderSpec, ...]:
         ProviderSpec("anthropic_sonnet", "claude-sonnet-5", "ANTHROPIC_API_KEY", "anthropic"),
         ProviderSpec("anthropic_opus", "claude-opus-5", "ANTHROPIC_API_KEY", "anthropic"),
         ProviderSpec("gemini", "gemini-3.1-pro-preview", "GEMINI_API_KEY", "gemini"),
-        ProviderSpec("groq", "openai/gpt-oss-120b", "GROQ_API_KEY", "groq"),
+        ProviderSpec("groq", "openai/gpt-oss-120b", "GROQ_API_KEY", "openai_compatible", "https://api.groq.com/openai/v1"),
         ProviderSpec("deepseek", "deepseek-v4-pro", "DEEPSEEK_API_KEY", "openai_compatible"),
         ProviderSpec("glm", "glm-5.2", "ZAI_API_KEY", "openai_compatible"),
-        ProviderSpec("nvidia", "z-ai/glm-5.2", "NVIDIA_API_KEY", "openai_compatible"),
+        ProviderSpec("nvidia", "z-ai/glm-5.2", "NVIDIA_API_KEY", "openai_compatible", "https://integrate.api.nvidia.com/v1"),
         ProviderSpec("alibaba_dashscope", "qwen3.8-max", "DASHSCOPE_API_KEY", "openai_compatible"),
+        ProviderSpec("mistral", "mistral-large-2512", "MISTRAL_API_KEY", "openai_compatible", "https://api.mistral.ai/v1"),
+        ProviderSpec("sambanova_deepseek", "DeepSeek-V3.2", "SAMBANOVA_API_KEY", "openai_compatible", "https://api.sambanova.ai/v1"),
+        ProviderSpec("sambanova_minimax", "MiniMax-M2.7", "SAMBANOVA_API_KEY", "openai_compatible", "https://api.sambanova.ai/v1"),
         ProviderSpec("xai", "grok-4.5", "XAI_API_KEY", "openai"),
         ProviderSpec("kimi", "kimi-k3", "MOONSHOT_API_KEY", "openai_compatible"),
     )
@@ -102,6 +109,18 @@ class B0Result:
     error_taxonomy: str | None = None
 
 
+class HttpxTransport:
+    """Small injectable boundary: raw responses never enter B0 results."""
+
+    def request(self, method: str, url: str, *, headers: dict[str, str], json: dict[str, Any] | None, timeout: float):
+        response = httpx.request(method, url, headers=headers, json=json, timeout=timeout)
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"message": response.text[:300]}
+        return response.status_code, body
+
+
 class B0Runner:
     """Runs only probes against the synthetic fixtures above.
 
@@ -115,8 +134,9 @@ class B0Runner:
         "multi_tool", "usage_telemetry", "protocol_metadata",
     )
 
-    def __init__(self, env: Mapping[str, str] | None = None):
+    def __init__(self, env: Mapping[str, str] | None = None, transport: Any | None = None):
         self.env = dict(os.environ if env is None else env)
+        self.transport = transport or HttpxTransport()
 
     def _empty_result(self, spec: ProviderSpec) -> B0Result:
         return B0Result(
@@ -134,8 +154,105 @@ class B0Runner:
             result.error_taxonomy = "credential_missing"
             result.probes["credential"] = Probe("missing", f"{spec.credential_env} is not configured")
             return result
+        if spec.protocol == "gemini":
+            return self._run_gemini(spec, result)
+        if spec.protocol != "openai_compatible":
+            result.classification = "adapter_work_needed"
+            result.probes["credential"] = Probe("present")
+            return result
+        return self._run_openai_compatible(spec, result)
+
+    def _base_url(self, spec: ProviderSpec) -> str:
+        if spec.provider == "alibaba_dashscope":
+            return self.env.get("DASHSCOPE_BASE_URL", "").rstrip("/")
+        return (spec.base_url or "").rstrip("/")
+
+    @staticmethod
+    def _usage(result: B0Result, body: Mapping[str, Any]) -> None:
+        usage = body.get("usage") or {}
+        def add(name: str, *keys: str) -> None:
+            value = next((usage.get(key) for key in keys if isinstance(usage.get(key), int)), 0)
+            result.telemetry[name] = int(result.telemetry.get(name, 0)) + int(value)
+        add("input_tokens", "prompt_tokens", "input_tokens")
+        add("output_tokens", "completion_tokens", "output_tokens")
+        add("cached_tokens", "cached_tokens")
+        add("reasoning_tokens", "reasoning_tokens")
+        details = usage.get("completion_tokens_details") or {}
+        if isinstance(details.get("reasoning_tokens"), int):
+            result.telemetry["reasoning_tokens"] = int(result.telemetry.get("reasoning_tokens", 0)) + details["reasoning_tokens"]
+
+    def _call(self, spec: ProviderSpec, result: B0Result, method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[int, Mapping[str, Any], float]:
+        base_url = self._base_url(spec)
+        if not base_url:
+            return 0, {"message": "base URL is not configured"}, 0.0
+        headers = {"Authorization": f"Bearer {self.env[spec.credential_env]}", "Content-Type": "application/json"}
+        timeout = 60.0 if spec.provider.startswith("sambanova") else 30.0
+        started = time.monotonic()
+        try:
+            status, body = self.transport.request(method, f"{base_url}{path}", headers=headers, json=payload, timeout=timeout)
+        except Exception as exc:
+            status, body = 0, {"message": self.sanitize_error(str(exc))}
+        latency_ms = round((time.monotonic() - started) * 1000, 1)
+        result.telemetry["requests"] = int(result.telemetry.get("requests", 0)) + 1
+        return status, body if isinstance(body, Mapping) else {}, latency_ms
+
+    def _fail(self, result: B0Result, probe: str, status: int, body: Mapping[str, Any], latency_ms: float) -> B0Result:
+        message = self.sanitize_error(str(body.get("message") or body.get("error") or f"HTTP {status}"))
+        taxonomy = classify_error(f"{status} {message}")
+        result.probes[probe] = Probe("failed", taxonomy)
+        result.error_taxonomy = taxonomy
+        result.classification = "quota_rate_limit_failure" if taxonomy == "quota_rate_limit_failure" else "provider_infra_failure"
+        result.telemetry[f"{probe}_latency_ms"] = latency_ms
+        return result
+
+    def _run_openai_compatible(self, spec: ProviderSpec, result: B0Result) -> B0Result:
+        status, body, latency = self._call(spec, result, "GET", "/models")
+        model_listing_available = 200 <= status < 300
+        result.probes["credential"] = Probe("passed" if model_listing_available else "not_run")
+        result.resolved_model = spec.requested_model
+        payloads = {
+            "completion": {"model": spec.requested_model, "messages": [{"role": "user", "content": synthetic_fixtures()["completion"]}], "max_tokens": 2048},
+            "structured": {"model": spec.requested_model, "messages": [{"role": "user", "content": "Return exactly JSON: {status: ok, count: 3}."}], "response_format": {"type": "json_object"}, "max_tokens": 512},
+            "tool_call": {"model": spec.requested_model, "messages": [{"role": "user", "content": "Use lookup_color for AZ-7."}], "tools": [{"type": "function", "function": {"name": "lookup_color", "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}}}], "max_tokens": 1024},
+            "tool_result_replay": {"model": spec.requested_model, "messages": [{"role": "user", "content": "The lookup result is AZ-7 is azul. Confirm it."}], "max_tokens": 512},
+            "multi_tool": {"model": spec.requested_model, "messages": [{"role": "user", "content": "Use get_base then add_tax to calculate 10 plus 2."}], "tools": [{"type": "function", "function": {"name": "get_base", "parameters": {"type": "object", "properties": {}}}}, {"type": "function", "function": {"name": "add_tax", "parameters": {"type": "object", "properties": {}}}}], "max_tokens": 1024},
+        }
+        for probe, payload in payloads.items():
+            status, body, latency = self._call(spec, result, "POST", "/chat/completions", payload)
+            if status < 200 or status >= 300:
+                return self._fail(result, probe, status, body, latency)
+            self._usage(result, body)
+            if result.probes["credential"].status != "passed":
+                # A successful authenticated inference is stronger evidence than
+                # an optional /models endpoint.
+                result.probes["credential"] = Probe("passed")
+            result.probes[probe] = Probe("passed")
+            result.telemetry[f"{probe}_latency_ms"] = latency
+            choices = body.get("choices") or []
+            if choices and isinstance(choices[0], Mapping) and choices[0].get("finish_reason") == "length":
+                result.probes[probe] = Probe("failed", "output_truncated_by_token_limit")
+        result.probes["usage_telemetry"] = Probe("passed")
+        result.probes["protocol_metadata"] = Probe("passed")
+        result.classification = "adapter_ready" if all(p.status == "passed" for p in result.probes.values()) else "adapter_work_needed"
+        return result
+
+    def _run_gemini(self, spec: ProviderSpec, result: B0Result) -> B0Result:
+        base_url = "https://generativelanguage.googleapis.com/v1beta"
+        headers = {"x-goog-api-key": self.env[spec.credential_env], "Content-Type": "application/json"}
+        payload = {"contents": [{"role": "user", "parts": [{"text": synthetic_fixtures()["completion"]}]}]}
+        started = time.monotonic()
+        try:
+            status, body = self.transport.request("POST", f"{base_url}/models/{spec.requested_model}:generateContent", headers=headers, json=payload, timeout=30.0)
+        except Exception as exc:
+            status, body = 0, {"message": self.sanitize_error(str(exc))}
+        latency = round((time.monotonic() - started) * 1000, 1)
+        result.telemetry["requests"] = 1
+        if status < 200 or status >= 300:
+            return self._fail(result, "credential", status, body, latency)
+        result.probes["credential"] = Probe("passed")
+        result.probes["completion"] = Probe("passed")
+        result.resolved_model = spec.requested_model
         result.classification = "adapter_work_needed"
-        result.probes["credential"] = Probe("present")
         return result
 
     @staticmethod
