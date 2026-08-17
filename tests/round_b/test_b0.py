@@ -34,7 +34,7 @@ def test_metadata_is_hashed_without_persisting_opaque_value():
 
 def test_default_catalog_preserves_requested_models_without_substitution():
     specs = {spec.provider: spec.requested_model for spec in default_specs()}
-    assert specs["qwen"] == "qwen3.8-max"
+    assert specs["alibaba_dashscope"] == "qwen3.8-max"
     assert specs["kimi"] == "kimi-k3"
     assert specs["groq"] == "openai/gpt-oss-120b"
     assert specs["nvidia"] == "z-ai/glm-5.2"
