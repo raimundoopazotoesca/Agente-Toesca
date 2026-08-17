@@ -76,7 +76,7 @@ ground_truth_refs:
     unit: pct
   proximo_vencimiento_tri:
     sql: >
-      SELECT credito_key, activo_key, fecha_vencimiento FROM dim_credito
+      SELECT CAST(strftime('%Y', fecha_vencimiento) AS INTEGER) FROM dim_credito
       WHERE fondo_key = 'TRI' AND estado = 'VIGENTE' AND fecha_vencimiento IS NOT NULL
         AND fecha_vencimiento >= '2026-08-13'
       ORDER BY fecha_vencimiento ASC LIMIT 1
