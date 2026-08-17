@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from eval.benchmark.adapters.base import Turn
 from eval.benchmark.graders import gates
 from eval.benchmark.graders.deterministic import score_turn
+from eval.benchmark.graders.deterministic import _text_fact_in_answer
 from eval.benchmark.graders.entities import (
     check_expected_entities,
     entity_mentioned,
@@ -326,3 +327,6 @@ def test_score_turn_entity_confusion_is_fatal_and_zeroes_everything():
     assert result.is_fatal
     assert all(v == 0.0 for v in result.dimension_scores.values())
     assert not result.unscored_dimensions
+def test_text_facts_match_case_and_whitespace_insensitively():
+    assert _text_fact_in_answer("PAGADO", "El crédito quedó  pagado.")
+    assert not _text_fact_in_answer("PAGADO", "El crédito sigue vigente.")
