@@ -9,7 +9,7 @@ from eval.round_b.runner import validate_full_dev
 
 
 MODEL_FACING_FIELDS = (
-    "code_commit_sha", "system_prompt_sha256", "tool_schema_sha256", "inference_profile",
+    "system_prompt_sha256", "tool_schema_sha256", "inference_profile",
     "max_model_tool_rounds", "retry_policy", "timeout_policy",
 )
 
@@ -38,6 +38,8 @@ def validate_composite(b24_dir: Path, b25_dir: Path) -> dict[str, Any]:
     left, right = manifests
     if left["candidate"] != right["candidate"]:
         raise ValueError("provider/model mismatch")
+    if left.get("model_facing_runtime_sha", left["code_commit_sha"]) != right.get("model_facing_runtime_sha", right["code_commit_sha"]):
+        raise ValueError("model-facing runtime mismatch")
     for field in MODEL_FACING_FIELDS:
         if left[field] != right[field]:
             raise ValueError(f"model-facing contract mismatch: {field}")
