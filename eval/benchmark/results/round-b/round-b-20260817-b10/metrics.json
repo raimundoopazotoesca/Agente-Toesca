@@ -1,0 +1,1 @@
+{"run_id":"round-b-20260817-b10","fireworks_gpt_oss_120b":{"cases_completed":15,"turns_recorded":25,"substantive_final_answers":4,"tool_loop_exhausted":21,"input_tokens":162546,"output_tokens":6550,"cached_tokens":136171,"sql_calls":90,"tool_calls":114,"latency_mean_ms":9190.5,"latency_median_ms":8765.0}}
