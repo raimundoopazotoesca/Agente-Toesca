@@ -3,7 +3,7 @@ from pathlib import Path
 from eval.round_b.runner import build_run_manifest, estimate_cost, validate_full_dev, validate_mini_dev
 from eval.round_b.runner import FullDevRoundBRunner, RoundBRunner
 from eval.round_b.incremental import IncrementalStore
-from eval.round_b.composite import derive_remaining_cases
+from eval.round_b.composite import derive_b26_remaining_cases, derive_remaining_cases
 from eval.benchmark.adapters.base import Turn, Usage
 from eval.benchmark.snapshot import SnapshotSandbox
 
@@ -44,6 +44,30 @@ def test_b24_remaining_continuation_is_derived_from_freeze_and_completed_cases()
     remaining = derive_remaining_cases(completed)
     assert (remaining["case_count"], remaining["turn_count"]) == (29, 57)
     assert remaining["ordered_case_ids"][0] == "tae-l4-007"
+
+
+def test_b26_continuation_excludes_the_entire_partially_aborted_b25_tce_case():
+    b24 = ROOT / "eval/benchmark/results/round-b/round-b-20260818-b24"
+    b25 = ROOT / "eval/benchmark/results/round-b/round-b-20260818-b25"
+
+    continuation = derive_b26_remaining_cases(b24, b25)
+
+    assert continuation["case_count"] == 7
+    assert continuation["turn_count"] == 22
+    assert continuation["ordered_case_ids"] == [
+        "tce-investigationanomaly-001",
+        "tce-investigationdrilldown-001",
+        "tce-investigationhypothesis-001",
+        "tce-investigationmultidomain-001",
+        "tce-metriccorrection-001",
+        "tce-periodcorrection-001",
+        "tce-topicreset-001",
+    ]
+    assert continuation["turn_counts"]["tce-investigationanomaly-001"] == 4
+    assert continuation["sources"] == {
+        "round-b-20260818-b24": {"case_count": 22, "turn_count": 22},
+        "round-b-20260818-b25": {"case_count": 22, "turn_count": 35},
+    }
 
 
 def test_b22_and_b23_full_dev_manifests_pin_the_same_frozen_contract():
