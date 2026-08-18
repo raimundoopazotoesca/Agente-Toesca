@@ -11,6 +11,27 @@ from typing import Any
 class IncompleteRequestError(RuntimeError): pass
 
 
+_PRIVATE_REPLAY_FIELDS = {"reasoning_content", "thinking", "redacted_thinking", "signature", "thought_signature"}
+
+
+def _without_private_replay(value: Any) -> Any:
+    """Drop opaque reasoning replay content while preserving benchmark telemetry."""
+    if isinstance(value, dict):
+        if value.get("type") in {"thinking", "redacted_thinking"}:
+            return None
+        result = {}
+        for key, item in value.items():
+            if key.lower() in _PRIVATE_REPLAY_FIELDS:
+                continue
+            cleaned = _without_private_replay(item)
+            if cleaned is not None:
+                result[key] = cleaned
+        return result
+    if isinstance(value, list):
+        return [cleaned for item in value if (cleaned := _without_private_replay(item)) is not None]
+    return value
+
+
 class IncrementalStore:
     def __init__(self, directory: Path, run_id: str):
         self.directory, self.run_id = directory, run_id
@@ -32,12 +53,11 @@ class IncrementalStore:
         os.replace(tmp, self.checkpoint_path)
 
     def event(self, event_type: str, candidate_id: str, case_id: str, turn_index: int, model_round: int, attempt_index: int, **extra: Any) -> dict[str, Any]:
-        value = {"event_id": uuid.uuid4().hex, "event_type": event_type, "run_id": self.run_id, "candidate_id": candidate_id, "case_id": case_id, "turn_index": turn_index, "model_round": model_round, "attempt_index": attempt_index, **extra}
+        value = _without_private_replay({"event_id": uuid.uuid4().hex, "event_type": event_type, "run_id": self.run_id, "candidate_id": candidate_id, "case_id": case_id, "turn_index": turn_index, "model_round": model_round, "attempt_index": attempt_index, **extra})
         self._append(self.events_path, value); return value
 
     def turn(self, record: dict[str, Any]) -> None:
-        forbidden = ("reasoning", "thought", "api_key", "authorization", "auth_header")
-        clean = {k: v for k, v in record.items() if not any(word in k.lower() for word in forbidden)}
+        clean = _without_private_replay(record)
         self._append(self.turns_path, {"run_id": self.run_id, **clean})
 
     def reconcile(self, candidate_id: str, case_id: str) -> None:

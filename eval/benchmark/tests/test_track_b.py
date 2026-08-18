@@ -235,7 +235,7 @@ def test_b1_standard_groq_explicitly_sends_medium_reasoning_without_sampling():
 def test_b1_standard_other_candidates_omit_all_sampling_and_reasoning_overrides():
     profile = resolve_b1_standard_profile("mistral", "mistral-large-2512")
     assert profile.request_kwargs() == {}
-    assert len(B1_STANDARD_PROFILES) == 7
+    assert len(B1_STANDARD_PROFILES) == 11
 
 
 def test_b1_standard_fireworks_gpt_oss_uses_explicit_medium_reasoning():

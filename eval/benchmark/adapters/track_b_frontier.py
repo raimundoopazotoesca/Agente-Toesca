@@ -74,6 +74,10 @@ B1_STANDARD_PROFILES = (
     InferenceProfile("dashscope", "qwen3.8-max", "B1_STANDARD"),
     InferenceProfile("mistral", "mistral-large-2512", "B1_STANDARD"),
     InferenceProfile("sambanova", "MiniMax-M2.7", "B1_STANDARD"),
+    InferenceProfile("openai", "gpt-5.6-terra", "B1_STANDARD"),
+    InferenceProfile("openai", "gpt-5.6-sol", "B1_STANDARD"),
+    InferenceProfile("anthropic", "claude-sonnet-5", "B1_STANDARD"),
+    InferenceProfile("anthropic", "claude-opus-5", "B1_STANDARD"),
 )
 
 
@@ -352,7 +356,10 @@ class TrackBFrontier:
 
             provider = db_chat._provider_chain()[0]
         self.provider = provider
-        self.client = OpenAI(api_key=provider["api_key"], base_url=provider["base_url"])
+        client_kwargs = {"api_key": provider["api_key"]}
+        if provider.get("base_url"):
+            client_kwargs["base_url"] = provider["base_url"]
+        self.client = OpenAI(**client_kwargs)
         self.model = provider["model"]
         self.inference_profile = inference_profile
         self.request_observer = request_observer
