@@ -171,14 +171,24 @@ def test_unsafe_tool_call_is_rejected_without_executing(sandbox):
     assert not turn.gate_violations  # sandbox never even saw it
 
 
-def test_iteration_cap_produces_fallback_text(sandbox):
-    """A model that keeps calling tools forever is cut off, not left hanging."""
+def test_iteration_cap_produces_synthesized_answer(sandbox):
+    """A model that keeps calling tools forever is cut off and made to conclude.
+
+    Pre-F4 this asserted the opposite -- that exhaustion produced the placeholder
+    "(no se alcanzo una respuesta final...)". That was the defect, not the spec:
+    it cost 17 of B27's 79 turns their entire answer. The budget is unchanged at
+    5 model calls; the last one is now reserved for synthesis.
+    """
     tool_call = _FakeToolCall(id="1", name="run_sql", arguments=json.dumps({"query": "SELECT 1"}))
-    chat = _ScriptedClient(script=[_fake_response(None, [tool_call]) for _ in range(10)])
+    chat = _ScriptedClient(script=[
+        *[_fake_response(None, [tool_call]) for _ in range(4)],
+        _fake_response("Con la evidencia disponible, la conclusion es X."),
+    ])
     session = _session(sandbox, chat)
     turn = session.ask("pregunta que nunca se resuelve")
-    assert turn.usage.calls == 5  # MAX_TOOL_ITERATIONS
-    assert "limite de iteraciones" in turn.text
+    assert turn.usage.calls == 5  # 4 investigation + 1 reserved synthesis
+    assert turn.text == "Con la evidencia disponible, la conclusion es X."
+    assert "limite de iteraciones" not in turn.text
 
 
 def test_history_persists_within_a_session(sandbox):

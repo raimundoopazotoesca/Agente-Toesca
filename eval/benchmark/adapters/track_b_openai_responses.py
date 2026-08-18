@@ -11,7 +11,8 @@ from openai import OpenAI
 
 from eval.benchmark.adapters.base import ToolCall, Turn, Usage
 from eval.benchmark.adapters.track_b_frontier import (
-    MAX_ROWS_RETURNED, MAX_TOOL_ITERATIONS, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE,
+    MAX_INVESTIGATION_ROUNDS, MAX_ROWS_RETURNED, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION,
+    _SYSTEM_PROMPT_TEMPLATE,
     _extract_artifacts, _format_tool_result, _schema_summary, _semantic_context, _validate_sql,
 )
 from eval.benchmark.snapshot import SnapshotSandbox
@@ -82,7 +83,7 @@ class _OpenAIResponsesSession:
         tool_calls_log: list[ToolCall] = []
         final_text, api_calls, response, final_items = "", 0, None, []
 
-        for model_round in range(MAX_TOOL_ITERATIONS):
+        for model_round in range(MAX_INVESTIGATION_ROUNDS):
             call_started = time.monotonic()
             if self.request_observer:
                 self.request_observer("provider_request_started", model_round, None)
@@ -119,7 +120,30 @@ class _OpenAIResponsesSession:
                                               duration_ms=(time.monotonic() - call_started) * 1000))
                 request_input.append({"type": "function_call_output", "call_id": item.get("call_id", ""), "output": result_text})
         else:
-            final_text = "(no se alcanzo una respuesta final dentro del limite de iteraciones de herramientas)"
+            # Reserved synthesis round. `request_input` already carries the full
+            # provider-required trajectory (including opaque reasoning items) from
+            # the investigation rounds -- appending to it rather than rebuilding
+            # is what keeps Responses tool replay valid. Tools stay declared so the
+            # replayed function_call/function_call_output items still validate, but
+            # `tool_choice="none"` forbids new ones, and this branch never reads
+            # function_call items back, so no SQL can reach the sandbox from here.
+            request_input.append({"role": "user", "content": _SYNTHESIS_INSTRUCTION})
+            if self.request_observer:
+                self.request_observer("provider_request_started", MAX_INVESTIGATION_ROUNDS, None)
+            try:
+                response = self.client.responses.create(
+                    model=self.model, instructions=self.system_prompt, input=request_input,
+                    tools=[_RESPONSES_RUN_SQL_TOOL], tool_choice="none", store=False,
+                )
+            except Exception as exc:
+                if self.request_observer:
+                    self.request_observer("provider_request_failed", MAX_INVESTIGATION_ROUNDS, exc)
+                raise
+            if self.request_observer:
+                self.request_observer("provider_response_received", MAX_INVESTIGATION_ROUNDS, response)
+            api_calls += 1
+            final_items = [_item_dict(item) for item in response.output]
+            final_text = _visible_text(response, final_items)
 
         # Keep the complete provider-required trajectory only in memory for TCE.
         self.history = [*request_input, *final_items]

@@ -30,8 +30,10 @@ not because it's architecture-specific:
   - the neutral BenchmarkAdapter/Session/Turn contract from adapters/base.py
 
 Loop: question -> model (+ tools) -> [tool call -> result -> model]* ->
-final answer. Capped at MAX_TOOL_ITERATIONS rounds so a confused model
-can't loop forever inside a benchmark run.
+final answer. Capped at MAX_INVESTIGATION_ROUNDS so a confused model can't
+loop forever inside a benchmark run; if that cap is reached without a final
+answer, the reserved synthesis round (tools disabled) produces one instead of
+returning a placeholder. See the round-budget constants below.
 """
 from __future__ import annotations
 
@@ -50,7 +52,21 @@ from eval.benchmark.snapshot import SnapshotSandbox
 
 SEMANTIC_DIR = Path(__file__).resolve().parents[3] / "semantic"
 
-MAX_TOOL_ITERATIONS = 5
+# Round budget (F4 stage 1). The TOTAL number of model calls per turn is
+# unchanged from Round B (5) -- what changed is that the last one is reserved
+# for synthesis instead of being spendable on another investigation branch.
+#
+# Before: 5 investigation rounds, no reserved synthesis. If round 5 asked for a
+# tool, the tool ran and the turn returned a placeholder -- 17 of B27's 79 turns
+# (21.5%) ended with no answer at all for this reason alone.
+# After: 4 investigation rounds + 1 mandatory tool-free synthesis round.
+#
+# The total is deliberately held at 5 so an F4 run stays compute-comparable with
+# B26/B27 turn for turn.
+MAX_TOTAL_MODEL_ROUNDS = 5
+RESERVED_SYNTHESIS_ROUNDS = 1
+MAX_INVESTIGATION_ROUNDS = MAX_TOTAL_MODEL_ROUNDS - RESERVED_SYNTHESIS_ROUNDS
+
 MAX_ROWS_RETURNED = 50
 _CHART_BLOCK = re.compile(r"```chart\s*\n(.*?)```", re.DOTALL)
 
@@ -144,6 +160,20 @@ CATALOGO SEMANTICO (fondos, activos, alias, metricas definidas):
 ESQUEMA DE BASE DE DATOS DISPONIBLE (tabla: columnas):
 {schema_summary}
 """
+
+
+# Sent as a normal turn message on the reserved synthesis round only -- NOT part
+# of _SYSTEM_PROMPT_TEMPLATE, so `system_prompt_sha256` stays byte-identical to
+# B26/B27 and the only model-facing difference an F4 run introduces is the loop
+# structure itself. Deliberately generic: no metric, fund, asset or benchmark-case
+# specific instruction belongs here.
+_SYNTHESIS_INSTRUCTION = (
+    "Se agoto el presupuesto de investigacion: esta es tu ultima intervencion y no "
+    "tienes herramientas disponibles. Responde ahora con la mejor conclusion que "
+    "sustente la evidencia ya obtenida. No abras nuevas lineas de investigacion ni "
+    "propongas consultas adicionales. Declara de forma natural cualquier incertidumbre "
+    "material o dato que no hayas podido verificar."
+)
 
 
 @lru_cache(maxsize=1)
@@ -255,7 +285,7 @@ class _TrackBSession:
         final_text = ""
         api_calls = 0
 
-        for model_round in range(MAX_TOOL_ITERATIONS):
+        for model_round in range(MAX_INVESTIGATION_ROUNDS):
             call_started = time.monotonic()
             # One provider for the whole session (see TrackBFrontier docstring
             # on why: mixing providers mid-loop broke Gemini's OpenAI-compat
@@ -304,9 +334,29 @@ class _TrackBSession:
                 tool_calls_log.append(ToolCall(name="run_sql", args={"query": query}, ok=ok, duration_ms=duration_ms))
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_text})
         else:
-            final_text = final_text or (
-                "(no se alcanzo una respuesta final dentro del limite de iteraciones de herramientas)"
-            )
+            # Investigation budget exhausted without a final answer. Spend the
+            # reserved round on synthesis, with tools disabled two ways: the
+            # provider is told `tool_choice="none"`, and -- regardless of whether
+            # it honors that -- this branch never reads `tool_calls`, so no SQL
+            # can reach the sandbox from here. `tools` stays declared because the
+            # replayed history contains tool_calls/tool messages that providers
+            # validate against the declared schema.
+            messages.append({"role": "user", "content": _SYNTHESIS_INSTRUCTION})
+            kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
+            if self.request_observer:
+                self.request_observer("provider_request_started", MAX_INVESTIGATION_ROUNDS, None)
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="none", **kwargs,
+                )
+            except Exception as exc:
+                if self.request_observer:
+                    self.request_observer("provider_request_failed", MAX_INVESTIGATION_ROUNDS, exc)
+                raise
+            if self.request_observer:
+                self.request_observer("provider_response_received", MAX_INVESTIGATION_ROUNDS, resp)
+            api_calls += 1
+            final_text = resp.choices[0].message.content or ""
 
         elapsed_ms = (time.monotonic() - started) * 1000
         self.history.append({"role": "user", "content": message})

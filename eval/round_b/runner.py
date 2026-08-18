@@ -13,7 +13,10 @@ from typing import Any
 
 import yaml
 
-from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE, _schema_summary, _semantic_context
+from eval.benchmark.adapters.track_b_frontier import (
+    B1_STANDARD_PROFILES, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS,
+    RESERVED_SYNTHESIS_ROUNDS, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE, _schema_summary, _semantic_context,
+)
 from eval.benchmark.adapters.track_b_frontier import TrackBFrontier
 from eval.benchmark.adapters.track_b_anthropic import TrackBAnthropic
 from eval.benchmark.adapters.track_b_openai_responses import TrackBOpenAIResponses
@@ -27,6 +30,11 @@ from eval.benchmark.snapshot import load_lock
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "eval/round_b/mini_dev_v1.yaml"
 PRICING = ROOT / "eval/round_b/pricing.yaml"
+# Identifies the reasoning-loop generation a run was produced by. B26/B27 ran the
+# pre-F4 loop and their manifests carry no such key; any run from this code forward
+# records F4_STAGE1 (4 investigation rounds + 1 reserved synthesis, 5 total).
+ANALYST_LOOP_VERSION = "F4_STAGE1"
+
 CANONICAL_SHA = "df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f"
 FULL_DEV_CANONICAL_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
 
@@ -91,7 +99,17 @@ def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -
     return {"run_id": run_id, "run_kind": "mini_dev", "mini_dev": mini, "code_commit_sha": code_commit_sha, "track": "B",
             "snapshot": lock, "system_prompt_sha256": prompt_hash, "tool_schema_sha256": tool_hash,
             "inference_profile": "B1_STANDARD", "provider_configs": [p.__dict__ for p in B1_STANDARD_PROFILES],
-            "max_model_tool_rounds": 5, "timeout_policy": "provider default", "retry_policy": "one: 429/5xx/network/timeout",
+            # max_model_tool_rounds stays 5: the TOTAL per-turn model-call budget is
+            # unchanged from B26/B27, which is what makes an F4 run compute-comparable.
+            # round_budget/analyst_loop_version are the discriminators that say how
+            # those 5 are spent -- B26/B27 manifests predate them and legitimately
+            # lack them, so historical files stay valid and untouched.
+            "max_model_tool_rounds": MAX_TOTAL_MODEL_ROUNDS,
+            "round_budget": {"investigation": MAX_INVESTIGATION_ROUNDS,
+                             "reserved_synthesis": RESERVED_SYNTHESIS_ROUNDS,
+                             "total": MAX_TOTAL_MODEL_ROUNDS},
+            "analyst_loop_version": ANALYST_LOOP_VERSION,
+            "timeout_policy": "provider default", "retry_policy": "one: 429/5xx/network/timeout",
             "grader_versions": {"deterministic_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/deterministic.py"),
                                 "gates_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/gates.py")},
             "judge_status": "not_scored_yet", "execution_date": execution_date}

@@ -11,7 +11,8 @@ from anthropic import Anthropic
 
 from eval.benchmark.adapters.base import ToolCall, Turn, Usage
 from eval.benchmark.adapters.track_b_frontier import (
-    MAX_ROWS_RETURNED, MAX_TOOL_ITERATIONS, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE,
+    MAX_INVESTIGATION_ROUNDS, MAX_ROWS_RETURNED, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION,
+    _SYSTEM_PROMPT_TEMPLATE,
     _extract_artifacts, _format_tool_result, _schema_summary, _semantic_context, _validate_sql,
 )
 from eval.benchmark.snapshot import SnapshotSandbox
@@ -61,7 +62,7 @@ class _AnthropicSession:
         messages: list[dict[str, Any]] = [*self.history, {"role": "user", "content": message}]
         tool_calls_log: list[ToolCall] = []
         final_text, api_calls, response = "", 0, None
-        for model_round in range(MAX_TOOL_ITERATIONS):
+        for model_round in range(MAX_INVESTIGATION_ROUNDS):
             call_started = time.monotonic()
             if self.request_observer: self.request_observer("provider_request_started", model_round, None)
             try:
@@ -91,7 +92,34 @@ class _AnthropicSession:
                 tool_results.append({"type": "tool_result", "tool_use_id": block.get("id", ""), "content": result_text})
             messages.append({"role": "user", "content": tool_results})
         else:
-            final_text = "(no se alcanzo una respuesta final dentro del limite de iteraciones de herramientas)"
+            # Reserved synthesis round. `messages` already holds the assistant
+            # turns verbatim (thinking/signature blocks included) -- untouched, so
+            # replay stays valid. The instruction is appended as an extra text
+            # block on the existing trailing user message rather than as a new
+            # user message, because Anthropic expects alternating roles and the
+            # last entry here is always the tool_result user message.
+            if messages and messages[-1]["role"] == "user" and isinstance(messages[-1]["content"], list):
+                messages[-1]["content"].append({"type": "text", "text": _SYNTHESIS_INSTRUCTION})
+            else:
+                messages.append({"role": "user", "content": _SYNTHESIS_INSTRUCTION})
+            if self.request_observer:
+                self.request_observer("provider_request_started", MAX_INVESTIGATION_ROUNDS, None)
+            try:
+                # tools stay declared so replayed tool_use/tool_result blocks still
+                # validate; tool_choice none forbids new ones. This branch never
+                # reads tool_use blocks back, so no SQL can reach the sandbox.
+                response = self.client.messages.create(model=self.model, max_tokens=4096, system=self.system_prompt,
+                                                       messages=messages, tools=[_ANTHROPIC_RUN_SQL_TOOL],
+                                                       tool_choice={"type": "none"})
+            except Exception as exc:
+                if self.request_observer:
+                    self.request_observer("provider_request_failed", MAX_INVESTIGATION_ROUNDS, exc)
+                raise
+            if self.request_observer:
+                self.request_observer("provider_response_received", MAX_INVESTIGATION_ROUNDS, response)
+            api_calls += 1
+            content = [_block_dict(block) for block in response.content]
+            final_text = "".join(block.get("text", "") for block in content if block.get("type") == "text")
         elapsed_ms = (time.monotonic() - started) * 1000
         self.history.extend([{"role": "user", "content": message}, {"role": "assistant", "content": final_text}])
         usage = getattr(response, "usage", None)
