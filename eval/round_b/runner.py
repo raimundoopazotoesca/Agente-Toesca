@@ -7,6 +7,7 @@ import subprocess
 import time
 import uuid
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +89,6 @@ def committed_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-ELIGIBLE_RETRY = ("429", "5", "timeout", "network", "connection")
 CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "fireworks": ("FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1"), "openai": ("OPENAI_API_KEY", None), "anthropic": ("ANTHROPIC_API_KEY", None)}
 
 
@@ -96,6 +96,8 @@ def classify_execution_error(exc: Exception) -> str:
     text = str(exc).lower()
     if "429" in text or "rate limit" in text or "quota" in text:
         return "quota_rate_limit"
+    if re.search(r"\b5\d{2}\b", text):
+        return "provider_infra"
     if "timeout" in text:
         return "timeout"
     if "connection" in text or "network" in text:
@@ -103,6 +105,10 @@ def classify_execution_error(exc: Exception) -> str:
     if "sql" in text:
         return "tool_sql_invalid"
     return "adapter_protocol"
+
+
+def is_retry_eligible(exc: Exception) -> bool:
+    return classify_execution_error(exc) in {"quota_rate_limit", "provider_infra", "timeout"}
 
 
 class RoundBRunner:
@@ -148,7 +154,7 @@ class RoundBRunner:
                         break
                     except Exception as exc:  # network boundary only
                         error = classify_execution_error(exc)
-                        if attempt == 0 and any(x in str(exc).lower() for x in ELIGIBLE_RETRY):
+                        if attempt == 0 and is_retry_eligible(exc):
                             retries = 1
                             continue
                         break
@@ -201,7 +207,7 @@ class RoundBRunner:
                     try:
                         turn = session.ask(spec["question"]); break
                     except Exception as exc:
-                        if attempt[0] == 0 and classify_execution_error(exc) in {"quota_rate_limit", "provider_infra", "timeout"}: continue
+                        if attempt[0] == 0 and is_retry_eligible(exc): continue
                         store.set_state(provider, case_id, "aborted"); raise
                 grade = score_turn(turn, spec, resolved)
                 store.turn({"candidate_id": provider, "case_id": case_id, "turn_index": index, "provider": provider, "requested_model": model, "resolved_model": turn.usage.model, "final_answer": turn.text, "status": "completed", "model_rounds": turn.usage.calls, "tool_calls": [x.__dict__ for x in turn.tool_calls], "executed_sql": turn.queries, "input_tokens": turn.usage.input_tokens, "output_tokens": turn.usage.output_tokens, "reasoning_tokens": turn.usage.reasoning_tokens, "cached_tokens": turn.usage.cached_tokens, "latency_ms": turn.usage.latency_ms, "deterministic_grading": {"dimension_scores": grade.dimension_scores, "unscored_dimensions": sorted(grade.unscored_dimensions)}})

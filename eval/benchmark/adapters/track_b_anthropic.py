@@ -110,7 +110,7 @@ class TrackBAnthropic:
             raise ValueError("Anthropic provider configuration is required")
         self.sandbox = sandbox or SnapshotSandbox()
         self.provider = provider
-        self.client = Anthropic(api_key=provider["api_key"])
+        self.client = Anthropic(api_key=provider["api_key"], max_retries=0)
         self.model = provider["model"]
         self.request_observer = request_observer
         self._system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(semantic_context=_semantic_context(), schema_summary=_schema_summary(self.sandbox))
