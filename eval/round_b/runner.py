@@ -15,7 +15,8 @@ import yaml
 
 from eval.benchmark.adapters.track_b_frontier import (
     B1_STANDARD_PROFILES, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS,
-    RESERVED_SYNTHESIS_ROUNDS, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE, _schema_summary, _semantic_context,
+    RESERVED_SYNTHESIS_ROUNDS, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION, _SYSTEM_PROMPT_TEMPLATE,
+    _schema_summary, _semantic_context,
 )
 from eval.benchmark.adapters.track_b_frontier import TrackBFrontier
 from eval.benchmark.adapters.track_b_anthropic import TrackBAnthropic
@@ -92,6 +93,22 @@ def _effective_contract_hashes() -> tuple[str, str]:
     return prompt_hash, hashlib.sha256(tool.encode("utf-8")).hexdigest()
 
 
+def _reserved_synthesis_prompt_hash() -> str:
+    """Content hash of the model-facing instruction sent on the reserved synthesis
+    round (F4 stage 1).
+
+    Nothing else in the manifest pins it: it is deliberately NOT part of
+    _SYSTEM_PROMPT_TEMPLATE (so system_prompt_sha256 stays byte-comparable with
+    B26/B27) and it is not a tool, so tool_schema_sha256 misses it too.
+    `model_facing_runtime_sha` does not cover it either -- that key is a git
+    commit pointer hand-pinned into the B24-B27 manifests, never emitted by this
+    generator, and a revision pointer is not a content fingerprint. Without this
+    hash, editing the synthesis wording would change model-facing behavior while
+    every content hash in the manifest stayed identical.
+    """
+    return hashlib.sha256(_SYNTHESIS_INSTRUCTION.encode("utf-8")).hexdigest()
+
+
 def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -> dict[str, Any]:
     mini = validate_mini_dev()
     lock = load_lock()
@@ -109,6 +126,7 @@ def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -
                              "reserved_synthesis": RESERVED_SYNTHESIS_ROUNDS,
                              "total": MAX_TOTAL_MODEL_ROUNDS},
             "analyst_loop_version": ANALYST_LOOP_VERSION,
+            "reserved_synthesis_prompt_sha256": _reserved_synthesis_prompt_hash(),
             "timeout_policy": "provider default", "retry_policy": "one: 429/5xx/network/timeout",
             "grader_versions": {"deterministic_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/deterministic.py"),
                                 "gates_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/gates.py")},

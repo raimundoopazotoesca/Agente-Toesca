@@ -337,6 +337,27 @@ def test_anthropic_early_answer_makes_no_synthesis_call(sandbox):
     assert "tool_choice" not in client.calls[0]
 
 
+# --- manifest pins the synthesis prompt ---------------------------------------
+
+def test_manifest_fingerprints_the_reserved_synthesis_prompt():
+    """The instruction is model-facing but lives outside the system prompt and
+    outside the tool schema, so without its own hash a reworded synthesis would
+    be invisible in the manifest. Pinned here the same way the frozen contract
+    hashes are."""
+    import hashlib
+
+    from eval.round_b.runner import _reserved_synthesis_prompt_hash, build_run_manifest
+
+    expected = hashlib.sha256(_SYNTHESIS_INSTRUCTION.encode("utf-8")).hexdigest()
+    assert _reserved_synthesis_prompt_hash() == expected
+
+    manifest = build_run_manifest("offline", "deadbeef", "2026-08-18T00:00:00Z")
+    assert manifest["reserved_synthesis_prompt_sha256"] == expected
+    # the pre-F4 contract hashes must stay untouched by stage 1
+    assert manifest["system_prompt_sha256"] == "b155ded6464def5a8cf7ba8d4e9c56af8dc3b402cf0227b5f9f097ab96e17f44"
+    assert manifest["tool_schema_sha256"] == "d5623b5fc7f1cbc35d6f75b69403df87bbb326c9995d8e240f6a5e51d1b196ca"
+
+
 # --- placeholder is gone from every path --------------------------------------
 
 def test_placeholder_string_is_absent_from_all_three_adapters():
