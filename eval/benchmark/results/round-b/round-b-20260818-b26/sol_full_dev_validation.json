@@ -1,0 +1,1 @@
+{"checks":{"aborted_b25_case_origin":"round-b-20260818-b26","duplicates":0,"gaps":0,"turns":79,"unique_cases":51},"grader_sha256":"354d0209422ca679cef62816923205d5a5735874c06a6fc52c1418b30df5cb51","gates_sha256":"24a8acf210b5b1a3b31a931b632d53920ffda32fede19bc704c6953ea1a3cdf6","model_facing_runtime_sha":"bc5a1eb5b5636fc850a54dead2b08c07f3d72068","status":"pass"}
