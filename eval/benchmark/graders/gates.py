@@ -28,6 +28,7 @@ from eval.benchmark.graders.entities import (
     period_matches,
 )
 from eval.benchmark.graders.ground_truth import ResolvedFact
+from eval.benchmark.graders.fact_comparison import is_numeric_fact
 from eval.benchmark.graders.numbers import has_numbers, value_in_text
 
 FATAL = "fatal"
@@ -144,6 +145,8 @@ def gate_c1_wrong_primary_number(
     if spec is None or primary_fact not in resolved:
         return GateCheck("C1", CEILING, triggered=None, detail="primary_fact not resolvable")
     fact = resolved[primary_fact]
+    if not is_numeric_fact(fact):
+        return GateCheck("C1", CEILING, triggered=False, detail="primary fact is non-numeric")
     ok = value_in_text(
         float(fact.value), turn.text,
         tolerance_pct=spec.get("tolerance_pct", 0.0),
@@ -173,6 +176,8 @@ def gate_c2_wrong_secondary_number(
         if ref == primary_fact or ref not in resolved:
             continue
         fact = resolved[ref]
+        if not is_numeric_fact(fact):
+            continue
         ok = value_in_text(
             float(fact.value), turn.text,
             tolerance_pct=spec.get("tolerance_pct", 0.0),

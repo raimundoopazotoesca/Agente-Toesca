@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters.base import Turn
 from eval.benchmark.graders import gates
-from eval.benchmark.graders.deterministic import score_turn
+from eval.benchmark.graders.deterministic import _fact_in_answer, score_turn
 from eval.benchmark.graders.deterministic import _text_fact_in_answer
 from eval.benchmark.graders.entities import (
     check_expected_entities,
@@ -207,6 +207,23 @@ def test_gate_c2_wrong_secondary_number():
     assert check.ceiling == 0.60
 
 
+def test_gate_c1_ignores_date_and_text_facts():
+    date = ResolvedFact(ref="periodo", value="2025-08", unit="date")
+    text = ResolvedFact(ref="estado", value="PAGADO", unit="text")
+    assert gates.gate_c1_wrong_primary_number(Turn(text="2025-09"), "periodo", [{"ref": "periodo"}], {"periodo": date}).triggered is False
+    assert gates.gate_c1_wrong_primary_number(Turn(text="vigente"), "estado", [{"ref": "estado"}], {"estado": text}).triggered is False
+
+
+def test_gate_c2_ignores_date_and_text_facts():
+    resolved = {
+        "noi": ResolvedFact(ref="noi", value=1_000_000, unit="CLP"),
+        "periodo": ResolvedFact(ref="periodo", value="2025-08", unit="date"),
+        "estado": ResolvedFact(ref="estado", value="PAGADO", unit="text"),
+    }
+    required = [{"ref": "noi"}, {"ref": "periodo"}, {"ref": "estado"}]
+    assert gates.gate_c2_wrong_secondary_number(Turn(text="NOI 1.000.000"), "noi", required, resolved).triggered is False
+
+
 def test_gate_c3_wrong_period_without_declaration():
     turn = Turn(text="la vacancia fue 5% en 2024-01")
     check = gates.gate_c3_wrong_period(turn, {"exact": "2026-06"}, clarification_expected=False)
@@ -327,6 +344,48 @@ def test_score_turn_entity_confusion_is_fatal_and_zeroes_everything():
     assert result.is_fatal
     assert all(v == 0.0 for v in result.dimension_scores.values())
     assert not result.unscored_dimensions
+
+
+def test_date_fact_matches_without_numeric_coercion():
+    fact = ResolvedFact(ref="periodo", value="2025-08", unit="date")
+    assert _fact_in_answer(fact, "Strip Machalí dejó de reportar en 2025-08")
+
+
+def test_incorrect_date_fact_does_not_match():
+    fact = ResolvedFact(ref="periodo", value="2025-08", unit="date")
+    assert not _fact_in_answer(fact, "Strip Machalí dejó de reportar en 2025-09")
+
+
+def test_text_and_numeric_fact_comparators_preserve_existing_rules():
+    assert _fact_in_answer(ResolvedFact(ref="estado", value="PAGADO", unit="text"), "El crédito quedó pagado")
+    assert not _fact_in_answer(ResolvedFact(ref="estado", value="PAGADO", unit="text"), "El crédito sigue vigente")
+    fact = ResolvedFact(ref="noi", value=1_000_000, unit="CLP")
+    assert _fact_in_answer(fact, "NOI 1.005.000", tolerance_pct=1.0)
+    assert not _fact_in_answer(fact, "NOI 1.500.000", tolerance_pct=1.0)
+
+
+def test_tae_l4_007_date_ground_truth_scores_without_crashing():
+    spec = {"required_facts": [{"ref": "vigente_hasta_stripmachali"}]}
+    resolved = {"vigente_hasta_stripmachali": ResolvedFact("vigente_hasta_stripmachali", "2025-08", "date")}
+    result = score_turn(Turn(text="El hecho observado es de 2025-08."), spec, resolved)
+    assert result.dimension_scores["completeness"] == 1.0
+
+
+def test_tae_l4_007_full_date_contract_completes_gates_without_exception():
+    spec = {
+        "required_facts": [
+            {"ref": "vigente_hasta_stripmachali"},
+            {"ref": "fecha_vencimiento_credito_stripmachali"},
+        ],
+        "primary_fact": "vigente_hasta_stripmachali",
+    }
+    resolved = {
+        "vigente_hasta_stripmachali": ResolvedFact("vigente_hasta_stripmachali", "2025-08", "date"),
+        "fecha_vencimiento_credito_stripmachali": ResolvedFact("fecha_vencimiento_credito_stripmachali", "2025-09", "date"),
+    }
+    result = score_turn(Turn(text="Los hechos son 2025-08 y 2025-09."), spec, resolved)
+    assert result.facts_found == ["vigente_hasta_stripmachali", "fecha_vencimiento_credito_stripmachali"]
+    assert not result.gate_verdict.ceiling_triggered
 def test_text_facts_match_case_and_whitespace_insensitively():
     assert _text_fact_in_answer("PAGADO", "El crédito quedó  pagado.")
     assert not _text_fact_in_answer("PAGADO", "El crédito sigue vigente.")

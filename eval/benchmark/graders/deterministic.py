@@ -8,14 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-import re
-import unicodedata
 
 from eval.benchmark.adapters.base import Turn
 from eval.benchmark.graders import gates
 from eval.benchmark.graders.entities import check_expected_entities, period_matches
 from eval.benchmark.graders.ground_truth import ResolvedFact
-from eval.benchmark.graders.numbers import has_numbers, value_in_text
+from eval.benchmark.graders.fact_comparison import fact_in_answer as _fact_in_answer, text_fact_in_answer as _text_fact_in_answer
+from eval.benchmark.graders.numbers import has_numbers
 
 DIMENSIONS = [
     "factual_correctness",
@@ -29,13 +28,6 @@ DIMENSIONS = [
     "investigation_quality",
     "output_usefulness",
 ]
-
-
-def _text_fact_in_answer(value: Any, text: str) -> bool:
-    def normalize(s: Any) -> str:
-        s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii")
-        return re.sub(r"\s+", " ", s).strip().casefold()
-    return normalize(value) in normalize(text)
 
 
 @dataclass
@@ -70,14 +62,18 @@ def _score_facts(turn: Turn, turn_spec: dict[str, Any], resolved: dict[str, Reso
     for spec in required:
         ref = spec["ref"]
         fact = resolved.get(ref)
-        ok = fact is not None and (_text_fact_in_answer(fact.value, turn.text) if fact.unit == "text" else value_in_text(float(fact.value), turn.text, tolerance_pct=spec.get("tolerance_pct", 0.0), tolerance_abs=spec.get("tolerance_abs", 0.0)))
+        ok = fact is not None and _fact_in_answer(
+            fact, turn.text, tolerance_pct=spec.get("tolerance_pct", 0.0), tolerance_abs=spec.get("tolerance_abs", 0.0)
+        )
         (found if ok else missing).append(ref)
 
     bonus = 0
     for spec in acceptable:
         ref = spec["ref"]
         fact = resolved.get(ref)
-        if fact is not None and (_text_fact_in_answer(fact.value, turn.text) if fact.unit == "text" else value_in_text(float(fact.value), turn.text, tolerance_pct=spec.get("tolerance_pct", 0.0), tolerance_abs=spec.get("tolerance_abs", 0.0))):
+        if fact is not None and _fact_in_answer(
+            fact, turn.text, tolerance_pct=spec.get("tolerance_pct", 0.0), tolerance_abs=spec.get("tolerance_abs", 0.0)
+        ):
             bonus += 1
 
     required_score = (len(found) / len(required)) if required else 1.0

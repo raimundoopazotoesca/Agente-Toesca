@@ -3,6 +3,7 @@ from pathlib import Path
 from eval.round_b.runner import build_run_manifest, estimate_cost, validate_full_dev, validate_mini_dev
 from eval.round_b.runner import FullDevRoundBRunner, RoundBRunner
 from eval.round_b.incremental import IncrementalStore
+from eval.round_b.composite import derive_remaining_cases
 from eval.benchmark.adapters.base import Turn, Usage
 from eval.benchmark.snapshot import SnapshotSandbox
 
@@ -31,6 +32,18 @@ def test_full_dev_runner_selects_the_complete_frozen_corpus(tmp_path):
     cases = runner._cases()
     assert len(cases) == 51
     assert sum(len(case.turns) for case in cases) == 79
+
+
+def test_b24_remaining_continuation_is_derived_from_freeze_and_completed_cases():
+    completed = [
+        "tae-l1-001", "tae-l1-002", "tae-l1-003", "tae-l1-004", "tae-l1-005", "tae-l1-006",
+        "tae-l1-007", "tae-l1-008", "tae-l1-009", "tae-l2-001", "tae-l2-002", "tae-l2-003",
+        "tae-l3-001", "tae-l3-002", "tae-l3-003", "tae-l3-004", "tae-l4-001", "tae-l4-002",
+        "tae-l4-003", "tae-l4-004", "tae-l4-005", "tae-l4-006",
+    ]
+    remaining = derive_remaining_cases(completed)
+    assert (remaining["case_count"], remaining["turn_count"]) == (29, 57)
+    assert remaining["ordered_case_ids"][0] == "tae-l4-007"
 
 
 def test_b22_and_b23_full_dev_manifests_pin_the_same_frozen_contract():
