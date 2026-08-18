@@ -1,0 +1,50 @@
+{
+  "run_id": "round-b-20260817-b11",
+  "provider": "fireworks",
+  "model": "accounts/fireworks/models/glm-5p2",
+  "source_raw_artifacts_sha256": {
+    "checkpoint.json": "235d9d4583afb8bc3148bbc3ccf84b9e7720493bfc368ce8d94d91b3c214a66f",
+    "events.jsonl": "abc287aa6c06f4200e6ef4b0914201ad3c996d62e3601b73fcbf72da74191a18",
+    "run_manifest.json": "22a126062831c0d055142d6f1903b98e5baa68d0bc4c10861b83bf8bb4a3de4b",
+    "turns.jsonl": "7735bdb399e62be6df1b93a72d261bf1e335668a5303a54afffebd6e6c09aab2"
+  },
+  "raw_archive_verified_byte_identical": true,
+  "substantive_final_answer_definition": "final_answer is non-empty and not equal to the tool-loop-exhausted sentinel.",
+  "candidate_id": "fireworks",
+  "source_run": "round-b-20260817-b11",
+  "turns_recorded": 25,
+  "coverage_cases": 15,
+  "substantive_final_answers": 8,
+  "tool_loop_exhausted": 17,
+  "input_tokens": 357045,
+  "output_tokens": 18246,
+  "cached_tokens": 304849,
+  "reasoning_tokens": 0,
+  "sql_calls": 253,
+  "tool_calls": 284,
+  "model_rounds_total": 119,
+  "model_rounds_mean": 4.76,
+  "latency_total_ms": 1639861.0000000335,
+  "latency_mean_ms": 65594.44000000134,
+  "latency_median_ms": 52468.99999998277,
+  "deterministic_grading": {
+    "completeness": {
+      "mean": 0.428,
+      "scored_turns": 25
+    },
+    "conversational_quality": {
+      "mean": 0.25227272727272726,
+      "scored_turns": 22
+    },
+    "factual_correctness": {
+      "mean": 0.7714285714285715,
+      "scored_turns": 7
+    },
+    "tool_correctness": {
+      "mean": 0.375,
+      "scored_turns": 4
+    }
+  },
+  "reasoning_content_persisted": false,
+  "holdout_executed": false
+}

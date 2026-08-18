@@ -1,0 +1,235 @@
+{
+  "sources": [
+    {
+      "candidate_id": "dashscope",
+      "provider": "dashscope",
+      "model": "qwen3.8-max",
+      "source_run": "round-b-20260817-b6",
+      "coverage_cases": 15,
+      "turns_recorded": 25,
+      "substantive_final_answers": 3,
+      "tool_loop_exhausted": 22,
+      "input_tokens": 338156,
+      "output_tokens": 19667,
+      "cached_tokens": 279552,
+      "reasoning_tokens": 0,
+      "sql_calls": 256,
+      "tool_calls": 270,
+      "model_rounds_total": 123,
+      "model_rounds_mean": 4.92,
+      "latency_total_ms": 1376924.0000001155,
+      "latency_mean_ms": 55076.96000000462,
+      "latency_median_ms": 50765.00000001397,
+      "deterministic_grading": {
+        "completeness": {
+          "mean": 0.32,
+          "scored_turns": 25
+        },
+        "conversational_quality": {
+          "mean": 0.09090909090909091,
+          "scored_turns": 22
+        },
+        "factual_correctness": {
+          "mean": 1.0,
+          "scored_turns": 3
+        },
+        "tool_correctness": {
+          "mean": 0.4,
+          "scored_turns": 4
+        }
+      }
+    },
+    {
+      "candidate_id": "sambanova",
+      "provider": "sambanova",
+      "model": "MiniMax-M2.7",
+      "source_run": "round-b-20260817-b6",
+      "coverage_cases": 15,
+      "turns_recorded": 25,
+      "substantive_final_answers": 7,
+      "tool_loop_exhausted": 18,
+      "input_tokens": 234638,
+      "output_tokens": 10133,
+      "cached_tokens": 106496,
+      "reasoning_tokens": 0,
+      "sql_calls": 157,
+      "tool_calls": 227,
+      "model_rounds_total": 117,
+      "model_rounds_mean": 4.68,
+      "latency_total_ms": 271842.99999981886,
+      "latency_mean_ms": 10873.719999992754,
+      "latency_median_ms": 10125.0,
+      "deterministic_grading": {
+        "completeness": {
+          "mean": 0.37200000000000005,
+          "scored_turns": 25
+        },
+        "conversational_quality": {
+          "mean": 0.20909090909090908,
+          "scored_turns": 22
+        },
+        "factual_correctness": {
+          "mean": 0.6666666666666666,
+          "scored_turns": 6
+        },
+        "tool_correctness": {
+          "mean": 0.375,
+          "scored_turns": 4
+        }
+      }
+    },
+    {
+      "candidate_id": "mistral",
+      "provider": "mistral",
+      "model": "mistral-large-2512",
+      "source_run": "round-b-20260817-b8",
+      "coverage_cases": 15,
+      "turns_recorded": 25,
+      "substantive_final_answers": 11,
+      "tool_loop_exhausted": 14,
+      "input_tokens": 241414,
+      "output_tokens": 12960,
+      "cached_tokens": 44432,
+      "reasoning_tokens": 0,
+      "sql_calls": 138,
+      "tool_calls": 275,
+      "model_rounds_total": 100,
+      "model_rounds_mean": 4.0,
+      "latency_total_ms": 1333377.000000095,
+      "latency_mean_ms": 53335.0800000038,
+      "latency_median_ms": 27983.99999999674,
+      "deterministic_grading": {
+        "completeness": {
+          "mean": 0.24,
+          "scored_turns": 25
+        },
+        "conversational_quality": {
+          "mean": 0.2608695652173913,
+          "scored_turns": 23
+        },
+        "factual_correctness": {
+          "mean": 0.125,
+          "scored_turns": 8
+        },
+        "tool_correctness": {
+          "mean": 0.3333333333333333,
+          "scored_turns": 3
+        }
+      }
+    },
+    {
+      "candidate_id": "fireworks",
+      "provider": "fireworks",
+      "model": "accounts/fireworks/models/gpt-oss-120b",
+      "source_run": "round-b-20260817-b10",
+      "coverage_cases": 15,
+      "turns_recorded": 25,
+      "substantive_final_answers": 4,
+      "tool_loop_exhausted": 21,
+      "input_tokens": 162546,
+      "output_tokens": 6550,
+      "cached_tokens": 136171,
+      "reasoning_tokens": 0,
+      "sql_calls": 90,
+      "tool_calls": 114,
+      "model_rounds_total": 118,
+      "model_rounds_mean": 4.72,
+      "latency_total_ms": 229762.99999991897,
+      "latency_mean_ms": 9190.519999996759,
+      "latency_median_ms": 8765.00000001397,
+      "deterministic_grading": {
+        "analytical_quality": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "clarification_judgment": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "completeness": {
+          "mean": 0.32,
+          "scored_turns": 25
+        },
+        "conversational_quality": {
+          "mean": 0.13043478260869565,
+          "scored_turns": 23
+        },
+        "factual_correctness": {
+          "mean": 0.6,
+          "scored_turns": 5
+        },
+        "grounding": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "hallucination": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "investigation_quality": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "output_usefulness": {
+          "mean": 0.0,
+          "scored_turns": 2
+        },
+        "tool_correctness": {
+          "mean": 0.26666666666666666,
+          "scored_turns": 6
+        }
+      }
+    },
+    {
+      "candidate_id": "fireworks",
+      "provider": "fireworks",
+      "model": "accounts/fireworks/models/glm-5p2",
+      "source_run": "round-b-20260817-b11",
+      "coverage_cases": 15,
+      "turns_recorded": 25,
+      "substantive_final_answers": 8,
+      "tool_loop_exhausted": 17,
+      "input_tokens": 357045,
+      "output_tokens": 18246,
+      "cached_tokens": 304849,
+      "reasoning_tokens": 0,
+      "sql_calls": 253,
+      "tool_calls": 284,
+      "model_rounds_total": 119,
+      "model_rounds_mean": 4.76,
+      "latency_total_ms": 1639861.0000000335,
+      "latency_mean_ms": 65594.44000000134,
+      "latency_median_ms": 52468.99999998277,
+      "deterministic_grading": {
+        "completeness": {
+          "mean": 0.428,
+          "scored_turns": 25
+        },
+        "conversational_quality": {
+          "mean": 0.25227272727272726,
+          "scored_turns": 22
+        },
+        "factual_correctness": {
+          "mean": 0.7714285714285715,
+          "scored_turns": 7
+        },
+        "tool_correctness": {
+          "mean": 0.375,
+          "scored_turns": 4
+        }
+      }
+    }
+  ],
+  "validation": {
+    "source_runs": [
+      "round-b-20260817-b6",
+      "round-b-20260817-b8",
+      "round-b-20260817-b10",
+      "round-b-20260817-b11"
+    ],
+    "raw_only": true,
+    "no_global_score": true,
+    "blind_mapping_validated": true,
+    "per_label_sample_turns": 3
+  }
+}

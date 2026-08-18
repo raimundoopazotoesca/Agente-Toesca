@@ -1,0 +1,32 @@
+{
+  "Candidate A": {
+    "candidate_id": "mistral",
+    "provider": "mistral",
+    "model": "mistral-large-2512",
+    "source_run": "round-b-20260817-b8"
+  },
+  "Candidate B": {
+    "candidate_id": "sambanova",
+    "provider": "sambanova",
+    "model": "MiniMax-M2.7",
+    "source_run": "round-b-20260817-b6"
+  },
+  "Candidate C": {
+    "candidate_id": "dashscope",
+    "provider": "dashscope",
+    "model": "qwen3.8-max",
+    "source_run": "round-b-20260817-b6"
+  },
+  "Candidate D": {
+    "candidate_id": "fireworks",
+    "provider": "fireworks",
+    "model": "accounts/fireworks/models/gpt-oss-120b",
+    "source_run": "round-b-20260817-b10"
+  },
+  "Candidate E": {
+    "candidate_id": "fireworks",
+    "provider": "fireworks",
+    "model": "accounts/fireworks/models/glm-5p2",
+    "source_run": "round-b-20260817-b11"
+  }
+}
