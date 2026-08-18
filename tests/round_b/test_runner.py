@@ -33,6 +33,26 @@ def test_full_dev_runner_selects_the_complete_frozen_corpus(tmp_path):
     assert sum(len(case.turns) for case in cases) == 79
 
 
+def test_b22_and_b23_full_dev_manifests_pin_the_same_frozen_contract():
+    import json
+
+    runs = {
+        "round-b-20260818-b22": "gpt-5.6-sol",
+        "round-b-20260818-b23": "gpt-5.6-terra",
+    }
+    manifests = []
+    for run_id, model in runs.items():
+        path = ROOT / "eval/benchmark/results/round-b" / run_id / "run_manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        assert manifest["run_kind"] == "full_dev"
+        assert manifest["candidate"] == {"provider": "openai", "model": model}
+        assert manifest["dev_set"]["content_sha256"] == "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
+        assert (manifest["dev_set"]["case_count"], manifest["dev_set"]["turn_count"]) == (51, 79)
+        assert json.loads((path.parent / "checkpoint.json").read_text(encoding="utf-8")) == {}
+        manifests.append(manifest)
+    assert manifests[0]["code_commit_sha"] == manifests[1]["code_commit_sha"]
+
+
 def test_manifest_pins_b1_and_committed_code_sha():
     manifest = build_run_manifest("run-a", "abc123", "2026-08-17")
     assert manifest["run_id"] == "run-a"
