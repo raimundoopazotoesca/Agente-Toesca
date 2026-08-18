@@ -37,7 +37,28 @@ PRICING = ROOT / "eval/round_b/pricing.yaml"
 ANALYST_LOOP_VERSION = "F4_STAGE1"
 
 CANONICAL_SHA = "df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f"
-FULL_DEV_CANONICAL_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
+
+# --- Full Dev v1.1 freeze fingerprints ---------------------------------------
+# See docs/toesca-analyst-full-dev-v1-1-freeze-portability-fix.md.
+#
+# The original fingerprint hashed each case file's RAW bytes, which made it a
+# fingerprint of one working copy rather than of the benchmark's content: the
+# tree that produced it held 50 files in CRLF and one (tce-investigationmultidomain
+# -001.yaml) in 89 CRLF + 2 stray LF. Git stores that file as LF-pure, so no
+# checkout and no EOL setting can reproduce those bytes -- validate_full_dev()
+# failed on every fresh clone.
+#
+# The fix canonicalizes CRLF -> LF before hashing. The 51 case files are byte-
+# identical under that canonicalization in both trees (proven in the doc), so the
+# benchmark content is unchanged; only its fingerprint became portable.
+FULL_DEV_HASH_ALGORITHM = "sha256-lf-normalized-v1"
+
+# Historical, byte-level fingerprint recorded by runs B24-B27. Kept as evidence:
+# those manifests legitimately carry it and are never rewritten.
+FULL_DEV_V1_1_LEGACY_BYTE_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
+
+# Current fingerprint, reproducible from any checkout.
+FULL_DEV_V1_1_CANONICAL_SHA = "5c0e6d9b1e57cd2e08ebe535f7ff59fa63c9d4f3a22ae1933eb45df675a0cdb5"
 
 
 def _canonical_hash(data: dict[str, Any]) -> str:
@@ -61,7 +82,7 @@ def validate_full_dev() -> dict[str, Any]:
     cases = sorted(load_cases(CASES_DIR, split="dev"), key=lambda case: case.path.as_posix())
     entries = [
         {"case_id": case.id, "suite": case.suite, "turn_count": len(case.turns),
-         "path": case.path.relative_to(ROOT).as_posix(), "sha256": _file_hash(case.path)}
+         "path": case.path.relative_to(ROOT).as_posix(), "sha256": _canonical_file_hash(case.path)}
         for case in cases
     ]
     content = {"dev_set_id": "toesca-analyst-dev-v1.1", "ordered_cases": entries}
@@ -71,9 +92,11 @@ def validate_full_dev() -> dict[str, Any]:
     case_count, turn_count = len(cases), sum(len(case.turns) for case in cases)
     tae_count = sum(case.suite == "analyst" for case in cases)
     tce_count = sum(case.suite == "conversation" for case in cases)
-    if (actual, case_count, turn_count, tae_count, tce_count) != (FULL_DEV_CANONICAL_SHA, 51, 79, 34, 17):
+    if (actual, case_count, turn_count, tae_count, tce_count) != (FULL_DEV_V1_1_CANONICAL_SHA, 51, 79, 34, 17):
         raise ValueError("Full Dev v1.1 freeze mismatch")
     return {"dev_set_id": content["dev_set_id"], "content_sha256": actual,
+            "hash_algorithm": FULL_DEV_HASH_ALGORITHM,
+            "legacy_byte_sha256": FULL_DEV_V1_1_LEGACY_BYTE_SHA,
             "case_count": case_count, "turn_count": turn_count, "tae_count": tae_count, "tce_count": tce_count,
             "ordered_case_ids": [case.id for case in cases],
             "turn_counts": {case.id: len(case.turns) for case in cases},
@@ -81,7 +104,24 @@ def validate_full_dev() -> dict[str, Any]:
 
 
 def _file_hash(path: Path) -> str:
+    """Raw-byte hash. Still used for grader_versions, whose values are byte-level
+    pins recorded by B24-B27 -- deliberately NOT canonicalized here, so this fix
+    cannot shift any fingerprint other than the Full Dev one."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical_file_hash(path: Path) -> str:
+    """Text-content hash for the Full Dev freeze: CRLF collapsed to LF before
+    hashing, so the same logical file fingerprints identically whatever a
+    checkout's line-ending policy did to it. Nothing on disk is modified, and
+    every non-EOL byte difference still changes the hash.
+
+    Scope is intentionally narrow: only validate_full_dev() uses this. Mini-Dev
+    hashes parsed YAML (already EOL-invariant) and the Holdout freeze machinery
+    in eval/benchmark/compute_freeze_manifest.py does its own hashing without
+    importing anything from here, so neither is reachable from this change.
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _effective_contract_hashes() -> tuple[str, str]:
