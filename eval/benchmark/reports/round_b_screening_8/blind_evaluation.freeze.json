@@ -1,0 +1,8 @@
+{
+  "frozen_at": "2026-08-18T17:34:03.2386879Z",
+  "seed": 20260818,
+  "blind_evaluation_sha256": "3fab31c0eed22c72a6b8bcf1cf66f982bc87a01bb648afe46d127ba9628706b3",
+  "blind_package_sha256": "5673dc0e474509c716382f5250befb8a8d8270675ce830122b75dcc0a6b14880",
+  "ranking_a": ["Candidate H", "Candidate C", "Candidate A", "Candidate G", "Candidate B", "Candidate D", "Candidate E", "Candidate F"],
+  "ranking_b": ["Candidate H", "Candidate C", "Candidate A", "Candidate G", "Candidate B", "Candidate D", "Candidate E", "Candidate F"]
+}

@@ -1,0 +1,177 @@
+{
+  "status": "PASS",
+  "seed": 20260818,
+  "labels": [
+    "Candidate A",
+    "Candidate B",
+    "Candidate C",
+    "Candidate D",
+    "Candidate E",
+    "Candidate F",
+    "Candidate G",
+    "Candidate H"
+  ],
+  "candidate_checks": [
+    {
+      "label": "Candidate A",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate B",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate C",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate D",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate E",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate F",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate G",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    },
+    {
+      "label": "Candidate H",
+      "turn_count": 25,
+      "case_count": 15,
+      "identity_checks": [
+        {
+          "case_id": "tae-l1-008",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l2-003",
+          "turn_index": 0
+        },
+        {
+          "case_id": "tae-l3-004",
+          "turn_index": 0
+        }
+      ]
+    }
+  ],
+  "excluded_historical_rows": [
+    {
+      "run_id": "round-b-20260817-b6",
+      "identity": "mistral|mistral-large-2512|mistral-large-2512|mistral",
+      "case_id": "tae-l1-008",
+      "turn_index": 0,
+      "reason": "historical partial Mistral row"
+    }
+  ]
+}

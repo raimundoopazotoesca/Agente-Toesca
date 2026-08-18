@@ -1,0 +1,13 @@
+{
+  "seed": 20260818,
+  "mapping": {
+    "Candidate A": "fireworks|accounts/fireworks/models/glm-5p2|accounts/fireworks/models/glm-5p2|fireworks",
+    "Candidate B": "sambanova|MiniMax-M2.7|MiniMax-M2.7|sambanova",
+    "Candidate C": "openai|gpt-5.6-terra|gpt-5.6-terra|openai",
+    "Candidate D": "dashscope|qwen3.8-max|qwen3.8-max|dashscope",
+    "Candidate E": "fireworks|accounts/fireworks/models/gpt-oss-120b|accounts/fireworks/models/gpt-oss-120b|fireworks",
+    "Candidate F": "mistral|mistral-large-2512|mistral-large-2512|mistral",
+    "Candidate G": "anthropic|claude-sonnet-5|claude-sonnet-5|anthropic",
+    "Candidate H": "openai|gpt-5.6-sol|gpt-5.6-sol|openai"
+  }
+}
