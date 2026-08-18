@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "eval/round_b/mini_dev_v1.yaml"
 PRICING = ROOT / "eval/round_b/pricing.yaml"
 CANONICAL_SHA = "df8cd68c690266e770210e752ab8078ef8f3dc23b175e55abe97963a18d3558f"
+FULL_DEV_CANONICAL_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
 
 
 def _canonical_hash(data: dict[str, Any]) -> str:
@@ -44,6 +45,30 @@ def validate_mini_dev(path: Path = MANIFEST) -> dict[str, Any]:
     return {"mini_dev_id": data["mini_dev_id"], "canonical_manifest_sha256": actual,
             "case_count": len(data["ordered_case_ids"]), "turn_count": sum(data["turn_counts"].values()),
             "ordered_case_ids": data["ordered_case_ids"], "snapshot_sha256": data["dev_freeze"]["snapshot_sha256"]}
+
+
+def validate_full_dev() -> dict[str, Any]:
+    """Return the complete v1.1 Dev freeze, independently of Mini-Dev."""
+    cases = sorted(load_cases(CASES_DIR, split="dev"), key=lambda case: case.path.as_posix())
+    entries = [
+        {"case_id": case.id, "suite": case.suite, "turn_count": len(case.turns),
+         "path": case.path.relative_to(ROOT).as_posix(), "sha256": _file_hash(case.path)}
+        for case in cases
+    ]
+    content = {"dev_set_id": "toesca-analyst-dev-v1.1", "ordered_cases": entries}
+    actual = hashlib.sha256(
+        json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    case_count, turn_count = len(cases), sum(len(case.turns) for case in cases)
+    tae_count = sum(case.suite == "analyst" for case in cases)
+    tce_count = sum(case.suite == "conversation" for case in cases)
+    if (actual, case_count, turn_count, tae_count, tce_count) != (FULL_DEV_CANONICAL_SHA, 51, 79, 34, 17):
+        raise ValueError("Full Dev v1.1 freeze mismatch")
+    return {"dev_set_id": content["dev_set_id"], "content_sha256": actual,
+            "case_count": case_count, "turn_count": turn_count, "tae_count": tae_count, "tce_count": tce_count,
+            "ordered_case_ids": [case.id for case in cases],
+            "turn_counts": {case.id: len(case.turns) for case in cases},
+            "snapshot_sha256": load_lock()["sha256"]}
 
 
 def _file_hash(path: Path) -> str:
@@ -70,6 +95,14 @@ def build_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -
             "grader_versions": {"deterministic_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/deterministic.py"),
                                 "gates_py_sha256": _file_hash(ROOT / "eval/benchmark/graders/gates.py")},
             "judge_status": "not_scored_yet", "execution_date": execution_date}
+
+
+def build_full_dev_run_manifest(run_id: str, code_commit_sha: str, execution_date: str) -> dict[str, Any]:
+    manifest = build_run_manifest(run_id, code_commit_sha, execution_date)
+    manifest.pop("mini_dev")
+    manifest["run_kind"] = "full_dev"
+    manifest["dev_set"] = validate_full_dev()
+    return manifest
 
 
 def estimate_cost(provider: str, model: str, input_tokens: int | None, output_tokens: int | None, cached_tokens: int | None) -> dict[str, Any] | None:
@@ -216,6 +249,22 @@ class RoundBRunner:
         except Exception:
             if store.checkpoint().get(provider, {}).get(case_id) == "running": store.set_state(provider, case_id, "aborted")
             raise
+
+
+class FullDevRoundBRunner(RoundBRunner):
+    """Same frozen Track B contract, over the complete Dev v1.1 corpus."""
+    def preflight(self, code_sha: str) -> dict[str, Any]:
+        if code_sha != committed_head():
+            raise ValueError("code SHA is not current HEAD")
+        return build_full_dev_run_manifest(self.run_id, code_sha, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+
+    def _cases(self):
+        checked = validate_full_dev()
+        all_cases = {case.id: case for case in load_cases(CASES_DIR, split="dev")}
+        selected = [all_cases[case_id] for case_id in checked["ordered_case_ids"]]
+        if sum(len(case.turns) for case in selected) != checked["turn_count"]:
+            raise ValueError("frozen Full Dev turn count drift")
+        return selected
 
 
 def live_adapter_factory(provider: str, model: str, profile):
