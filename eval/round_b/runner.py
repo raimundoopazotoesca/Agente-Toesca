@@ -16,6 +16,7 @@ import yaml
 from eval.benchmark.adapters.track_b_frontier import B1_STANDARD_PROFILES, _RUN_SQL_TOOL, _SYSTEM_PROMPT_TEMPLATE, _schema_summary, _semantic_context
 from eval.benchmark.adapters.track_b_frontier import TrackBFrontier
 from eval.benchmark.adapters.track_b_anthropic import TrackBAnthropic
+from eval.benchmark.adapters.track_b_openai_responses import TrackBOpenAIResponses
 from eval.benchmark.cases_loader import CASES_DIR, load_cases
 from eval.benchmark.graders.deterministic import score_turn
 from eval.benchmark.graders.ground_truth import resolve_ground_truth
@@ -228,4 +229,6 @@ def live_adapter_factory(provider: str, model: str, profile):
         config["base_url"] = base_url
     if provider == "anthropic":
         return TrackBAnthropic(provider=config)
+    if provider == "openai":
+        return TrackBOpenAIResponses(provider=config)
     return TrackBFrontier(provider=config, inference_profile=profile)

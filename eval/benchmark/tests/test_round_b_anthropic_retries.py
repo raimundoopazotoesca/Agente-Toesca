@@ -45,11 +45,11 @@ class _FlakyAdapter:
         return _FlakySession(self, self.outcomes)
 
 
-def _run_case(tmp_path, outcomes):
+def _run_case(tmp_path, outcomes, provider="anthropic", model="claude-opus-5"):
     adapter = _FlakyAdapter(outcomes)
     runner = RoundBRunner(lambda *_: adapter, tmp_path, run_id="retry-offline")
     store = IncrementalStore(tmp_path, "retry-offline")
-    runner.run_case("anthropic", "claude-opus-5", "tae-l1-008", "unused", store)
+    runner.run_case(provider, model, "tae-l1-008", "unused", store)
     events = [json.loads(line) for line in store.events_path.read_text(encoding="utf-8").splitlines()]
     return store, events
 
@@ -87,6 +87,12 @@ def test_second_529_aborts_after_two_observable_attempts(tmp_path):
     events = [json.loads(line) for line in store.events_path.read_text(encoding="utf-8").splitlines()]
     assert [event["attempt_index"] for event in events if event["event_type"] == "provider_request_started"] == [0, 1]
     assert store.checkpoint()["anthropic"]["tae-l1-008"] == "aborted"
+
+
+def test_direct_openai_retry_is_centralized_and_auditable(tmp_path):
+    store, events = _run_case(tmp_path, [RuntimeError("429 rate limit"), Turn(text="unused")], "openai", "gpt-5.6-terra")
+    assert [event["attempt_index"] for event in events if event["event_type"] == "provider_request_started"] == [0, 1]
+    assert store.checkpoint()["openai"]["tae-l1-008"] == "completed"
 
 
 def test_5xx_classification_is_provider_infrastructure():

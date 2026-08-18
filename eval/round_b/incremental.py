@@ -17,7 +17,7 @@ _PRIVATE_REPLAY_FIELDS = {"reasoning_content", "thinking", "redacted_thinking", 
 def _without_private_replay(value: Any) -> Any:
     """Drop opaque reasoning replay content while preserving benchmark telemetry."""
     if isinstance(value, dict):
-        if value.get("type") in {"thinking", "redacted_thinking"}:
+        if value.get("type") in {"thinking", "redacted_thinking", "reasoning"}:
             return None
         result = {}
         for key, item in value.items():
