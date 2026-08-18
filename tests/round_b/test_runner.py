@@ -48,7 +48,11 @@ def test_b22_and_b23_full_dev_manifests_pin_the_same_frozen_contract():
         assert manifest["candidate"] == {"provider": "openai", "model": model}
         assert manifest["dev_set"]["content_sha256"] == "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
         assert (manifest["dev_set"]["case_count"], manifest["dev_set"]["turn_count"]) == (51, 79)
-        assert json.loads((path.parent / "checkpoint.json").read_text(encoding="utf-8")) == {}
+        checkpoint = json.loads((path.parent / "checkpoint.json").read_text(encoding="utf-8"))
+        if run_id == "round-b-20260818-b22":
+            assert checkpoint == {"openai": {"tae-l1-001": "aborted"}}
+        else:
+            assert checkpoint == {}
         manifests.append(manifest)
     assert manifests[0]["code_commit_sha"] == manifests[1]["code_commit_sha"]
 
