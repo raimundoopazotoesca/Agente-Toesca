@@ -1,0 +1,17 @@
+{
+  "generated_after_freeze": true,
+  "blind_evaluation_sha256_expected": "85816553c5bd9df2efe2ef33bfd7567a84740f8b7e02c8e1dabf8d2ddc94154d",
+  "blind_evaluation_sha256_actual": "85816553c5bd9df2efe2ef33bfd7567a84740f8b7e02c8e1dabf8d2ddc94154d",
+  "ranking_current_track_b": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "ranking_f4_potential": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "mapping": {
+    "Candidate A": "sol",
+    "Candidate B": "terra"
+  }
+}

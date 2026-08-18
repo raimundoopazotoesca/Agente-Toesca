@@ -1,0 +1,13 @@
+{
+  "frozen_at": "2026-08-18T20:52:57.808329+00:00",
+  "blind_evaluation_sha256": "85816553c5bd9df2efe2ef33bfd7567a84740f8b7e02c8e1dabf8d2ddc94154d",
+  "ranking_current_track_b": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "ranking_f4_potential": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "freeze_before_reveal": true
+}

@@ -1,0 +1,53 @@
+{
+  "ranking_current_track_b": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "ranking_f4_potential": [
+    "Candidate B",
+    "Candidate A"
+  ],
+  "clear_winner": false,
+  "difference": "narrow",
+  "confidence": "moderate",
+  "score_evidence": {
+    "Candidate A": {
+      "completeness": 0.5341772151898735,
+      "conversational_quality": 0.5377450980392158,
+      "factual_correctness": 0.6229166666666667,
+      "tool_correctness": 0.39166666666666666,
+      "analytical_quality": 0.0,
+      "clarification_judgment": 0.0,
+      "grounding": 0.0,
+      "hallucination": 0.0,
+      "investigation_quality": 0.0,
+      "output_usefulness": 0.0
+    },
+    "Candidate B": {
+      "completeness": 0.5772151898734177,
+      "conversational_quality": 0.5933823529411765,
+      "factual_correctness": 0.6431372549019607,
+      "tool_correctness": 0.4666666666666667
+    }
+  },
+  "strengths": {
+    "Candidate B": [
+      "stronger factual/completeness evidence"
+    ],
+    "Candidate A": [
+      "competitive 79-turn record"
+    ]
+  },
+  "weaknesses": {
+    "Candidate B": [
+      "material misses remain"
+    ],
+    "Candidate A": [
+      "lower factual/completeness evidence"
+    ]
+  },
+  "dangerous_errors": {
+    "status": "no uniquely disqualifying error established offline"
+  },
+  "second_preference_reason": "none decisive in blinded evidence"
+}

@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "seed": 20260818,
+  "contract": "PASS",
+  "candidate_checks": [
+    {
+      "label": "Candidate A",
+      "case_count": 51,
+      "turn_count": 79
+    },
+    {
+      "label": "Candidate B",
+      "case_count": 51,
+      "turn_count": 79
+    }
+  ],
+  "sol_composite": {
+    "cases": 51,
+    "turns": 79,
+    "excluded_partial_case": "tce-investigationanomaly-001"
+  },
+  "terra_turns_sha256": "0c4e64da6044a3a91e2ff3b2a3fa3b0f1549c967b125b2e2e6f2244c007d3cc4"
+}
