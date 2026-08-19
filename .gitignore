@@ -44,6 +44,7 @@ memory/backups/*.db
 # Estado privado y artefactos locales (la DB de negocio v2 sí es canónica).
 memory/agente_state.db*
 memory/agente_toesca.db
+memory/analyst_workspace.db
 memory/*.db-wal
 memory/*.db-shm
 memory/*.db.bak*
