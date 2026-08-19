@@ -7,9 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from eval.round_b.runner import build_run_manifest
+from eval.benchmark.adapters.track_b_frontier import _SYSTEM_PROMPT_TEMPLATE
 from tools.analyst_runtime.session import (
+    ALPHA_EVIDENCE_INSTRUCTION,
     ALPHA_PRODUCT_VOICE,
+    DEFAULT_INTERACTIVE_SYSTEM_PROMPT,
+    INTERACTIVE_EVIDENCE_INSTRUCTION,
     OpenAIResponsesAnalystSessionFactory,
     _alpha_system_prompt,
 )
@@ -77,15 +83,28 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
 
 
-def test_alpha_final_presentation_policy_overrides_evidence_disclosure():
-    """Evidence controls claims; Alpha controls how final claims are presented."""
-    prompt = _alpha_system_prompt("CORE EVIDENCE POLICY")
-    normalized_voice = " ".join(ALPHA_PRODUCT_VOICE.split())
+def test_alpha_reformulates_the_interactive_evidence_instruction_only():
+    """Alpha keeps evidence discipline but makes it internal and user-facing natural."""
+    prompt = _alpha_system_prompt(DEFAULT_INTERACTIVE_SYSTEM_PROMPT)
+    normalized_prompt = " ".join(prompt.split())
 
-    assert prompt == f"CORE EVIDENCE POLICY\n\n{ALPHA_PRODUCT_VOICE}"
-    assert "La disciplina de evidencia determina qu\u00e9 puedes afirmar" in normalized_voice
-    assert "pol\u00edtica de presentaci\u00f3n de la respuesta final" in normalized_voice
-    assert "conserva esa distinci\u00f3n en tu razonamiento" in normalized_voice.lower()
+    assert DEFAULT_INTERACTIVE_SYSTEM_PROMPT.count(INTERACTIVE_EVIDENCE_INSTRUCTION) == 1
+    assert INTERACTIVE_EVIDENCE_INSTRUCTION not in prompt
+    assert ALPHA_EVIDENCE_INSTRUCTION in prompt
+    assert ALPHA_PRODUCT_VOICE in prompt
+    assert "distingue internamente entre evidencia, inferencias, hip\u00f3tesis y supuestos" in normalized_prompt.lower()
+    assert "no conviertas esas categor\u00edas en etiquetas visibles" in normalized_prompt.lower()
+
+
+def test_alpha_prompt_builder_fails_fast_when_interactive_evidence_instruction_changes():
+    with pytest.raises(ValueError, match="exactly once"):
+        _alpha_system_prompt("Eres el Asistente Inmobiliario Toesca.")
+
+
+def test_benchmark_core_keeps_its_frozen_evidence_instruction():
+    assert "Distingue hechos (lo que arrojan las consultas) de tu interpretacion" in _SYSTEM_PROMPT_TEMPLATE
+    assert ALPHA_EVIDENCE_INSTRUCTION not in _SYSTEM_PROMPT_TEMPLATE
+    assert ALPHA_PRODUCT_VOICE not in _SYSTEM_PROMPT_TEMPLATE
 
 
 def test_alpha_voice_stays_out_of_workspace_and_benchmark_contract(tmp_path):

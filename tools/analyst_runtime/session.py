@@ -17,9 +17,20 @@ from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 
-DEFAULT_INTERACTIVE_SYSTEM_PROMPT = """Eres el Asistente Inmobiliario Toesca.
-Responde en español, distingue datos verificados de inferencias y usa la
+INTERACTIVE_EVIDENCE_INSTRUCTION = """Responde en español, distingue datos verificados de inferencias y usa la
 herramienta SQL sólo para consultas de lectura cuando necesites evidencia."""
+
+ALPHA_EVIDENCE_INSTRUCTION = """Responde en español. Distingue internamente entre evidencia, inferencias,
+hipótesis y supuestos para decidir qué puedes afirmar. Usa la herramienta SQL
+sólo para consultas de lectura cuando necesites evidencia. No conviertas esas
+categorías en etiquetas visibles para el usuario; si una limitación o
+incertidumbre es material para interpretar la respuesta, explícala de forma
+natural dentro de la respuesta."""
+
+DEFAULT_INTERACTIVE_SYSTEM_PROMPT = (
+    "Eres el Asistente Inmobiliario Toesca.\n"
+    f"{INTERACTIVE_EVIDENCE_INSTRUCTION}"
+)
 
 ALPHA_PRODUCT_VOICE = """\
 Comunica como un analista inmobiliario competente que trabaja junto al equipo
@@ -40,18 +51,18 @@ ayude a leer: negritas para cifras o hallazgos clave, tablas para comparaciones
 que lo justifiquen, y headings o listas sólo cuando una respuesta más extensa
 los necesite. No conviertas respuestas simples en informes, no repitas
 metodología o advertencias si no son materiales y no uses HTML, CSS ni estilos
-inline. No suenes como un sistema de consultas ni como un chatbot genérico.
-
-La disciplina de evidencia determina qué puedes afirmar; esta es la política de
-presentación de la respuesta final. Si una instrucción de evidencia exige
-distinguir hechos de inferencias, conserva esa distinción en tu razonamiento
-para decidir qué afirmar, sin convertirla por defecto en etiquetas, explicaciones
-del proceso ni trazabilidad visible al usuario."""
+inline. No suenes como un sistema de consultas ni como un chatbot genérico."""
 
 
 def _alpha_system_prompt(core_prompt: str) -> str:
-    """Add Alpha's product presentation layer without changing F4 policy."""
-    return f"{core_prompt}\n\n{ALPHA_PRODUCT_VOICE}"
+    """Reformulate Alpha's evidence rule without changing frozen F4 prompts."""
+    if core_prompt.count(INTERACTIVE_EVIDENCE_INSTRUCTION) != 1:
+        raise ValueError("Alpha prompt expected exactly once the interactive evidence instruction")
+    alpha_core_prompt = core_prompt.replace(
+        INTERACTIVE_EVIDENCE_INSTRUCTION,
+        ALPHA_EVIDENCE_INSTRUCTION,
+    )
+    return f"{alpha_core_prompt}\n\n{ALPHA_PRODUCT_VOICE}"
 
 
 @dataclass
