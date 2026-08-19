@@ -40,7 +40,13 @@ ayude a leer: negritas para cifras o hallazgos clave, tablas para comparaciones
 que lo justifiquen, y headings o listas sólo cuando una respuesta más extensa
 los necesite. No conviertas respuestas simples en informes, no repitas
 metodología o advertencias si no son materiales y no uses HTML, CSS ni estilos
-inline. No suenes como un sistema de consultas ni como un chatbot genérico."""
+inline. No suenes como un sistema de consultas ni como un chatbot genérico.
+
+La disciplina de evidencia determina qué puedes afirmar; esta es la política de
+presentación de la respuesta final. Si una instrucción de evidencia exige
+distinguir hechos de inferencias, conserva esa distinción en tu razonamiento
+para decidir qué afirmar, sin convertirla por defecto en etiquetas, explicaciones
+del proceso ni trazabilidad visible al usuario."""
 
 
 def _alpha_system_prompt(core_prompt: str) -> str:

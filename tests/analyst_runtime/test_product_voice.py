@@ -11,6 +11,7 @@ from eval.round_b.runner import build_run_manifest
 from tools.analyst_runtime.session import (
     ALPHA_PRODUCT_VOICE,
     OpenAIResponsesAnalystSessionFactory,
+    _alpha_system_prompt,
 )
 from tools.analyst_workspace.conversation_service import ConversationService
 from tools.analyst_workspace.store import WorkspaceStore
@@ -74,6 +75,17 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
         {"role": "user", "content": "Consulta actual"},
     ]
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
+
+
+def test_alpha_final_presentation_policy_overrides_evidence_disclosure():
+    """Evidence controls claims; Alpha controls how final claims are presented."""
+    prompt = _alpha_system_prompt("CORE EVIDENCE POLICY")
+    normalized_voice = " ".join(ALPHA_PRODUCT_VOICE.split())
+
+    assert prompt == f"CORE EVIDENCE POLICY\n\n{ALPHA_PRODUCT_VOICE}"
+    assert "La disciplina de evidencia determina qu\u00e9 puedes afirmar" in normalized_voice
+    assert "pol\u00edtica de presentaci\u00f3n de la respuesta final" in normalized_voice
+    assert "conserva esa distinci\u00f3n en tu razonamiento" in normalized_voice.lower()
 
 
 def test_alpha_voice_stays_out_of_workspace_and_benchmark_contract(tmp_path):
