@@ -10,9 +10,10 @@ from typing import Any, Callable
 from openai import OpenAI
 
 from eval.benchmark.adapters.base import ToolCall, Turn, Usage
+from eval.benchmark.adapters._transport import ModelRequest, ModelResponse, ToolRequest, ToolSpec, TranscriptItem
 from eval.benchmark.adapters.track_b_frontier import (
     MAX_INVESTIGATION_ROUNDS, MAX_ROWS_RETURNED, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION,
-    _SYSTEM_PROMPT_TEMPLATE,
+    _SYSTEM_PROMPT_TEMPLATE, _safe_json_loads,
     _extract_artifacts, _format_tool_result, _schema_summary, _semantic_context, _validate_sql,
 )
 from eval.benchmark.snapshot import SnapshotSandbox
@@ -44,6 +45,87 @@ def _visible_text(response: Any, items: list[dict[str, Any]]) -> str:
             if content.get("type") == "output_text":
                 parts.append(content.get("text", ""))
     return "".join(parts)
+
+
+def _tool_spec_to_responses(spec: ToolSpec) -> dict:
+    return {"type": "function", "name": spec.name, "description": spec.description, "parameters": spec.parameters}
+
+
+@dataclass
+class ResponsesTransport:
+    """F4 Stage 2D: the OpenAI Responses wire-protocol translation, extracted
+    from _OpenAIResponsesSession.ask(). Pure protocol translation -- no round
+    budget, no SQL.
+
+    The critical replay requirement (Stage 1's hardest-won constraint): a
+    TranscriptItem's `raw` is the *entire* `response.output` item list for
+    that round (reasoning items included) and must be replayed verbatim,
+    followed by its `function_call_output` entries built from tool_results --
+    never reconstructed or filtered. That's exactly what `_render_history`
+    does: `request_input.extend(item.raw)` then append outputs, per item, in
+    order. Losing or reordering any of it is what breaks Responses' opaque
+    reasoning-item validation on the next call.
+
+    `tool_specs` (constructor) is the full, unchanging tool set, declared on
+    every call for replay validity -- mirrors ChatCompletionsTransport.
+    `request.tools` (per call) drives only tool_choice.
+    """
+
+    client: Any
+    model: str
+    tool_specs: list[ToolSpec]
+    request_observer: Callable[[str, int, object | None], None] | None = None
+    _round: int = 0
+
+    def _render_history(self, history: list[TranscriptItem]) -> list[dict]:
+        request_input: list[dict] = []
+        for item in history:
+            if item.role == "user":
+                request_input.append({"role": "user", "content": item.text or ""})
+                continue
+            request_input.extend(item.raw or [])
+            for tr in item.tool_results:
+                request_input.append({"type": "function_call_output", "call_id": tr.call_id, "output": tr.content})
+        return request_input
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        request_input = self._render_history(request.history)
+        if request.message:
+            request_input.append({"role": "user", "content": request.message})
+
+        tool_choice = "auto" if request.tools else "none"
+        if self.request_observer:
+            self.request_observer("provider_request_started", self._round, None)
+        try:
+            response = self.client.responses.create(
+                model=self.model, instructions=request.system_prompt, input=request_input,
+                tools=[_tool_spec_to_responses(t) for t in self.tool_specs], tool_choice=tool_choice, store=False,
+            )
+        except Exception as exc:
+            if self.request_observer:
+                self.request_observer("provider_request_failed", self._round, exc)
+            raise
+        finally:
+            self._round += 1
+        if self.request_observer:
+            self.request_observer("provider_response_received", self._round - 1, response)
+
+        items = [_item_dict(item) for item in response.output]
+        function_calls = [item for item in items if item.get("type") == "function_call"]
+        tool_requests = [
+            ToolRequest(call_id=fc.get("call_id", ""), name=fc.get("name", ""), arguments=_safe_json_loads(fc.get("arguments")))
+            for fc in function_calls
+        ]
+        text = _visible_text(response, items)
+        usage_raw = getattr(response, "usage", None)
+        input_details = getattr(usage_raw, "input_tokens_details", None)
+        output_details = getattr(usage_raw, "output_tokens_details", None)
+        usage = Usage(
+            provider="openai", model=self.model, calls=1,
+            input_tokens=getattr(usage_raw, "input_tokens", None), output_tokens=getattr(usage_raw, "output_tokens", None),
+            reasoning_tokens=getattr(output_details, "reasoning_tokens", None), cached_tokens=getattr(input_details, "cached_tokens", None),
+        )
+        return ModelResponse(text=text, tool_requests=tool_requests, raw_items=items, usage=usage)
 
 
 @dataclass
