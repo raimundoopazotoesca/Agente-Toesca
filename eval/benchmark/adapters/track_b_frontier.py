@@ -69,6 +69,7 @@ from eval.benchmark.adapters.analyst_loop import (  # noqa: E402
     MAX_TOTAL_MODEL_ROUNDS,
     RESERVED_SYNTHESIS_ROUNDS,
     _SYNTHESIS_INSTRUCTION,
+    AnalystLoop,
 )
 
 MAX_ROWS_RETURNED = 50
@@ -140,6 +141,12 @@ _RUN_SQL_TOOL = {
         },
     },
 }
+
+# Provider-neutral ToolSpec built once from _RUN_SQL_TOOL, shared by the three
+# compatibility facades (this module's _TrackBSession and the ones in
+# track_b_openai_responses.py / track_b_anthropic.py) -- each transport
+# re-serializes it to its own wire shape.
+_RUN_SQL_SPEC = ToolSpec(name=_RUN_SQL_TOOL["function"]["name"], description=_RUN_SQL_TOOL["function"]["description"], parameters=_RUN_SQL_TOOL["function"]["parameters"])
 
 _SYSTEM_PROMPT_TEMPLATE = """\
 Eres un analista inmobiliario senior con acceso de solo lectura a la base de datos \
@@ -381,6 +388,18 @@ class LegacySqlActionExecutor:
 
 @dataclass
 class _TrackBSession:
+    """F4 Stage 2F compatibility facade: same name, constructor, `ask()`
+    signature and `history` shape Stage 1 had -- verified against
+    tests/test_track_b.py and test_f4_reserved_synthesis.py, which construct
+    this class directly and inspect `.history` as `list[dict]`. All reasoning
+    -loop logic now lives in AnalystLoop; this class only adapts its dict-
+    shaped `history` to/from TranscriptItem and supplies the sandbox-derived
+    fields (`queries`, `gate_violations`) AnalystLoop cannot know about.
+
+    Cross-turn retention matches Stage 1 exactly: only [question, final_text]
+    per turn, verified in test_analyst_loop_multiturn_parity.py.
+    """
+
     sandbox: SnapshotSandbox
     session_id: str
     system_prompt: str
@@ -390,123 +409,26 @@ class _TrackBSession:
     request_observer: Callable[[str, int, object | None], None] | None = None
     history: list[dict] = field(default_factory=list)
 
-    def _run_tool(self, query: str) -> tuple[str, bool]:
-        error = _validate_sql(query)
-        if error:
-            return json.dumps({"error": error}, ensure_ascii=False), False
-        sql = query.strip().rstrip(";")
-        if not re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE):
-            sql = f"{sql} LIMIT {MAX_ROWS_RETURNED}"
-        conn = self.sandbox.connect(guard=True)
-        try:
-            cur = conn.execute(sql)
-            cols = [d[0] for d in cur.description or []]
-            rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED)]
-            return _format_tool_result(cols, rows), True
-        except Exception as exc:  # noqa: BLE001 -- surfaced to the model as a tool error, not raised
-            return json.dumps({"error": str(exc)}, ensure_ascii=False), False
-        finally:
-            conn.close()
-
     def ask(self, message: str) -> Turn:
         self.sandbox.log.reset()
-        started = time.monotonic()
-
-        messages = [{"role": "system", "content": self.system_prompt}, *self.history, {"role": "user", "content": message}]
-        tool_calls_log: list[ToolCall] = []
-        final_text = ""
-        api_calls = 0
-
-        for model_round in range(MAX_INVESTIGATION_ROUNDS):
-            call_started = time.monotonic()
-            # One provider for the whole session (see TrackBFrontier docstring
-            # on why: mixing providers mid-loop broke Gemini's OpenAI-compat
-            # tool-call replay in practice, not just in theory).
-            kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
-            if self.request_observer: self.request_observer("provider_request_started", model_round, None)
-            try:
-                resp = self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="auto", **kwargs,
-                )
-            except Exception as exc:
-                if self.request_observer: self.request_observer("provider_request_failed", model_round, exc)
-                raise
-            if self.request_observer: self.request_observer("provider_response_received", model_round, resp)
-            api_calls += 1
-            msg = resp.choices[0].message
-
-            if not msg.tool_calls:
-                final_text = msg.content or ""
-                break
-
-            assistant_message = {
-                    "role": "assistant",
-                    "content": msg.content or "",
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                        }
-                        for tc in msg.tool_calls
-                    ],
-                }
-            reasoning_content = getattr(msg, "reasoning_content", None)
-            if reasoning_content:
-                assistant_message["reasoning_content"] = reasoning_content
-            messages.append(assistant_message)
-            for tc in msg.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments or "{}")
-                except json.JSONDecodeError:
-                    args = {}
-                query = args.get("query", "")
-                result_text, ok = self._run_tool(query)
-                duration_ms = (time.monotonic() - call_started) * 1000
-                tool_calls_log.append(ToolCall(name="run_sql", args={"query": query}, ok=ok, duration_ms=duration_ms))
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_text})
-        else:
-            # Investigation budget exhausted without a final answer. Spend the
-            # reserved round on synthesis, with tools disabled two ways: the
-            # provider is told `tool_choice="none"`, and -- regardless of whether
-            # it honors that -- this branch never reads `tool_calls`, so no SQL
-            # can reach the sandbox from here. `tools` stays declared because the
-            # replayed history contains tool_calls/tool messages that providers
-            # validate against the declared schema.
-            messages.append({"role": "user", "content": _SYNTHESIS_INSTRUCTION})
-            kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
-            if self.request_observer:
-                self.request_observer("provider_request_started", MAX_INVESTIGATION_ROUNDS, None)
-            try:
-                resp = self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=[_RUN_SQL_TOOL], tool_choice="none", **kwargs,
-                )
-            except Exception as exc:
-                if self.request_observer:
-                    self.request_observer("provider_request_failed", MAX_INVESTIGATION_ROUNDS, exc)
-                raise
-            if self.request_observer:
-                self.request_observer("provider_response_received", MAX_INVESTIGATION_ROUNDS, resp)
-            api_calls += 1
-            final_text = resp.choices[0].message.content or ""
-
-        elapsed_ms = (time.monotonic() - started) * 1000
-        self.history.append({"role": "user", "content": message})
-        self.history.append({"role": "assistant", "content": final_text})
-
-        raw_usage = getattr(resp, "usage", None)
-        details = getattr(raw_usage, "completion_tokens_details", None)
-        return Turn(
-            text=final_text,
-            artifacts=_extract_artifacts(final_text),
-            tool_calls=tool_calls_log,
-            usage=Usage(provider=self.model, model=self.model, calls=api_calls, latency_ms=elapsed_ms,
-                input_tokens=getattr(raw_usage, "prompt_tokens", None), output_tokens=getattr(raw_usage, "completion_tokens", None),
-                reasoning_tokens=getattr(details, "reasoning_tokens", None), cached_tokens=getattr(getattr(raw_usage, "prompt_tokens_details", None), "cached_tokens", None)),
-            queries=list(self.sandbox.log.statements),
-            gate_violations=list(self.sandbox.log.violations),
-            raw={"final_text": final_text},
+        loop = AnalystLoop(
+            system_prompt=self.system_prompt,
+            transport=ChatCompletionsTransport(
+                client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC],
+                inference_profile=self.inference_profile, request_observer=self.request_observer,
+            ),
+            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            tool_specs=[_RUN_SQL_SPEC],
         )
+        prior_history = [TranscriptItem(role=m["role"], text=m["content"]) for m in self.history]
+        result = loop.ask(message, history=prior_history)
+
+        self.history.append({"role": "user", "content": message})
+        self.history.append({"role": "assistant", "content": result.turn.text})
+
+        result.turn.queries = list(self.sandbox.log.statements)
+        result.turn.gate_violations = list(self.sandbox.log.violations)
+        return result.turn
 
 
 class TrackBFrontier:
