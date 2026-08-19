@@ -96,6 +96,18 @@ def test_alpha_reformulates_the_interactive_evidence_instruction_only():
     assert "no conviertas esas categor\u00edas en etiquetas visibles" in normalized_prompt.lower()
 
 
+def test_alpha_voice_teaches_natural_evidence_presentation_with_examples():
+    """Examples teach Alpha's presentation format without changing F4 evidence policy."""
+    normalized_voice = " ".join(ALPHA_PRODUCT_VOICE.split())
+
+    assert "Las categor\u00edas epistemol\u00f3gicas sirven para razonar" in normalized_voice
+    assert '"La vacancia fue **5,9%**."' in normalized_voice
+    assert '"Lo m\u00e1s relevante es la concentraci\u00f3n de la vacancia en pocos activos.' in normalized_voice
+    assert "Esto sugiere que una mejora en ellos podr\u00eda mover materialmente el indicador." in normalized_voice
+    assert '"El dato apunta a una mejora, aunque la cobertura del per\u00edodo es parcial."' in normalized_voice
+    assert '"La vacancia fue **5,9%**."' not in _SYSTEM_PROMPT_TEMPLATE
+
+
 def test_alpha_prompt_builder_fails_fast_when_interactive_evidence_instruction_changes():
     with pytest.raises(ValueError, match="exactly once"):
         _alpha_system_prompt("Eres el Asistente Inmobiliario Toesca.")
