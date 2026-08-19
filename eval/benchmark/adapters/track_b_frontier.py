@@ -52,6 +52,7 @@ from eval.benchmark.adapters._transport import (
     ModelRequest,
     ModelResponse,
     ToolRequest,
+    ToolResult,
     ToolSpec,
     TranscriptItem,
 )
@@ -59,20 +60,16 @@ from eval.benchmark.snapshot import SnapshotSandbox
 
 SEMANTIC_DIR = Path(__file__).resolve().parents[3] / "semantic"
 
-# Round budget (F4 stage 1). The TOTAL number of model calls per turn is
-# unchanged from Round B (5) -- what changed is that the last one is reserved
-# for synthesis instead of being spendable on another investigation branch.
-#
-# Before: 5 investigation rounds, no reserved synthesis. If round 5 asked for a
-# tool, the tool ran and the turn returned a placeholder -- 17 of B27's 79 turns
-# (21.5%) ended with no answer at all for this reason alone.
-# After: 4 investigation rounds + 1 mandatory tool-free synthesis round.
-#
-# The total is deliberately held at 5 so an F4 run stays compute-comparable with
-# B26/B27 turn for turn.
-MAX_TOTAL_MODEL_ROUNDS = 5
-RESERVED_SYNTHESIS_ROUNDS = 1
-MAX_INVESTIGATION_ROUNDS = MAX_TOTAL_MODEL_ROUNDS - RESERVED_SYNTHESIS_ROUNDS
+# Round budget and synthesis instruction now live in analyst_loop.py (F4 Stage
+# 2) -- reasoning-loop structure, not Chat-Completions wire protocol. Content
+# unchanged byte-for-byte (verified); re-exported under their original names
+# so every existing import of them from this module keeps working unchanged.
+from eval.benchmark.adapters.analyst_loop import (  # noqa: E402
+    MAX_INVESTIGATION_ROUNDS,
+    MAX_TOTAL_MODEL_ROUNDS,
+    RESERVED_SYNTHESIS_ROUNDS,
+    _SYNTHESIS_INSTRUCTION,
+)
 
 MAX_ROWS_RETURNED = 50
 _CHART_BLOCK = re.compile(r"```chart\s*\n(.*?)```", re.DOTALL)
@@ -167,20 +164,6 @@ CATALOGO SEMANTICO (fondos, activos, alias, metricas definidas):
 ESQUEMA DE BASE DE DATOS DISPONIBLE (tabla: columnas):
 {schema_summary}
 """
-
-
-# Sent as a normal turn message on the reserved synthesis round only -- NOT part
-# of _SYSTEM_PROMPT_TEMPLATE, so `system_prompt_sha256` stays byte-identical to
-# B26/B27 and the only model-facing difference an F4 run introduces is the loop
-# structure itself. Deliberately generic: no metric, fund, asset or benchmark-case
-# specific instruction belongs here.
-_SYNTHESIS_INSTRUCTION = (
-    "Se agoto el presupuesto de investigacion: esta es tu ultima intervencion y no "
-    "tienes herramientas disponibles. Responde ahora con la mejor conclusion que "
-    "sustente la evidencia ya obtenida. No abras nuevas lineas de investigacion ni "
-    "propongas consultas adicionales. Declara de forma natural cualquier incertidumbre "
-    "material o dato que no hayas podido verificar."
-)
 
 
 @lru_cache(maxsize=1)
@@ -347,6 +330,53 @@ def _safe_json_loads(text: str | None) -> dict:
         return json.loads(text or "{}")
     except json.JSONDecodeError:
         return {}
+
+
+@dataclass
+class LegacySqlActionExecutor:
+    """F4 Stage 2's ActionExecutor implementation: the exact SQL-execution
+    behavior _TrackBSession._run_tool has had since Stage 1 (_validate_sql,
+    implicit LIMIT injection, guarded sandbox connection, error-as-tool-result
+    instead of raised exception), now reachable through the generic
+    ActionExecutor seam instead of being inlined in the loop.
+
+    Deliberately named "Legacy" -- Stage 3's ActionRegistry replaces this
+    entire class with per-action dispatch (run_sql becomes one action among
+    several) without AnalystLoop changing, because AnalystLoop only ever sees
+    the ActionExecutor Protocol, never this implementation.
+
+    The `request.name == "run_sql"` comparison below is fine here: this class
+    lives outside AnalystLoop, is the one place SQL-specific dispatch is
+    still allowed to exist in Stage 2, and is exactly what gets deleted (not
+    generalized) when ActionRegistry arrives.
+    """
+
+    sandbox: SnapshotSandbox
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        if request.name != "run_sql":
+            return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": f"unknown tool: {request.name}"}, ensure_ascii=False))
+        query = request.arguments.get("query", "")
+        content, ok = self._run_sql(query)
+        return ToolResult(call_id=request.call_id, ok=ok, content=content)
+
+    def _run_sql(self, query: str) -> tuple[str, bool]:
+        error = _validate_sql(query)
+        if error:
+            return json.dumps({"error": error}, ensure_ascii=False), False
+        sql = query.strip().rstrip(";")
+        if not re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE):
+            sql = f"{sql} LIMIT {MAX_ROWS_RETURNED}"
+        conn = self.sandbox.connect(guard=True)
+        try:
+            cur = conn.execute(sql)
+            cols = [d[0] for d in cur.description or []]
+            rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED)]
+            return _format_tool_result(cols, rows), True
+        except Exception as exc:  # noqa: BLE001 -- surfaced to the model as a tool error, not raised
+            return json.dumps({"error": str(exc)}, ensure_ascii=False), False
+        finally:
+            conn.close()
 
 
 @dataclass
