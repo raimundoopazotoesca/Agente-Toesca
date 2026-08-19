@@ -68,7 +68,13 @@ class AnthropicTransport:
             if item.role == "user":
                 messages.append({"role": "user", "content": item.text or ""})
                 continue
-            messages.append({"role": "assistant", "content": item.raw})
+            # Within one turn, an assistant item always carries `raw` (the real
+            # content-block list, thinking/tool_use included). Across turns,
+            # Stage 1's cross-session history is a plain-text summary (see
+            # _AnthropicSession's compat facade) -- `raw is None` there, and
+            # content must be the string Anthropic expects for that shape, not
+            # a block list.
+            messages.append({"role": "assistant", "content": item.raw if item.raw is not None else (item.text or "")})
             if item.tool_results:
                 messages.append({"role": "user", "content": [
                     {"type": "tool_result", "tool_use_id": tr.call_id, "content": tr.content} for tr in item.tool_results
