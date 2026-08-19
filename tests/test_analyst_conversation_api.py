@@ -173,6 +173,18 @@ def test_send_message_returns_public_schema(client, headers):
     assert response.get_json() == {"id": "msg-1", "conversation_id": "conv-1", "role": "assistant", "content": "Hola", "created_at": "2026-08-19T12:01:00Z", "metadata": {"source": "test"}}
 
 
+@pytest.mark.parametrize("text", [
+    "¿Cuál es la vacancia de TRI en junio de 2026?",
+    "¿Cómo evolucionó la ocupación en Viña Centro?",
+    "¡Año ñandú: áéíóú!",
+])
+def test_send_message_preserves_utf8_json_exactly(client, headers, service, text):
+    response = client.post("/api/analyst/conversations/conv-1/messages", headers=headers, json={"text": text})
+    assert response.status_code == 201
+    assert service.message.content == text
+    assert response.get_json()["content"] == text
+
+
 def test_blank_message_is_400(client, headers):
     response = client.post("/api/analyst/conversations/conv-1/messages", headers=headers, json={"text": "  "})
     assert response.status_code == 400
@@ -239,9 +251,9 @@ def test_legacy_chat_remains_registered_and_uses_db_chat(client, headers, monkey
     assert called["question"] == "Pregunta"
 
 
-def test_importing_server_has_no_workspace_db_provider_or_knowledge_db_side_effect(tmp_path):
+def test_importing_server_preserves_existing_workspace_state():
     workspace_db = Path("memory/analyst_workspace.db")
-    assert not workspace_db.exists(), "the A5 worktree must start without a workspace DB"
+    before = workspace_db.read_bytes() if workspace_db.exists() else None
     code = """
 import os
 import sqlite3
@@ -251,7 +263,8 @@ def forbidden(*args, **kwargs):
     raise AssertionError('sqlite connection opened during module import')
 sqlite3.connect = forbidden
 import scripts.ingesta_server
-assert not Path('memory/analyst_workspace.db').exists()
 """
     result = subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, env={key: value for key, value in os.environ.items() if key != "OPENAI_API_KEY"})
     assert result.returncode == 0, result.stderr
+    after = workspace_db.read_bytes() if workspace_db.exists() else None
+    assert after == before
