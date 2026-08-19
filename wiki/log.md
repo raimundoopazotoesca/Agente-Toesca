@@ -1,3 +1,19 @@
+## [2026-08-19] fix | Fechas faltantes de absorción JLL completadas por Nicole Carvajal
+
+Nicole (JLL) devolvió `RAW/Fechas faltantes absorcion - JLL (listo).xlsx` con 8 de
+las 11 fechas pendientes en `raw_movimiento_contrato`. Parcheadas directo por id
+(no vía re-ingesta, porque el archivo de respuesta no es el mismo que
+`RAW/Absorcion Histórica DB.xlsx` — si se vuelve a correr `ingest_movimiento_contrato`
+sobre el archivo original combinado, estas 8 fechas se pierden por el
+supersede-por-record_path; hay que reaplicar este parche o pedirle a JLL que
+actualice también el archivo maestro). Ids parchados: 2022,2023,2024,2025,2078
+(inicio_nuevo_contrato) y 1960,1853,2069 (vencimiento). Quedan 3 filas sin
+resolver: Apo4501/Bodega/Celeo 22.74m² (Nicole no identifica la unidad, pendiente
+respuesta), Apo3001/Oficina/#REF! 132.08m² y Apo4700/Oficina/Js Held 93m².
+Check delta_vacancia vs absorción para Apo3001 mejoró de -1329.7 a -116.4 tras
+el parche — confirma que las fechas faltantes eran la causa principal del
+descalce. Ver [[project-absorcion-historica-manual]].
+
 ## [2026-08-10] feat+fix | Tabla "Resumen Performance" página 2 TRI + bug de dedup en ingesta rent roll
 
 1. **Wireada la tabla de performance de la página 2 del fact sheet TRI**
