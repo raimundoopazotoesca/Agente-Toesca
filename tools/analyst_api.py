@@ -9,9 +9,19 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
+from openai import OpenAIError
+
+from tools.analyst_workspace.conversation_service import ConversationServiceError
+from tools.analyst_workspace.store import (
+    ConversationNotFoundError,
+    MessageNotFoundError,
+    ValidationError,
+    WorkspaceStoreError,
+)
+
 
 class ConversationServiceProtocol(Protocol):
-    """Conceptual boundary to be reconciled once A4's public API is final."""
+    """The small HTTP-facing subset of the A4 ConversationService."""
 
     def create_conversation(self, *, title: str | None = None, context: dict[str, Any] | None = None) -> Any: ...
     def list_conversations(self, *, include_archived: bool = False) -> list[Any]: ...
@@ -30,12 +40,16 @@ class AnalystNotFoundError(AnalystApiError):
     pass
 
 
+class AnalystValidationError(AnalystApiError):
+    pass
+
+
 class AnalystServiceUnavailableError(AnalystApiError):
     pass
 
 
 class ConversationApiAdapter:
-    """Contains the provisional A5-to-A4 method and serialization adaptation."""
+    """Translate the stable HTTP contract to the concrete A3/A4 service."""
 
     def __init__(self, service: ConversationServiceProtocol):
         self._service = service
@@ -54,7 +68,9 @@ class ConversationApiAdapter:
             return _conversation(self._call(self._service.rename_conversation, conversation_id, title))
         if archived is True:
             return _conversation(self._call(self._service.archive_conversation, conversation_id))
-        raise ValueError("provide a title or archived=true")
+        if archived is False:
+            return _conversation(self._call(self._service.unarchive_conversation, conversation_id))
+        raise AnalystValidationError("provide a title or archived boolean")
 
     def send_message(self, conversation_id: str, text: str) -> dict[str, Any]:
         """The only point tied to A4's eventual send-message return shape."""
@@ -67,12 +83,13 @@ class ConversationApiAdapter:
     def _call(method: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         try:
             return method(*args, **kwargs)
-        except KeyError as exc:
-            # A4 will replace this provisional convention with explicit types.
+        except (ConversationNotFoundError, MessageNotFoundError) as exc:
             raise AnalystNotFoundError from exc
-        except Exception as exc:
-            # A4's concrete runtime/provider errors are intentionally not part
-            # of A5's provisional public contract yet.
+        except (ValidationError, ConversationServiceError) as exc:
+            raise AnalystValidationError from exc
+        except WorkspaceStoreError as exc:
+            raise AnalystServiceUnavailableError from exc
+        except (RuntimeError, OpenAIError) as exc:
             raise AnalystServiceUnavailableError from exc
 
 

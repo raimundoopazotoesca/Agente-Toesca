@@ -152,6 +152,29 @@ def _generar_pdfs_factsheet(
 
 app = Flask(__name__, static_folder=None)
 
+
+def _create_analyst_conversation_service():
+    """Construct the writable workspace and F4 runtime only on first API use."""
+    cached = app.extensions.get("analyst_conversation_service")
+    if cached is not None:
+        return cached
+
+    from tools.analyst_runtime.session import OpenAIResponsesAnalystSessionFactory
+    from tools.analyst_workspace.conversation_service import ConversationService
+    from tools.analyst_workspace.store import WorkspaceStore
+
+    workspace = WorkspaceStore(ROOT / "memory" / "analyst_workspace.db")
+    workspace.initialize()
+    session_factory = OpenAIResponsesAnalystSessionFactory(ROOT / "memory" / "agente_toesca_v2.db")
+    service = ConversationService(workspace, session_factory)
+    app.extensions["analyst_conversation_service"] = service
+    return service
+
+
+# Kept as a factory (rather than a service instance) so importing this module
+# neither creates a workspace DB nor requires an OpenAI credential.
+app.config.setdefault("ANALYST_CONVERSATION_SERVICE_FACTORY", _create_analyst_conversation_service)
+
 # Tope de subida: los .xlsx de proveedores son de pocos MB; el RR JLL es el mayor.
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 
@@ -390,6 +413,8 @@ def analyst_create_conversation():
         return jsonify(_analyst_adapter().create_conversation(title=title.strip() if title else None, context=context)), 201
     except ValueError:
         return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 
@@ -400,6 +425,8 @@ def analyst_get_conversation(conversation_id: str):
         return jsonify(_analyst_adapter().get_conversation(conversation_id))
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 
@@ -416,8 +443,12 @@ def analyst_update_conversation(conversation_id: str):
         return jsonify(_analyst_adapter().update_conversation(conversation_id, title=title.strip() if title else None, archived=archived))
     except ValueError:
         return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 
@@ -431,12 +462,11 @@ def analyst_send_message(conversation_id: str):
         return jsonify(_analyst_adapter().send_message(conversation_id, text.strip())), 201
     except ValueError:
         return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystServiceUnavailableError:
-        return _analyst_error("service_unavailable", 503)
-    except Exception:
-        app.logger.exception("Analyst conversation service failed")
         return _analyst_error("service_unavailable", 503)
 
 
@@ -452,12 +482,11 @@ def analyst_set_feedback(message_id: str):
         return jsonify(_analyst_adapter().set_feedback(message_id, rating, note))
     except ValueError:
         return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystServiceUnavailableError:
-        return _analyst_error("service_unavailable", 503)
-    except Exception:
-        app.logger.exception("Analyst conversation service failed")
         return _analyst_error("service_unavailable", 503)
 
 

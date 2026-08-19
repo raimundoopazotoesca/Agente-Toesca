@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from scripts import ingesta_server
+from tools.analyst_workspace.store import ConversationNotFoundError, MessageNotFoundError
 
 
 @dataclass
@@ -66,7 +67,7 @@ class FakeConversationService:
 
     def get_conversation(self, conversation_id):
         if conversation_id != self.conversation.id:
-            raise KeyError(conversation_id)
+            raise ConversationNotFoundError(conversation_id)
         return self.conversation
 
     def rename_conversation(self, conversation_id, title):
@@ -94,7 +95,7 @@ class FakeConversationService:
 
     def set_feedback(self, message_id, rating, note=None):
         if message_id != self.message.id:
-            raise KeyError(message_id)
+            raise MessageNotFoundError(message_id)
         return FakeFeedback(rating=rating, note=note)
 
 
@@ -105,13 +106,14 @@ def service():
 
 @pytest.fixture
 def client(service):
+    original_factory = ingesta_server.app.config["ANALYST_CONVERSATION_SERVICE_FACTORY"]
     ingesta_server.app.config.update(
         TESTING=True,
         ANALYST_CONVERSATION_SERVICE_FACTORY=lambda: service,
     )
     with ingesta_server.app.test_client() as test_client:
         yield test_client
-    ingesta_server.app.config.pop("ANALYST_CONVERSATION_SERVICE_FACTORY", None)
+    ingesta_server.app.config["ANALYST_CONVERSATION_SERVICE_FACTORY"] = original_factory
 
 
 @pytest.fixture
