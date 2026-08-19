@@ -355,36 +355,28 @@
     return div;
   }
 
-  function typeHtml(el, html) {
+  function hasComplexMarkdown(content) {
+    return /```|^#{1,6}\s|^\s*\|.*\|\s*\n\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$/m.test(content);
+  }
+
+  function typePlainText(el, content) {
     return new Promise((resolve) => {
-      const chunk = Math.max(1, Math.floor(html.length / 220));
+      const chunk = Math.max(1, Math.floor(content.length / 220));
       let i = 0;
+      el.textContent = "";
+      el.style.whiteSpace = "pre-wrap";
       function step() {
-        if (i >= html.length) {
+        if (i >= content.length) {
+          el.style.whiteSpace = "";
           resolve();
           return;
         }
-        let n = chunk;
-        let piece = "";
-        while (n-- > 0 && i < html.length) {
-          if (html[i] === "<") {
-            const close = html.indexOf(">", i);
-            const end = close === -1 ? html.length : close + 1;
-            piece += html.slice(i, end);
-            i = end;
-          } else if (html[i] === "&") {
-            const semi = html.indexOf(";", i);
-            const end = semi !== -1 && semi - i <= 8 ? semi + 1 : i + 1;
-            piece += html.slice(i, end);
-            i = end;
-          } else {
-            piece += html[i];
-            i++;
-          }
+        let end = Math.min(content.length, i + chunk);
+        while (end < content.length && !/\s/.test(content[end])) {
+          end++;
         }
-        // insertAdjacentHTML solo parsea el fragmento nuevo, sin re-serializar
-        // el DOM ya insertado (innerHTML += rompe entidades como &quot; a mitad de tipeo).
-        el.insertAdjacentHTML("beforeend", piece);
+        el.textContent += content.slice(i, end);
+        i = end;
         body.scrollTop = body.scrollHeight;
         requestAnimationFrame(() => setTimeout(step, 15));
       }
@@ -453,10 +445,16 @@
         return;
       }
       restoredConversationId = chatController.getStoredConversationId();
-      const html = mdToHtml(result.message.content || "(sin respuesta)");
+      const content = result.message.content || "(sin respuesta)";
+      if (hasComplexMarkdown(content)) {
+        addMsg("bot", mdToHtml(content));
+        return;
+      }
       const row = addMsg("bot", "");
       const msgEl = row.querySelector(".tc-msg");
-      await typeHtml(msgEl, html);
+      await typePlainText(msgEl, content);
+      msgEl.innerHTML = mdToHtml(content);
+      body.scrollTop = body.scrollHeight;
     } catch (err) {
       typing.remove();
       showTransientError();
