@@ -1,7 +1,7 @@
 /* Burbuja flotante del Asistente Virtual Inmobiliario Toesca.
    Incluir con un tag <script> apuntando a este archivo (src="/chat_bubble.js" defer),
    o inlineado directo dentro de otro documento (ver build_factsheet.py).
-   Requiere endpoint POST /api/chat. */
+   Requiere la API /api/analyst y ToescaQuickChat. */
 (function () {
   if (window.__toescaChatMounted) return;
   window.__toescaChatMounted = true;
@@ -71,6 +71,7 @@
     padding:8px;border-radius:6px;font-size:11px;overflow-x:auto;white-space:pre-wrap}
   .tc-sql.open .tc-sql-body{display:block}
   .tc-typing{align-self:flex-start;color:#64748b;font-size:12.5px;font-style:italic}
+  .tc-error{margin:0 14px 10px;color:#b91c1c;font-size:12.5px;line-height:1.35}
   .tc-input{border-top:1px solid #e2e8f0;padding:10px;background:#fff;
     display:flex;gap:8px}
   .tc-input textarea{flex:1;border:1px solid #cbd5e1;border-radius:10px;
@@ -137,20 +138,38 @@
   const sendBtn = panel.querySelector("#tc-send");
   const closeBtn = panel.querySelector(".tc-close");
 
-  const history = [];
-  const CONVERSATION_ID_KEY = "toesca_asistente_conversation_id";
-  let conversationId = sessionStorage.getItem(CONVERSATION_ID_KEY);
-  if (!conversationId) {
-    conversationId = crypto.randomUUID();
-    sessionStorage.setItem(CONVERSATION_ID_KEY, conversationId);
+  function analystHeaders() {
+    const headers = {};
+    if (window.INGESTA_TOKEN) headers["X-Ingesta-Token"] = window.INGESTA_TOKEN;
+    return headers;
   }
+
+  function buildFactsheetContext() {
+    const periodSelector = document.getElementById("sel-periodo-op");
+    return window.ToescaQuickChat.buildFactsheetContext(
+      typeof currentFund === "string" ? currentFund : "",
+      periodSelector ? periodSelector.value : "",
+    );
+  }
+
+  const chatController = window.ToescaQuickChat.createQuickChatController({
+    apiBase: API_BASE,
+    storage: sessionStorage,
+    fetch: window.fetch.bind(window),
+    getHeaders: analystHeaders,
+    buildFactsheetContext,
+  });
+  let restoredConversationId = null;
 
   function toggle(open) {
     const isOpen = open ?? !panel.classList.contains("open");
     panel.classList.toggle("open", isOpen);
     fab.classList.toggle("hidden", isOpen);
     fabLabel.classList.toggle("hidden", isOpen);
-    if (isOpen) setTimeout(() => input.focus(), 50);
+    if (isOpen) {
+      restoreTranscript();
+      setTimeout(() => input.focus(), 50);
+    }
   }
 
   fab.addEventListener("click", () => toggle(true));
@@ -382,7 +401,40 @@
     return div;
   }
 
+  function renderPersistedTranscript(messages) {
+    body.innerHTML = "";
+    messages.forEach((message) => {
+      if (message.role === "assistant") addMsg("bot", mdToHtml(message.content || ""));
+      else if (message.role === "user") addMsg("user", escapeHtml(message.content || ""));
+    });
+  }
+
+  function showTransientError() {
+    const error = document.createElement("div");
+    error.className = "tc-error";
+    error.textContent = "No se pudo obtener una respuesta. Intenta nuevamente.";
+    body.appendChild(error);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  async function restoreTranscript() {
+    const conversationId = chatController.getStoredConversationId();
+    if (!conversationId || restoredConversationId === conversationId) return;
+    try {
+      const transcript = await chatController.loadConversation();
+      if (transcript.stale) {
+        restoredConversationId = null;
+        return;
+      }
+      restoredConversationId = conversationId;
+      renderPersistedTranscript(transcript.messages);
+    } catch (_error) {
+      // Keep the initial UI available; a send may still report a safe error.
+    }
+  }
+
   async function send() {
+    if (chatController.isPending()) return;
     const q = input.value.trim();
     if (!q) return;
     input.value = "";
@@ -390,41 +442,24 @@
     sendBtn.disabled = true;
 
     addMsg("user", escapeHtml(q));
-    history.push({ role: "user", content: q });
     const typing = addTyping();
 
     try {
-      // El servidor exige X-Ingesta-Token; lo inyecta al servir la pagina. Si el
-      // factsheet se abrio como file:// no hay token y la respuesta es 401.
-      const headers = { "Content-Type": "application/json" };
-      if (window.INGESTA_TOKEN) headers["X-Ingesta-Token"] = window.INGESTA_TOKEN;
-      const r = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ question: q, history, conversation_id: conversationId }),
-      });
-      if (r.status === 401) {
-        typing.remove();
-        addMsg("bot", "⚠️ Abre el factsheet desde <b>http://127.0.0.1:8765/factsheet</b> para usar el asistente.");
+      const result = await chatController.sendAnalystMessage(q);
+      typing.remove();
+      if (result.error) {
+        renderPersistedTranscript(result.messages || []);
+        showTransientError();
         return;
       }
-      const data = await r.json();
-      typing.remove();
-
-      let html = mdToHtml(data.answer_md || "(sin respuesta)");
-      if (data.sql) {
-        const sqlEsc = escapeHtml(data.sql);
-        html += `<div class="tc-sql" onclick="this.classList.toggle('open')">
-          ▸ Ver detalle tecnico (${data.rows ? data.rows.length : 0} resultados)
-          <div class="tc-sql-body">${sqlEsc}</div></div>`;
-      }
+      restoredConversationId = chatController.getStoredConversationId();
+      const html = mdToHtml(result.message.content || "(sin respuesta)");
       const row = addMsg("bot", "");
       const msgEl = row.querySelector(".tc-msg");
       await typeHtml(msgEl, html);
-      history.push({ role: "assistant", content: data.answer_md || "" });
     } catch (err) {
       typing.remove();
-      addMsg("bot", `⚠️ Error de red: ${escapeHtml(String(err))}`);
+      showTransientError();
     } finally {
       sendBtn.disabled = false;
       input.focus();
@@ -436,4 +471,7 @@
     input.style.height = "42px";
     input.style.height = Math.min(input.scrollHeight, 120) + "px";
   });
+
+  // A stored pointer is restored from WorkspaceStore without creating a chat.
+  restoreTranscript();
 })();

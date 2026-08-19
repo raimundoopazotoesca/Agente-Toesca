@@ -345,7 +345,9 @@ def serve_factsheet():
 
 @app.get("/chat_bubble.js")
 def serve_chat_bubble():
-    resp = send_from_directory(WEB_DIR, "chat_bubble.js", mimetype="application/javascript")
+    source = (WEB_DIR / "quick_chat_controller.js").read_text(encoding="utf-8")
+    source += "\n" + (WEB_DIR / "chat_bubble.js").read_text(encoding="utf-8")
+    resp = app.response_class(source, mimetype="application/javascript")
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
@@ -423,6 +425,18 @@ def analyst_create_conversation():
 def analyst_get_conversation(conversation_id: str):
     try:
         return jsonify(_analyst_adapter().get_conversation(conversation_id))
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/conversations/<conversation_id>/messages")
+def analyst_list_messages(conversation_id: str):
+    try:
+        return jsonify({"messages": _analyst_adapter().list_messages(conversation_id)})
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystValidationError:

@@ -61,6 +61,12 @@ def test_http_uses_real_service_and_persists_visible_transcript(client, headers,
     assert [(item.role, item.content) for item in service.list_messages(conversation_id)] == [
         ("user", "Pregunta"), ("assistant", "Respuesta")
     ]
+    transcript = client.get(f"/api/analyst/conversations/{conversation_id}/messages", headers=headers)
+    assert transcript.status_code == 200
+    assert [(item["role"], item["content"]) for item in transcript.get_json()["messages"]] == [
+        ("user", "Pregunta"), ("assistant", "Respuesta")
+    ]
+    assert "reasoning" not in str(transcript.get_json())
 
 
 def test_http_real_store_supports_get_list_rename_archive_and_feedback(client, headers, service):

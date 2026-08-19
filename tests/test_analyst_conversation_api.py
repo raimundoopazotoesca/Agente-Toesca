@@ -93,6 +93,22 @@ class FakeConversationService:
         )
         return self.message
 
+    def list_messages(self, conversation_id):
+        self.get_conversation(conversation_id)
+        return [
+            FakeMessage(
+                id="msg-user",
+                conversation_id=conversation_id,
+                role="user",
+                content="¿Cuál es la vacancia de TRI en junio de 2026?",
+                created_at="2026-08-19T12:00:00Z",
+                metadata={"source": "factsheet"},
+                reasoning=["private"],
+                raw_provider_payload={"secret": "private"},
+            ),
+            self.message,
+        ]
+
     def set_feedback(self, message_id, rating, note=None):
         if message_id != self.message.id:
             raise MessageNotFoundError(message_id)
@@ -131,6 +147,11 @@ def test_analyst_api_rejects_invalid_token(client):
     assert response.status_code == 401
 
 
+def test_get_messages_requires_token(client):
+    response = client.get("/api/analyst/conversations/conv-1/messages")
+    assert response.status_code == 401
+
+
 def test_create_conversation_returns_public_schema(client, headers):
     response = client.post("/api/analyst/conversations", headers=headers, json={"title": "Plan", "context": {"fondo": "PT"}})
     assert response.status_code == 201
@@ -147,6 +168,38 @@ def test_get_conversation(client, headers):
     response = client.get("/api/analyst/conversations/conv-1", headers=headers)
     assert response.status_code == 200
     assert response.get_json()["id"] == "conv-1"
+
+
+def test_get_messages_returns_chronological_public_transcript(client, headers):
+    response = client.get("/api/analyst/conversations/conv-1/messages", headers=headers)
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "messages": [
+            {
+                "id": "msg-user",
+                "conversation_id": "conv-1",
+                "role": "user",
+                "content": "¿Cuál es la vacancia de TRI en junio de 2026?",
+                "created_at": "2026-08-19T12:00:00Z",
+                "metadata": {"source": "factsheet"},
+            },
+            {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "role": "assistant",
+                "content": "Respuesta",
+                "created_at": "2026-08-19T12:01:00Z",
+                "metadata": {"source": "test"},
+            },
+        ]
+    }
+    assert "private" not in response.get_data(as_text=True)
+
+
+def test_get_messages_for_missing_conversation_is_404(client, headers):
+    response = client.get("/api/analyst/conversations/missing/messages", headers=headers)
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "not_found"}
 
 
 def test_missing_conversation_is_404(client, headers):
