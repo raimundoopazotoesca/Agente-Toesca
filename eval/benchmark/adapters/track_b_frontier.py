@@ -48,6 +48,13 @@ from typing import Callable
 from openai import OpenAI
 
 from eval.benchmark.adapters.base import Artifact, ToolCall, Turn, Usage
+from eval.benchmark.adapters._transport import (
+    ModelRequest,
+    ModelResponse,
+    ToolRequest,
+    ToolSpec,
+    TranscriptItem,
+)
 from eval.benchmark.snapshot import SnapshotSandbox
 
 SEMANTIC_DIR = Path(__file__).resolve().parents[3] / "semantic"
@@ -245,6 +252,101 @@ def _format_tool_result(columns: list[str], rows: list[list]) -> str:
 
 def _extract_artifacts(text: str) -> list[Artifact]:
     return [Artifact(kind="chart", payload=m.group(1).strip()) for m in _CHART_BLOCK.finditer(text or "")]
+
+
+def _tool_spec_to_openai(spec: ToolSpec) -> dict:
+    return {"type": "function", "function": {"name": spec.name, "description": spec.description, "parameters": spec.parameters}}
+
+
+@dataclass
+class ChatCompletionsTransport:
+    """F4 Stage 2: the OpenAI Chat Completions wire-protocol translation,
+    extracted from _TrackBSession.ask() (Stage 1) so AnalystLoop can drive it
+    without knowing anything about tool_calls/tool_call_id or message shapes.
+
+    Pure protocol translation -- no round budget, no investigation/synthesis
+    policy, no SQL. `tool_specs` (constructor) is the FULL, unchanging set of
+    tools this session may ever use, declared on every call for replay
+    validity (a provider must see the same schema that produced any tool_calls
+    already in history) -- exactly what the module constant `_RUN_SQL_TOOL`
+    already did implicitly in Stage 1. `request.tools` (per call) is used only
+    to pick `tool_choice`: non-empty -> "auto" (investigation), empty ->
+    "none" (the reserved synthesis round must not be able to call anything,
+    regardless of what the model asks for -- see AnalystLoop for the second,
+    structural half of that guarantee: it never reads tool_requests back on a
+    tools=[] response).
+    """
+
+    client: OpenAI
+    model: str
+    tool_specs: list[ToolSpec]
+    inference_profile: InferenceProfile | None = None
+    request_observer: Callable[[str, int, object | None], None] | None = None
+    _round: int = 0
+
+    def _render_history(self, history: list[TranscriptItem]) -> list[dict]:
+        messages: list[dict] = []
+        for item in history:
+            if item.role == "user":
+                messages.append({"role": "user", "content": item.text or ""})
+                continue
+            assistant_message = {"role": "assistant", "content": item.text or ""}
+            if item.tool_requests:
+                assistant_message["tool_calls"] = [
+                    {"id": tr.call_id, "type": "function", "function": {"name": tr.name, "arguments": json.dumps(tr.arguments, ensure_ascii=False)}}
+                    for tr in item.tool_requests
+                ]
+            if isinstance(item.raw, dict) and item.raw.get("reasoning_content"):
+                assistant_message["reasoning_content"] = item.raw["reasoning_content"]
+            messages.append(assistant_message)
+            for tr in item.tool_results:
+                messages.append({"role": "tool", "tool_call_id": tr.call_id, "content": tr.content})
+        return messages
+
+    def complete(self, request: ModelRequest) -> ModelResponse:
+        messages = [{"role": "system", "content": request.system_prompt}, *self._render_history(request.history)]
+        if request.message:
+            messages.append({"role": "user", "content": request.message})
+
+        tool_choice = "auto" if request.tools else "none"
+        kwargs = self.inference_profile.request_kwargs() if self.inference_profile else {"temperature": 0.0}
+        if self.request_observer:
+            self.request_observer("provider_request_started", self._round, None)
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.model, messages=messages, tools=[_tool_spec_to_openai(t) for t in self.tool_specs], tool_choice=tool_choice, **kwargs,
+            )
+        except Exception as exc:
+            if self.request_observer:
+                self.request_observer("provider_request_failed", self._round, exc)
+            raise
+        finally:
+            self._round += 1
+        if self.request_observer:
+            self.request_observer("provider_response_received", self._round - 1, resp)
+
+        msg = resp.choices[0].message
+        tool_requests = [
+            ToolRequest(call_id=tc.id, name=tc.function.name, arguments=_safe_json_loads(tc.function.arguments))
+            for tc in (msg.tool_calls or [])
+        ]
+        raw_reasoning = getattr(msg, "reasoning_content", None)
+        raw_items = {"reasoning_content": raw_reasoning} if raw_reasoning else None
+        raw_usage = getattr(resp, "usage", None)
+        details = getattr(raw_usage, "completion_tokens_details", None)
+        usage = Usage(
+            provider=self.model, model=self.model, calls=1,
+            input_tokens=getattr(raw_usage, "prompt_tokens", None), output_tokens=getattr(raw_usage, "completion_tokens", None),
+            reasoning_tokens=getattr(details, "reasoning_tokens", None), cached_tokens=getattr(getattr(raw_usage, "prompt_tokens_details", None), "cached_tokens", None),
+        )
+        return ModelResponse(text=msg.content or "", tool_requests=tool_requests, raw_items=raw_items, usage=usage)
+
+
+def _safe_json_loads(text: str | None) -> dict:
+    try:
+        return json.loads(text or "{}")
+    except json.JSONDecodeError:
+        return {}
 
 
 @dataclass
