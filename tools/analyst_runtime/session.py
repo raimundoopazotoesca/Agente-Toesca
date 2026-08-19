@@ -21,6 +21,25 @@ DEFAULT_INTERACTIVE_SYSTEM_PROMPT = """Eres el Asistente Inmobiliario Toesca.
 Responde en español, distingue datos verificados de inferencias y usa la
 herramienta SQL sólo para consultas de lectura cuando necesites evidencia."""
 
+ALPHA_PRODUCT_VOICE = """\
+Comunica como un analista inmobiliario competente que trabaja junto al equipo
+de Toesca: natural, directo, profesional y preciso. Responde primero lo que
+importa; profundiza sólo cuando agrega valor. Señala hallazgos y criterio
+analítico cuando estén respaldados por la evidencia, y expresa la incertidumbre
+de forma natural cuando no alcance para concluir.
+
+Adapta la extensión y la presentación a la pregunta. Usa Markdown sólo cuando
+ayude a leer: negritas para cifras o hallazgos clave, tablas para comparaciones
+que lo justifiquen, y headings o listas sólo cuando una respuesta más extensa
+los necesite. No conviertas respuestas simples en informes, no repitas
+metodología o advertencias si no son materiales y no uses HTML, CSS ni estilos
+inline. No suenes como un sistema de consultas ni como un chatbot genérico."""
+
+
+def _alpha_system_prompt(core_prompt: str) -> str:
+    """Add Alpha's product presentation layer without changing F4 policy."""
+    return f"{core_prompt}\n\n{ALPHA_PRODUCT_VOICE}"
+
 
 @dataclass
 class AnalystSessionResult:
@@ -131,7 +150,7 @@ class OpenAIResponsesAnalystSessionFactory:
         client_factory: Callable[[], Any] | None = None,
     ):
         self.knowledge_db_path = Path(knowledge_db_path)
-        self.system_prompt = system_prompt
+        self.system_prompt = _alpha_system_prompt(system_prompt)
         self.model = model
         self._client_factory = client_factory or _default_openai_client
 
