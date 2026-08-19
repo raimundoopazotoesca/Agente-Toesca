@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from hashlib import sha256
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -15,6 +16,7 @@ from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
+from tools.analyst_runtime.presentation import FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 
 INTERACTIVE_EVIDENCE_INSTRUCTION = """Responde en español, distingue datos verificados de inferencias y usa la
@@ -84,6 +86,13 @@ class AnalystSessionResult:
     usage: Usage = field(default_factory=Usage)
     tool_calls: list[ToolCall] = field(default_factory=list)
     sql_queries: list[str] = field(default_factory=list)
+    presentation_applied: bool | None = None
+    presentation_provider: str | None = None
+    presentation_model: str | None = None
+    presentation_latency_ms: float | None = None
+    presentation_integrity_status: str | None = None
+    original_answer_hash: str | None = None
+    presented_answer_hash: str | None = None
 
 
 class AnalystSession(Protocol):
@@ -158,20 +167,34 @@ class OpenAIResponsesTransport:
 class OpenAIResponsesAnalystSession:
     """Keeps the provider's opaque replay trajectory only in process memory."""
 
-    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None):
+    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None):
         self._loop = loop
         self._history: list[TranscriptItem] = list(history or [])
+        self._presenter = presenter
 
     def ask(self, text: str) -> AnalystSessionResult:
         result = self._loop.ask(text, history=self._history)
         self._history = result.round_trajectory
         turn = result.turn
+        presentation = self._present(turn.text, text)
         return AnalystSessionResult(
-            text=turn.text,
+            text=presentation.content,
             usage=turn.usage,
             tool_calls=turn.tool_calls,
             sql_queries=[call.args["query"] for call in turn.tool_calls if call.name == "run_sql" and "query" in call.args],
+            presentation_applied=presentation.applied,
+            presentation_provider=presentation.provider,
+            presentation_model=presentation.model,
+            presentation_latency_ms=presentation.latency_ms,
+            presentation_integrity_status=presentation.integrity_status,
+            original_answer_hash=_answer_hash(turn.text),
+            presented_answer_hash=_answer_hash(presentation.content),
         )
+
+    def _present(self, draft: str, user_message: str) -> PresentationResult:
+        if self._presenter is None:
+            return PresentationResult(draft, False, None, None, None, "not_configured")
+        return self._presenter.present(user_message=user_message, draft_answer=draft)
 
 
 class OpenAIResponsesAnalystSessionFactory:
@@ -183,11 +206,13 @@ class OpenAIResponsesAnalystSessionFactory:
         system_prompt: str = DEFAULT_INTERACTIVE_SYSTEM_PROMPT,
         model: str = "gpt-5.6-terra",
         client_factory: Callable[[], Any] | None = None,
+        presenter_factory: Callable[[Any, str], FinalPresenter] | None = OpenAIResponsesFinalPresenter,
     ):
         self.knowledge_db_path = Path(knowledge_db_path)
         self.system_prompt = _alpha_system_prompt(system_prompt)
         self.model = model
         self._client_factory = client_factory or _default_openai_client
+        self._presenter_factory = presenter_factory
 
     def create(self, conversation: Any, visible_messages: list[Any], runtime_context: dict[str, Any] | None = None) -> AnalystSession:
         # Visible history is sufficient for restart continuity. Opaque provider
@@ -196,10 +221,12 @@ class OpenAIResponsesAnalystSessionFactory:
         sandbox = LiveReadOnlySandbox(self.knowledge_db_path)
         action = RunSqlAction(sandbox=sandbox)
         registry = ActionRegistry([action])
-        transport = OpenAIResponsesTransport(self._client_factory(), self.model, registry.tool_specs())
+        client = self._client_factory()
+        transport = OpenAIResponsesTransport(client, self.model, registry.tool_specs())
         history = [TranscriptItem(role=message.role, text=message.content) for message in visible_messages]
+        presenter = self._presenter_factory(client, self.model) if self._presenter_factory else None
         return OpenAIResponsesAnalystSession(
-            AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history
+            AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter
         )
 
 
@@ -239,3 +266,7 @@ def _safe_json_loads(value: str | None) -> dict[str, Any]:
 
 def _tool_spec_to_responses(spec: ToolSpec) -> dict[str, Any]:
     return {"type": "function", "name": spec.name, "description": spec.description, "parameters": spec.parameters}
+
+
+def _answer_hash(text: str) -> str:
+    return sha256(text.encode("utf-8")).hexdigest()

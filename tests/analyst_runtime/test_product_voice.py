@@ -52,6 +52,21 @@ class _FakeClient:
         self.responses = _FakeResponses()
 
 
+class _SequencedResponses:
+    def __init__(self, outputs: list[str]) -> None:
+        self.outputs = list(outputs)
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return SimpleNamespace(output_text=self.outputs.pop(0), output=[], usage=None)
+
+
+class _SequencedClient:
+    def __init__(self, outputs: list[str]) -> None:
+        self.responses = _SequencedResponses(outputs)
+
+
 def _knowledge_db(path: Path) -> Path:
     conn = sqlite3.connect(path)
     conn.execute("CREATE TABLE dim_fondo (fondo_key TEXT PRIMARY KEY)")
@@ -81,6 +96,39 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
         {"role": "user", "content": "Consulta actual"},
     ]
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
+
+
+def test_alpha_session_presents_the_final_draft_and_keeps_safe_metadata(tmp_path):
+    draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
+    presented = "La vacancia de TRI en junio de 2026 fue **5,945%**."
+    client = _SequencedClient([draft, presented])
+    factory = OpenAIResponsesAnalystSessionFactory(
+        _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
+    )
+
+    result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
+
+    assert result.text == presented
+    assert result.presentation_applied is True
+    assert result.presentation_integrity_status == "passed"
+    assert result.original_answer_hash != draft
+    assert len(client.responses.calls) == 2
+    assert client.responses.calls[1]["tools"] == []
+    assert client.responses.calls[1]["tool_choice"] == "none"
+
+
+def test_alpha_session_keeps_the_draft_when_presentation_fails_integrity(tmp_path):
+    draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
+    client = _SequencedClient([draft, "La vacancia de TRI en junio de 2026 fue 6,2%."])
+    factory = OpenAIResponsesAnalystSessionFactory(
+        _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
+    )
+
+    result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
+
+    assert result.text == draft
+    assert result.presentation_applied is False
+    assert result.presentation_integrity_status == "failed_facts"
 
 
 def test_alpha_reformulates_the_interactive_evidence_instruction_only():
@@ -140,6 +188,12 @@ def test_alpha_voice_stays_out_of_workspace_and_benchmark_contract(tmp_path):
     assert ALPHA_PRODUCT_VOICE not in json.dumps(
         [message.metadata for message in persisted], ensure_ascii=False
     )
+    assistant_metadata = persisted[-1].metadata
+    assert assistant_metadata["presentation_applied"] is True
+    assert assistant_metadata["presentation_integrity_status"] == "passed"
+    assert len(assistant_metadata["original_answer_hash"]) == 64
+    assert "draft" not in json.dumps(assistant_metadata, ensure_ascii=False).lower()
+    assert "raw_response" not in assistant_metadata
 
     manifest = build_run_manifest("offline", "0" * 40, "2026-08-19T00:00:00Z")
     assert manifest["system_prompt_sha256"] == "b155ded6464def5a8cf7ba8d4e9c56af8dc3b402cf0227b5f9f097ab96e17f44"

@@ -93,7 +93,7 @@ def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) 
         {"name": call.name, "ok": call.ok, "duration_ms": call.duration_ms}
         for call in result.tool_calls
     ]
-    return {
+    metadata = {
         "latency_ms": latency_ms,
         "model_calls": usage.calls,
         "action_count": len(result.tool_calls),
@@ -104,6 +104,17 @@ def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) 
         "provider": usage.provider,
         "model": usage.model,
     }
+    presentation = {
+        "presentation_applied": result.presentation_applied,
+        "presentation_provider": result.presentation_provider,
+        "presentation_model": result.presentation_model,
+        "presentation_latency_ms": result.presentation_latency_ms,
+        "presentation_integrity_status": result.presentation_integrity_status,
+        "original_answer_hash": result.original_answer_hash,
+        "presented_answer_hash": result.presented_answer_hash,
+    }
+    metadata.update({name: value for name, value in presentation.items() if value is not None})
+    return metadata
 
 
 def _auto_title(text: str) -> str:
