@@ -11,12 +11,12 @@ from anthropic import Anthropic
 
 from eval.benchmark.adapters.base import ToolCall, Turn, Usage
 from eval.benchmark.adapters._transport import ModelRequest, ModelResponse, ToolRequest, ToolSpec, TranscriptItem
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
 from eval.benchmark.adapters.analyst_loop import AnalystLoop
 from eval.benchmark.adapters.track_b_frontier import (
     MAX_INVESTIGATION_ROUNDS, MAX_ROWS_RETURNED, _RUN_SQL_SPEC, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION,
     _SYSTEM_PROMPT_TEMPLATE,
     _extract_artifacts, _format_tool_result, _schema_summary, _semantic_context, _validate_sql,
-    LegacySqlActionExecutor,
 )
 from eval.benchmark.snapshot import SnapshotSandbox
 
@@ -152,7 +152,7 @@ class _AnthropicSession:
         loop = AnalystLoop(
             system_prompt=self.system_prompt,
             transport=AnthropicTransport(client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC], request_observer=self.request_observer),
-            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            action_executor=ActionRegistry([RunSqlAction(sandbox=self.sandbox)]),
             tool_specs=[_RUN_SQL_SPEC],
         )
         prior_history = [TranscriptItem(role=m["role"], text=m["content"]) for m in self.history]

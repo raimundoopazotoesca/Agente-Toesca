@@ -40,9 +40,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters._transport import ToolSpec, TranscriptItem
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
 from eval.benchmark.adapters.analyst_loop import AnalystLoop
 from eval.benchmark.adapters.track_b_anthropic import AnthropicTransport, _AnthropicSession
-from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport, LegacySqlActionExecutor, _RUN_SQL_TOOL, _TrackBSession
+from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport, _RUN_SQL_TOOL, _TrackBSession
 from eval.benchmark.adapters.track_b_openai_responses import ResponsesTransport, _OpenAIResponsesSession
 from eval.benchmark.snapshot import SnapshotSandbox
 
@@ -69,7 +70,7 @@ class _ChatCompletionsCompatSession:
         loop = AnalystLoop(
             system_prompt="sys",
             transport=ChatCompletionsTransport(client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC]),
-            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            action_executor=ActionRegistry([RunSqlAction(sandbox=self.sandbox)]),
             tool_specs=[_RUN_SQL_SPEC],
         )
         result = loop.ask(message, history=self._compat_history)
@@ -91,7 +92,7 @@ class _AnthropicCompatSession:
         loop = AnalystLoop(
             system_prompt="sys",
             transport=AnthropicTransport(client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC]),
-            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            action_executor=ActionRegistry([RunSqlAction(sandbox=self.sandbox)]),
             tool_specs=[_RUN_SQL_SPEC],
         )
         result = loop.ask(message, history=self._compat_history)
@@ -112,7 +113,7 @@ class _ResponsesCompatSession:
         loop = AnalystLoop(
             system_prompt="sys",
             transport=ResponsesTransport(client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC]),
-            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            action_executor=ActionRegistry([RunSqlAction(sandbox=self.sandbox)]),
             tool_specs=[_RUN_SQL_SPEC],
         )
         result = loop.ask(message, history=self._compat_history)

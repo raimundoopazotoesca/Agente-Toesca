@@ -1,5 +1,5 @@
-"""F4 Stage 2D: golden parity between `_OpenAIResponsesSession` (untouched)
-and `AnalystLoop` driving `ResponsesTransport` + `LegacySqlActionExecutor`.
+"""F4 Stage 2D/3: golden parity between `_OpenAIResponsesSession` (untouched)
+and `AnalystLoop` driving `ResponsesTransport` + `ActionRegistry([RunSqlAction(...)])`.
 
 Special focus: opaque reasoning-item replay. A Responses-shaped script here
 always includes a `reasoning` item alongside each `function_call` -- if the
@@ -21,8 +21,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters._transport import ToolSpec
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
 from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
-from eval.benchmark.adapters.track_b_frontier import LegacySqlActionExecutor, _RUN_SQL_TOOL
+from eval.benchmark.adapters.track_b_frontier import _RUN_SQL_TOOL
 from eval.benchmark.adapters.track_b_openai_responses import ResponsesTransport, _OpenAIResponsesSession
 from eval.benchmark.snapshot import SnapshotSandbox
 
@@ -72,7 +73,7 @@ def _old_session(sandbox, client) -> _OpenAIResponsesSession:
 
 def _new_loop(sandbox, client) -> AnalystLoop:
     transport = ResponsesTransport(client=client, model="gpt-5.6-terra", tool_specs=[_RUN_SQL_SPEC])
-    executor = LegacySqlActionExecutor(sandbox=sandbox)
+    executor = ActionRegistry([RunSqlAction(sandbox=sandbox)])
     return AnalystLoop(system_prompt="sys", transport=transport, action_executor=executor, tool_specs=[_RUN_SQL_SPEC])
 
 

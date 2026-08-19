@@ -1,12 +1,16 @@
 """F4 Stage 3: ActionRegistry / RunSqlAction.
 
-Two things this file proves:
-  1. Parity -- ActionRegistry(RunSqlAction) behaves identically to Stage 2's
-     LegacySqlActionExecutor for every SQL scenario that mattered there.
-  2. Extensibility -- the actual Stage 3 gate. Registering a second, non-SQL
-     Action and having a scripted model call it requires zero changes to
-     analyst_loop.py or any transport. Proven end-to-end through a real
-     AnalystLoop + ChatCompletionsTransport, not just at the registry level.
+Parity against LegacySqlActionExecutor was proven and recorded when this
+class was introduced (commit "refactor(f4): introduce generic action
+registry") -- every scenario below matched byte-for-byte before
+LegacySqlActionExecutor was deleted. These tests now verify ActionRegistry(
+RunSqlAction) directly, as the only implementation.
+
+The main thing this file proves: Extensibility -- the actual Stage 3 gate.
+Registering a second, non-SQL Action and having a scripted model call it
+requires zero changes to analyst_loop.py or any transport. Proven end-to-end
+through a real AnalystLoop + ChatCompletionsTransport, not just at the
+registry level.
 
 Offline only: real SQL against the real pinned snapshot through the real
 sandbox (so gate F4 / QueryLog behavior is genuine), scripted LLM responses,
@@ -26,8 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters._transport import ToolRequest, ToolResult, ToolSpec, TranscriptItem
 from eval.benchmark.adapters.actions import Action, ActionRegistry, RunSqlAction
-from eval.benchmark.adapters.analyst_loop import AnalystLoop
-from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport, LegacySqlActionExecutor
+from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
+from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport
 from eval.benchmark.snapshot import SnapshotSandbox
 
 _SENTINEL_SQL = "SELECT 1 FROM dim_activo"
@@ -43,87 +47,62 @@ def _req(query: str, call_id: str = "1", name: str = "run_sql") -> ToolRequest:
 
 
 # =============================================================================
-# Parity: ActionRegistry(RunSqlAction) vs LegacySqlActionExecutor
+# RunSqlAction behavior (parity against LegacySqlActionExecutor already
+# proven and on record; see module docstring)
 # =============================================================================
 
-def test_parity_normal_query(sandbox):
-    old = LegacySqlActionExecutor(sandbox=sandbox)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox)])
-
-    old_result = old.execute(_req(_SENTINEL_SQL))
-    new_result = new.execute(_req(_SENTINEL_SQL))
-
-    assert old_result.ok == new_result.ok is True
-    assert old_result.content == new_result.content
-    assert old_result.call_id == new_result.call_id == "1"
+def test_normal_query_succeeds(sandbox):
+    registry = ActionRegistry([RunSqlAction(sandbox=sandbox)])
+    result = registry.execute(_req(_SENTINEL_SQL))
+    assert result.ok is True
+    assert result.call_id == "1"
+    payload = json.loads(result.content)
+    assert "columns" in payload and "rows" in payload
 
 
-def test_parity_invalid_sql_empty(sandbox):
-    old = LegacySqlActionExecutor(sandbox=sandbox)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox)])
-    assert old.execute(_req("")).content == new.execute(_req("")).content
-    assert old.execute(_req("")).ok == new.execute(_req("")).ok is False
+def test_empty_sql_rejected(sandbox):
+    registry = ActionRegistry([RunSqlAction(sandbox=sandbox)])
+    result = registry.execute(_req(""))
+    assert result.ok is False
+    assert "vacia" in json.loads(result.content)["error"].lower()
 
 
-def test_parity_write_attempt_rejected(sandbox):
-    old = LegacySqlActionExecutor(sandbox=sandbox)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox)])
-    q = "DELETE FROM dim_activo"
-    old_result, new_result = old.execute(_req(q)), new.execute(_req(q))
-    assert old_result.ok == new_result.ok is False
-    assert old_result.content == new_result.content
+def test_write_attempt_rejected(sandbox):
+    registry = ActionRegistry([RunSqlAction(sandbox=sandbox)])
+    result = registry.execute(_req("DELETE FROM dim_activo"))
+    assert result.ok is False
     # never reached the sandbox -- caught by validate_sql before any connection
 
 
-def test_parity_multi_statement_rejected(sandbox):
-    old = LegacySqlActionExecutor(sandbox=sandbox)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox)])
-    q = "SELECT 1; DROP TABLE dim_activo"
-    assert old.execute(_req(q)).content == new.execute(_req(q)).content
+def test_multi_statement_rejected(sandbox):
+    registry = ActionRegistry([RunSqlAction(sandbox=sandbox)])
+    result = registry.execute(_req("SELECT 1; DROP TABLE dim_activo"))
+    assert result.ok is False
+    assert "una sentencia" in json.loads(result.content)["error"].lower()
 
 
-def test_parity_result_truncation(sandbox):
-    """Both inject an implicit LIMIT 50 into the SQL itself (before
-    fetchmany(50) even runs), so the Python-side row cap is never actually
-    exercised by any query issued through the tool -- `truncated` in the
-    payload is always False in practice given that. What matters for parity
-    is that both executors do the exact same thing, not that truncation
-    fires."""
-    old = LegacySqlActionExecutor(sandbox=sandbox)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox)])
-    q = "SELECT * FROM raw_er_activo_line"
-    old_result, new_result = old.execute(_req(q)), new.execute(_req(q))
-    assert old_result.content == new_result.content
-    payload = json.loads(new_result.content)
+def test_result_row_cap(sandbox):
+    """LIMIT 50 is injected into the SQL itself (before fetchmany(50) even
+    runs), so rows never exceed 50 and `truncated` is always False in
+    practice -- this pins that real behavior, not an assumption."""
+    registry = ActionRegistry([RunSqlAction(sandbox=sandbox)])
+    result = registry.execute(_req("SELECT * FROM raw_er_activo_line"))
+    payload = json.loads(result.content)
     assert len(payload["rows"]) <= 50
     assert payload["truncated"] is False
 
 
-def test_parity_query_logging_and_gate_violations(sandbox):
+def test_query_logging_and_gate_violations(sandbox):
     """Turn.queries/gate_violations come from the sandbox's own trace, not
-    self-reported -- both executors must produce identical sandbox-side
-    effects for the same query."""
-    for executor in (LegacySqlActionExecutor(sandbox=sandbox), ActionRegistry([RunSqlAction(sandbox=sandbox)])):
-        sandbox.log.reset()
-        executor.execute(_req(_SENTINEL_SQL))
-        assert any("dim_activo" in s.lower() for s in sandbox.log.statements)
-        assert sandbox.log.violations == []
-
-
-def test_parity_unknown_action_vs_unknown_tool_name():
-    """Both must reject a name they don't recognize, explicitly, not crash."""
-    sandbox_local = SnapshotSandbox()
-    old = LegacySqlActionExecutor(sandbox=sandbox_local)
-    new = ActionRegistry([RunSqlAction(sandbox=sandbox_local)])
-    old_result = old.execute(_req("ignored", name="not_run_sql"))
-    new_result = new.execute(_req("ignored", name="not_run_sql"))
-    assert old_result.ok == new_result.ok is False
-    assert "unknown" in json.loads(old_result.content)["error"].lower()
-    assert "unknown" in json.loads(new_result.content)["error"].lower()
+    self-reported."""
+    sandbox.log.reset()
+    ActionRegistry([RunSqlAction(sandbox=sandbox)]).execute(_req(_SENTINEL_SQL))
+    assert any("dim_activo" in s.lower() for s in sandbox.log.statements)
+    assert sandbox.log.violations == []
 
 
 # =============================================================================
-# Parity through the full loop: 4+1 synthesis and multi-turn, old vs new
+# Through the full loop: 4+1 synthesis and multi-turn
 # =============================================================================
 
 @dataclass
@@ -161,53 +140,38 @@ def _tool_call(query, call_id="1"):
 _RUN_SQL_SPEC = RunSqlAction(sandbox=None).tool_spec()
 
 
-def test_parity_four_investigation_rounds_then_synthesis_via_full_loop(sandbox):
-    from eval.benchmark.adapters.analyst_loop import MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
-
-    script_fn = lambda: [
+def test_four_investigation_rounds_then_synthesis_via_full_loop(sandbox):
+    script = [
         *[_chat_response(None, [_tool_call(f"SELECT {i} FROM dim_activo", str(i))]) for i in range(MAX_INVESTIGATION_ROUNDS)],
         _chat_response("conclusion sintetizada"),
     ]
-
-    old_loop = AnalystLoop(
+    loop = AnalystLoop(
         system_prompt="sys",
-        transport=ChatCompletionsTransport(client=_ChatClient(script_fn()), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
-        action_executor=LegacySqlActionExecutor(sandbox=sandbox), tool_specs=[_RUN_SQL_SPEC],
-    )
-    new_loop = AnalystLoop(
-        system_prompt="sys",
-        transport=ChatCompletionsTransport(client=_ChatClient(script_fn()), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
+        transport=ChatCompletionsTransport(client=_ChatClient(script), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
         action_executor=ActionRegistry([RunSqlAction(sandbox=sandbox)]), tool_specs=[_RUN_SQL_SPEC],
     )
+    result = loop.ask("pregunta que agota el presupuesto")
 
-    old_result = old_loop.ask("pregunta que agota el presupuesto")
-    new_result = new_loop.ask("pregunta que agota el presupuesto")
-
-    assert old_result.turn.text == new_result.turn.text == "conclusion sintetizada"
-    assert old_result.turn.usage.calls == new_result.turn.usage.calls == MAX_TOTAL_MODEL_ROUNDS
-    assert len(old_result.turn.tool_calls) == len(new_result.turn.tool_calls) == MAX_INVESTIGATION_ROUNDS
+    assert result.turn.text == "conclusion sintetizada"
+    assert result.turn.usage.calls == MAX_TOTAL_MODEL_ROUNDS
+    assert len(result.turn.tool_calls) == MAX_INVESTIGATION_ROUNDS
+    assert "no se alcanzo una respuesta final" not in result.turn.text
 
 
-def test_parity_multiturn(sandbox):
+def test_multiturn_via_full_loop(sandbox):
     script = [
         _chat_response(None, [_tool_call("SELECT 1 FROM dim_activo")]), _chat_response("con datos t1"),
         _chat_response(None, [_tool_call("SELECT 2 FROM dim_activo")]), _chat_response("con datos t2"),
     ]
-    old_loop = AnalystLoop(system_prompt="sys", transport=ChatCompletionsTransport(client=_ChatClient(list(script)), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
-                           action_executor=LegacySqlActionExecutor(sandbox=sandbox), tool_specs=[_RUN_SQL_SPEC])
-    new_loop = AnalystLoop(system_prompt="sys", transport=ChatCompletionsTransport(client=_ChatClient(list(script)), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
-                           action_executor=ActionRegistry([RunSqlAction(sandbox=sandbox)]), tool_specs=[_RUN_SQL_SPEC])
+    loop = AnalystLoop(system_prompt="sys", transport=ChatCompletionsTransport(client=_ChatClient(list(script)), model="test-model", tool_specs=[_RUN_SQL_SPEC]),
+                       action_executor=ActionRegistry([RunSqlAction(sandbox=sandbox)]), tool_specs=[_RUN_SQL_SPEC])
 
-    old_t1 = old_loop.ask("pregunta 1")
-    old_t2 = old_loop.ask("pregunta 2", history=[
-        TranscriptItem(role="user", text="pregunta 1"), TranscriptItem(role="assistant", text=old_t1.turn.text),
-    ])
-    new_t1 = new_loop.ask("pregunta 1")
-    new_t2 = new_loop.ask("pregunta 2", history=[
-        TranscriptItem(role="user", text="pregunta 1"), TranscriptItem(role="assistant", text=new_t1.turn.text),
+    t1 = loop.ask("pregunta 1")
+    t2 = loop.ask("pregunta 2", history=[
+        TranscriptItem(role="user", text="pregunta 1"), TranscriptItem(role="assistant", text=t1.turn.text),
     ])
 
-    assert old_t2.turn.text == new_t2.turn.text == "con datos t2"
+    assert t2.turn.text == "con datos t2"
 
 
 # =============================================================================
@@ -236,7 +200,7 @@ def test_second_nonsql_action_requires_no_analyst_loop_or_transport_change(sandb
     """register fake action -> scripted model calls it -> ActionRegistry
     dispatches -> AnalystLoop receives a ToolResult -> model answers.
     analyst_loop.py and track_b_frontier.py's ChatCompletionsTransport are
-    used completely unmodified from Stage 2/3's SQL-only shape."""
+    used completely unmodified from their SQL-only shape."""
     echo = _EchoAction()
     registry = ActionRegistry([RunSqlAction(sandbox=sandbox), echo])
 

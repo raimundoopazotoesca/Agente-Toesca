@@ -48,6 +48,7 @@ from typing import Callable
 from openai import OpenAI
 
 from eval.benchmark.adapters.base import Artifact, ToolCall, Turn, Usage
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction, format_query_result, validate_sql
 from eval.benchmark.adapters._transport import (
     ModelRequest,
     ModelResponse,
@@ -212,32 +213,15 @@ def _schema_summary(sandbox: SnapshotSandbox) -> str:
         conn.close()
 
 
-def _validate_sql(sql: str) -> str | None:
-    """None if safe to attempt; an error string otherwise. This is a cheap
-    pre-filter for a better error message back to the model -- the sandbox's
-    authorizer (gate F4) is the actual enforcement layer regardless."""
-    s = (sql or "").strip().rstrip(";").strip()
-    if not s:
-        return "Query vacia."
-    if ";" in s:
-        return "Solo se permite una sentencia SQL."
-    head = s.split(None, 1)[0].lower()
-    if head not in {"select", "with"}:
-        return "Solo se permiten sentencias SELECT o WITH."
-    if _FORBIDDEN_RE.search(s):
-        return "La consulta contiene una operacion no permitida (solo lectura)."
-    return None
-
-
-def _format_tool_result(columns: list[str], rows: list[list]) -> str:
-    truncated = rows[:MAX_ROWS_RETURNED]
-    payload = {
-        "columns": columns,
-        "rows": truncated,
-        "row_count": len(rows),
-        "truncated": len(rows) > len(truncated),
-    }
-    return json.dumps(payload, ensure_ascii=False, default=str)
+# F4 Stage 3: SQL validation/formatting now live canonically in actions.py
+# (RunSqlAction's own concern, not this transport's), re-exported here under
+# their original names -- test_track_b.py imports and tests `_validate_sql`
+# directly, so the name stays importable from this module. Content unchanged
+# (same function, not a reimplementation): verified by test_actions.py's
+# parity suite before LegacySqlActionExecutor, which used to define these
+# locally, was deleted.
+_validate_sql = validate_sql
+_format_tool_result = format_query_result
 
 
 def _extract_artifacts(text: str) -> list[Artifact]:
@@ -340,53 +324,6 @@ def _safe_json_loads(text: str | None) -> dict:
 
 
 @dataclass
-class LegacySqlActionExecutor:
-    """F4 Stage 2's ActionExecutor implementation: the exact SQL-execution
-    behavior _TrackBSession._run_tool has had since Stage 1 (_validate_sql,
-    implicit LIMIT injection, guarded sandbox connection, error-as-tool-result
-    instead of raised exception), now reachable through the generic
-    ActionExecutor seam instead of being inlined in the loop.
-
-    Deliberately named "Legacy" -- Stage 3's ActionRegistry replaces this
-    entire class with per-action dispatch (run_sql becomes one action among
-    several) without AnalystLoop changing, because AnalystLoop only ever sees
-    the ActionExecutor Protocol, never this implementation.
-
-    The `request.name == "run_sql"` comparison below is fine here: this class
-    lives outside AnalystLoop, is the one place SQL-specific dispatch is
-    still allowed to exist in Stage 2, and is exactly what gets deleted (not
-    generalized) when ActionRegistry arrives.
-    """
-
-    sandbox: SnapshotSandbox
-
-    def execute(self, request: ToolRequest) -> ToolResult:
-        if request.name != "run_sql":
-            return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": f"unknown tool: {request.name}"}, ensure_ascii=False))
-        query = request.arguments.get("query", "")
-        content, ok = self._run_sql(query)
-        return ToolResult(call_id=request.call_id, ok=ok, content=content)
-
-    def _run_sql(self, query: str) -> tuple[str, bool]:
-        error = _validate_sql(query)
-        if error:
-            return json.dumps({"error": error}, ensure_ascii=False), False
-        sql = query.strip().rstrip(";")
-        if not re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE):
-            sql = f"{sql} LIMIT {MAX_ROWS_RETURNED}"
-        conn = self.sandbox.connect(guard=True)
-        try:
-            cur = conn.execute(sql)
-            cols = [d[0] for d in cur.description or []]
-            rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED)]
-            return _format_tool_result(cols, rows), True
-        except Exception as exc:  # noqa: BLE001 -- surfaced to the model as a tool error, not raised
-            return json.dumps({"error": str(exc)}, ensure_ascii=False), False
-        finally:
-            conn.close()
-
-
-@dataclass
 class _TrackBSession:
     """F4 Stage 2F compatibility facade: same name, constructor, `ask()`
     signature and `history` shape Stage 1 had -- verified against
@@ -417,7 +354,7 @@ class _TrackBSession:
                 client=self.client, model=self.model, tool_specs=[_RUN_SQL_SPEC],
                 inference_profile=self.inference_profile, request_observer=self.request_observer,
             ),
-            action_executor=LegacySqlActionExecutor(sandbox=self.sandbox),
+            action_executor=ActionRegistry([RunSqlAction(sandbox=self.sandbox)]),
             tool_specs=[_RUN_SQL_SPEC],
         )
         prior_history = [TranscriptItem(role=m["role"], text=m["content"]) for m in self.history]

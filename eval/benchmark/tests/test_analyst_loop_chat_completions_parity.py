@@ -1,6 +1,6 @@
-"""F4 Stage 2C: golden parity between the Stage 1 loop (`_TrackBSession`,
-untouched) and the real `AnalystLoop` driving `ChatCompletionsTransport` +
-`LegacySqlActionExecutor`.
+"""F4 Stage 2C/3: golden parity between the `_TrackBSession` compatibility
+facade and a directly-constructed `AnalystLoop` driving
+`ChatCompletionsTransport` + `ActionRegistry([RunSqlAction(...)])`.
 
 This supersedes the temporary `_drive` harness from Step 2B's parity test --
 that harness existed only to prove the transport's wire translation was
@@ -22,10 +22,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters._transport import ToolSpec
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
 from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
 from eval.benchmark.adapters.track_b_frontier import (
     ChatCompletionsTransport,
-    LegacySqlActionExecutor,
     _RUN_SQL_TOOL,
     _TrackBSession,
 )
@@ -83,7 +83,7 @@ def _old_session(sandbox, client) -> _TrackBSession:
 
 def _new_loop(sandbox, client) -> AnalystLoop:
     transport = ChatCompletionsTransport(client=client, model="test-model", tool_specs=[_RUN_SQL_SPEC])
-    executor = LegacySqlActionExecutor(sandbox=sandbox)
+    executor = ActionRegistry([RunSqlAction(sandbox=sandbox)])
     return AnalystLoop(system_prompt="sys", transport=transport, action_executor=executor, tool_specs=[_RUN_SQL_SPEC])
 
 

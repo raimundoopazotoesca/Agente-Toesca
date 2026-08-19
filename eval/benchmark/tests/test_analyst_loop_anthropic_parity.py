@@ -1,5 +1,5 @@
-"""F4 Stage 2E: golden parity between `_AnthropicSession` (untouched) and
-`AnalystLoop` driving `AnthropicTransport` + `LegacySqlActionExecutor`.
+"""F4 Stage 2E/3: golden parity between `_AnthropicSession` (untouched) and
+`AnalystLoop` driving `AnthropicTransport` + `ActionRegistry([RunSqlAction(...)])`.
 
 Special focus: thinking/signature block replay and role alternation. Every
 scripted tool-use response here carries a `thinking` block alongside
@@ -19,9 +19,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from eval.benchmark.adapters._transport import ToolSpec
+from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
 from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
 from eval.benchmark.adapters.track_b_anthropic import AnthropicTransport, _AnthropicSession
-from eval.benchmark.adapters.track_b_frontier import LegacySqlActionExecutor, _RUN_SQL_TOOL
+from eval.benchmark.adapters.track_b_frontier import _RUN_SQL_TOOL
 from eval.benchmark.snapshot import SnapshotSandbox
 
 _RUN_SQL_SPEC = ToolSpec(name="run_sql", description=_RUN_SQL_TOOL["function"]["description"], parameters=_RUN_SQL_TOOL["function"]["parameters"])
@@ -62,7 +63,7 @@ def _old_session(sandbox, client) -> _AnthropicSession:
 
 def _new_loop(sandbox, client) -> AnalystLoop:
     transport = AnthropicTransport(client=client, model="claude-sonnet-5", tool_specs=[_RUN_SQL_SPEC])
-    executor = LegacySqlActionExecutor(sandbox=sandbox)
+    executor = ActionRegistry([RunSqlAction(sandbox=sandbox)])
     return AnalystLoop(system_prompt="sys", transport=transport, action_executor=executor, tool_specs=[_RUN_SQL_SPEC])
 
 
