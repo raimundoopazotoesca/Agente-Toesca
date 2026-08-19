@@ -57,6 +57,7 @@ from tools.db import estado_ingesta  # noqa: E402
 from tools import db_chat  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
 from scripts import recompute_derived_kpis  # noqa: E402
+from tools import analyst_api  # noqa: E402
 
 
 def _rebuild_factsheet() -> None:
@@ -218,7 +219,7 @@ def _add_cors_headers(response):
     origin = request.headers.get("Origin", "")
     if origin in _CORS_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = f"Content-Type, {TOKEN_HEADER}"
     response.headers["Vary"] = "Origin"
     return response
@@ -350,6 +351,114 @@ def api_chat():
             "error": "server_error",
         }), 500
     return jsonify(result)
+
+
+def _analyst_body() -> dict:
+    """Parse an object JSON request without exposing Flask parsing details."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        raise ValueError("JSON body must be an object")
+    return body
+
+
+def _analyst_error(error: str, status: int):
+    return jsonify({"error": error}), status
+
+
+def _analyst_adapter() -> analyst_api.ConversationApiAdapter:
+    return analyst_api.get_adapter(app.config.get("ANALYST_CONVERSATION_SERVICE_FACTORY"))
+
+
+@app.get("/api/analyst/conversations")
+def analyst_list_conversations():
+    try:
+        include_archived = request.args.get("include_archived", "false").lower() == "true"
+        return jsonify({"conversations": _analyst_adapter().list_conversations(include_archived=include_archived)})
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.post("/api/analyst/conversations")
+def analyst_create_conversation():
+    try:
+        body = _analyst_body()
+        title, context = body.get("title"), body.get("context")
+        if title is not None and (not isinstance(title, str) or not title.strip()):
+            raise ValueError("title must be a non-blank string")
+        if context is not None and not isinstance(context, dict):
+            raise ValueError("context must be an object")
+        return jsonify(_analyst_adapter().create_conversation(title=title.strip() if title else None, context=context)), 201
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/conversations/<conversation_id>")
+def analyst_get_conversation(conversation_id: str):
+    try:
+        return jsonify(_analyst_adapter().get_conversation(conversation_id))
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.patch("/api/analyst/conversations/<conversation_id>")
+def analyst_update_conversation(conversation_id: str):
+    try:
+        body = _analyst_body()
+        title, archived = body.get("title"), body.get("archived")
+        if title is not None and (not isinstance(title, str) or not title.strip()):
+            raise ValueError("title must be a non-blank string")
+        if archived is not None and not isinstance(archived, bool):
+            raise ValueError("archived must be a boolean")
+        return jsonify(_analyst_adapter().update_conversation(conversation_id, title=title.strip() if title else None, archived=archived))
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.post("/api/analyst/conversations/<conversation_id>/messages")
+def analyst_send_message(conversation_id: str):
+    try:
+        text = _analyst_body().get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a non-blank string")
+        return jsonify(_analyst_adapter().send_message(conversation_id, text.strip())), 201
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+    except Exception:
+        app.logger.exception("Analyst conversation service failed")
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.post("/api/analyst/messages/<message_id>/feedback")
+def analyst_set_feedback(message_id: str):
+    try:
+        body = _analyst_body()
+        rating, note = body.get("rating"), body.get("note")
+        if rating not in {"up", "down"}:
+            raise ValueError("rating must be 'up' or 'down'")
+        if note is not None and not isinstance(note, str):
+            raise ValueError("note must be a string")
+        return jsonify(_analyst_adapter().set_feedback(message_id, rating, note))
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+    except Exception:
+        app.logger.exception("Analyst conversation service failed")
+        return _analyst_error("service_unavailable", 503)
 
 
 @app.get("/api/estado_ingesta")
