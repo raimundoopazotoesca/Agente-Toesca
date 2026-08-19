@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from tools.analyst_runtime.sqlite_guard import make_authorizer
+
 BENCHMARK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BENCHMARK_DIR.parents[1]
 LOCK_PATH = BENCHMARK_DIR / "snapshot.lock"
@@ -97,15 +99,6 @@ def verify_row_counts(conn: sqlite3.Connection, lock: dict[str, Any] | None = No
         raise SnapshotError("snapshot row counts drifted: " + "; ".join(problems))
 
 
-# sqlite authorizer actions that are safe for a benchmark reader.
-_ALLOWED_ACTIONS = {
-    sqlite3.SQLITE_SELECT,
-    sqlite3.SQLITE_READ,
-    sqlite3.SQLITE_FUNCTION,
-    sqlite3.SQLITE_RECURSIVE,
-}
-
-
 @dataclass
 class QueryLog:
     """SQL captured by the sandbox, not reported by the system under test."""
@@ -140,12 +133,11 @@ class SnapshotSandbox:
     def benchmark_today(self) -> str:
         return self.lock["benchmark_today"]
 
-    def _authorizer(self, action: int, arg1, arg2, db_name, trigger) -> int:
-        if action in _ALLOWED_ACTIONS:
-            return sqlite3.SQLITE_OK
-        detail = f"action={action} arg1={arg1!r} arg2={arg2!r}"
-        self.log.violations.append(detail)
-        return sqlite3.SQLITE_DENY
+    @property
+    def _authorizer(self):
+        # Shared with LiveReadOnlySandbox (tools/analyst_runtime/sqlite_guard.py)
+        # -- exactly one copy of the allow-list/deny logic exists in the repo.
+        return make_authorizer(self.log.violations)
 
     def connect(self, guard: bool = True) -> sqlite3.Connection:
         """Open the snapshot read-only.
