@@ -1,34 +1,25 @@
 """F4 Stage 2: the provider-neutral reasoning loop.
 
+Moved from eval/benchmark/adapters/analyst_loop.py (Stage A1) byte-for-byte.
+
 Everything here is reasoning POLICY: how many rounds exist, when investigation
 gives way to mandatory synthesis, how one turn's transcript is assembled, when
 to stop, how to invoke actions. None of it is provider wire protocol (that's
-ModelTransport, _transport.py) and none of it is SQL or any other action's
+ModelTransport, transport.py) and none of it is SQL or any other action's
 semantics (that's ActionExecutor, injected).
 
-Architectural invariant this module exists to enforce -- verified by grep in
-Stage 2's review, not just asserted here: AnalystLoop imports NOTHING from
-`openai`, `anthropic`, `eval.benchmark.snapshot` (SnapshotSandbox), or any
-SQL-validation helper. It has never compared an action name to the string
-"run_sql". It receives a ToolRequest and hands it to `action_executor`; it has
-no idea what comes back besides a ToolResult.
+Architectural invariant this module exists to enforce: AnalystLoop imports
+NOTHING from `openai`, `anthropic`, `eval.benchmark.snapshot` (SnapshotSandbox),
+or any SQL-validation helper. It has never compared an action name to the
+string "run_sql". It receives a ToolRequest and hands it to `action_executor`;
+it has no idea what comes back besides a ToolResult.
 
 Cross-turn history retention is deliberately NOT this module's decision.
 `ask()` takes the prior-turn history explicitly and returns the full round
 trajectory alongside the Turn; what subset of that trajectory a session keeps
-for the *next* turn is provider-shaped (OpenAI Responses needs the full
-opaque trajectory replayed for its reasoning items to stay valid; Chat
-Completions and Anthropic only need [original question, final answer] --
-Stage 1 confirmed this asymmetry already exists in `_TrackBSession` vs
-`_OpenAIResponsesSession`). That policy lives in whatever constructs and
-reuses an AnalystLoop across turns (a session wrapper), not in AnalystLoop
-itself -- exactly the kind of protocol-shaped decision that belongs on the
-transport side of the seam, not the loop side.
-
-Content moved here byte-for-byte from track_b_frontier.py (Stage 1): the round
-budget (why it's 4+1, not 5+1) and the synthesis instruction text.
-track_b_frontier.py re-exports both under their original names so no existing
-import site changes.
+for the *next* turn is provider-shaped. That policy lives in whatever
+constructs and reuses an AnalystLoop across turns (a session wrapper), not in
+AnalystLoop itself.
 """
 from __future__ import annotations
 
@@ -37,7 +28,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from eval.benchmark.adapters._transport import (
+from tools.analyst_runtime.transport import (
     ModelRequest,
     ModelResponse,
     ModelTransport,
@@ -46,20 +37,12 @@ from eval.benchmark.adapters._transport import (
     ToolSpec,
     TranscriptItem,
 )
-from eval.benchmark.adapters.base import Artifact, Turn, ToolCall, Usage
+from tools.analyst_runtime.base import Artifact, Turn, ToolCall, Usage
 
 # Round budget (F4 stage 1, unchanged in Stage 2). The TOTAL number of model
 # calls per turn is unchanged from Round B (5) -- what changed in Stage 1 is
 # that the last one is reserved for synthesis instead of being spendable on
 # another investigation branch.
-#
-# Before Stage 1: 5 investigation rounds, no reserved synthesis. If round 5
-# asked for a tool, the tool ran and the turn returned a placeholder -- 17 of
-# B27's 79 turns (21.5%) ended with no answer at all for this reason alone.
-# After: 4 investigation rounds + 1 mandatory tool-free synthesis round.
-#
-# The total is deliberately held at 5 so an F4 run stays compute-comparable
-# with B26/B27 turn for turn.
 MAX_TOTAL_MODEL_ROUNDS = 5
 RESERVED_SYNTHESIS_ROUNDS = 1
 MAX_INVESTIGATION_ROUNDS = MAX_TOTAL_MODEL_ROUNDS - RESERVED_SYNTHESIS_ROUNDS
@@ -82,10 +65,7 @@ _CHART_BLOCK = re.compile(r"```chart\s*\n(.*?)```", re.DOTALL)
 
 class ActionExecutor(Protocol):
     """The one seam through which AnalystLoop touches the outside world for
-    tool execution. Deliberately minimal (Stage 2) -- Stage 3 replaces the
-    injected implementation with ActionRegistry-backed dispatch without this
-    Protocol, or AnalystLoop, changing at all.
-    """
+    tool execution."""
 
     def execute(self, request: ToolRequest) -> ToolResult: ...
 
@@ -105,7 +85,7 @@ class AnalystLoop:
     """One turn's reasoning loop, provider-neutral. `transport` translates
     to/from one provider's wire protocol; `action_executor` runs whatever a
     ToolRequest asks for. AnalystLoop knows neither's internals -- only the
-    shapes in _transport.py.
+    shapes in transport.py.
     """
 
     system_prompt: str

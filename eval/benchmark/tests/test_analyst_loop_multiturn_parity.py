@@ -39,9 +39,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from eval.benchmark.adapters._transport import ToolSpec, TranscriptItem
-from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
-from eval.benchmark.adapters.analyst_loop import AnalystLoop
+from tools.analyst_runtime.transport import ToolSpec, TranscriptItem
+from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
+from tools.analyst_runtime.analyst_loop import AnalystLoop
 from eval.benchmark.adapters.track_b_anthropic import AnthropicTransport, _AnthropicSession
 from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport, _RUN_SQL_TOOL, _TrackBSession
 from eval.benchmark.adapters.track_b_openai_responses import ResponsesTransport, _OpenAIResponsesSession
@@ -359,7 +359,7 @@ def test_responses_scenario_c_synthesis_then_followup(sandbox):
     """Highest-risk scenario: turn 1 exhausts the investigation budget and
     synthesizes; turn 2 must still replay turn 1's ENTIRE trajectory,
     including the synthesis instruction message and every reasoning item."""
-    from eval.benchmark.adapters.analyst_loop import MAX_INVESTIGATION_ROUNDS
+    from tools.analyst_runtime.analyst_loop import MAX_INVESTIGATION_ROUNDS
 
     t1_script = [_resp(_reasoning_and_call(str(i), f"SELECT {i} FROM dim_activo")) for i in range(MAX_INVESTIGATION_ROUNDS)]
     t1_script.append(_resp(_message("conclusion turno 1"), "conclusion turno 1"))
@@ -383,7 +383,7 @@ def test_responses_scenario_c_synthesis_then_followup(sandbox):
 
 
 def test_chat_completions_scenario_c_synthesis_then_followup(sandbox):
-    from eval.benchmark.adapters.analyst_loop import MAX_INVESTIGATION_ROUNDS
+    from tools.analyst_runtime.analyst_loop import MAX_INVESTIGATION_ROUNDS
 
     t1_script = [_chat_response(None, [_chat_tool_call(f"SELECT {i} FROM dim_activo", str(i))]) for i in range(MAX_INVESTIGATION_ROUNDS)]
     t1_script.append(_chat_response("conclusion turno 1"))
@@ -408,7 +408,7 @@ def test_chat_completions_scenario_c_synthesis_then_followup(sandbox):
 
 
 def test_anthropic_scenario_c_synthesis_then_followup(sandbox):
-    from eval.benchmark.adapters.analyst_loop import MAX_INVESTIGATION_ROUNDS
+    from tools.analyst_runtime.analyst_loop import MAX_INVESTIGATION_ROUNDS
 
     t1_script = [_anthropic_reply(_thinking_and_tool_use(str(i), f"SELECT {i} FROM dim_activo")) for i in range(MAX_INVESTIGATION_ROUNDS)]
     t1_script.append(_anthropic_reply([{"type": "text", "text": "conclusion turno 1"}]))

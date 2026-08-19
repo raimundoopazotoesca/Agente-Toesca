@@ -9,10 +9,10 @@ from typing import Any, Callable
 
 from openai import OpenAI
 
-from eval.benchmark.adapters.base import ToolCall, Turn, Usage
-from eval.benchmark.adapters._transport import ModelRequest, ModelResponse, ToolRequest, ToolSpec, TranscriptItem
-from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
-from eval.benchmark.adapters.analyst_loop import AnalystLoop
+from tools.analyst_runtime.base import ToolCall, Turn, Usage
+from tools.analyst_runtime.transport import ModelRequest, ModelResponse, ToolRequest, ToolSpec, TranscriptItem
+from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
+from tools.analyst_runtime.analyst_loop import AnalystLoop
 from eval.benchmark.adapters.track_b_frontier import (
     MAX_INVESTIGATION_ROUNDS, MAX_ROWS_RETURNED, _RUN_SQL_SPEC, _RUN_SQL_TOOL, _SYNTHESIS_INSTRUCTION,
     _SYSTEM_PROMPT_TEMPLATE, _safe_json_loads,

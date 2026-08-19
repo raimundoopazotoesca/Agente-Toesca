@@ -18,57 +18,20 @@ benchmark-v1-design.md section 3):
   - `tool_calls` is optional. An adapter that doesn't instrument its own
     tool use returns an empty list; the runner then marks
     `tool_requirements` checks as `unscored`, not `fail`.
+
+Stage A1 of the Alpha v0.1 extraction moved `Turn`/`ToolCall`/`Usage`/
+`Artifact` to `tools.analyst_runtime.base` (reusable outside the benchmark
+harness). This module re-imports `Turn` for the Protocols below, which stay
+here because `Session`/`BenchmarkAdapter` encode eval-harness-only concepts
+(`session_id`, "one adapter instance per benchmark run").
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Protocol
 
+from tools.analyst_runtime.base import Artifact, Turn, ToolCall, Usage  # noqa: F401 -- re-exported for existing call sites
 
-@dataclass
-class ToolCall:
-    name: str
-    args: dict[str, Any] = field(default_factory=dict)
-    ok: bool = True
-    duration_ms: float | None = None
-
-
-@dataclass
-class Artifact:
-    kind: str  # table | chart | xlsx | file
-    payload: Any = None
-    path: str | None = None
-    spec: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class Usage:
-    provider: str | None = None
-    model: str | None = None
-    calls: int = 0
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    reasoning_tokens: int | None = None
-    cached_tokens: int | None = None
-    retries: int = 0
-    latency_ms: float | None = None
-
-
-@dataclass
-class Turn:
-    text: str
-    artifacts: list[Artifact] = field(default_factory=list)
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    usage: Usage = field(default_factory=Usage)
-
-    # Filled in by the runner from the sandbox trace, not by the adapter.
-    queries: list[str] = field(default_factory=list)
-    gate_violations: list[str] = field(default_factory=list)
-
-    # Raw payload the adapter returned, kept for debugging/reporting only.
-    # Graders must not read implementation-internal keys from it (see
-    # module docstring) -- it exists so a human can inspect a failure.
-    raw: dict[str, Any] = field(default_factory=dict)
+__all__ = ["Artifact", "Turn", "ToolCall", "Usage", "Session", "BenchmarkAdapter"]
 
 
 class Session(Protocol):

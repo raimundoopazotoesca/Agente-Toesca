@@ -23,7 +23,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from eval.benchmark.adapters._transport import ModelRequest, ToolRequest, ToolResult, ToolSpec, TranscriptItem
+from tools.analyst_runtime.transport import ModelRequest, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 from eval.benchmark.adapters.track_b_frontier import (
     MAX_INVESTIGATION_ROUNDS,
     MAX_TOTAL_MODEL_ROUNDS,

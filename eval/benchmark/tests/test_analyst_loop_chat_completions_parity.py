@@ -21,9 +21,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from eval.benchmark.adapters._transport import ToolSpec
-from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction
-from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
+from tools.analyst_runtime.transport import ToolSpec
+from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
+from tools.analyst_runtime.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
 from eval.benchmark.adapters.track_b_frontier import (
     ChatCompletionsTransport,
     _RUN_SQL_TOOL,
@@ -219,7 +219,7 @@ def test_analyst_loop_has_no_sql_or_provider_knowledge():
     grep would wrongly flag."""
     import ast
 
-    src = Path(__file__).resolve().parents[1] / "adapters" / "analyst_loop.py"
+    src = Path(__file__).resolve().parents[3] / "tools" / "analyst_runtime" / "analyst_loop.py"
     tree = ast.parse(src.read_text(encoding="utf-8"))
 
     imported_modules = {

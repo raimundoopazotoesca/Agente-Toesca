@@ -47,9 +47,9 @@ from typing import Callable
 
 from openai import OpenAI
 
-from eval.benchmark.adapters.base import Artifact, ToolCall, Turn, Usage
-from eval.benchmark.adapters.actions import ActionRegistry, RunSqlAction, format_query_result, validate_sql
-from eval.benchmark.adapters._transport import (
+from tools.analyst_runtime.base import Artifact, ToolCall, Turn, Usage
+from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction, format_query_result, validate_sql
+from tools.analyst_runtime.transport import (
     ModelRequest,
     ModelResponse,
     ToolRequest,
@@ -61,11 +61,12 @@ from eval.benchmark.snapshot import SnapshotSandbox
 
 SEMANTIC_DIR = Path(__file__).resolve().parents[3] / "semantic"
 
-# Round budget and synthesis instruction now live in analyst_loop.py (F4 Stage
-# 2) -- reasoning-loop structure, not Chat-Completions wire protocol. Content
-# unchanged byte-for-byte (verified); re-exported under their original names
-# so every existing import of them from this module keeps working unchanged.
-from eval.benchmark.adapters.analyst_loop import (  # noqa: E402
+# Round budget and synthesis instruction now live in tools/analyst_runtime/
+# analyst_loop.py (F4 Stage 2 / Alpha Stage A1) -- reasoning-loop structure,
+# not Chat-Completions wire protocol. Content unchanged byte-for-byte
+# (verified); re-exported under their original names so every existing
+# import of them from this module keeps working unchanged.
+from tools.analyst_runtime.analyst_loop import (  # noqa: E402
     MAX_INVESTIGATION_ROUNDS,
     MAX_TOTAL_MODEL_ROUNDS,
     RESERVED_SYNTHESIS_ROUNDS,

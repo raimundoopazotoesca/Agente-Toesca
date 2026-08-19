@@ -28,9 +28,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from eval.benchmark.adapters._transport import ToolRequest, ToolResult, ToolSpec, TranscriptItem
-from eval.benchmark.adapters.actions import Action, ActionRegistry, RunSqlAction
-from eval.benchmark.adapters.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
+from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec, TranscriptItem
+from tools.analyst_runtime.actions import Action, ActionRegistry, RunSqlAction
+from tools.analyst_runtime.analyst_loop import AnalystLoop, MAX_INVESTIGATION_ROUNDS, MAX_TOTAL_MODEL_ROUNDS
 from eval.benchmark.adapters.track_b_frontier import ChatCompletionsTransport
 from eval.benchmark.snapshot import SnapshotSandbox
 

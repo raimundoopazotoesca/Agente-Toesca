@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from eval.benchmark.adapters._transport import (
+from tools.analyst_runtime.transport import (
     ModelRequest,
     ModelResponse,
     ModelTransport,
@@ -19,7 +19,7 @@ from eval.benchmark.adapters._transport import (
     ToolSpec,
     TranscriptItem,
 )
-from eval.benchmark.adapters.base import Usage
+from tools.analyst_runtime.base import Usage
 
 
 def test_tool_spec_shape():

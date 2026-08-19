@@ -1,27 +1,27 @@
 """F4 Stage 3: generic action dispatch behind the ActionExecutor seam.
 
-Replaces LegacySqlActionExecutor (Stage 2's one-off SQL-only implementation)
-with a registry that can hold any number of Actions, none of them known to
-AnalystLoop or ModelTransport. run_sql becomes the first action, not a
-special case -- see test_actions.py's fake-action test for the proof that a
-second, non-SQL Action requires zero changes to analyst_loop.py or any
-transport.
+Moved from eval/benchmark/adapters/actions.py (Stage A1 of the Alpha v0.1
+build). The only substantive change from the original is the sandbox
+dependency: instead of importing the benchmark-only `SnapshotSandbox`
+concretely, `RunSqlAction.sandbox` is typed against the `SqlSandbox`
+Protocol defined here. `SnapshotSandbox` (eval/benchmark/snapshot.py) and
+`LiveReadOnlySandbox` (live_sandbox.py) both structurally satisfy it --
+duck typing, zero coupling back to the benchmark harness.
 
-Explicitly NOT here, per the Stage 3 brief: a lifecycle framework, a plugin
-loader, dependency injection, hooks/middleware, action categories,
-confidence, or priorities. `ActionRegistry` does exactly one job -- given a
-ToolRequest, find the Action with that name and run it, or return a clear
-error if none exists.
+`ActionRegistry` does exactly one job -- given a ToolRequest, find the
+Action with that name and run it, or return a clear error if none exists.
+No lifecycle framework, no plugin loader, no dependency injection, no
+hooks/middleware, no action categories/confidence/priorities.
 """
 from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from eval.benchmark.adapters._transport import ToolRequest, ToolResult, ToolSpec
-from eval.benchmark.snapshot import SnapshotSandbox
+from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec
 
 MAX_ROWS_RETURNED = 50
 
@@ -31,11 +31,22 @@ _FORBIDDEN_RE = re.compile(
 )
 
 
+class SqlSandbox(Protocol):
+    """Anything that can hand out a guarded, read-only sqlite3 connection.
+
+    `SnapshotSandbox` (pinned benchmark snapshot) and `LiveReadOnlySandbox`
+    (live production DB) both satisfy this structurally -- RunSqlAction
+    depends on the Protocol, never on either concrete class.
+    """
+
+    def connect(self, guard: bool = True) -> sqlite3.Connection: ...
+
+
 def validate_sql(sql: str) -> str | None:
     """None if safe to attempt; an error string otherwise. Byte-for-byte the
     same check Stage 1/2 used (moved here, not rewritten) -- this is a cheap
     pre-filter for a better error message back to the model; the sandbox's
-    own authorizer (gate F4) is the actual enforcement layer regardless."""
+    own authorizer is the actual enforcement layer regardless."""
     s = (sql or "").strip().rstrip(";").strip()
     if not s:
         return "Query vacia."
@@ -75,22 +86,18 @@ class Action(Protocol):
 
 @dataclass
 class RunSqlAction:
-    """Stage 3's migration of LegacySqlActionExecutor's behavior into the
-    Action shape. Reuses the exact same security surface, not reimplemented:
-    validate_sql (identical logic to Stage 1/2's _validate_sql), the guarded
-    read-only SnapshotSandbox connection (gate F4's authorizer, QueryLog
-    trace), implicit LIMIT injection, and format_query_result (identical
-    logic to _format_tool_result). Model-facing behavior is unchanged --
-    verified by parity tests against LegacySqlActionExecutor before that
-    class was deleted.
+    """Reuses the exact same security surface as its predecessor implementations,
+    not reimplemented: validate_sql, the guarded read-only sandbox connection
+    (shared authorizer, sqlite_guard.py), implicit LIMIT injection, and
+    format_query_result.
     """
 
-    sandbox: SnapshotSandbox
+    sandbox: SqlSandbox
     name: str = "run_sql"
     description: str = (
         "Run one read-only SELECT statement against the Toesca real-estate "
-        "database (pinned snapshot) and get back columns + rows. Use it as "
-        "many times as needed before answering -- one query per call."
+        "database and get back columns + rows. Use it as many times as "
+        "needed before answering -- one query per call."
     )
 
     def tool_spec(self) -> ToolSpec:
@@ -131,16 +138,7 @@ class RunSqlAction:
 
 @dataclass
 class ActionRegistry:
-    """AnalystLoop's ActionExecutor, generalized to N actions. Does exactly
-    one job: given a ToolRequest, find the Action named `request.name` and
-    run it. Registering a second, unrelated Action requires no change here
-    beyond adding it to the list -- no dispatch table to extend, no
-    conditional to add.
-
-    Does NOT: decide which action to call (that's the model's job, expressed
-    through what tool_specs() offers), decide when to stop investigating
-    (AnalystLoop's job), or touch a provider SDK (ModelTransport's job).
-    """
+    """AnalystLoop's ActionExecutor, generalized to N actions."""
 
     actions: list[Action] = field(default_factory=list)
     _by_name: dict[str, Action] = field(init=False, repr=False)
