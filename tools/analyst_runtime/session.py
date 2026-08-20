@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
+from tools.analyst_runtime.actions import ActionRegistry, AnalyticsQueryAction, RunSqlAction
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
@@ -227,7 +227,7 @@ class OpenAIResponsesAnalystSessionFactory:
         del conversation, runtime_context
         sandbox = LiveReadOnlySandbox(self.knowledge_db_path)
         action = RunSqlAction(sandbox=sandbox)
-        registry = ActionRegistry([action])
+        registry = ActionRegistry([action, AnalyticsQueryAction(self.knowledge_db_path)])
         client = self._client_factory()
         transport = OpenAIResponsesTransport(client, self.model, registry.tool_specs())
         history = [TranscriptItem(role=message.role, text=message.content) for message in visible_messages]

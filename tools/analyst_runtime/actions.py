@@ -19,9 +19,11 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec
+from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
 
 MAX_ROWS_RETURNED = 50
 
@@ -134,6 +136,28 @@ class RunSqlAction:
             return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": str(exc)}, ensure_ascii=False))
         finally:
             conn.close()
+
+
+@dataclass
+class AnalyticsQueryAction:
+    """Execute one governed metric request; selection remains the model's job."""
+
+    db_path: Path
+    name: str = "analytics_query"
+
+    def tool_spec(self) -> ToolSpec:
+        return ToolSpec(self.name, "Consulta métricas gobernadas disponibles en el catálogo con validación de grano, dimensiones y fuente.", {
+            "type": "object", "properties": {"metric": {"type": "string", "enum": ["vacancia_pct_fondo", "vacancia_fisica_pct_activo", "m2_vacantes"]}, "funds": {"type": "array", "items": {"type": "string"}}, "assets": {"type": "array", "items": {"type": "string"}}, "period": {"type": "string"}, "group_by": {"type": "string"}, "order_by": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["metric", "period"]})
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        try:
+            a = request.arguments
+            result = AnalyticsExecutor(self.db_path).execute(AnalyticsQueryRequest(a["metric"], tuple(a.get("funds", [])), tuple(a.get("assets", [])), a["period"], a.get("period_end"), a.get("group_by"), a.get("order_by"), a.get("limit"), a.get("aggregation")))
+            return ToolResult(request.call_id, True, json.dumps({"catalog_version": result.catalog_version, "result_kind": result.result_kind, "rows": [row.__dict__ for row in result.rows]}, ensure_ascii=False, default=str))
+        except SemanticQueryError as exc:
+            return ToolResult(request.call_id, False, json.dumps({"error_type": "semantic_query_error", "error": str(exc)}, ensure_ascii=False))
+        except (KeyError, TypeError, ValueError) as exc:
+            return ToolResult(request.call_id, False, json.dumps({"error_type": "invalid_request", "error": str(exc)}, ensure_ascii=False))
 
 
 @dataclass
