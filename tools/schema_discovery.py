@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
 
+from tools.datasets.catalog import load_dataset_catalog
+
 
 DEFAULT_SCHEMA_SEARCH_LIMIT = 5
 MAX_SCHEMA_SEARCH_LIMIT = 10
@@ -41,6 +43,7 @@ class SchemaObject:
     columns: tuple[SchemaColumn, ...]
     relationships: tuple[SchemaRelationship, ...]
     description: str | None = None
+    dataset: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -72,6 +75,8 @@ class SQLiteSchemaIntrospector:
 
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
+        catalog = load_dataset_catalog()
+        self._datasets_by_object = {dataset.object_name: dataset for dataset in catalog.datasets.values()}
 
     def search(self, query: str, limit: int | None = None) -> NormalizedSchemaResult:
         query_tokens = _tokens(query)
@@ -102,12 +107,15 @@ class SQLiteSchemaIntrospector:
             for row in conn.execute(f"PRAGMA foreign_key_list({identifier})")
             if row[4] is not None
         )
+        dataset = self._datasets_by_object.get(name)
         return SchemaObject(
             name=name,
             kind=kind,
             source_category=_source_category(name, kind),
             columns=columns,
             relationships=relationships,
+            description=dataset.description if dataset else None,
+            dataset=dataset.schema_metadata() if dataset else None,
         )
 
     @staticmethod
@@ -115,6 +123,10 @@ class SQLiteSchemaIntrospector:
         name_tokens = set(_tokens(obj.name))
         column_tokens = {token for column in obj.columns for token in _tokens(column.name)}
         description_tokens = set(_tokens(obj.description or ""))
+        dataset_tokens = {
+            token for value in (obj.dataset or {}).values()
+            if isinstance(value, str) for token in _tokens(value)
+        }
         score = 0
         for token in query_tokens:
             if token in name_tokens:
@@ -122,7 +134,9 @@ class SQLiteSchemaIntrospector:
             if token in column_tokens:
                 score += 3
             if token in description_tokens:
-                score += 1
+                score += 4
+            if token in dataset_tokens:
+                score += 2
         return score
 
 

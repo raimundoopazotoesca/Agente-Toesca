@@ -1,0 +1,12 @@
+catalog_version: 1
+datasets:
+  - dataset_key: rent_roll
+    semantic_version: rent_roll_semantics_v1
+    object_name: v_rent_roll_semantic
+    grain: rent_roll_row
+    description: Governed row-level rent roll dataset by asset and period, with normalized occupancy status, unit category, identity quality and source provenance.
+    dimensions: [activo_key, periodo]
+    fields: [dataset_key, semantic_version, activo_key, periodo, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, is_current]
+    semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, is_current]
+    provenance_fields: [source_file, source_sheet, source_row, file_hash, ingest_run_id]
+    status: active
