@@ -3,7 +3,7 @@ from pathlib import Path
 
 from tools.analyst_runtime.actions import (
     ActionRegistry, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
-    AnalyticsLookupFundAction, RunSqlAction,
+    AnalyticsLookupFundAction, RunSqlAction, SchemaSearchAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
@@ -24,9 +24,10 @@ def test_alpha_factory_registers_exactly_governed_and_exploratory_actions():
     session = factory.create(None, [])
     registry = session._loop.action_executor
     assert set(registry._by_name) == {
-        "run_sql", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
+        "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
     }
     assert isinstance(registry._by_name["run_sql"], RunSqlAction)
+    assert isinstance(registry._by_name["schema_search"], SchemaSearchAction)
     assert isinstance(registry._by_name["analytics_lookup_fund"], AnalyticsLookupFundAction)
     assert isinstance(registry._by_name["analytics_lookup_asset"], AnalyticsLookupAssetAction)
     assert isinstance(registry._by_name["analytics_breakdown_asset"], AnalyticsBreakdownAssetAction)

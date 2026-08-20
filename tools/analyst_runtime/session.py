@@ -14,7 +14,7 @@ from typing import Any, Callable, Protocol
 
 from tools.analyst_runtime.actions import (
     ActionRegistry, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
-    AnalyticsLookupFundAction, RunSqlAction,
+    AnalyticsLookupFundAction, RunSqlAction, SchemaSearchAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.base import ToolCall, Usage
@@ -232,6 +232,7 @@ class OpenAIResponsesAnalystSessionFactory:
         action = RunSqlAction(sandbox=sandbox)
         registry = ActionRegistry([
             action,
+            SchemaSearchAction(self.knowledge_db_path),
             AnalyticsLookupFundAction(self.knowledge_db_path),
             AnalyticsLookupAssetAction(self.knowledge_db_path),
             AnalyticsBreakdownAssetAction(self.knowledge_db_path),

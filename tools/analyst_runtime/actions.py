@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Protocol
@@ -26,6 +27,12 @@ from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
 from tools.analytics.capabilities import capability_metric_keys
 from tools.analytics.catalog import load_metric_catalog
+from tools.schema_discovery import (
+    DEFAULT_SCHEMA_SEARCH_LIMIT,
+    MAX_SCHEMA_SEARCH_LIMIT,
+    SchemaIntrospector,
+    SQLiteSchemaIntrospector,
+)
 
 MAX_ROWS_RETURNED = 50
 
@@ -140,6 +147,59 @@ class RunSqlAction:
             conn.close()
 
 
+@dataclass
+class SchemaSearchAction:
+    """Expose normalized, read-only schema metadata to Alpha exploration."""
+
+    db_path: Path
+    introspector: SchemaIntrospector | None = None
+    name: str = "schema_search"
+    description: str = (
+        "Searches read-only database metadata for relevant tables and views, "
+        "returning structured columns and verified relationships to support raw data exploration."
+    )
+
+    def __post_init__(self) -> None:
+        if self.introspector is None:
+            self.introspector = SQLiteSchemaIntrospector(self.db_path)
+
+    def tool_spec(self) -> ToolSpec:
+        return ToolSpec(self.name, self.description, {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "query": {"type": "string", "description": "Metadata search terms for tables, views, columns, and verified relationships."},
+                "limit": {"type": ["integer", "null"], "minimum": 1, "description": "Maximum metadata objects returned; use null for the default."},
+            },
+            "required": ["query", "limit"],
+        })
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        started = time.monotonic()
+        requested_limit = request.arguments.get("limit")
+        effective_limit: int | None = None
+        try:
+            unknown = sorted(set(request.arguments) - {"query", "limit"})
+            if unknown:
+                raise ValueError(f"unknown schema_search fields: {', '.join(unknown)}")
+            query = _required_string(request.arguments, "query")
+            limit = _optional_positive_int(request.arguments, "limit")
+            effective_limit = min(limit, MAX_SCHEMA_SEARCH_LIMIT) if limit is not None else DEFAULT_SCHEMA_SEARCH_LIMIT
+            assert self.introspector is not None
+            result = self.introspector.search(query, effective_limit)
+            payload = result.as_dict()
+            trace = _schema_trace(query, requested_limit, effective_limit, result.dialect, result.metadata_version, [obj.name for obj in result.objects], True, started)
+            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False), trace=trace)
+        except (KeyError, TypeError, ValueError) as exc:
+            payload = {"error_type": "invalid_request", "error": str(exc)}
+            trace = _schema_trace(request.arguments.get("query"), requested_limit, effective_limit, None, None, [], False, started, "invalid_request", str(exc))
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=trace)
+        except Exception as exc:  # noqa: BLE001 -- tool failures are reported, never raised through the loop
+            payload = {"error_type": "schema_search_error", "error": str(exc)}
+            trace = _schema_trace(request.arguments.get("query"), requested_limit, effective_limit, None, None, [], False, started, "schema_search_error", str(exc))
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=trace)
+
+
 def _required_string(arguments: dict[str, object], name: str) -> str:
     value = arguments[name]
     if not isinstance(value, str) or not value:
@@ -167,6 +227,18 @@ def _sql_trace(query: object, row_count: int | None = None, error: str | None = 
         trace["result"] = {"row_count": row_count}
     else:
         trace["error"] = {"error_type": "sql_error", "message": error}
+    return trace
+
+
+def _schema_trace(query: object, requested_limit: object, effective_limit: int | None, dialect: str | None, metadata_version: str | None, candidate_names: list[str], success: bool, started: float, error_type: str | None = None, error: str | None = None) -> dict[str, object]:
+    trace: dict[str, object] = {
+        "tool_name": "schema_search", "query": query, "requested_limit": requested_limit,
+        "effective_limit": effective_limit, "dialect": dialect, "metadata_version": metadata_version,
+        "candidate_names": candidate_names, "object_count": len(candidate_names), "success": success,
+        "duration_ms": (time.monotonic() - started) * 1000,
+    }
+    if error_type is not None:
+        trace["error"] = {"error_type": error_type, "message": error or ""}
     return trace
 
 
