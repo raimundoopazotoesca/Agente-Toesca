@@ -1,0 +1,41 @@
+catalog_version: 1
+metrics:
+  - key: vacancia_pct_fondo
+    display_name: Vacancia del fondo
+    description: Vacancia porcentual del fondo según su metodología canónica registrada.
+    unit: pct_0_100
+    entity_grain: fund
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: fondo, kpi: vacancia_pct}
+    aggregation: non_additive
+    allowed_dimensions: [fund, period]
+    status: active
+    related_metrics: [vacancia_fisica_pct_activo, m2_vacantes]
+    methodology: vacancia_ponderada_fondo_rentas_manual
+  - key: vacancia_fisica_pct_activo
+    display_name: Vacancia física por activo
+    description: Superficie vacante dividida por GLA cuando la métrica física está disponible.
+    unit: pct_0_100
+    entity_grain: asset
+    period_grain: month
+    source_kind: breakdown
+    access: {kind: view_metric, view: v_vacancia_activo, value_column: vacancia_pct}
+    aggregation: non_additive
+    allowed_dimensions: [asset, fund, period]
+    status: active
+    related_metrics: [vacancia_pct_fondo, m2_vacantes]
+    methodology: superficie_vacante_dividida_por_gla
+  - key: m2_vacantes
+    display_name: Metros cuadrados vacantes
+    description: Superficie vacante observada a nivel activo.
+    unit: m2
+    entity_grain: asset
+    period_grain: month
+    source_kind: breakdown
+    access: {kind: view_metric, view: v_vacancia_activo, value_column: m2_vacantes}
+    aggregation: sum_compatible_scope
+    allowed_dimensions: [asset, fund, period]
+    status: active
+    related_metrics: [vacancia_pct_fondo, vacancia_fisica_pct_activo]
+    methodology: superficie_vacante_observada

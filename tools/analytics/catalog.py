@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from tools.analytics.models import DerivedKpiAccess, MetricCatalog, MetricDefinition, ViewMetricAccess
+
+
+CATALOG_PATH = Path(__file__).with_name("catalog_v1.yaml")
+_UNITS = {"pct_0_100", "m2"}
+_ENTITY_GRAINS = {"fund", "asset"}
+_PERIOD_GRAINS = {"month"}
+_SOURCE_KINDS = {"canonical", "breakdown", "alternative"}
+_AGGREGATIONS = {"non_additive", "sum_compatible_scope"}
+_STATUSES = {"active"}
+_REQUIRED = {
+    "key", "display_name", "description", "unit", "entity_grain", "period_grain", "source_kind",
+    "access", "aggregation", "allowed_dimensions", "status", "related_metrics", "methodology",
+}
+_PROHIBITED_VALUE_FIELDS = {"value", "valor", "current_value", "entities", "entity_values"}
+
+
+class CatalogValidationError(ValueError):
+    pass
+
+
+def _invalid(message: str) -> CatalogValidationError:
+    return CatalogValidationError(message)
+
+
+def _access(raw: Any) -> DerivedKpiAccess | ViewMetricAccess:
+    if not isinstance(raw, dict):
+        raise _invalid("malformed access strategy")
+    kind = raw.get("kind")
+    if kind == "derived_kpi" and set(raw) == {"kind", "entity_type", "kpi"}:
+        return DerivedKpiAccess(entity_type=str(raw["entity_type"]), kpi=str(raw["kpi"]))
+    if kind == "view_metric" and set(raw) == {"kind", "view", "value_column"}:
+        return ViewMetricAccess(view=str(raw["view"]), value_column=str(raw["value_column"]))
+    raise _invalid("malformed access strategy")
+
+
+def _metric(raw: Any) -> MetricDefinition:
+    if not isinstance(raw, dict) or _REQUIRED - raw.keys() or _PROHIBITED_VALUE_FIELDS & raw.keys():
+        raise _invalid("malformed metric definition")
+    for field, allowed in (
+        ("unit", _UNITS), ("entity_grain", _ENTITY_GRAINS), ("period_grain", _PERIOD_GRAINS),
+        ("source_kind", _SOURCE_KINDS), ("aggregation", _AGGREGATIONS), ("status", _STATUSES),
+    ):
+        if raw[field] not in allowed:
+            raise _invalid(f"malformed metric definition: invalid {field}")
+    if not isinstance(raw["allowed_dimensions"], list) or not isinstance(raw["related_metrics"], list):
+        raise _invalid("malformed metric definition: dimensions and relations must be lists")
+    return MetricDefinition(
+        key=str(raw["key"]), display_name=str(raw["display_name"]), description=str(raw["description"]),
+        unit=raw["unit"], entity_grain=raw["entity_grain"], period_grain=raw["period_grain"],
+        source_kind=raw["source_kind"], access=_access(raw["access"]), aggregation=raw["aggregation"],
+        allowed_dimensions=tuple(raw["allowed_dimensions"]), status=raw["status"],
+        related_metrics=tuple(raw["related_metrics"]), methodology=str(raw["methodology"]),
+    )
+
+
+def load_metric_catalog(path: Path | None = None) -> MetricCatalog:
+    path = path or CATALOG_PATH
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or raw.get("catalog_version") != 1 or not isinstance(raw.get("metrics"), list):
+        raise _invalid("malformed catalog")
+    if not raw["metrics"]:
+        raise _invalid("catalog must define at least one metric")
+    metrics = [_metric(item) for item in raw["metrics"]]
+    keys = [metric.key for metric in metrics]
+    if len(keys) != len(set(keys)) or not all(keys):
+        raise _invalid("duplicate or empty metric key")
+    known = set(keys)
+    for metric in metrics:
+        unknown = set(metric.related_metrics) - known
+        if unknown:
+            raise _invalid(f"unknown related metric: {sorted(unknown)[0]}")
+    return MetricCatalog(version=1, metrics={metric.key: metric for metric in sorted(metrics, key=lambda item: item.key)})
