@@ -1,0 +1,7 @@
+id: alpha-simple-lookup
+turns: ["¿Cuál es la vacancia de TRI en junio de 2026?"]
+purpose: A governed KPI lookup should not require unnecessary exploration.
+deterministic: {required_numbers: [5.945]}
+semantic: {governed_lookup: true}
+prohibited: {numbers: [5.39]}
+tags: [lookup, efficiency]

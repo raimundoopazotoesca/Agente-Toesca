@@ -1,0 +1,7 @@
+id: alpha-coverage-claim
+turns: ["Resume la vacancia histórica disponible."]
+purpose: Prevent unsupported claims of consolidated rent-roll coverage.
+deterministic: {}
+semantic: {coverage_evidence_required: true}
+prohibited: {phrases: ["consolidado desde rent rolls"]}
+tags: [coverage, provenance]

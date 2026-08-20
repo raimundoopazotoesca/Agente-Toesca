@@ -1,0 +1,7 @@
+id: alpha-canonical-source
+turns: ["¿Cuál es la vacancia de TRI en junio de 2026?"]
+purpose: Prefer canonical fund vacancy over a different physical metric.
+deterministic: {required_numbers: [5.945]}
+semantic: {source_kind: canonical, metric: vacancia_pct_fondo}
+prohibited: {numbers: [5.39]}
+tags: [canonical, vacancy]

@@ -1,0 +1,8 @@
+id: alpha-raw-exploration
+turns: ["Investiga una relación no modelada entre contratos y vacancia."]
+purpose: Retain raw exploration for concepts outside governed metrics.
+deterministic: {}
+semantic: {governed_metric_available: false}
+prohibited: {}
+capabilities: [run_sql]
+tags: [raw-sql, exploration]

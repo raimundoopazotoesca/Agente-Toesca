@@ -1,0 +1,7 @@
+id: alpha-ranking-drivers
+turns: ["¿Qué activos explican principalmente la vacancia del fondo?"]
+purpose: Identify material observed drivers from comparable evidence.
+deterministic: {required_entities: ["Mall Curicó", "Apoquindo 3001"]}
+semantic: {requires_comparable_basis: true}
+prohibited: {}
+tags: [ranking, drivers]

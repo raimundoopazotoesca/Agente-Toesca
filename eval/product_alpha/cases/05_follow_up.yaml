@@ -1,0 +1,7 @@
+id: alpha-follow-up
+turns: ["¿Cuál fue la vacancia de TRI en junio?", "¿Y mayo?"]
+purpose: Preserve the prior metric and entity in a follow-up.
+deterministic: {}
+semantic: {conversation_reference: true}
+prohibited: {}
+tags: [follow-up]

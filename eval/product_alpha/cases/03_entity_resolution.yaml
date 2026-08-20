@@ -1,0 +1,7 @@
+id: alpha-entity-resolution
+turns: ["¿Cómo ha evolucionado Parque Titanium este año?"]
+purpose: Do not silently replace the complex with its parking entity.
+deterministic: {}
+semantic: {ambiguity_allowed: true}
+prohibited: {phrases: ["Parking Parque Titanium / SABA"]}
+tags: [entity-resolution]

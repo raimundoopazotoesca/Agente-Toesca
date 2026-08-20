@@ -1,0 +1,7 @@
+id: alpha-presentation
+turns: ["Explica el resultado de vacancia."]
+purpose: Preserve B.3 natural evidence presentation.
+deterministic: {}
+semantic: {presentation: natural}
+prohibited: {phrases: ["Dato verificado:", "Inferencia:", "Hipótesis:"]}
+tags: [presentation]
