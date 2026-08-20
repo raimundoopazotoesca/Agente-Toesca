@@ -12,17 +12,99 @@ from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction, SchemaSe
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
+from tools.db import connection as db_connection
+from tools.db.connection import apply_migrations, get_conn_for
 
 
 DB = Path("memory/agente_toesca_v2.db")
 MIGRATION = Path("tools/db/migrations/083_governed_rent_roll_dataset.sql")
+MIGRATIONS_DIR = Path("tools/db/migrations")
 
 
-def _semantic_copy(tmp_path: Path) -> sqlite3.Connection:
-    db_path = tmp_path / "knowledge-copy.db"
-    shutil.copy2(DB, db_path)
+def test_pre_083_fixture_starts_without_the_governed_view(tmp_path: Path, monkeypatch):
+    db_path = _pre_083_db(tmp_path, monkeypatch)
     conn = sqlite3.connect(db_path)
-    conn.executescript(MIGRATION.read_text(encoding="utf-8"))
+    try:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_rent_roll_semantic'"
+        ).fetchone() is None
+        assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 82
+    finally:
+        conn.close()
+
+
+def _pre_083_db(tmp_path: Path, monkeypatch) -> Path:
+    """Create the deterministic schema-82 fixture and its minimum golden data."""
+    migration_dir = tmp_path / "migrations-through-082"
+    migration_dir.mkdir()
+    for path in MIGRATIONS_DIR.glob("*.sql"):
+        if int(path.stem.split("_", 1)[0]) <= 82:
+            shutil.copy2(path, migration_dir / path.name)
+
+    db_path = tmp_path / "knowledge-v82.db"
+    monkeypatch.setattr(db_connection, "MIGRATIONS_DIR", migration_dir)
+    assert apply_migrations(str(db_path)) == list(range(1, 83))
+
+    conn = get_conn_for(str(db_path))
+    try:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_rent_roll_semantic'"
+        ).fetchone() is None
+        conn.execute("INSERT OR IGNORE INTO dim_fondo(fondo_key, nombre) VALUES ('TRI', 'TRI')")
+        conn.executemany(
+            "INSERT OR IGNORE INTO dim_activo(activo_key, fondo_key, nombre) VALUES (?, 'TRI', ?)",
+            [("Apo3001", "Apo3001"), ("Residencia Arturo Medina", "Residencia Arturo Medina")],
+        )
+
+        def row(activo, unidad, arrendatario, m2, categoria, source_row, superseded_at=None):
+            return (
+                activo, "2026-06", unidad, arrendatario, m2, None,
+                json.dumps({"tipo_activo_2": categoria}), "fixture.xlsx", "Rent Roll",
+                source_row, "fixture-083", superseded_at,
+            )
+
+        vacancies = [
+            row("Apo3001", f"Piso {index}", "Vacante", m2, "Oficina", index)
+            for index, m2 in enumerate((440.3, 440.3, 234.0, 234.0, 234.0), start=1)
+        ]
+        vacancies.extend(
+            row("Apo3001", f"Zócalo {index}", "Vacante", 8.0, "Estacionamiento", index)
+            for index in range(6, 9)
+        )
+        vacancies.extend(
+            row("Apo3001", f"Bodega {index}", "Vacante", 25.0, "Bodega", index)
+            for index in range(9, 11)
+        )
+        occupied = [
+            row("Apo3001", f"Oficina ocupada {index}", "Tenant", 100.0, "Oficina", index)
+            for index in range(11, 26)
+        ]
+        history = [
+            row("Residencia Arturo Medina", "Unidad 1", "Tenant", 1.0, "Oficina", 101, "2026-06-30"),
+            row("Residencia Arturo Medina", "Unidad 1", "Tenant", 1.0, "Oficina", 102),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO raw_rent_roll_line(
+                activo_key, periodo, unidad, arrendatario, m2, renta_uf, extra_json,
+                source_file, source_sheet, source_row, file_hash, superseded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            vacancies + occupied + history,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path
+
+
+def _semantic_copy(tmp_path: Path, monkeypatch) -> sqlite3.Connection:
+    """Apply 083 once through the normal runner to a reproducible v82 fixture."""
+    db_path = _pre_083_db(tmp_path, monkeypatch)
+    monkeypatch.setattr(db_connection, "MIGRATIONS_DIR", MIGRATIONS_DIR)
+    assert apply_migrations(str(db_path)) == [83]
+    conn = get_conn_for(str(db_path))
+    assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 83
     return conn
 
 
@@ -43,8 +125,9 @@ def test_dataset_catalog_declares_the_row_level_rent_roll_contract_without_value
     assert "1656.6" not in repr(catalog.as_dict())
 
 
-def test_semantic_view_keeps_history_and_marks_currentness(tmp_path: Path):
-    conn = _semantic_copy(tmp_path)
+def test_semantic_view_keeps_history_and_marks_currentness(tmp_path: Path, monkeypatch):
+    """Previously copied the real v83 DB; the fixture now starts at v82."""
+    conn = _semantic_copy(tmp_path, monkeypatch)
     try:
         rows = conn.execute(
             "SELECT is_current FROM v_rent_roll_semantic WHERE activo_key='Residencia Arturo Medina' AND periodo='2026-06'"
@@ -55,8 +138,9 @@ def test_semantic_view_keeps_history_and_marks_currentness(tmp_path: Path):
     assert sorted(row[0] for row in rows) == [0, 1]
 
 
-def test_golden_apo3001_june_keeps_all_raw_vacancy_and_kpi_remains_distinct(tmp_path: Path):
-    conn = _semantic_copy(tmp_path)
+def test_golden_apo3001_june_keeps_all_raw_vacancy_and_kpi_remains_distinct(tmp_path: Path, monkeypatch):
+    """Previously copied the real v83 DB; golden rows are now test-owned at v82."""
+    conn = _semantic_copy(tmp_path, monkeypatch)
     try:
         total = conn.execute(
             "SELECT COUNT(*) FROM v_rent_roll_semantic WHERE activo_key='Apo3001' AND periodo='2026-06' AND is_current=1"
@@ -118,8 +202,9 @@ def test_semantic_view_classifies_frozen_occupancy_and_category_edges(tmp_path: 
     assert observed["(sin detalle, fila 8)"] == ("vacant", "parking", "synthetic_missing_source_identity")
 
 
-def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(tmp_path: Path):
-    conn = _semantic_copy(tmp_path)
+def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(tmp_path: Path, monkeypatch):
+    """Previously copied the real v83 DB; discovery now validates one v82→v83 run."""
+    conn = _semantic_copy(tmp_path, monkeypatch)
     db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
     conn.close()
 
@@ -141,8 +226,9 @@ def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(
     assert {"occupancy_status", "unit_category", "is_current"} <= {column["name"] for column in semantic["columns"]}
 
 
-def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp_path: Path):
-    conn = _semantic_copy(tmp_path)
+def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp_path: Path, monkeypatch):
+    """Previously copied the real v83 DB; scripted wiring now uses the isolated migration."""
+    conn = _semantic_copy(tmp_path, monkeypatch)
     db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
     conn.close()
 

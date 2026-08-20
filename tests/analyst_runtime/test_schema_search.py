@@ -118,7 +118,25 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
     assert [(call.name, call.ok) for call in result.turn.tool_calls] == [
         ("schema_search", True), ("run_sql", True),
     ]
-    assert result.turn.tool_calls[0].trace["candidate_names"] == ["raw_rent_roll_line"]
+    # Stage 3.15 intentionally introduced the governed view. The raw source
+    # remains discoverable, but callers receive semantic metadata without
+    # depending on an exact ranking of otherwise relevant objects.
+    candidate_names = result.turn.tool_calls[0].trace["candidate_names"]
+    assert "v_rent_roll_semantic" in candidate_names
+    assert "raw_rent_roll_line" in candidate_names
+    schema_result = next(
+        tool_result
+        for round_ in result.round_trajectory
+        for tool_result in round_.tool_results
+        if tool_result.call_id == "schema"
+    )
+    schema_payload = json.loads(schema_result.content)
+    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "v_rent_roll_semantic")
+    assert semantic["dataset"]["dataset_key"] == "rent_roll"
+    assert semantic["dataset"]["semantic_version"] == "rent_roll_semantics_v1"
+    assert {"occupancy_status", "unit_category", "is_current"} <= {
+        column["name"] for column in semantic["columns"]
+    }
     assert result.turn.usage.calls == 3
 
 
