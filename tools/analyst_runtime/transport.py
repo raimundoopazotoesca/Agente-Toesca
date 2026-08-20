@@ -50,6 +50,7 @@ class ToolResult:
     call_id: str
     ok: bool
     content: str
+    trace: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

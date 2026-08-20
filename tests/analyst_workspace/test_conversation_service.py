@@ -105,7 +105,16 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
     result = _result(
         "Respuesta",
         usage=Usage(provider="openai", model="gpt-test", calls=2, input_tokens=10, output_tokens=5),
-        tool_calls=[ToolCall(name="run_sql", args={"query": "SELECT 1"}, ok=True, duration_ms=3.0)],
+        tool_calls=[ToolCall(
+            name="analytics_query",
+            args={"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+            ok=False,
+            duration_ms=3.0,
+            trace={
+                "arguments": {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+                "error": {"error_type": "semantic_query_error", "message": "fund scope is required"},
+            },
+        )],
         sql_queries=["SELECT 1"],
     )
     result.raw_reasoning = [{"type": "reasoning", "secret": "never persist"}]
@@ -118,7 +127,13 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
         "action_count": 1,
         "sql_count": 1,
         "sql_queries": ["SELECT 1"],
-        "tool_calls": [{"name": "run_sql", "ok": True, "duration_ms": 3.0}],
+        "tool_calls": [{
+            "name": "analytics_query", "ok": False, "duration_ms": 3.0,
+            "trace": {
+                "arguments": {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+                "error": {"error_type": "semantic_query_error", "message": "fund scope is required"},
+            },
+        }],
         "token_usage": {"input_tokens": 10, "output_tokens": 5},
         "provider": "openai",
         "model": "gpt-test",

@@ -90,7 +90,12 @@ def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) 
         }.items() if value is not None
     }
     tool_calls = [
-        {"name": call.name, "ok": call.ok, "duration_ms": call.duration_ms}
+        {
+            "name": call.name,
+            "ok": call.ok,
+            "duration_ms": call.duration_ms,
+            **({"trace": call.trace} if call.trace else {}),
+        }
         for call in result.tool_calls
     ]
     metadata = {

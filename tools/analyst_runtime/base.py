@@ -19,6 +19,7 @@ class ToolCall:
     args: dict[str, Any] = field(default_factory=dict)
     ok: bool = True
     duration_ms: float | None = None
+    trace: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

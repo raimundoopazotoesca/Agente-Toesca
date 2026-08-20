@@ -117,7 +117,7 @@ class AnalystLoop:
 
             results = [self.action_executor.execute(tr) for tr in response.tool_requests]
             for tr, result in zip(response.tool_requests, results):
-                tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok))
+                tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
             round_history = _append_turn(round_history, user_text, response, results)
         else:
             # Investigation budget exhausted without a final answer. Spend the
