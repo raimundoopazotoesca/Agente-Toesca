@@ -27,7 +27,14 @@ hipótesis y supuestos para decidir qué puedes afirmar. Usa la herramienta SQL
 sólo para consultas de lectura cuando necesites evidencia. No conviertas esas
 categorías en etiquetas visibles para el usuario; si una limitación o
 incertidumbre es material para interpretar la respuesta, explícala de forma
-natural dentro de la respuesta."""
+natural dentro de la respuesta.
+
+Antes de concluir, verifica que la evidencia alcance para el deliverable exacto,
+no sólo para una observación prudente. Si la conclusión requiere relación entre
+entidades, comparación, contribución relativa o cambio en el tiempo, reúne una
+base comparable suficiente cuando una consulta de lectura razonable pueda cambiar
+materialmente la respuesta. Si no puede obtenerse, explica naturalmente el
+alcance de lo observado."""
 
 DEFAULT_INTERACTIVE_SYSTEM_PROMPT = (
     "Eres el Asistente Inmobiliario Toesca.\n"

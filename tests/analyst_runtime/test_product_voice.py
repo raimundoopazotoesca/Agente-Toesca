@@ -144,6 +144,15 @@ def test_alpha_reformulates_the_interactive_evidence_instruction_only():
     assert "no conviertas esas categor\u00edas en etiquetas visibles" in normalized_prompt.lower()
 
 
+def test_alpha_adds_deliverable_sufficiency_before_product_voice_only():
+    prompt = _alpha_system_prompt(DEFAULT_INTERACTIVE_SYSTEM_PROMPT)
+    sufficiency = "verifica que la evidencia alcance para el deliverable exacto"
+
+    assert sufficiency in prompt.lower()
+    assert prompt.index(ALPHA_EVIDENCE_INSTRUCTION) < prompt.index(ALPHA_PRODUCT_VOICE)
+    assert _SYSTEM_PROMPT_TEMPLATE.find(sufficiency) == -1
+
+
 def test_alpha_voice_teaches_natural_evidence_presentation_with_examples():
     """Examples teach Alpha's presentation format without changing F4 evidence policy."""
     normalized_voice = " ".join(ALPHA_PRODUCT_VOICE.split())
