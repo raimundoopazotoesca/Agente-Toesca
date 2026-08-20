@@ -106,12 +106,13 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
         "Respuesta",
         usage=Usage(provider="openai", model="gpt-test", calls=2, input_tokens=10, output_tokens=5),
         tool_calls=[ToolCall(
-            name="analytics_query",
-            args={"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+            name="analytics_lookup_fund",
+            args={"metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06"},
             ok=False,
             duration_ms=3.0,
             trace={
-                "arguments": {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+                "arguments": {"metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06"},
+                "scope": {"fund": "TRI"},
                 "error": {"error_type": "semantic_query_error", "message": "fund scope is required"},
             },
         )],
@@ -128,9 +129,10 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
         "sql_count": 1,
         "sql_queries": ["SELECT 1"],
         "tool_calls": [{
-            "name": "analytics_query", "ok": False, "duration_ms": 3.0,
+            "name": "analytics_lookup_fund", "ok": False, "duration_ms": 3.0,
             "trace": {
-                "arguments": {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"},
+                "arguments": {"metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06"},
+                "scope": {"fund": "TRI"},
                 "error": {"error_type": "semantic_query_error", "message": "fund scope is required"},
             },
         }],

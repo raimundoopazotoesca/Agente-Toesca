@@ -20,10 +20,12 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
+from tools.analytics.capabilities import capability_metric_keys
+from tools.analytics.catalog import load_metric_catalog
 
 MAX_ROWS_RETURNED = 50
 
@@ -138,61 +140,6 @@ class RunSqlAction:
             conn.close()
 
 
-@dataclass
-class AnalyticsQueryAction:
-    """Execute one governed metric request; selection remains the model's job."""
-
-    db_path: Path
-    name: str = "analytics_query"
-
-    def tool_spec(self) -> ToolSpec:
-        return ToolSpec(self.name, "Consulta métricas gobernadas disponibles en el catálogo con validación de grano, dimensiones y fuente.", {
-            "type": "object", "additionalProperties": False,
-            "properties": {
-                "metric": {"type": "string", "enum": ["vacancia_pct_fondo", "vacancia_fisica_pct_activo", "m2_vacantes"], "description": "Identidad exacta de la métrica gobernada."},
-                "funds": {"type": "array", "items": {"type": "string"}, "description": "Fondos en el alcance; requerido para métricas de fondo."},
-                "assets": {"type": "array", "items": {"type": "string"}, "description": "Activos en el alcance; requerido para métricas de activo."},
-                "period": {"type": "string", "description": "Mes inicial en formato YYYY-MM."},
-                "period_end": {"type": "string", "description": "Mes final inclusivo YYYY-MM para una serie de la misma métrica."},
-                "group_by": {"type": "string", "enum": ["asset"], "description": "Dimensión permitida para desglosar la métrica."},
-                "order_by": {"type": "string", "enum": ["value_desc", "value_asc"], "description": "Orden de los valores devueltos."},
-                "limit": {"type": "integer", "minimum": 1, "description": "Máximo de filas devueltas."},
-            },
-            "required": ["metric", "period"],
-        })
-
-    def execute(self, request: ToolRequest) -> ToolResult:
-        try:
-            result = AnalyticsExecutor(self.db_path).execute(_analytics_request(request.arguments))
-            payload = {"catalog_version": result.catalog_version, "result_kind": result.result_kind, "rows": [row.__dict__ for row in result.rows]}
-            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), trace=_analytics_trace(request.arguments, payload))
-        except SemanticQueryError as exc:
-            payload = {"error_type": "semantic_query_error", "error": str(exc)}
-            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=_analytics_trace(request.arguments, payload))
-        except (KeyError, TypeError, ValueError) as exc:
-            payload = {"error_type": "invalid_request", "error": str(exc)}
-            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=_analytics_trace(request.arguments, payload))
-
-
-_ANALYTICS_ARGUMENT_FIELDS = frozenset({"metric", "funds", "assets", "period", "period_end", "group_by", "order_by", "limit"})
-
-
-def _analytics_request(arguments: dict[str, object]) -> AnalyticsQueryRequest:
-    unknown = sorted(set(arguments) - _ANALYTICS_ARGUMENT_FIELDS)
-    if unknown:
-        raise ValueError(f"unknown analytics_query fields: {', '.join(unknown)}")
-    return AnalyticsQueryRequest(
-        metric=_required_string(arguments, "metric"),
-        funds=_string_array(arguments, "funds"),
-        assets=_string_array(arguments, "assets"),
-        period=_required_string(arguments, "period"),
-        period_end=_optional_string(arguments, "period_end"),
-        group_by=_optional_string(arguments, "group_by"),
-        order_by=_optional_string(arguments, "order_by"),
-        limit=_optional_positive_int(arguments, "limit"),
-    )
-
-
 def _required_string(arguments: dict[str, object], name: str) -> str:
     value = arguments[name]
     if not isinstance(value, str) or not value:
@@ -207,13 +154,6 @@ def _optional_string(arguments: dict[str, object], name: str) -> str | None:
     return value
 
 
-def _string_array(arguments: dict[str, object], name: str) -> tuple[str, ...]:
-    value = arguments.get(name, [])
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise ValueError(f"{name} must be an array of strings")
-    return tuple(value)
-
-
 def _optional_positive_int(arguments: dict[str, object], name: str) -> int | None:
     value = arguments.get(name)
     if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
@@ -221,12 +161,129 @@ def _optional_positive_int(arguments: dict[str, object], name: str) -> int | Non
     return value
 
 
-def _analytics_trace(arguments: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
-    allowed = _ANALYTICS_ARGUMENT_FIELDS
+def _sql_trace(query: object, row_count: int | None = None, error: str | None = None) -> dict[str, object]:
+    trace: dict[str, object] = {"arguments": {"query": query}}
+    if error is None:
+        trace["result"] = {"row_count": row_count}
+    else:
+        trace["error"] = {"error_type": "sql_error", "message": error}
+    return trace
+
+
+@dataclass
+class _AnalyticsCapabilityAction:
+    """Catalog-derived action surface; execution remains in AnalyticsExecutor."""
+
+    db_path: Path
+    name: ClassVar[str] = ""
+    description: ClassVar[str] = ""
+    capability: ClassVar[str] = ""
+    scope_field: ClassVar[str] = ""
+    breakdown: ClassVar[bool] = False
+
+    def tool_spec(self) -> ToolSpec:
+        properties: dict[str, object] = {
+            "metric": {
+                "type": "string",
+                "enum": list(self._metric_keys()),
+                "description": "Exact governed metric identity available for this operation.",
+            },
+            self.scope_field: {"type": "string", "description": f"{self.scope_field.title()} scope for this operation."},
+            "period": {"type": "string", "description": "Initial month in YYYY-MM format."},
+            "period_end": {"type": ["string", "null"], "description": "Optional inclusive final month in YYYY-MM format; use null for a point lookup."},
+        }
+        if self.breakdown:
+            properties.update({
+                "order_by": {"type": ["string", "null"], "enum": ["value_desc", "value_asc", None], "description": "Ordering for comparable metric values; use null for the native order."},
+                "limit": {"type": ["integer", "null"], "minimum": 1, "description": "Maximum number of rows returned; use null for the capability default."},
+            })
+        return ToolSpec(self.name, self.description, {
+            "type": "object", "additionalProperties": False, "properties": properties,
+            "required": list(properties),
+        })
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        try:
+            analytics_request, scope = self._request(request.arguments)
+            result = AnalyticsExecutor(self.db_path).execute(analytics_request)
+            payload = {
+                "catalog_version": result.catalog_version,
+                "result_kind": result.result_kind,
+                "rows": [row.__dict__ for row in result.rows],
+            }
+            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
+                              trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()))
+        except SemanticQueryError as exc:
+            payload = {"error_type": "semantic_query_error", "error": str(exc)}
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
+                              trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
+        except (KeyError, TypeError, ValueError) as exc:
+            payload = {"error_type": "invalid_request", "error": str(exc)}
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
+                              trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
+
+    def _metric_keys(self) -> tuple[str, ...]:
+        return capability_metric_keys(load_metric_catalog())[self.capability]
+
+    def _allowed_fields(self) -> frozenset[str]:
+        fields = {"metric", self.scope_field, "period", "period_end"}
+        if self.breakdown:
+            fields.update({"order_by", "limit"})
+        return frozenset(fields)
+
+    def _request(self, arguments: dict[str, object]) -> tuple[AnalyticsQueryRequest, dict[str, str]]:
+        unknown = sorted(set(arguments) - self._allowed_fields())
+        if unknown:
+            raise ValueError(f"unknown {self.name} fields: {', '.join(unknown)}")
+        metric = _required_string(arguments, "metric")
+        if metric not in self._metric_keys():
+            raise ValueError(f"metric is not available for {self.name}: {metric}")
+        scope_value = _required_string(arguments, self.scope_field)
+        period = _required_string(arguments, "period")
+        period_end = _optional_string(arguments, "period_end")
+        if self.scope_field == "fund":
+            funds, assets, scope = (scope_value,), (), {"fund": scope_value}
+        else:
+            funds, assets, scope = (), (scope_value,), {"asset": scope_value}
+        order_by = _optional_string(arguments, "order_by") if self.breakdown else None
+        limit = _optional_positive_int(arguments, "limit") if self.breakdown else None
+        return AnalyticsQueryRequest(
+            metric=metric, funds=funds, assets=assets, period=period, period_end=period_end,
+            group_by="asset" if self.breakdown else None, order_by=order_by, limit=limit,
+        ), scope
+
+
+class AnalyticsLookupFundAction(_AnalyticsCapabilityAction):
+    name = "analytics_lookup_fund"
+    description = "Returns governed fund-level metric values for a fund and point or period range, validated against the metric catalog."
+    capability = "fund_lookup"
+    scope_field = "fund"
+    breakdown = False
+
+
+class AnalyticsLookupAssetAction(_AnalyticsCapabilityAction):
+    name = "analytics_lookup_asset"
+    description = "Returns governed asset-level metric values for an asset and point or period range, validated against the metric catalog."
+    capability = "asset_lookup"
+    scope_field = "asset"
+    breakdown = False
+
+
+class AnalyticsBreakdownAssetAction(_AnalyticsCapabilityAction):
+    name = "analytics_breakdown_asset"
+    description = "Returns governed metric breakdowns across comparable assets for a fund and period, with optional ordering and limit, validated against the metric catalog."
+    capability = "asset_breakdown"
+    scope_field = "fund"
+    breakdown = True
+
+
+def _capability_trace(arguments: dict[str, object], scope: dict[str, str], payload: dict[str, object], allowed: frozenset[str]) -> dict[str, object]:
     trace: dict[str, object] = {"arguments": {name: arguments[name] for name in allowed if name in arguments}}
     unknown = sorted(set(arguments) - allowed)
     if unknown:
         trace["unknown_fields"] = unknown
+    if scope:
+        trace["scope"] = scope
     if "error_type" in payload:
         trace["error"] = {"error_type": payload["error_type"], "message": payload.get("error", "")}
         return trace
@@ -244,15 +301,6 @@ def _analytics_trace(arguments: dict[str, object], payload: dict[str, object]) -
         "row_count": len(rows) if isinstance(rows, list) else 0,
         "provenance_ingest_run_ids": ingest_run_ids,
     }
-    return trace
-
-
-def _sql_trace(query: object, row_count: int | None = None, error: str | None = None) -> dict[str, object]:
-    trace: dict[str, object] = {"arguments": {"query": query}}
-    if error is None:
-        trace["result"] = {"row_count": row_count}
-    else:
-        trace["error"] = {"error_type": "sql_error", "message": error}
     return trace
 
 

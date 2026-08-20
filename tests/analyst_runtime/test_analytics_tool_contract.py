@@ -5,103 +5,128 @@ from pathlib import Path
 
 import pytest
 
-from tools.analyst_runtime.actions import AnalyticsQueryAction
-from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction
+from tools.analytics.capabilities import capability_metric_keys
+from tools.analytics.catalog import load_metric_catalog
+from tools.analyst_runtime.actions import (
+    ActionRegistry,
+    AnalyticsBreakdownAssetAction,
+    AnalyticsLookupAssetAction,
+    AnalyticsLookupFundAction,
+    RunSqlAction,
+)
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
+from tools.analyst_runtime.session import OpenAIResponsesAnalystSessionFactory
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
 
 
 DB = Path("memory/agente_toesca_v2.db")
 
 
-def test_analytics_tool_spec_is_closed_and_exposes_action_range_field():
-    spec = AnalyticsQueryAction(DB).tool_spec()
+def test_catalog_derives_capability_metric_keys_from_semantic_metadata():
+    metrics = capability_metric_keys(load_metric_catalog())
 
-    assert spec.parameters["additionalProperties"] is False
-    assert spec.parameters["required"] == ["metric", "period"]
-    assert set(spec.parameters["properties"]) == {
-        "metric", "funds", "assets", "period", "period_end", "group_by", "order_by", "limit",
+    assert metrics == {
+        "fund_lookup": ("vacancia_pct_fondo",),
+        "asset_lookup": ("m2_vacantes", "vacancia_fisica_pct_activo"),
+        "asset_breakdown": ("m2_vacantes", "vacancia_fisica_pct_activo"),
     }
 
 
-@pytest.mark.parametrize(
-    ("arguments", "expected_error"),
-    [
-        (
-            {"metric": "vacancia_pct_fondo", "scope": {"fund": "TRI"}, "period": "2026-06"},
-            "unknown analytics_query fields: scope",
-        ),
-        (
-            {"metric": "m2_vacantes", "funds": ["TRI"], "period": "2026-06", "group_by": ["asset"]},
-            "group_by must be a string",
-        ),
-    ],
-)
-def test_analytics_action_rejects_noncanonical_shapes_before_executor(arguments, expected_error):
-    result = AnalyticsQueryAction(DB).execute(ToolRequest("call", "analytics_query", arguments))
+def test_lookup_fund_schema_makes_m1_grouping_unrepresentable():
+    spec = AnalyticsLookupFundAction(DB).tool_spec()
 
-    assert result.ok is False
+    assert spec.name == "analytics_lookup_fund"
+    assert spec.parameters["additionalProperties"] is False
+    assert spec.parameters["properties"]["metric"]["enum"] == ["vacancia_pct_fondo"]
+    assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end"}
+    assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end"}
+    assert spec.parameters["properties"]["period_end"]["type"] == ["string", "null"]
+
+
+def test_lookup_fund_maps_scope_to_executor_and_preserves_semantic_trace():
+    action = AnalyticsLookupFundAction(DB)
+    result = action.execute(ToolRequest("call", action.name, {
+        "metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06",
+    }))
+
     payload = json.loads(result.content)
-    assert payload["error_type"] == "invalid_request"
-    assert payload["error"] == expected_error
-
-
-def test_analytics_action_accepts_range_declared_by_tool_spec():
-    result = AnalyticsQueryAction(DB).execute(ToolRequest(
-        "call", "analytics_query",
-        {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-05", "period_end": "2026-06"},
-    ))
-
     assert result.ok is True
-    assert [row["period"] for row in json.loads(result.content)["rows"]] == ["2026-05", "2026-06"]
-
-
-def test_scripted_analytics_call_exposes_sanitized_request_and_result_trace():
-    class ScriptedTransport:
-        def __init__(self):
-            self.responses = iter([
-                ModelResponse("", [ToolRequest("call", "analytics_query", {
-                    "metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06",
-                })]),
-                ModelResponse("respuesta"),
-            ])
-
-        def complete(self, _request):
-            return next(self.responses)
-
-    registry = ActionRegistry([RunSqlAction(LiveReadOnlySandbox(DB)), AnalyticsQueryAction(DB)])
-    result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
-
-    trace = result.turn.tool_calls[0].trace
-    assert trace["arguments"] == {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"}
-    assert trace["result"] == {
+    assert payload["rows"][0]["value"] == pytest.approx(5.945)
+    assert result.trace["arguments"] == {"metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06"}
+    assert result.trace["scope"] == {"fund": "TRI"}
+    assert result.trace["result"] == {
         "metric_key": "vacancia_pct_fondo", "source_kind": "canonical", "catalog_version": 1,
         "row_count": 1, "provenance_ingest_run_ids": [142],
     }
 
 
-def test_scripted_analytics_ranking_uses_the_governed_breakdown_contract():
+def test_lookup_asset_schema_has_no_breakdown_controls_and_maps_asset_scope():
+    action = AnalyticsLookupAssetAction(DB)
+    spec = action.tool_spec()
+    result = action.execute(ToolRequest("call", action.name, {
+        "metric": "vacancia_fisica_pct_activo", "asset": "Apo3001", "period": "2026-06",
+    }))
+
+    assert set(spec.parameters["properties"]) == {"metric", "asset", "period", "period_end"}
+    assert json.loads(result.content)["rows"][0]["value"] == pytest.approx(0.3620316883)
+    assert result.trace["scope"] == {"asset": "Apo3001"}
+
+
+def test_breakdown_schema_cannot_select_fund_metric_and_fixes_grouping_internally():
+    action = AnalyticsBreakdownAssetAction(DB)
+    spec = action.tool_spec()
+
+    assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end", "order_by", "limit"}
+    assert "vacancia_pct_fondo" not in spec.parameters["properties"]["metric"]["enum"]
+    assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end", "order_by", "limit"}
+    assert spec.parameters["properties"]["order_by"]["enum"] == ["value_desc", "value_asc", None]
+    invalid = action.execute(ToolRequest("bad", action.name, {
+        "metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06",
+    }))
+    valid = action.execute(ToolRequest("good", action.name, {
+        "metric": "m2_vacantes", "fund": "TRI", "period": "2026-06", "order_by": "value_desc", "limit": 10,
+    }))
+
+    assert json.loads(invalid.content)["error_type"] == "invalid_request"
+    rows = json.loads(valid.content)["rows"]
+    assert [row["entity_id"] for row in rows[:3]] == ["Mall Curicó", "Apo3001", "Viña Centro"]
+    assert valid.trace["scope"] == {"fund": "TRI"}
+
+
+def test_scripted_capabilities_dispatch_lookup_breakdown_and_sql():
     class ScriptedTransport:
         def __init__(self):
             self.responses = iter([
-                ModelResponse("", [ToolRequest("call", "analytics_query", {
-                    "metric": "m2_vacantes", "funds": ["TRI"], "period": "2026-06",
-                    "group_by": "asset", "order_by": "value_desc",
+                ModelResponse("", [ToolRequest("fund", "analytics_lookup_fund", {
+                    "metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06",
                 })]),
+                ModelResponse("", [ToolRequest("breakdown", "analytics_breakdown_asset", {
+                    "metric": "m2_vacantes", "fund": "TRI", "period": "2026-06", "order_by": "value_desc", "limit": 10,
+                })]),
+                ModelResponse("", [ToolRequest("sql", "run_sql", {"query": "SELECT 1"})]),
                 ModelResponse("respuesta"),
             ])
 
         def complete(self, _request):
             return next(self.responses)
 
-    registry = ActionRegistry([RunSqlAction(LiveReadOnlySandbox(DB)), AnalyticsQueryAction(DB)])
-    result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("ranking")
+    registry = ActionRegistry([
+        RunSqlAction(LiveReadOnlySandbox(DB)), AnalyticsLookupFundAction(DB),
+        AnalyticsLookupAssetAction(DB), AnalyticsBreakdownAssetAction(DB),
+    ])
+    result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
 
-    payload = json.loads(result.round_trajectory[1].tool_results[0].content)
-    assert [row["entity_id"] for row in payload["rows"][:3]] == ["Mall Curicó", "Apo3001", "Viña Centro"]
-    assert [row["value"] for row in payload["rows"][:3]] == pytest.approx([2476.0, 1632.6, 199.83])
-    assert result.turn.tool_calls[0].trace["result"] == {
-        "metric_key": "m2_vacantes", "source_kind": "breakdown", "catalog_version": 1,
-        "row_count": 10, "provenance_ingest_run_ids": [],
+    assert [(call.name, call.ok) for call in result.turn.tool_calls] == [
+        ("analytics_lookup_fund", True), ("analytics_breakdown_asset", True), ("run_sql", True),
+    ]
+    assert result.turn.tool_calls[1].trace["result"]["source_kind"] == "breakdown"
+
+
+def test_alpha_factory_exposes_only_capabilities_and_run_sql():
+    factory = OpenAIResponsesAnalystSessionFactory(DB, client_factory=lambda: object(), presenter_factory=None)
+    registry = factory.create(None, [])._loop.action_executor
+
+    assert set(registry._by_name) == {
+        "run_sql", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
     }

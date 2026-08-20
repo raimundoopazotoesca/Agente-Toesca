@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.analyst_runtime.actions import AnalyticsQueryAction, RunSqlAction, validate_sql
+from tools.analyst_runtime.actions import AnalyticsLookupFundAction, RunSqlAction, validate_sql
 from tools.analyst_runtime.transport import ToolRequest
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ToolRequest
@@ -187,9 +187,9 @@ def test_live_sandbox_against_real_db_is_read_only_and_untouched():
     assert before.st_mtime == after.st_mtime
     assert before.st_size == after.st_size
 
-def test_analytics_query_action_returns_semantic_envelope_for_canonical_lookup():
-    action = AnalyticsQueryAction(db_path=REAL_DB)
-    result = action.execute(ToolRequest("1", "analytics_query", {"metric": "vacancia_pct_fondo", "funds": ["TRI"], "period": "2026-06"}))
+def test_analytics_lookup_fund_action_returns_semantic_envelope_for_canonical_lookup():
+    action = AnalyticsLookupFundAction(db_path=REAL_DB)
+    result = action.execute(ToolRequest("1", "analytics_lookup_fund", {"metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06"}))
     payload = json.loads(result.content)
     assert result.ok is True
     assert payload["catalog_version"] == 1
