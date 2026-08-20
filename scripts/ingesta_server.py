@@ -386,8 +386,23 @@ def _analyst_body() -> dict:
     return body
 
 
-def _analyst_error(error: str, status: int):
-    return jsonify({"error": error}), status
+def _analyst_error(error: str, status: int, *, details: list[dict[str, str]] | None = None):
+    payload = {"error": error}
+    if details:
+        payload["details"] = details
+    return jsonify(payload), status
+
+
+def _analyst_request_validation_details(exc: ValueError) -> list[dict[str, str]]:
+    """Expose only fixed HTTP validation rules, never request contents or traces."""
+    known_rules = {
+        "JSON body must be an object": ("body", "invalid_json_object", "JSON body must be an object"),
+        "text must be a non-blank string": ("text", "invalid_text", "text must be a non-blank string"),
+    }
+    field, code, message = known_rules.get(
+        str(exc), ("request", "invalid_request", "Request validation failed")
+    )
+    return [{"field": field, "code": code, "message": message}]
 
 
 def _analyst_adapter() -> analyst_api.ConversationApiAdapter:
@@ -474,10 +489,14 @@ def analyst_send_message(conversation_id: str):
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-blank string")
         return jsonify(_analyst_adapter().send_message(conversation_id, text.strip())), 201
-    except ValueError:
-        return _analyst_error("validation_error", 400)
+    except ValueError as exc:
+        return _analyst_error("validation_error", 400, details=_analyst_request_validation_details(exc))
     except analyst_api.AnalystValidationError:
-        return _analyst_error("validation_error", 400)
+        return _analyst_error("validation_error", 400, details=[{
+            "field": "request",
+            "code": "service_validation",
+            "message": "Request was rejected by analyst service",
+        }])
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystServiceUnavailableError:

@@ -226,6 +226,33 @@ def test_send_message_returns_public_schema(client, headers):
     assert response.get_json() == {"id": "msg-1", "conversation_id": "conv-1", "role": "assistant", "content": "Hola", "created_at": "2026-08-19T12:01:00Z", "metadata": {"source": "test"}}
 
 
+def test_send_message_contract_requires_json_content_type(client, headers, service):
+    body = '{"text":"¿Cuál es la vacancia de TRI en junio de 2026?"}'
+
+    valid = client.post(
+        "/api/analyst/conversations/conv-1/messages",
+        headers={**headers, "Content-Type": "application/json"},
+        data=body.encode("utf-8"),
+    )
+    assert valid.status_code == 201
+    assert service.message.content == "¿Cuál es la vacancia de TRI en junio de 2026?"
+
+    missing_content_type = client.post(
+        "/api/analyst/conversations/conv-1/messages",
+        headers=headers,
+        data=body.encode("utf-8"),
+    )
+    assert missing_content_type.status_code == 400
+    assert missing_content_type.get_json() == {
+        "error": "validation_error",
+        "details": [{
+            "field": "body",
+            "code": "invalid_json_object",
+            "message": "JSON body must be an object",
+        }],
+    }
+
+
 @pytest.mark.parametrize("text", [
     "¿Cuál es la vacancia de TRI en junio de 2026?",
     "¿Cómo evolucionó la ocupación en Viña Centro?",
