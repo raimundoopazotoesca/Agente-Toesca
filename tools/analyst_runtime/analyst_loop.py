@@ -81,6 +81,17 @@ class LoopResult:
 
 
 @dataclass
+class InvestigationResult:
+    """Provider-neutral evidence-gathering trajectory, before any finalization."""
+
+    round_trajectory: list[TranscriptItem]
+    tool_calls: list[ToolCall]
+    usage: Usage
+    termination_reason: str
+    final_text: str = ""
+
+
+@dataclass
 class AnalystLoop:
     """One turn's reasoning loop, provider-neutral. `transport` translates
     to/from one provider's wire protocol; `action_executor` runs whatever a
@@ -93,15 +104,14 @@ class AnalystLoop:
     action_executor: ActionExecutor
     tool_specs: list[ToolSpec] = field(default_factory=list)
 
-    def ask(self, message: str, history: list[TranscriptItem] | None = None) -> LoopResult:
+    def investigate(self, message: str, history: list[TranscriptItem] | None = None) -> InvestigationResult:
         started = time.monotonic()
         round_history: list[TranscriptItem] = list(history or [])
         next_message = message
         final_text = ""
         tool_calls_log: list[ToolCall] = []
         total_usage = Usage()
-        response: ModelResponse | None = None
-        termination_reason: str | None = None
+        termination_reason = "budget_exhausted"
 
         for _ in range(MAX_INVESTIGATION_ROUNDS):
             request = ModelRequest(system_prompt=self.system_prompt, history=round_history, message=next_message, tools=self.tool_specs)
@@ -114,6 +124,7 @@ class AnalystLoop:
             if not response.tool_requests:
                 final_text = response.text
                 round_history = _append_turn(round_history, user_text, response, [])
+                termination_reason = "model_terminal"
                 break
 
             results: list[ToolResult] = []
@@ -128,30 +139,35 @@ class AnalystLoop:
                     final_text = _clarification_text(result.control)
                     break
             round_history = _append_turn(round_history, user_text, response, results)
-            if termination_reason:
+            if termination_reason == "clarification_required":
                 break
-        else:
-            # Investigation budget exhausted without a final answer. Spend the
-            # reserved round on synthesis, with tools disabled two ways: the
-            # transport is told tools=[] (drives tool_choice="none" or
-            # equivalent per provider), and -- regardless of whether the
-            # provider honors that -- this branch never reads tool_requests
-            # back, so no action can execute from here.
-            request = ModelRequest(system_prompt=self.system_prompt, history=round_history, message=_SYNTHESIS_INSTRUCTION, tools=[])
+        total_usage.latency_ms = (time.monotonic() - started) * 1000
+        return InvestigationResult(round_history, tool_calls_log, total_usage, termination_reason, final_text)
+
+    def _legacy_finalize(self, investigation: InvestigationResult) -> LoopResult:
+        final_text = investigation.final_text
+        round_history = investigation.round_trajectory
+        total_usage = investigation.usage
+        termination_reason = investigation.termination_reason
+        if termination_reason == "budget_exhausted":
+            request = ModelRequest(self.system_prompt, round_history, _SYNTHESIS_INSTRUCTION, [])
             response = self.transport.complete(request)
             _accumulate(total_usage, response.usage)
             final_text = response.text
             round_history = _append_turn(round_history, _SYNTHESIS_INSTRUCTION, response, [])
-
-        total_usage.latency_ms = (time.monotonic() - started) * 1000
         turn = Turn(
             text=final_text,
             artifacts=_extract_artifacts(final_text),
-            tool_calls=tool_calls_log,
+            tool_calls=investigation.tool_calls,
             usage=total_usage,
-            raw={"final_text": final_text, **({"termination_reason": termination_reason} if termination_reason else {})},
+            raw={"final_text": final_text, **({"termination_reason": termination_reason}
+                                                if termination_reason == "clarification_required" else {})},
         )
         return LoopResult(turn=turn, round_trajectory=round_history)
+
+    def ask(self, message: str, history: list[TranscriptItem] | None = None) -> LoopResult:
+        """Legacy compatibility wrapper: investigation plus one plain finalization."""
+        return self._legacy_finalize(self.investigate(message, history))
 
 
 def _append_turn(history: list[TranscriptItem], user_text: str | None, response: ModelResponse, results: list[ToolResult]) -> list[TranscriptItem]:
