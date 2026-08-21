@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Protocol
 
-from tools.analyst_runtime.transport import ToolRequest, ToolResult, ToolSpec
+from tools.analyst_runtime.transport import ToolEvidence, ToolRequest, ToolResult, ToolSpec
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
 from tools.analytics.capabilities import capability_metric_keys
 from tools.analytics.catalog import load_metric_catalog
@@ -322,8 +322,21 @@ class _AnalyticsCapabilityAction:
                 "result_kind": result.result_kind,
                 "rows": [row.__dict__ for row in result.rows],
             }
+            evidence = None
+            if result.result_kind == "scalar" and len(result.rows) == 1:
+                row = result.rows[0]
+                evidence = ToolEvidence(
+                    evidence_id=request.call_id,
+                    evidence_class="canonical_metric",
+                    source={"tool_name": self.name, "source_kind": row.source_kind},
+                    scope=scope,
+                    semantic_contract={"metric_key": row.metric_key},
+                    provenance=row.provenance,
+                    facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
+                            "entity_id": row.entity_id, "period": row.period},),
+                )
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
-                              trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()))
+                              trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
         except SemanticQueryError as exc:
             payload = {"error_type": "semantic_query_error", "error": str(exc)}
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),

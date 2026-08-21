@@ -165,6 +165,19 @@ class AnalystLoop:
         )
         return LoopResult(turn=turn, round_trajectory=round_history)
 
+    def finalize(self, investigation: InvestigationResult, output_contract: object | None = None) -> LoopResult:
+        """Perform one tool-free finalization without interpreting its content."""
+        if investigation.termination_reason == "clarification_required":
+            return self._legacy_finalize(investigation)
+        request = ModelRequest(self.system_prompt, investigation.round_trajectory, _SYNTHESIS_INSTRUCTION, [], output_contract)
+        response = self.transport.complete(request)
+        total_usage = investigation.usage
+        _accumulate(total_usage, response.usage)
+        history = _append_turn(investigation.round_trajectory, _SYNTHESIS_INSTRUCTION, response, [])
+        turn = Turn(response.text, _extract_artifacts(response.text), investigation.tool_calls, total_usage,
+                    raw={"final_text": response.text, "structured_output": response.structured_output})
+        return LoopResult(turn, history)
+
     def ask(self, message: str, history: list[TranscriptItem] | None = None) -> LoopResult:
         """Legacy compatibility wrapper: investigation plus one plain finalization."""
         return self._legacy_finalize(self.investigate(message, history))

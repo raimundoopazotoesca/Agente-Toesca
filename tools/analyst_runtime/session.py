@@ -18,10 +18,12 @@ from tools.analyst_runtime.actions import (
     ResolveEntityAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
+from tools.analyst_runtime.canonical_guard import validate_and_render
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
-from tools.analyst_runtime.transport import ModelRequest, ModelResponse, ToolRequest, ToolResult, ToolSpec, TranscriptItem
+from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
+from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
 
 INTERACTIVE_EVIDENCE_INSTRUCTION = """Responde en español, distingue datos verificados de inferencias y usa la
 herramienta SQL sólo para consultas de lectura cuando necesites evidencia."""
@@ -189,12 +191,27 @@ class OpenAIResponsesAnalystSession:
         self._presenter = presenter
 
     def ask(self, text: str) -> AnalystSessionResult:
-        result = self._loop.ask(text, history=self._history)
+        investigation = self._loop.investigate(text, history=self._history)
+        evidence = [result.evidence for item in investigation.round_trajectory for result in item.tool_results
+                    if result.evidence is not None]
+        canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
+        validation = None
+        if investigation.termination_reason == "clarification_required":
+            result = self._loop._legacy_finalize(investigation)
+        elif canonical:
+            result = self._loop.finalize(investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA))
+            validation = validate_and_render(result.turn.raw["structured_output"] or {}, canonical)
+            result.turn.text = validation.content
+            result.turn.raw.update(validation.trace)
+        else:
+            result = self._loop._legacy_finalize(investigation)
         self._history = result.round_trajectory
         turn = result.turn
         termination_reason = turn.raw.get("termination_reason")
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
+                        else _conflict_presentation(turn.text) if validation and not validation.valid
                         else self._present(turn.text, text))
+        turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
         return AnalystSessionResult(
             text=presentation.content,
             usage=turn.usage,
@@ -218,6 +235,10 @@ class OpenAIResponsesAnalystSession:
 
 def _clarification_presentation(content: str) -> PresentationResult:
     return PresentationResult(content, False, None, None, None, "clarification_required")
+
+
+def _conflict_presentation(content: str) -> PresentationResult:
+    return PresentationResult(content, False, None, None, None, "canonical_conflict")
 
 
 class OpenAIResponsesAnalystSessionFactory:
