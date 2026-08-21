@@ -15,6 +15,7 @@ class DatasetDefinition:
     dimensions: tuple[str, ...]
     fields: tuple[str, ...]
     field_descriptions: dict[str, str]
+    field_value_domains: dict[str, dict[str, object]]
     semantic_fields: tuple[str, ...]
     provenance_fields: tuple[str, ...]
     status: str
@@ -29,6 +30,10 @@ class DatasetDefinition:
             "description": self.description,
             "dimensions": list(self.dimensions),
             "fields": self.field_descriptions,
+            "field_value_domains": {
+                field: {"type": domain["type"], "values": list(domain["values"])}
+                for field, domain in self.field_value_domains.items()
+            },
             "semantic_fields": list(self.semantic_fields),
             "provenance_fields": list(self.provenance_fields),
             "status": self.status,

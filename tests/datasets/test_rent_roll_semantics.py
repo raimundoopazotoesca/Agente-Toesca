@@ -6,9 +6,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+import yaml
 
-from tools.datasets.catalog import load_dataset_catalog
-from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction, SchemaSearchAction
+from tools.datasets.catalog import CATALOG_PATH, DatasetCatalogValidationError, load_dataset_catalog
+from tools.analyst_runtime.actions import ActionRegistry, ResolveEntityAction, RunSqlAction, SchemaSearchAction
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
@@ -108,7 +109,7 @@ def _semantic_copy(tmp_path: Path, monkeypatch) -> sqlite3.Connection:
     return conn
 
 
-def test_dataset_catalog_declares_the_row_level_rent_roll_contract_without_values():
+def test_dataset_catalog_declares_the_row_level_rent_roll_contract_with_closed_value_domains():
     catalog = load_dataset_catalog()
     dataset = catalog.datasets["rent_roll"]
 
@@ -122,7 +123,13 @@ def test_dataset_catalog_declares_the_row_level_rent_roll_contract_without_value
         "unit_identity_quality", "is_current",
     }
     assert {"source_file", "source_sheet", "source_row", "file_hash", "ingest_run_id"} <= set(dataset.provenance_fields)
-    assert "1656.6" not in repr(catalog.as_dict())
+    assert dataset.field_value_domains == {
+        "occupancy_status": {"type": "enum", "values": ("vacant", "occupied", "unknown")},
+        "unit_category": {"type": "enum", "values": ("office", "local", "storage", "parking", "other_source_declared", "unknown")},
+        "unit_identity_quality": {"type": "enum", "values": ("source_identity", "synthetic_missing_source_identity")},
+        "is_current": {"type": "boolean", "values": (0, 1)},
+    }
+    assert "unit_category_source" not in dataset.field_value_domains
 
 
 def test_dataset_catalog_serializes_declarative_row_semantics_and_field_descriptions():
@@ -139,6 +146,32 @@ def test_dataset_catalog_serializes_declarative_row_semantics_and_field_descript
     assert dataset.schema_metadata()["fields"]["occupancy_status"] == (
         "Estado de ocupación gobernado de la fila, como vacante, ocupada o desconocida."
     )
+
+
+def test_value_domain_catalog_validation_is_generic_and_fail_fast(tmp_path: Path):
+    raw = yaml.safe_load(CATALOG_PATH.read_text(encoding="utf-8"))
+    definition = raw["datasets"][0]
+    definition["fields"].append("field_x")
+    definition["field_descriptions"]["field_x"] = "Campo temporal con dominio cerrado."
+    definition["field_value_domains"] = {"field_x": {"type": "enum", "values": ["a", "b"]}}
+    valid = tmp_path / "valid.yaml"
+    valid.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    assert load_dataset_catalog(valid).datasets["rent_roll"].schema_metadata()["field_value_domains"]["field_x"] == {
+        "type": "enum", "values": ["a", "b"],
+    }
+
+    invalid_cases = {
+        "unknown-field": {"missing": {"type": "enum", "values": ["a"]}},
+        "empty-enum": {"field_x": {"type": "enum", "values": []}},
+        "duplicate-values": {"field_x": {"type": "enum", "values": ["a", "a"]}},
+        "bad-type": {"field_x": {"type": "free_text", "values": ["a"]}},
+    }
+    for label, domain in invalid_cases.items():
+        definition["field_value_domains"] = domain
+        path = tmp_path / f"{label}.yaml"
+        path.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+        with pytest.raises(DatasetCatalogValidationError):
+            load_dataset_catalog(path)
 
 
 def test_semantic_view_keeps_history_and_marks_currentness(tmp_path: Path, monkeypatch):
@@ -243,6 +276,9 @@ def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(
     assert semantic["dataset"]["fields"]["unidad"] == (
         "Identificador o etiqueta de la unidad o espacio reportado por la fuente."
     )
+    assert semantic["dataset"]["field_value_domains"]["occupancy_status"] == {
+        "type": "enum", "values": ["vacant", "occupied", "unknown"],
+    }
     assert {"occupancy_status", "unit_category", "is_current"} <= {column["name"] for column in semantic["columns"]}
 
 
@@ -268,5 +304,35 @@ def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp
     rows = json.loads(result.round_trajectory[-2].tool_results[0].content)["rows"]
 
     assert [(call.name, call.ok) for call in result.turn.tool_calls] == [("schema_search", True), ("run_sql", True)]
+    assert len(rows) == 10
+    assert sum(row[1] for row in rows) == pytest.approx(1656.6)
+
+
+def test_scripted_m3_uses_visible_canonical_value_domain(tmp_path: Path, monkeypatch):
+    conn = _semantic_copy(tmp_path, monkeypatch)
+    db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
+    conn.close()
+
+    class ScriptedTransport:
+        def __init__(self):
+            self.responses = iter([
+                ModelResponse("", [ToolRequest("resolve", "resolve_entity", {"query": "Apoquindo 3001", "entity_types": ["asset"], "fund": None})]),
+                ModelResponse("", [ToolRequest("schema", "schema_search", {"query": "Apoquindo 3001 espacios pisos vacantes junio 2026", "limit": 10})]),
+                ModelResponse("", [ToolRequest("sql", "run_sql", {"query": "SELECT unidad, m2 FROM v_rent_roll_semantic WHERE activo_key='Apo3001' AND periodo='2026-06' AND occupancy_status='vacant' AND is_current=1 ORDER BY source_row"})]),
+                ModelResponse("respuesta"),
+            ])
+
+        def complete(self, _request):
+            return next(self.responses)
+
+    registry = ActionRegistry([ResolveEntityAction(db_path), SchemaSearchAction(db_path), RunSqlAction(LiveReadOnlySandbox(db_path))])
+    result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
+    schema_payload = json.loads(result.round_trajectory[-3].tool_results[0].content)
+    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "v_rent_roll_semantic")
+    rows = json.loads(result.round_trajectory[-2].tool_results[0].content)["rows"]
+
+    assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "schema_search", "run_sql"]
+    assert "occupancy_status='vacant'" in result.turn.tool_calls[-1].args["query"]
+    assert semantic["dataset"]["field_value_domains"]["occupancy_status"]["values"] == ["vacant", "occupied", "unknown"]
     assert len(rows) == 10
     assert sum(row[1] for row in rows) == pytest.approx(1656.6)

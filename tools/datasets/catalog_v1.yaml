@@ -23,6 +23,11 @@ datasets:
       unit_category: Categoría gobernada de la unidad o espacio.
       unit_category_source: Categoría de unidad declarada por la fuente.
       is_current: Indica si la fila corresponde a la versión vigente del registro.
+    field_value_domains:
+      occupancy_status: {type: enum, values: [vacant, occupied, unknown]}
+      unit_category: {type: enum, values: [office, local, storage, parking, other_source_declared, unknown]}
+      unit_identity_quality: {type: enum, values: [source_identity, synthetic_missing_source_identity]}
+      is_current: {type: boolean, values: [0, 1]}
     semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, is_current]
     provenance_fields: [source_file, source_sheet, source_row, file_hash, ingest_run_id]
     status: active
