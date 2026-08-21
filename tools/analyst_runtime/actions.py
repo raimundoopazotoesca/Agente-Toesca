@@ -33,6 +33,8 @@ from tools.schema_discovery import (
     SchemaIntrospector,
     SQLiteSchemaIntrospector,
 )
+from tools.entities.catalog import ENTITY_TYPES
+from tools.entities.resolver import EntityResolver
 
 MAX_ROWS_RETURNED = 50
 
@@ -197,6 +199,30 @@ class SchemaSearchAction:
         except Exception as exc:  # noqa: BLE001 -- tool failures are reported, never raised through the loop
             payload = {"error_type": "schema_search_error", "error": str(exc)}
             trace = _schema_trace(request.arguments.get("query"), requested_limit, effective_limit, None, None, [], False, started, "schema_search_error", str(exc))
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=trace)
+
+@dataclass
+class ResolveEntityAction:
+    db_path: Path
+    name: str = "resolve_entity"
+    description: str = "Resolves human references to canonical Toesca entities and returns canonical keys or explicit ambiguity using governed dimension data."
+    def tool_spec(self) -> ToolSpec:
+        return ToolSpec(self.name, self.description, {"type":"object","additionalProperties":False,"properties":{"query":{"type":"string"},"entity_types":{"type":"array","items":{"type":"string","enum":list(ENTITY_TYPES)}},"fund":{"type":["string","null"]}},"required":["query","entity_types","fund"]})
+    def execute(self, request: ToolRequest) -> ToolResult:
+        started=time.monotonic()
+        try:
+            if set(request.arguments)!={"query","entity_types","fund"}: raise ValueError("invalid resolve_entity fields")
+            query=_required_string(request.arguments,"query"); types=request.arguments["entity_types"]; fund=request.arguments["fund"]
+            if not isinstance(types,list) or not types or any(t not in ENTITY_TYPES for t in types): raise ValueError("entity_types must contain supported entity types")
+            if fund is not None and not isinstance(fund,str): raise ValueError("fund must be a canonical fund key or null")
+            result=EntityResolver(self.db_path).resolve(query,tuple(types),fund); payload=result.as_dict()
+            trace={"tool_name":self.name,"query":query,"requested_entity_types":types,"fund":fund,"status":result.status,"candidates":[{"entity_key":c.entity_key,"canonical_name":c.canonical_name,"score":c.score,"match_kind":c.match_kind} for c in result.candidates],"success":True,"duration_ms":(time.monotonic()-started)*1000}
+            return ToolResult(request.call_id,True,json.dumps(payload,ensure_ascii=False),trace=trace)
+        except (KeyError,TypeError,ValueError) as exc:
+            return ToolResult(request.call_id,False,json.dumps({"error_type":"invalid_request","error":str(exc)},ensure_ascii=False),trace={"tool_name":self.name,"success":False,"error":{"error_type":"invalid_request","message":str(exc)},"duration_ms":(time.monotonic()-started)*1000})
+        except Exception as exc:  # noqa: BLE001 -- tool failures are reported, never raised through the loop
+            payload = {"error_type": "resolve_entity_error", "error": str(exc)}
+            trace = {"tool_name":self.name,"success":False,"error":{"error_type":"resolve_entity_error","message":str(exc)},"duration_ms":(time.monotonic()-started)*1000}
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=trace)
 
 

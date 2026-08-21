@@ -129,4 +129,5 @@ def test_alpha_factory_exposes_only_capabilities_and_run_sql():
 
     assert set(registry._by_name) == {
         "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
+        "resolve_entity",
     }
