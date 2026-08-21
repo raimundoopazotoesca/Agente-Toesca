@@ -9,9 +9,12 @@ class DatasetDefinition:
     semantic_version: str
     object_name: str
     grain: str
+    grain_description: str
+    row_represents: str
     description: str
     dimensions: tuple[str, ...]
     fields: tuple[str, ...]
+    field_descriptions: dict[str, str]
     semantic_fields: tuple[str, ...]
     provenance_fields: tuple[str, ...]
     status: str
@@ -21,7 +24,11 @@ class DatasetDefinition:
             "dataset_key": self.dataset_key,
             "semantic_version": self.semantic_version,
             "grain": self.grain,
+            "grain_description": self.grain_description,
+            "row_represents": self.row_represents,
             "description": self.description,
+            "dimensions": list(self.dimensions),
+            "fields": self.field_descriptions,
             "semantic_fields": list(self.semantic_fields),
             "provenance_fields": list(self.provenance_fields),
             "status": self.status,

@@ -10,8 +10,8 @@ from tools.datasets.models import DatasetCatalog, DatasetDefinition
 
 CATALOG_PATH = Path(__file__).with_name("catalog_v1.yaml")
 _REQUIRED = {
-    "dataset_key", "semantic_version", "object_name", "grain", "description", "dimensions",
-    "fields", "semantic_fields", "provenance_fields", "status",
+    "dataset_key", "semantic_version", "object_name", "grain", "grain_description", "row_represents",
+    "description", "dimensions", "fields", "field_descriptions", "semantic_fields", "provenance_fields", "status",
 }
 
 
@@ -25,12 +25,21 @@ def _dataset(raw: Any) -> DatasetDefinition:
     sequence_fields = ("dimensions", "fields", "semantic_fields", "provenance_fields")
     if any(not isinstance(raw[name], list) or not all(isinstance(value, str) for value in raw[name]) for name in sequence_fields):
         raise DatasetCatalogValidationError("malformed dataset definition fields")
+    field_descriptions = raw["field_descriptions"]
+    if (not isinstance(field_descriptions, dict)
+            or set(field_descriptions) != set(raw["fields"])
+            or not all(isinstance(name, str) and isinstance(description, str) and description
+                       for name, description in field_descriptions.items())):
+        raise DatasetCatalogValidationError("malformed dataset field descriptions")
     if raw["status"] != "active" or raw["grain"] != "rent_roll_row":
         raise DatasetCatalogValidationError("unsupported dataset status or grain")
     return DatasetDefinition(
         dataset_key=str(raw["dataset_key"]), semantic_version=str(raw["semantic_version"]),
-        object_name=str(raw["object_name"]), grain=raw["grain"], description=str(raw["description"]),
+        object_name=str(raw["object_name"]), grain=raw["grain"],
+        grain_description=str(raw["grain_description"]), row_represents=str(raw["row_represents"]),
+        description=str(raw["description"]),
         dimensions=tuple(raw["dimensions"]), fields=tuple(raw["fields"]),
+        field_descriptions=dict(field_descriptions),
         semantic_fields=tuple(raw["semantic_fields"]), provenance_fields=tuple(raw["provenance_fields"]),
         status=raw["status"],
     )

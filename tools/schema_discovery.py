@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
@@ -54,6 +55,11 @@ class NormalizedSchemaResult:
     dialect: str
     metadata_version: str
     objects: tuple[SchemaObject, ...]
+    candidate_scores: dict[str, int] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.candidate_scores is None:
+            object.__setattr__(self, "candidate_scores", {})
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -92,9 +98,13 @@ class SQLiteSchemaIntrospector:
         finally:
             conn.close()
         ranked = [(self._score(obj, query_tokens), obj) for obj in objects]
-        matched = [obj for score, obj in ranked if score > 0]
-        matched.sort(key=lambda obj: (-self._score(obj, query_tokens), obj.name))
-        return NormalizedSchemaResult(self.dialect, self.metadata_version, tuple(matched[:effective_limit]))
+        matched = [(score, obj) for score, obj in ranked if score > 0]
+        matched.sort(key=lambda item: (-item[0], item[1].name))
+        selected = matched[:effective_limit]
+        return NormalizedSchemaResult(
+            self.dialect, self.metadata_version, tuple(obj for _, obj in selected),
+            {obj.name: score for score, obj in selected},
+        )
 
     def _object(self, conn: sqlite3.Connection, name: str, kind: str) -> SchemaObject:
         identifier = _quote_identifier(name)
@@ -120,24 +130,29 @@ class SQLiteSchemaIntrospector:
 
     @staticmethod
     def _score(obj: SchemaObject, query_tokens: tuple[str, ...]) -> int:
-        name_tokens = set(_tokens(obj.name))
-        column_tokens = {token for column in obj.columns for token in _tokens(column.name)}
-        description_tokens = set(_tokens(obj.description or ""))
-        dataset_tokens = {
-            token for value in (obj.dataset or {}).values()
-            if isinstance(value, str) for token in _tokens(value)
-        }
-        score = 0
-        for token in query_tokens:
-            if token in name_tokens:
-                score += 10
-            if token in column_tokens:
-                score += 3
-            if token in description_tokens:
-                score += 4
-            if token in dataset_tokens:
-                score += 2
-        return score
+        dataset = obj.dataset or {}
+        field_descriptions = dataset.get("fields", {})
+        sources = (
+            (10, _tokens(obj.name)),
+            (3, tuple(token for column in obj.columns for token in _tokens(column.name))),
+            (4, _tokens(obj.description or "")),
+            (5, _tokens(str(dataset.get("row_represents", "")))),
+            (4, _tokens(str(dataset.get("grain_description", "")))),
+            (3, _tokens(str(dataset.get("grain", "")))),
+            (3, tuple(token for dimension in dataset.get("dimensions", []) for token in _tokens(str(dimension)))),
+            (3, tuple(token for field in dataset.get("fields", {}) for token in _tokens(str(field)))),
+            (4, tuple(token for description in field_descriptions.values() for token in _tokens(str(description))) if isinstance(field_descriptions, dict) else ()),
+            (2, tuple(token for field in dataset.get("semantic_fields", []) for token in _tokens(str(field)))),
+            (2, tuple(token for field in dataset.get("provenance_fields", []) for token in _tokens(str(field)))),
+        )
+        # A dimension or field can be represented in physical columns and in
+        # the catalog. Count its strongest structural evidence once per token,
+        # rather than inflating generic terms through duplicated metadata.
+        score = sum(
+            max((weight for weight, values in sources if token in values), default=0)
+            for token in query_tokens
+        )
+        return score + (1 if score > 0 and dataset.get("status") == "active" else 0)
 
 
 def _effective_limit(limit: int | None) -> int:
@@ -147,8 +162,19 @@ def _effective_limit(limit: int | None) -> int:
 
 
 def _tokens(value: str) -> tuple[str, ...]:
-    normalized = re.sub(r"[_\-\s]+", " ", value.casefold())
-    return tuple(token for token in re.split(r"[^\w]+", normalized) if token)
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    normalized = re.sub(r"[_\-\s]+", " ", normalized)
+    return tuple(_singular(token) for token in re.split(r"[^\w]+", normalized) if token)
+
+
+def _singular(token: str) -> str:
+    """Conservative generic plural normalization for lexical metadata search."""
+    if len(token) > 4 and token.endswith("es"):
+        return token[:-2]
+    if len(token) > 3 and token.endswith("s") and not token.endswith(("ss", "us", "is")):
+        return token[:-1]
+    return token
 
 
 def _quote_identifier(value: str) -> str:

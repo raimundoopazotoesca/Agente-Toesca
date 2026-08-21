@@ -4,9 +4,25 @@ datasets:
     semantic_version: rent_roll_semantics_v1
     object_name: v_rent_roll_semantic
     grain: rent_roll_row
-    description: Governed row-level rent roll dataset by asset and period, with normalized occupancy status, unit category, identity quality and source provenance.
+    grain_description: Fila individual de rent roll correspondiente a una unidad o espacio fuente para un activo y período.
+    row_represents: Unidad o espacio individual reportado por la fuente del rent roll.
+    description: Dataset gobernado de rent roll fila a fila por activo y período, con estado de ocupación, categoría de unidad, calidad de identidad y provenance de fuente normalizados.
     dimensions: [activo_key, periodo]
     fields: [dataset_key, semantic_version, activo_key, periodo, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, is_current]
+    field_descriptions:
+      dataset_key: Identidad del dataset gobernado.
+      semantic_version: Versión del contrato semántico del dataset.
+      activo_key: Identificador del activo al que corresponde la fila.
+      periodo: Período mensual del rent roll.
+      unidad: Identificador o etiqueta de la unidad o espacio reportado por la fuente.
+      unit_identity_quality: Calidad de la identidad de unidad reportada por la fuente.
+      arrendatario: Arrendatario o marca de vacancia reportada por la fuente.
+      m2: Superficie de la unidad o espacio.
+      renta_uf: Renta en UF reportada para la unidad o espacio.
+      occupancy_status: Estado de ocupación gobernado de la fila, como vacante, ocupada o desconocida.
+      unit_category: Categoría gobernada de la unidad o espacio.
+      unit_category_source: Categoría de unidad declarada por la fuente.
+      is_current: Indica si la fila corresponde a la versión vigente del registro.
     semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, is_current]
     provenance_fields: [source_file, source_sheet, source_row, file_hash, ingest_run_id]
     status: active

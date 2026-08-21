@@ -188,7 +188,7 @@ class SchemaSearchAction:
             assert self.introspector is not None
             result = self.introspector.search(query, effective_limit)
             payload = result.as_dict()
-            trace = _schema_trace(query, requested_limit, effective_limit, result.dialect, result.metadata_version, [obj.name for obj in result.objects], True, started)
+            trace = _schema_trace(query, requested_limit, effective_limit, result.dialect, result.metadata_version, [obj.name for obj in result.objects], True, started, candidate_scores=result.candidate_scores)
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False), trace=trace)
         except (KeyError, TypeError, ValueError) as exc:
             payload = {"error_type": "invalid_request", "error": str(exc)}
@@ -230,13 +230,15 @@ def _sql_trace(query: object, row_count: int | None = None, error: str | None = 
     return trace
 
 
-def _schema_trace(query: object, requested_limit: object, effective_limit: int | None, dialect: str | None, metadata_version: str | None, candidate_names: list[str], success: bool, started: float, error_type: str | None = None, error: str | None = None) -> dict[str, object]:
+def _schema_trace(query: object, requested_limit: object, effective_limit: int | None, dialect: str | None, metadata_version: str | None, candidate_names: list[str], success: bool, started: float, error_type: str | None = None, error: str | None = None, candidate_scores: dict[str, int] | None = None) -> dict[str, object]:
     trace: dict[str, object] = {
         "tool_name": "schema_search", "query": query, "requested_limit": requested_limit,
         "effective_limit": effective_limit, "dialect": dialect, "metadata_version": metadata_version,
         "candidate_names": candidate_names, "object_count": len(candidate_names), "success": success,
         "duration_ms": (time.monotonic() - started) * 1000,
     }
+    if candidate_scores is not None:
+        trace["candidate_scores"] = candidate_scores
     if error_type is not None:
         trace["error"] = {"error_type": error_type, "message": error or ""}
     return trace

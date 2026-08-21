@@ -125,6 +125,22 @@ def test_dataset_catalog_declares_the_row_level_rent_roll_contract_without_value
     assert "1656.6" not in repr(catalog.as_dict())
 
 
+def test_dataset_catalog_serializes_declarative_row_semantics_and_field_descriptions():
+    dataset = load_dataset_catalog().datasets["rent_roll"]
+
+    assert dataset.grain_description == (
+        "Fila individual de rent roll correspondiente a una unidad o espacio fuente para un activo y período."
+    )
+    assert dataset.row_represents == "Unidad o espacio individual reportado por la fuente del rent roll."
+    assert dataset.field_descriptions["unidad"] == (
+        "Identificador o etiqueta de la unidad o espacio reportado por la fuente."
+    )
+    assert dataset.schema_metadata()["dimensions"] == ["activo_key", "periodo"]
+    assert dataset.schema_metadata()["fields"]["occupancy_status"] == (
+        "Estado de ocupación gobernado de la fila, como vacante, ocupada o desconocida."
+    )
+
+
 def test_semantic_view_keeps_history_and_marks_currentness(tmp_path: Path, monkeypatch):
     """Previously copied the real v83 DB; the fixture now starts at v82."""
     conn = _semantic_copy(tmp_path, monkeypatch)
@@ -216,13 +232,17 @@ def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(
 
     assert result.ok is True
     assert payload["objects"][0]["name"] == "v_rent_roll_semantic"
-    assert semantic["dataset"] == {
+    assert {
         "dataset_key": "rent_roll", "semantic_version": "rent_roll_semantics_v1",
         "grain": "rent_roll_row", "description": semantic["description"],
-        "semantic_fields": ["occupancy_status", "unit_category", "unit_category_source", "unit_identity_quality", "is_current"],
-        "provenance_fields": ["source_file", "source_sheet", "source_row", "file_hash", "ingest_run_id"],
+        "grain_description": "Fila individual de rent roll correspondiente a una unidad o espacio fuente para un activo y período.",
+        "row_represents": "Unidad o espacio individual reportado por la fuente del rent roll.",
+        "dimensions": ["activo_key", "periodo"],
         "status": "active",
-    }
+    }.items() <= semantic["dataset"].items()
+    assert semantic["dataset"]["fields"]["unidad"] == (
+        "Identificador o etiqueta de la unidad o espacio reportado por la fuente."
+    )
     assert {"occupancy_status", "unit_category", "is_current"} <= {column["name"] for column in semantic["columns"]}
 
 

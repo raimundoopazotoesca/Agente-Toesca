@@ -80,6 +80,7 @@ def test_schema_search_action_serializes_metadata_and_trace():
     assert "raw_rent_roll_line" in result.trace["candidate_names"]
     assert result.trace["success"] is True
     assert result.trace["duration_ms"] >= 0
+    assert result.trace["candidate_scores"]
 
 
 def test_schema_search_action_rejects_invalid_request_with_typed_trace():
@@ -98,10 +99,10 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
         def __init__(self):
             self.responses = iter([
                 ModelResponse("", [ToolRequest("schema", "schema_search", {
-                    "query": "rent roll vacancy asset period", "limit": 5,
+                    "query": "Apoquindo 3001 espacios pisos vacantes junio 2026", "limit": 10,
                 })]),
                 ModelResponse("", [ToolRequest("sql", "run_sql", {
-                    "query": "SELECT unidad, m2 FROM raw_rent_roll_line WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND superseded_at IS NULL",
+                    "query": "SELECT unidad, m2 FROM v_rent_roll_semantic WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND is_current = 1 AND occupancy_status = 'vacant' ORDER BY source_row",
                 })]),
                 ModelResponse("respuesta"),
             ])
@@ -118,12 +119,10 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
     assert [(call.name, call.ok) for call in result.turn.tool_calls] == [
         ("schema_search", True), ("run_sql", True),
     ]
-    # Stage 3.15 intentionally introduced the governed view. The raw source
-    # remains discoverable, but callers receive semantic metadata without
-    # depending on an exact ranking of otherwise relevant objects.
+    # The real Stage 3.17 wording must expose the governed row-level dataset.
     candidate_names = result.turn.tool_calls[0].trace["candidate_names"]
     assert "v_rent_roll_semantic" in candidate_names
-    assert "raw_rent_roll_line" in candidate_names
+    assert result.turn.tool_calls[0].trace["candidate_scores"]["v_rent_roll_semantic"] > 0
     schema_result = next(
         tool_result
         for round_ in result.round_trajectory
@@ -138,6 +137,36 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
         column["name"] for column in semantic["columns"]
     }
     assert result.turn.usage.calls == 3
+
+
+def test_schema_search_ranks_governed_row_level_dataset_from_generic_space_metadata():
+    result = SQLiteSchemaIntrospector(DB).search(
+        "Apoquindo 3001 espacios pisos vacantes junio 2026", limit=10
+    )
+
+    names = [obj.name for obj in result.objects]
+    assert "v_rent_roll_semantic" in names
+    assert result.candidate_scores["v_rent_roll_semantic"] > 0
+
+
+def test_schema_search_retrieval_set_keeps_aggregate_breakdown_row_and_raw_candidates():
+    introspector = SQLiteSchemaIntrospector(DB)
+    cases = {
+        "vacancia por activo mensual": "v_vacancia_activo",
+        "vacancia por tipo de unidad de un activo": "v_vacancia_activo_tipo",
+        "unidades espacios vacantes activo periodo": "v_rent_roll_semantic",
+        "rent roll archivo fuente fila provenance": "raw_rent_roll_line",
+        "movimientos de contrato por activo": "raw_movimiento_contrato",
+    }
+
+    for query, expected in cases.items():
+        assert expected in [obj.name for obj in introspector.search(query, limit=10).objects]
+
+
+def test_schema_search_does_not_repeat_generic_dimension_evidence_across_metadata_sources():
+    result = SQLiteSchemaIntrospector(DB).search("movimientos de contrato por activo", limit=10)
+
+    assert result.objects[0].name == "raw_movimiento_contrato"
 
 
 def test_benchmark_contract_exposes_only_frozen_run_sql_tool():
