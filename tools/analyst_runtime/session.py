@@ -18,7 +18,7 @@ from tools.analyst_runtime.actions import (
     ResolveEntityAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
-from tools.analyst_runtime.canonical_guard import validate_and_render
+from tools.analyst_runtime.coverage_guard import validate_and_render
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
@@ -185,22 +185,28 @@ class OpenAIResponsesTransport:
 class OpenAIResponsesAnalystSession:
     """Keeps the provider's opaque replay trajectory only in process memory."""
 
-    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None):
+    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None, db_path: Path | None = None):
         self._loop = loop
         self._history: list[TranscriptItem] = list(history or [])
         self._presenter = presenter
+        self._db_path = db_path
 
     def ask(self, text: str) -> AnalystSessionResult:
         investigation = self._loop.investigate(text, history=self._history)
         evidence = [result.evidence for item in investigation.round_trajectory for result in item.tool_results
                     if result.evidence is not None]
         canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
+        governed = [item for item in evidence if item.evidence_class == "governed_dataset"]
         validation = None
         if investigation.termination_reason == "clarification_required":
             result = self._loop._legacy_finalize(investigation)
-        elif canonical:
+        elif investigation.tool_calls:
+            # Any tool call -- not just a canonical/governed one -- may have
+            # surfaced entity data (e.g. run_sql). Structured finalization plus
+            # coverage_guard is what closes the raw-only enumeration bypass;
+            # a toolless turn has no entity data to guard, so it stays legacy.
             result = self._loop.finalize(investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA))
-            validation = validate_and_render(result.turn.raw["structured_output"] or {}, canonical)
+            validation = validate_and_render(result.turn.raw["structured_output"] or {}, canonical, governed, self._db_path)
             result.turn.text = validation.content
             result.turn.raw.update(validation.trace)
         else:
@@ -277,7 +283,8 @@ class OpenAIResponsesAnalystSessionFactory:
         history = [TranscriptItem(role=message.role, text=message.content) for message in visible_messages]
         presenter = self._presenter_factory(client, self.model) if self._presenter_factory else None
         return OpenAIResponsesAnalystSession(
-            AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter
+            AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
+            db_path=self.knowledge_db_path,
         )
 
 

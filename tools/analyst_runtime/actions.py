@@ -35,6 +35,7 @@ from tools.schema_discovery import (
 )
 from tools.entities.catalog import ENTITY_TYPES
 from tools.entities.resolver import EntityResolver
+from tools.entities.canonical_scope import CanonicalScopeValidator, expected_asset_universe
 
 MAX_ROWS_RETURNED = 50
 
@@ -335,6 +336,21 @@ class _AnalyticsCapabilityAction:
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
                             "entity_id": row.entity_id, "period": row.period},),
                 )
+            elif result.result_kind == "breakdown" and result.rows:
+                evidence = ToolEvidence(
+                    evidence_id=request.call_id,
+                    evidence_class="governed_dataset",
+                    source={"tool_name": self.name, "source_kind": result.rows[0].source_kind},
+                    scope=scope,
+                    semantic_contract={"metric_key": result.rows[0].metric_key, "entity_grain": "asset", "period_grain": "month"},
+                    provenance={"ingest_run_ids": sorted({
+                        r.provenance.get("ingest_run_id") for r in result.rows
+                        if isinstance(r.provenance, dict) and isinstance(r.provenance.get("ingest_run_id"), int)
+                    })},
+                    coverage=_governed_dataset_coverage(self.db_path, scope, request.arguments, result.rows),
+                    facts=tuple({"metric_key": r.metric_key, "value": r.value, "unit": r.unit,
+                                 "entity_id": r.entity_id, "period": r.period} for r in result.rows),
+                )
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
         except SemanticQueryError as exc:
@@ -399,6 +415,27 @@ class AnalyticsBreakdownAssetAction(_AnalyticsCapabilityAction):
     capability = "asset_breakdown"
     scope_field = "fund"
     breakdown = True
+
+
+def _governed_dataset_coverage(db_path: Path, scope: dict[str, str], arguments: dict[str, object], rows: tuple) -> dict[str, object]:
+    """Deterministic complete/partial/unknown coverage for one governed
+    multi-row result. `unknown` whenever scope isn't a canonical fund key or
+    the expected universe cannot be derived -- never inferred as complete
+    from absence of a contrary signal."""
+    fund_key = scope.get("fund")
+    observed = frozenset(r.entity_id for r in rows)
+    if not fund_key or not CanonicalScopeValidator(db_path).validate_fund(fund_key).valid:
+        return {"universe_kind": "fund_assets", "eligible_count": None, "observed_count": len(observed),
+                "eligible_ids": None, "observed_ids": sorted(observed), "status": "unknown"}
+    period_ref = arguments.get("period_end") or arguments.get("period")
+    universe = expected_asset_universe(db_path, fund_key, str(period_ref))
+    if universe.status != "determined":
+        return {"universe_kind": "fund_assets", "eligible_count": None, "observed_count": len(observed),
+                "eligible_ids": None, "observed_ids": sorted(observed), "status": "unknown"}
+    eligible = universe.eligible_keys
+    status = "complete" if eligible and eligible <= observed else ("partial" if eligible else "unknown")
+    return {"universe_kind": "fund_assets", "eligible_count": len(eligible), "observed_count": len(observed),
+            "eligible_ids": sorted(eligible), "observed_ids": sorted(observed), "status": status}
 
 
 def _capability_trace(arguments: dict[str, object], scope: dict[str, str], payload: dict[str, object], allowed: frozenset[str]) -> dict[str, object]:

@@ -134,7 +134,11 @@ def test_next_user_turn_resets_barrier_and_skips_presenter_for_clarification():
     transport = ScriptedTransport([
         ModelResponse("", [ToolRequest("low", "resolve_entity", {"query": "Parque Titanium", "entity_types": ["asset"], "fund": None})]),
         ModelResponse("", [ToolRequest("resolved", "resolve_entity", {"query": "Parking Parque Titanium (SABA)", "entity_types": ["asset"], "fund": None})]),
-        ModelResponse("respuesta"),
+        ModelResponse("respuesta", []),
+        ModelResponse("respuesta", structured_output={
+            "fragments": [{"type": "text", "text": "respuesta"}],
+            "canonical_metric_claims": [], "governed_dataset_claims": [],
+        }),
     ])
     registry = ActionRegistry([ResolveEntityAction(DB)])
     session = OpenAIResponsesAnalystSession(AnalystLoop("sys", transport, registry, registry.tool_specs()), presenter=None)
