@@ -217,7 +217,18 @@ class ResolveEntityAction:
             if fund is not None and not isinstance(fund,str): raise ValueError("fund must be a canonical fund key or null")
             result=EntityResolver(self.db_path).resolve(query,tuple(types),fund); payload=result.as_dict()
             trace={"tool_name":self.name,"query":query,"requested_entity_types":types,"fund":fund,"status":result.status,"candidates":[{"entity_key":c.entity_key,"canonical_name":c.canonical_name,"score":c.score,"match_kind":c.match_kind} for c in result.candidates],"success":True,"duration_ms":(time.monotonic()-started)*1000}
-            return ToolResult(request.call_id,True,json.dumps(payload,ensure_ascii=False),trace=trace)
+            control = None
+            if result.status != "resolved":
+                control = {
+                    "kind": "clarification_required",
+                    "reason": result.status,
+                    "entity_query": query,
+                    "resolution_status": result.status,
+                }
+                trace.update({"resolution_status": result.status, "clarification_required": True})
+            else:
+                trace["resolution_status"] = "resolved"
+            return ToolResult(request.call_id,True,json.dumps(payload,ensure_ascii=False),trace=trace,control=control)
         except (KeyError,TypeError,ValueError) as exc:
             return ToolResult(request.call_id,False,json.dumps({"error_type":"invalid_request","error":str(exc)},ensure_ascii=False),trace={"tool_name":self.name,"success":False,"error":{"error_type":"invalid_request","message":str(exc)},"duration_ms":(time.monotonic()-started)*1000})
         except Exception as exc:  # noqa: BLE001 -- tool failures are reported, never raised through the loop

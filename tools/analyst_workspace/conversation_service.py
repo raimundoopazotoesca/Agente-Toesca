@@ -108,6 +108,7 @@ def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) 
         "token_usage": token_usage,
         "provider": usage.provider,
         "model": usage.model,
+        **({"termination_reason": result.termination_reason} if result.termination_reason else {}),
     }
     presentation = {
         "presentation_applied": result.presentation_applied,

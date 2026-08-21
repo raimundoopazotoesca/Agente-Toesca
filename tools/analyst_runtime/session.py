@@ -104,6 +104,7 @@ class AnalystSessionResult:
     presentation_integrity_status: str | None = None
     original_answer_hash: str | None = None
     presented_answer_hash: str | None = None
+    termination_reason: str | None = None
 
 
 class AnalystSession(Protocol):
@@ -187,7 +188,9 @@ class OpenAIResponsesAnalystSession:
         result = self._loop.ask(text, history=self._history)
         self._history = result.round_trajectory
         turn = result.turn
-        presentation = self._present(turn.text, text)
+        termination_reason = turn.raw.get("termination_reason")
+        presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
+                        else self._present(turn.text, text))
         return AnalystSessionResult(
             text=presentation.content,
             usage=turn.usage,
@@ -200,12 +203,17 @@ class OpenAIResponsesAnalystSession:
             presentation_integrity_status=presentation.integrity_status,
             original_answer_hash=_answer_hash(turn.text),
             presented_answer_hash=_answer_hash(presentation.content),
+            termination_reason=termination_reason,
         )
 
     def _present(self, draft: str, user_message: str) -> PresentationResult:
         if self._presenter is None:
             return PresentationResult(draft, False, None, None, None, "not_configured")
         return self._presenter.present(user_message=user_message, draft_answer=draft)
+
+
+def _clarification_presentation(content: str) -> PresentationResult:
+    return PresentationResult(content, False, None, None, None, "clarification_required")
 
 
 class OpenAIResponsesAnalystSessionFactory:

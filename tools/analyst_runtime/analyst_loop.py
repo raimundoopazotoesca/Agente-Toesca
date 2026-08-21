@@ -101,6 +101,7 @@ class AnalystLoop:
         tool_calls_log: list[ToolCall] = []
         total_usage = Usage()
         response: ModelResponse | None = None
+        termination_reason: str | None = None
 
         for _ in range(MAX_INVESTIGATION_ROUNDS):
             request = ModelRequest(system_prompt=self.system_prompt, history=round_history, message=next_message, tools=self.tool_specs)
@@ -115,10 +116,20 @@ class AnalystLoop:
                 round_history = _append_turn(round_history, user_text, response, [])
                 break
 
-            results = [self.action_executor.execute(tr) for tr in response.tool_requests]
-            for tr, result in zip(response.tool_requests, results):
+            results: list[ToolResult] = []
+            for index, tr in enumerate(response.tool_requests):
+                result = self.action_executor.execute(tr)
+                results.append(result)
                 tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
+                if result.control and result.control.get("kind") == "clarification_required":
+                    result.trace["blocked_followup_tool_calls"] = [request.name for request in response.tool_requests[index + 1:]]
+                    result.trace["termination_reason"] = "clarification_required"
+                    termination_reason = "clarification_required"
+                    final_text = _clarification_text(result.control)
+                    break
             round_history = _append_turn(round_history, user_text, response, results)
+            if termination_reason:
+                break
         else:
             # Investigation budget exhausted without a final answer. Spend the
             # reserved round on synthesis, with tools disabled two ways: the
@@ -138,7 +149,7 @@ class AnalystLoop:
             artifacts=_extract_artifacts(final_text),
             tool_calls=tool_calls_log,
             usage=total_usage,
-            raw={"final_text": final_text},
+            raw={"final_text": final_text, **({"termination_reason": termination_reason} if termination_reason else {})},
         )
         return LoopResult(turn=turn, round_trajectory=round_history)
 
@@ -149,6 +160,16 @@ def _append_turn(history: list[TranscriptItem], user_text: str | None, response:
         out.append(TranscriptItem(role="user", text=user_text))
     out.append(TranscriptItem(role="assistant", text=response.text, tool_requests=response.tool_requests, tool_results=results, raw=response.raw_items))
     return out
+
+
+def _clarification_text(control: dict[str, object]) -> str:
+    query = str(control.get("entity_query", "la entidad"))
+    status = control.get("resolution_status")
+    if status == "ambiguous":
+        return f"No pude resolver '{query}' a una entidad canÃ³nica Ãºnica. Â¿Puedes precisar a quÃ© activo te refieres?"
+    if status == "not_found":
+        return f"No encontrÃ© una entidad canÃ³nica para '{query}'. Â¿Puedes precisar a quÃ© activo te refieres?"
+    return f"No pude resolver '{query}' a una entidad canÃ³nica con suficiente confianza. Â¿Puedes precisar a quÃ© activo te refieres?"
 
 
 def _accumulate(total: Usage, call: Usage) -> None:

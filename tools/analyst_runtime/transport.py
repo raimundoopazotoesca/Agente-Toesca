@@ -51,6 +51,7 @@ class ToolResult:
     ok: bool
     content: str
     trace: dict[str, Any] = field(default_factory=dict)
+    control: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
