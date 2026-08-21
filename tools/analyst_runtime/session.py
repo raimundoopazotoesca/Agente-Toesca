@@ -127,7 +127,7 @@ class OpenAIResponsesTransport:
         request_input = self._render_history(request.history)
         if request.message:
             request_input.append({"role": "user", "content": request.message})
-        response = self.client.responses.create(
+        kwargs = dict(
             model=self.model,
             instructions=request.system_prompt,
             input=request_input,
@@ -135,6 +135,9 @@ class OpenAIResponsesTransport:
             tool_choice="auto" if request.tools else "none",
             store=False,
         )
+        if request.output_contract:
+            kwargs["text"] = {"format": {"type": "json_schema", "name": request.output_contract.name, "schema": request.output_contract.schema, "strict": request.output_contract.strict}}
+        response = self.client.responses.create(**kwargs)
         items = [_item_dict(item) for item in response.output]
         usage_raw = getattr(response, "usage", None)
         input_details = getattr(usage_raw, "input_tokens_details", None)
@@ -154,6 +157,7 @@ class OpenAIResponsesTransport:
                 reasoning_tokens=getattr(output_details, "reasoning_tokens", None),
                 cached_tokens=getattr(input_details, "cached_tokens", None),
             ),
+            structured_output=_structured_output(response, request.output_contract is not None),
         )
 
     @staticmethod
@@ -288,6 +292,13 @@ def _safe_json_loads(value: str | None) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+def _structured_output(response: Any, required: bool) -> dict[str, Any] | None:
+    if not required: return None
+    value = getattr(response, "output_parsed", None)
+    if hasattr(value, "model_dump"): value = value.model_dump()
+    if not isinstance(value, dict): raise ValueError("structured_output_required")
+    return value
 
 
 def _tool_spec_to_responses(spec: ToolSpec) -> dict[str, Any]:

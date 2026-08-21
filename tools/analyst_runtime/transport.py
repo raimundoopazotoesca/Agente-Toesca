@@ -43,6 +43,24 @@ class ToolRequest:
 
 
 @dataclass(frozen=True)
+class ToolEvidence:
+    evidence_id: str
+    evidence_class: str
+    source: dict[str, Any] = field(default_factory=dict)
+    scope: dict[str, Any] = field(default_factory=dict)
+    semantic_contract: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+    coverage: dict[str, Any] | None = None
+    facts: tuple[dict[str, Any], ...] = ()
+
+@dataclass(frozen=True)
+class StructuredOutputContract:
+    name: str
+    schema: dict[str, Any]
+    strict: bool = True
+
+
+@dataclass(frozen=True)
 class ToolResult:
     """The executor's answer to one ToolRequest, ready to hand back to a
     transport for replay."""
@@ -52,6 +70,7 @@ class ToolResult:
     content: str
     trace: dict[str, Any] = field(default_factory=dict)
     control: dict[str, Any] | None = None
+    evidence: ToolEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +92,7 @@ class ModelRequest:
     history: list[TranscriptItem]
     message: str
     tools: list[ToolSpec]
+    output_contract: StructuredOutputContract | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +103,7 @@ class ModelResponse:
     tool_requests: list[ToolRequest] = field(default_factory=list)
     raw_items: Any = None
     usage: Usage = field(default_factory=Usage)
+    structured_output: dict[str, Any] | None = None
 
 
 class ModelTransport(Protocol):
