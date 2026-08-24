@@ -346,7 +346,30 @@ def serve_factsheet():
 @app.get("/chat_bubble.js")
 def serve_chat_bubble():
     source = (WEB_DIR / "quick_chat_controller.js").read_text(encoding="utf-8")
+    source += "\n" + (WEB_DIR / "chat_markdown.js").read_text(encoding="utf-8")
     source += "\n" + (WEB_DIR / "chat_bubble.js").read_text(encoding="utf-8")
+    resp = app.response_class(source, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
+@app.get("/analyst")
+def serve_analyst_workspace():
+    return _serve_html_con_token(WEB_DIR, "analyst.html")
+
+
+@app.get("/analyst/chat/<conversation_id>")
+def serve_analyst_workspace_chat(conversation_id: str):
+    # conversation_id se resuelve en el cliente (fetch a /api/analyst/...);
+    # el servidor solo sirve el mismo shell para cualquier id, igual que una SPA.
+    return _serve_html_con_token(WEB_DIR, "analyst.html")
+
+
+@app.get("/analyst_workspace.js")
+def serve_analyst_workspace_js():
+    source = (WEB_DIR / "quick_chat_controller.js").read_text(encoding="utf-8")
+    source += "\n" + (WEB_DIR / "chat_markdown.js").read_text(encoding="utf-8")
+    source += "\n" + (WEB_DIR / "analyst_workspace.js").read_text(encoding="utf-8")
     resp = app.response_class(source, mimetype="application/javascript")
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
@@ -376,6 +399,31 @@ def api_chat():
             "error": "server_error",
         }), 500
     return jsonify(result)
+
+
+@app.post("/api/restart_servidores")
+def api_restart_servidores():
+    """Relanza restart_servidores.bat (mata y vuelve a levantar 8765 y 5000).
+
+    El propio proceso actual queda en la lista de PIDs que el .bat mata en el
+    puerto 8765, así que basta con lanzarlo desacoplado del proceso: el .bat
+    sobrevive a que este proceso termine.
+    """
+    import subprocess
+
+    bat_path = ROOT / "restart_servidores.bat"
+    if not bat_path.exists():
+        return jsonify({"ok": False, "error": f"No se encontró {bat_path}"}), 500
+    try:
+        subprocess.Popen(
+            ["cmd", "/c", str(bat_path)],
+            cwd=str(ROOT),
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+    except OSError as exc:
+        return jsonify({"ok": False, "error": f"No se pudo lanzar el script: {exc}"}), 500
+    return jsonify({"ok": True, "mensaje": "Reiniciando servidores. La página se recargará sola en unos segundos."})
 
 
 def _analyst_body() -> dict:

@@ -69,3 +69,10 @@ scratchpad/
 # Git worktrees creados por Claude Code
 .claude/worktrees/
 .worktrees/
+
+# Alpha eval: versionar cases + runners (el gate), no las corridas crudas.
+eval/alpha_eval_v1/results/
+eval/alpha_eval_v1/results_*/
+eval/alpha_eval_v1/*.log
+eval/alpha_eval_v1/_scratch_workspace.db
+eval/alpha_eval_v1/__pycache__/

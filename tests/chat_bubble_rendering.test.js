@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
+const ToescaChatMarkdown = require("../web/chat_markdown.js");
 
 class Element {
   constructor(tagName) {
@@ -57,6 +58,7 @@ function createDocument() {
   elements.set("#tc-q", input);
   elements.set("#tc-send", send);
   elements.set(".tc-close", close);
+  elements.set(".tc-expand", new Element("button"));
   panel.querySelector = (selector) => elements.get(selector) || null;
   let divCount = 0;
   const originalCreate = (tag) => {
@@ -120,6 +122,12 @@ async function run() {
       setItem: (key, value) => stored.set(key, String(value)),
       removeItem: (key) => stored.delete(key),
     },
+    localStorage: {
+      getItem: (key) => stored.get(key) || null,
+      setItem: (key, value) => stored.set(key, String(value)),
+      removeItem: (key) => stored.delete(key),
+    },
+    ToescaChatMarkdown,
     fetch: async (url, init = {}) => {
       if (url.endsWith("/conversations")) return makeResponse(201, { id: "conv-1" });
       if (init.method === "POST") return makeResponse(201, { id: "msg-1", role: "assistant", content: complex });
@@ -164,7 +172,9 @@ async function run() {
     document: restoredDocument,
     location: { protocol: "http:" },
     sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     fetch: async () => makeResponse(200, {}),
+    ToescaChatMarkdown,
     ToescaQuickChat: {
       createQuickChatController: () => ({
         isPending: () => false,

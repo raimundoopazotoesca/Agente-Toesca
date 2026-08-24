@@ -1,0 +1,162 @@
+[
+  {
+    "id": "01_canonical_kpi",
+    "category": "simple_canonical_kpi",
+    "turns": ["¿Cuál fue la vacancia de TRI en junio de 2026?"],
+    "ground_truth": {
+      "source": "derived_kpi WHERE entidad_tipo='fondo' AND entidad_key='TRI' AND kpi='vacancia_pct' AND periodo='2026-06'",
+      "value": "5.945%",
+      "formula": "vacancia_ponderada_fondo_rentas_manual"
+    },
+    "expected_behavior": "Debe recuperar 5.945% (canónico) sin recalcular desde raw y sin exponer metodología/tabla salvo que se pregunte."
+  },
+  {
+    "id": "02_asset_kpi",
+    "category": "simple_asset_kpi",
+    "turns": ["¿Cuál es el LTV de Apoquindo 3001 en junio de 2026?"],
+    "ground_truth": {
+      "source": "derived_kpi WHERE entidad_tipo='activo' AND entidad_key='Apo3001' AND kpi='ltv' AND periodo='2026-06'",
+      "value": "71.15%"
+    },
+    "expected_behavior": "Debe recuperar ~71.15% para Apo3001, sin confundir con LTV de TRI (61.02%) o Apo fondo (73.48%)."
+  },
+  {
+    "id": "03_followup",
+    "category": "conversational_followup",
+    "turns": [
+      "¿Cuál es el LTV de Apoquindo 3001 en junio de 2026?",
+      "¿Y el mes anterior?"
+    ],
+    "ground_truth": {
+      "source": "derived_kpi Apo3001 ltv",
+      "value_jun": "71.15%",
+      "value_may": "71.32% (2026-05)"
+    },
+    "expected_behavior": "Segundo turno debe entender 'mes anterior' = mayo 2026 del mismo activo/KPI (Apo3001 LTV) sin repreguntar qué activo/KPI."
+  },
+  {
+    "id": "04_entity_ambiguity",
+    "category": "entity_ambiguity",
+    "turns": ["¿Cómo ha evolucionado Parque Titanium este año?"],
+    "ground_truth": {
+      "source": "dim_activo WHERE fondo_key='PT'",
+      "note": "Fondo PT tiene 3 activos: Torre A, Boulevard PT, Parking PT (SABA). Ninguno se llama literalmente 'Parque Titanium' (ese es el nombre del fondo/complejo)."
+    },
+    "expected_behavior": "Debe pedir aclaración sobre qué activo/agregado del fondo PT se refiere, NO asumir silenciosamente 'Parking PT (SABA)' ni ningún otro activo específico."
+  },
+  {
+    "id": "05_complete_enumeration",
+    "category": "complete_enumeration",
+    "turns": ["Dame todos los activos del fondo TRI."],
+    "ground_truth": {
+      "source": "dim_activo WHERE fondo_key='TRI'",
+      "value": ["INMOSA", "Viña Centro", "Mall Curicó", "Apo3001", "Sucden (Bodegas Maipú)", "Residencia Arturo Medina", "Residencia Candil", "Residencia Colombia", "Residencia Coventry", "Residencia Domingo Calderón", "Residencia Padre Errázuriz", "Strip Machalí"],
+      "count": 12,
+      "note": "Strip Machalí vigente_hasta=2025-08 (divestido) — debe aparecer marcado como histórico/no vigente, no como activo actual sin aclaración."
+    },
+    "expected_behavior": "Debe enumerar los 12 activos (vía Dynamic Coverage / resolve_entity+schema), y distinguir Strip Machalí como no vigente actualmente."
+  },
+  {
+    "id": "06_ranking_full_fund",
+    "category": "ranking",
+    "turns": ["Rankea los activos de TRI por NOI mensual de junio de 2026."],
+    "ground_truth": {
+      "source": "derived_kpi kpi='noi_mensual' periodo='2026-06' entidad_tipo='activo', fondo_key TRI",
+      "covered": {"Viña Centro": 10465.96, "INMOSA": 7217.0, "Sucden": 1782.44, "Mall Curicó": 979.11},
+      "not_covered": ["Apo3001", "Residencia Arturo Medina", "Residencia Candil", "Residencia Colombia", "Residencia Coventry", "Residencia Domingo Calderón", "Residencia Padre Errázuriz", "Strip Machalí"],
+      "note": "Solo 4 de 12 activos TRI tienen noi_mensual calculado en derived_kpi para este período."
+    },
+    "expected_behavior": "Debe rankear los 4 activos con dato disponible y declarar explícitamente la limitación de cobertura para el resto, no fabricar ni omitir silenciosamente el resto del universo."
+  },
+  {
+    "id": "07_explicit_subset_ranking",
+    "category": "explicit_subset_ranking",
+    "turns": ["Rankea INMOSA, Viña Centro y Mall Curicó por NOI mensual de junio de 2026."],
+    "ground_truth": {
+      "source": "derived_kpi kpi='noi_mensual' periodo='2026-06'",
+      "ranking": [["Viña Centro", 10465.96], ["INMOSA", 7217.0], ["Mall Curicó", 979.11]]
+    },
+    "expected_behavior": "Debe rankear exactamente los 3 activos nombrados sin exigir cobertura del fondo TRI completo (los otros 9 activos son irrelevantes aquí)."
+  },
+  {
+    "id": "08_canonical_vs_raw_conflict",
+    "category": "canonical_vs_raw",
+    "turns": ["La vacancia canónica de TRI es 5.945%. ¿Coincide con lo que da un cálculo simple promediando la vacancia de cada activo desde sus rent rolls?"],
+    "ground_truth": {
+      "canonical": "5.945% (derived_kpi, fondo_key=TRI, formula vacancia_ponderada_fondo_rentas_manual)",
+      "raw_naive": "~4.76% (promedio simple no ponderado sobre v_vacancia_activo)",
+      "note": "Los dos números difieren porque el canónico pondera y usa una metodología manual distinta al promedio naive de la vista raw."
+    },
+    "expected_behavior": "El canónico (5.945%) debe mantenerse como autoridad; la reconstrucción raw (~4.76%) puede presentarse solo como análisis separado/explicativo, nunca reemplazando ni promediándose con el canónico."
+  },
+  {
+    "id": "09_raw_exploration",
+    "category": "raw_exploration",
+    "turns": ["¿Qué activos de TRI no tienen NOI mensual calculado para junio de 2026, y por qué crees que podría pasar eso?"],
+    "ground_truth": {
+      "not_covered": ["Apo3001", "Residencia Arturo Medina", "Residencia Candil", "Residencia Colombia", "Residencia Coventry", "Residencia Domingo Calderón", "Residencia Padre Errázuriz", "Strip Machalí"],
+      "note": "No hay capability gobernada directa para 'qué activos faltan'; requiere schema_search/run_sql comparando dim_activo vs derived_kpi, o análogo."
+    },
+    "expected_behavior": "Debe usar exploración (schema_search/run_sql) razonablemente para identificar el gap y ofrecer una hipótesis razonable (ej. residencias no tienen ER operacional tipo NOI, Apo3001 se reporta con otro KPI, Machalí divestido)."
+  },
+  {
+    "id": "10_multistep_investigation",
+    "category": "multistep",
+    "turns": ["¿El LTV de Apoquindo 3001 se explica más por el nivel de deuda o por el valor del activo? Revisa la evolución reciente."],
+    "ground_truth": {
+      "source": "derived_kpi Apo3001 ltv 2024-10 a 2026-06 (baja de 86.45% a 71.15%)",
+      "note": "Requiere mirar serie temporal de ltv (y posiblemente ltc/deuda/tasación) para argumentar la causa del cambio, no solo reportar el valor puntual."
+    },
+    "expected_behavior": "Debe hacer 2+ tool calls (serie temporal + posiblemente deuda/valor del activo) y razonar sobre la causa del movimiento del LTV, no solo devolver el número actual."
+  },
+  {
+    "id": "11_individual_asset_analysis",
+    "category": "asset_analysis",
+    "turns": ["Analiza Apoquindo 3001."],
+    "ground_truth": {
+      "note": "Activo TRI con LTV alto y decreciente (86%→71%), vacancia por piso mixta (algunos pisos 100% vacíos, otros 100% ocupados). Insight esperado: apalancamiento elevado pero mejorando, vacancia concentrada."
+    },
+    "expected_behavior": "No debe ser un volcado de KPIs; debe producir una lectura analítica (qué es relevante, qué destaca, qué implica) usando los datos reales disponibles."
+  },
+  {
+    "id": "12_fund_comparison",
+    "category": "fund_comparison",
+    "turns": ["Compara el apalancamiento (LTV) de TRI y PT."],
+    "ground_truth": {
+      "source": "derived_kpi kpi='ltv' periodo='2026-06' entidad_tipo='fondo'",
+      "value": {"TRI": "61.02%", "PT": "81.22%"}
+    },
+    "expected_behavior": "Debe comparar correctamente 61.02% (TRI) vs 81.22% (PT) y señalar que PT está bastante más apalancado."
+  },
+  {
+    "id": "13_temporal_applicability",
+    "category": "temporal_applicability",
+    "turns": ["¿Cuál fue el NOI de Strip Machalí en junio de 2026?"],
+    "ground_truth": {
+      "source": "dim_activo.vigente_hasta='2025-08' para Strip Machalí; raw_er_activo_line sin datos posteriores a 2025-08",
+      "note": "Machalí fue divestido; no debe aparecer como activo vigente en 2026-06."
+    },
+    "expected_behavior": "Debe indicar que Strip Machalí ya no es parte del portafolio/fue divestido antes de esa fecha (~agosto 2025) y no reportar o inventar un NOI para junio 2026."
+  },
+  {
+    "id": "14_coverage_partial_unknown",
+    "category": "coverage_partial",
+    "turns": ["¿Cuál es la vacancia por piso de todos los activos de TRI en junio de 2026?"],
+    "ground_truth": {
+      "source": "derived_kpi kpi='vacancia_pct_piso' periodo='2026-06'",
+      "covered": ["Apo3001 (por piso: Piso 3, Piso 4, Zócalo=100%; Piso 2/5/6/7/8/11=0%)"],
+      "not_covered": ["INMOSA", "Viña Centro", "Mall Curicó", "Sucden", "las 6 Residencias", "Strip Machalí"],
+      "note": "Solo Apo3001 tiene granularidad por piso dentro de TRI; el resto de activos TRI no tiene este KPI a nivel piso."
+    },
+    "expected_behavior": "Debe declarar partial/unknown de forma honesta: cubrir Apo3001 con detalle y marcar explícitamente que el resto de activos TRI no tiene ese nivel de granularidad, sin fabricar datos ni ocultarlo."
+  },
+  {
+    "id": "15_vague_conversational",
+    "category": "vague_analyst_request",
+    "turns": ["oye, ¿cómo viene Apoquindo este trimestre? ¿hay algo que debería preocuparme?"],
+    "ground_truth": {
+      "note": "Pregunta natural sin especificar fondo Apo vs activos Apo4501/Apo4700/Apo3001, ni KPI, ni trimestre exacto (asumir Q2 2026 = abr-jun si 'este trimestre' se resuelve a partir de la fecha actual). No tiene estructura de BI."
+    },
+    "expected_behavior": "Debe interpretar la intención (barrido de salud general: LTV, vacancia, NOI) sin exigir que el usuario reformule en términos de KPI/tabla/período exacto, y señalar algo concreto y relevante (ej. LTV alto en Apo3001, vacancia por piso concentrada) si aplica."
+  }
+]
