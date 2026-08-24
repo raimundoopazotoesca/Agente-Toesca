@@ -79,14 +79,14 @@ def test_scripted_resolve_entity_propagates_canonical_asset_to_analytics():
         def __init__(self):
             self.responses = iter([
                 ModelResponse("", [ToolRequest("resolve", "resolve_entity", {"query": "Apoquindo 3001", "entity_types": ["asset"], "fund": None})]),
-                ModelResponse("", [ToolRequest("analytics", "analytics_lookup_asset", {"metric": "vacancia_fisica_pct_activo", "asset": "Apo3001", "period": "2026-06", "period_end": None})]),
+                ModelResponse("", [ToolRequest("analytics", "analytics_lookup_asset", {"metric": "vacancia_fisica_pct_activo", "assets": ["Apo3001"], "period": "2026-06", "period_end": None})]),
                 ModelResponse("respuesta"),
             ])
         def complete(self, _request): return next(self.responses)
     registry = ActionRegistry([ResolveEntityAction(DB), AnalyticsLookupAssetAction(DB)])
     result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
     assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "analytics_lookup_asset"]
-    assert result.turn.tool_calls[1].args["asset"] == "Apo3001"
+    assert result.turn.tool_calls[1].args["assets"] == ["Apo3001"]
     payload = json.loads(result.round_trajectory[-2].tool_results[0].content)
     assert payload["rows"][0]["value"] == 0.3620316883059285
 

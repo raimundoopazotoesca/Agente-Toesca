@@ -65,10 +65,11 @@ def test_lookup_asset_schema_has_no_breakdown_controls_and_maps_asset_scope():
     action = AnalyticsLookupAssetAction(DB)
     spec = action.tool_spec()
     result = action.execute(ToolRequest("call", action.name, {
-        "metric": "vacancia_fisica_pct_activo", "asset": "Apo3001", "period": "2026-06",
+        "metric": "vacancia_fisica_pct_activo", "assets": ["Apo3001"], "period": "2026-06",
     }))
 
-    assert set(spec.parameters["properties"]) == {"metric", "asset", "period", "period_end"}
+    assert set(spec.parameters["properties"]) == {"metric", "assets", "period", "period_end"}
+    assert spec.parameters["properties"]["assets"]["type"] == "array"
     assert json.loads(result.content)["rows"][0]["value"] == pytest.approx(0.3620316883)
     assert result.trace["scope"] == {"asset": "Apo3001"}
 
@@ -77,9 +78,9 @@ def test_breakdown_schema_cannot_select_fund_metric_and_fixes_grouping_internall
     action = AnalyticsBreakdownAssetAction(DB)
     spec = action.tool_spec()
 
-    assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end", "order_by", "limit"}
+    assert set(spec.parameters["properties"]) == {"metric", "fund", "assets", "period", "period_end", "order_by", "limit"}
     assert "vacancia_pct_fondo" not in spec.parameters["properties"]["metric"]["enum"]
-    assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end", "order_by", "limit"}
+    assert set(spec.parameters["required"]) == {"metric", "fund", "assets", "period", "period_end", "order_by", "limit"}
     assert spec.parameters["properties"]["order_by"]["enum"] == ["value_desc", "value_asc", None]
     invalid = action.execute(ToolRequest("bad", action.name, {
         "metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06",
@@ -129,5 +130,5 @@ def test_alpha_factory_exposes_only_capabilities_and_run_sql():
 
     assert set(registry._by_name) == {
         "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
-        "resolve_entity",
+        "resolve_entity", "list_assets",
     }

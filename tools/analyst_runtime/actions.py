@@ -252,6 +252,38 @@ def _optional_string(arguments: dict[str, object], name: str) -> str | None:
     return value
 
 
+def _required_key_list(arguments: dict[str, object], name: str) -> list[str]:
+    value = arguments.get(name)
+    if not isinstance(value, list) or not value or any(not isinstance(item, str) or not item for item in value):
+        raise ValueError(f"{name} must be a non-empty list of canonical keys")
+    if len(set(value)) != len(value):
+        raise ValueError(f"{name} must not repeat a canonical key")
+    return list(value)
+
+
+def _optional_key_list(arguments: dict[str, object], name: str) -> list[str]:
+    if arguments.get(name) is None:
+        return []
+    return _required_key_list(arguments, name)
+
+
+def _validate_subset_membership(db_path: Path, fund_key: str, assets: tuple[str, ...], period: str) -> None:
+    """Every explicitly requested asset must belong to the fund and be
+    temporally applicable at `period` -- same rule as expected_asset_universe.
+    An asset that belongs but simply has no KPI row is NOT rejected here: it
+    stays in the expected universe so coverage reports `partial`."""
+    if not CanonicalScopeValidator(db_path).validate_fund(fund_key).valid:
+        raise SemanticQueryError(f"unknown canonical fund: {fund_key}")
+    universe = expected_asset_universe(db_path, fund_key, period)
+    if universe.status != "determined":
+        raise SemanticQueryError(f"asset universe is undetermined for fund: {fund_key}")
+    outside = sorted(set(assets) - universe.eligible_keys)
+    if outside:
+        raise SemanticQueryError(
+            f"assets not applicable to fund {fund_key} at {period}: {', '.join(outside)}"
+        )
+
+
 def _optional_positive_int(arguments: dict[str, object], name: str) -> int | None:
     value = arguments.get(name)
     if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
@@ -290,8 +322,9 @@ class _AnalyticsCapabilityAction:
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     capability: ClassVar[str] = ""
-    scope_field: ClassVar[str] = ""
+    scope_field: ClassVar[str] = ""   # "fund" | "assets"
     breakdown: ClassVar[bool] = False
+    subset: ClassVar[bool] = False    # fund-scoped operations may take an explicit asset subset
 
     def tool_spec(self) -> ToolSpec:
         properties: dict[str, object] = {
@@ -300,10 +333,21 @@ class _AnalyticsCapabilityAction:
                 "enum": list(self._metric_keys()),
                 "description": "Exact governed metric identity available for this operation.",
             },
-            self.scope_field: {"type": "string", "description": f"{self.scope_field.title()} scope for this operation."},
             "period": {"type": "string", "description": "Initial month in YYYY-MM format."},
             "period_end": {"type": ["string", "null"], "description": "Optional inclusive final month in YYYY-MM format; use null for a point lookup."},
         }
+        if self.scope_field == "fund":
+            properties["fund"] = {"type": "string", "description": "Canonical fund key scoping this operation."}
+        else:
+            properties["assets"] = {
+                "type": "array", "items": {"type": "string"}, "minItems": 1,
+                "description": "One or more canonical asset keys to look up.",
+            }
+        if self.subset:
+            properties["assets"] = {
+                "type": ["array", "null"], "items": {"type": "string"}, "minItems": 1,
+                "description": "Optional explicit subset of canonical asset keys within the fund; use null to cover the whole fund.",
+            }
         if self.breakdown:
             properties.update({
                 "order_by": {"type": ["string", "null"], "enum": ["value_desc", "value_asc", None], "description": "Ordering for comparable metric values; use null for the native order."},
@@ -336,18 +380,29 @@ class _AnalyticsCapabilityAction:
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
                             "entity_id": row.entity_id, "period": row.period},),
                 )
-            elif result.result_kind == "breakdown" and result.rows:
+            elif result.rows:
+                # A multi-row *scalar* result is a time series over one entity,
+                # not an entity universe: it becomes governed_dataset evidence
+                # marked `period_range` so coverage_guard never frames it as
+                # partial/complete over assets. Per-row identity stays
+                # (entity_id, period) in either case.
+                period_range = result.result_kind == "scalar"
+                coverage = (_period_range_coverage(result.rows) if period_range
+                            else _governed_dataset_coverage(self.db_path, scope, request.arguments, result.rows))
                 evidence = ToolEvidence(
                     evidence_id=request.call_id,
                     evidence_class="governed_dataset",
                     source={"tool_name": self.name, "source_kind": result.rows[0].source_kind},
                     scope=scope,
-                    semantic_contract={"metric_key": result.rows[0].metric_key, "entity_grain": "asset", "period_grain": "month"},
+                    semantic_contract={"metric_key": result.rows[0].metric_key,
+                                       "entity_grain": result.rows[0].entity_type,
+                                       "period_grain": "month",
+                                       "universe_kind": coverage["universe_kind"]},
                     provenance={"ingest_run_ids": sorted({
                         r.provenance.get("ingest_run_id") for r in result.rows
                         if isinstance(r.provenance, dict) and isinstance(r.provenance.get("ingest_run_id"), int)
                     })},
-                    coverage=_governed_dataset_coverage(self.db_path, scope, request.arguments, result.rows),
+                    coverage=coverage,
                     facts=tuple({"metric_key": r.metric_key, "value": r.value, "unit": r.unit,
                                  "entity_id": r.entity_id, "period": r.period} for r in result.rows),
                 )
@@ -367,6 +422,8 @@ class _AnalyticsCapabilityAction:
 
     def _allowed_fields(self) -> frozenset[str]:
         fields = {"metric", self.scope_field, "period", "period_end"}
+        if self.subset:
+            fields.add("assets")
         if self.breakdown:
             fields.update({"order_by", "limit"})
         return frozenset(fields)
@@ -378,18 +435,26 @@ class _AnalyticsCapabilityAction:
         metric = _required_string(arguments, "metric")
         if metric not in self._metric_keys():
             raise ValueError(f"metric is not available for {self.name}: {metric}")
-        scope_value = _required_string(arguments, self.scope_field)
         period = _required_string(arguments, "period")
         period_end = _optional_string(arguments, "period_end")
+        universe_period = period_end or period
         if self.scope_field == "fund":
-            funds, assets, scope = (scope_value,), (), {"fund": scope_value}
+            fund = _required_string(arguments, "fund")
+            assets = tuple(_optional_key_list(arguments, "assets")) if self.subset else ()
+            if assets:
+                _validate_subset_membership(self.db_path, fund, assets, universe_period)
+            funds, scope = (fund,), {"fund": fund}
         else:
-            funds, assets, scope = (), (scope_value,), {"asset": scope_value}
+            assets = tuple(_required_key_list(arguments, "assets"))
+            funds, scope = (), ({"asset": assets[0]} if len(assets) == 1 else {"assets": list(assets)})
         order_by = _optional_string(arguments, "order_by") if self.breakdown else None
         limit = _optional_positive_int(arguments, "limit") if self.breakdown else None
+        # An explicit multi-asset lookup is a breakdown over an explicit
+        # subset, not a scalar: it must carry per-entity identity.
+        group_by = "asset" if (self.breakdown or (self.scope_field == "assets" and len(assets) > 1)) else None
         return AnalyticsQueryRequest(
             metric=metric, funds=funds, assets=assets, period=period, period_end=period_end,
-            group_by="asset" if self.breakdown else None, order_by=order_by, limit=limit,
+            group_by=group_by, order_by=order_by, limit=limit,
         ), scope
 
 
@@ -403,18 +468,116 @@ class AnalyticsLookupFundAction(_AnalyticsCapabilityAction):
 
 class AnalyticsLookupAssetAction(_AnalyticsCapabilityAction):
     name = "analytics_lookup_asset"
-    description = "Returns governed asset-level metric values for an asset and point or period range, validated against the metric catalog."
+    description = "Returns governed asset-level metric values for one or more canonical assets and a point or period range, validated against the metric catalog."
     capability = "asset_lookup"
-    scope_field = "asset"
+    scope_field = "assets"
     breakdown = False
 
 
 class AnalyticsBreakdownAssetAction(_AnalyticsCapabilityAction):
     name = "analytics_breakdown_asset"
-    description = "Returns governed metric breakdowns across comparable assets for a fund and period, with optional ordering and limit, validated against the metric catalog."
+    description = "Returns governed metric breakdowns and rankings across the assets of a fund for a period, optionally restricted to an explicit asset subset, with optional ordering and limit, validated against the metric catalog."
     capability = "asset_breakdown"
     scope_field = "fund"
     breakdown = True
+    subset = True
+
+
+@dataclass
+class ListAssetsAction:
+    """Governed enumeration of the assets of a fund.
+
+    Not a metric, so it deliberately does not go through the metric catalog;
+    it reads `dim_fondo`/`dim_activo` directly. Coverage is *derived* from the
+    same expected-universe semantics used everywhere else, never asserted.
+    """
+
+    db_path: Path
+    name: str = "list_assets"
+    description: str = (
+        "Enumerates the canonical assets of a fund, optionally as of a given month, "
+        "marking each one as currently applicable or historical (divested)."
+    )
+
+    def tool_spec(self) -> ToolSpec:
+        return ToolSpec(self.name, self.description, {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "fund": {"type": "string", "description": "Canonical fund key."},
+                "period": {"type": ["string", "null"], "description": "Optional month in YYYY-MM format; use null for the assets applicable today."},
+            },
+            "required": ["fund", "period"],
+        })
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        allowed = frozenset({"fund", "period"})
+        try:
+            unknown = sorted(set(request.arguments) - allowed)
+            if unknown:
+                raise ValueError(f"unknown {self.name} fields: {', '.join(unknown)}")
+            fund = _required_string(request.arguments, "fund")
+            period = _optional_string(request.arguments, "period")
+            if not CanonicalScopeValidator(self.db_path).validate_fund(fund).valid:
+                raise SemanticQueryError(f"unknown canonical fund: {fund}")
+            rows = _fund_asset_rows(self.db_path, fund)
+            # With a period, the applicable universe is the one
+            # expected_asset_universe would derive; without one, "now" means
+            # vigente_hasta IS NULL.
+            eligible = (expected_asset_universe(self.db_path, fund, period).eligible_keys if period
+                        else frozenset(key for key, vigente_hasta, _ in rows if vigente_hasta is None))
+            facts = tuple({"entity_id": key, "name": nombre, "vigente_hasta": vigente_hasta,
+                           "applicable": key in eligible, "period": period}
+                          for key, vigente_hasta, nombre in rows)
+            observed = frozenset(fact["entity_id"] for fact in facts if fact["applicable"])
+            coverage = {"universe_kind": "fund_assets", "eligible_count": len(eligible),
+                        "observed_count": len(observed), "eligible_ids": sorted(eligible),
+                        "observed_ids": sorted(observed),
+                        "status": "complete" if eligible and eligible <= observed else ("partial" if eligible else "unknown")}
+            payload = {"fund": fund, "period": period, "assets": list(facts),
+                       "applicable_count": len(observed), "total_count": len(facts)}
+            evidence = ToolEvidence(
+                evidence_id=request.call_id, evidence_class="governed_dataset",
+                source={"tool_name": self.name, "source_kind": "canonical"},
+                scope={"fund": fund}, semantic_contract={"entity_grain": "asset", "universe_kind": "fund_assets"},
+                provenance={"tables": ["dim_fondo", "dim_activo"]}, coverage=coverage, facts=facts,
+            )
+            trace = {"tool_name": self.name, "arguments": {"fund": fund, "period": period},
+                     "result": {"row_count": len(facts), "coverage_status": coverage["status"],
+                                "eligible_count": coverage["eligible_count"]}}
+            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
+                              trace=trace, evidence=evidence)
+        except SemanticQueryError as exc:
+            payload = {"error_type": "semantic_query_error", "error": str(exc)}
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
+                              trace={"tool_name": self.name, "error": {"error_type": "semantic_query_error", "message": str(exc)}})
+        except (KeyError, TypeError, ValueError) as exc:
+            payload = {"error_type": "invalid_request", "error": str(exc)}
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
+                              trace={"tool_name": self.name, "error": {"error_type": "invalid_request", "message": str(exc)}})
+
+
+def _fund_asset_rows(db_path: Path, fund_key: str) -> list[tuple]:
+    conn = sqlite3.connect(f"{Path(db_path).resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        return conn.execute(
+            "SELECT activo_key, vigente_hasta, nombre FROM dim_activo WHERE fondo_key=? ORDER BY activo_key",
+            (fund_key,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _period_range_coverage(rows: tuple) -> dict[str, object]:
+    """Coverage for a time series. There is no asset universe to compare
+    against, so completeness is expressed over the observed period range and
+    `expected_asset_universe` is never consulted."""
+    periods = sorted({r.period for r in rows})
+    return {"universe_kind": "period_range", "eligible_count": len(periods),
+            "observed_count": len(periods), "eligible_ids": periods, "observed_ids": periods,
+            "entity_ids": sorted({r.entity_id for r in rows}),
+            "period_start": periods[0] if periods else None,
+            "period_end": periods[-1] if periods else None,
+            "status": "complete"}
 
 
 def _governed_dataset_coverage(db_path: Path, scope: dict[str, str], arguments: dict[str, object], rows: tuple) -> dict[str, object]:
@@ -424,6 +587,15 @@ def _governed_dataset_coverage(db_path: Path, scope: dict[str, str], arguments: 
     from absence of a contrary signal."""
     fund_key = scope.get("fund")
     observed = frozenset(r.entity_id for r in rows)
+    requested = arguments.get("assets")
+    if isinstance(requested, list) and requested:
+        # An explicit subset IS the expected universe -- membership and
+        # temporal applicability were already validated before execution.
+        eligible = frozenset(str(item) for item in requested)
+        return {"universe_kind": "explicit_subset", "eligible_count": len(eligible),
+                "observed_count": len(observed), "eligible_ids": sorted(eligible),
+                "observed_ids": sorted(observed),
+                "status": "complete" if eligible <= observed else "partial"}
     if not fund_key or not CanonicalScopeValidator(db_path).validate_fund(fund_key).valid:
         return {"universe_kind": "fund_assets", "eligible_count": None, "observed_count": len(observed),
                 "eligible_ids": None, "observed_ids": sorted(observed), "status": "unknown"}

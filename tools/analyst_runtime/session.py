@@ -14,7 +14,7 @@ from typing import Any, Callable, Protocol
 
 from tools.analyst_runtime.actions import (
     ActionRegistry, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
-    AnalyticsLookupFundAction, RunSqlAction, SchemaSearchAction,
+    AnalyticsLookupFundAction, ListAssetsAction, RunSqlAction, SchemaSearchAction,
     ResolveEntityAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
@@ -277,6 +277,7 @@ class OpenAIResponsesAnalystSessionFactory:
             AnalyticsLookupFundAction(self.knowledge_db_path),
             AnalyticsLookupAssetAction(self.knowledge_db_path),
             AnalyticsBreakdownAssetAction(self.knowledge_db_path),
+            ListAssetsAction(self.knowledge_db_path),
         ])
         client = self._client_factory()
         transport = OpenAIResponsesTransport(client, self.model, registry.tool_specs())

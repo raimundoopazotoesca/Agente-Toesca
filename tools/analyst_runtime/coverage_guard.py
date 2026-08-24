@@ -76,11 +76,19 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         claim_entity_ids = claim.get("entity_ids")
         if not isinstance(claim_entity_ids, list) or not claim_entity_ids:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim")
-        fact_by_entity = {fact.get("entity_id"): fact for fact in item.facts}
+        # Select facts by (entity, period), never by entity alone: evidence
+        # may hold several periods for the same entity (a `period_range`
+        # series). Indexing by entity alone would silently collapse those and
+        # could bind a claim to the wrong period. Missing period => the
+        # entity_ids subset check below fails => fail-closed.
+        candidates = [fact for fact in item.facts if fact.get("period") == claim.get("period")]
+        fact_by_entity = {fact.get("entity_id"): fact for fact in candidates}
+        if len(fact_by_entity) != len(candidates):
+            return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding")
         if not set(claim_entity_ids) <= set(fact_by_entity):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
         facts = [fact_by_entity[eid] for eid in claim_entity_ids]
-        if any(fact.get("metric_key") != claim.get("metric_key") or fact.get("period") != claim.get("period") for fact in facts):
+        if any(fact.get("metric_key") != claim.get("metric_key") for fact in facts):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
         coverage = item.coverage or {"status": "unknown", "eligible_count": None, "observed_count": len(item.facts)}
         bound_governed[claim["claim_id"]] = {"facts": facts, "scope": item.scope, "coverage": coverage}
