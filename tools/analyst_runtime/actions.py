@@ -25,7 +25,7 @@ from typing import ClassVar, Protocol
 
 from tools.analyst_runtime.transport import ToolEvidence, ToolRequest, ToolResult, ToolSpec
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
-from tools.analytics.capabilities import capability_metric_keys
+from tools.analytics.capabilities import capability_metric_keys, metric_period_bounds
 from tools.analytics.catalog import load_metric_catalog
 from tools.schema_discovery import (
     DEFAULT_SCHEMA_SEARCH_LIMIT,
@@ -38,6 +38,13 @@ from tools.entities.resolver import EntityResolver
 from tools.entities.canonical_scope import CanonicalScopeValidator, expected_asset_universe
 
 MAX_ROWS_RETURNED = 50
+
+# Fixed, metric-agnostic half of every governed capability description; the
+# rest is generated from the Metric Catalog (see `_description`).
+_GOVERNED_AUTHORITY_NOTE = (
+    "Es la vía autoritativa para estas métricas: úsala en vez de reconstruirlas "
+    "con SQL crudo o de buscarlas en el esquema."
+)
 
 _FORBIDDEN_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|create|attach|detach|pragma|vacuum|replace)\b",
@@ -319,6 +326,7 @@ class _AnalyticsCapabilityAction:
     """Catalog-derived action surface; execution remains in AnalyticsExecutor."""
 
     db_path: Path
+    catalog_path: Path | None = None
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     capability: ClassVar[str] = ""
@@ -359,14 +367,25 @@ class _AnalyticsCapabilityAction:
         })
 
     def _description(self) -> str:
-        """Name the metrics this capability covers, straight from the catalog.
-        Without it the metrics are discoverable only inside a JSON enum of
-        opaque keys, and the model falls back to raw exploration for questions
-        the governed path already answers."""
-        catalog = load_metric_catalog().metrics
-        available = ", ".join(f"{catalog[key].display_name} ({key})"
+        """Name the metrics this capability covers, straight from the catalog,
+        each with the months actually observed for it.
+
+        Everything after the fixed prefix is DERIVED: adding a metric to the
+        catalog makes it appear here with no prompt or code change. Without
+        this the metrics are discoverable only inside a JSON enum of opaque
+        keys and with no hint of which `period` is answerable, so the model
+        falls back to raw exploration for questions the governed path already
+        answers -- and a raw reconstruction carries no canonical authority."""
+        catalog = self._catalog().metrics
+        available = "; ".join(self._metric_affordance(catalog[key])
                               for key in self._metric_keys() if key in catalog)
-        return f"{self.description} Métricas disponibles: {available}."
+        return (f"{self.description} {_GOVERNED_AUTHORITY_NOTE} "
+                f"Métricas disponibles: {available}.")
+
+    def _metric_affordance(self, metric) -> str:
+        bounds = metric_period_bounds(self.db_path, metric)
+        period_hint = f", períodos {bounds[0]}..{bounds[1]}" if bounds else ""
+        return f"{metric.display_name} ({metric.key}{period_hint})"
 
     def execute(self, request: ToolRequest) -> ToolResult:
         try:
@@ -430,8 +449,11 @@ class _AnalyticsCapabilityAction:
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
                               trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
 
+    def _catalog(self):
+        return load_metric_catalog(self.catalog_path)
+
     def _metric_keys(self) -> tuple[str, ...]:
-        return capability_metric_keys(load_metric_catalog())[self.capability]
+        return capability_metric_keys(self._catalog())[self.capability]
 
     def _allowed_fields(self) -> frozenset[str]:
         fields = {"metric", self.scope_field, "period", "period_end"}
