@@ -22,6 +22,7 @@ OUT = ROOT / "factsheet.html"
 ASSETS = ROOT / "assets"
 CHAT_BUBBLE_JS = ROOT / "web" / "chat_bubble.js"
 QUICK_CHAT_CONTROLLER_JS = ROOT / "web" / "quick_chat_controller.js"
+CHAT_MARKDOWN_JS = ROOT / "web" / "chat_markdown.js"
 
 
 def _data_uri(filename: str) -> str:
@@ -8795,6 +8796,7 @@ function render(){
 </script>
 </div><!-- #main-content -->
 <script>__QUICK_CHAT_CONTROLLER_JS__</script>
+<script>__CHAT_MARKDOWN_JS__</script>
 <script>__CHAT_BUBBLE_JS__</script>
 </body>
 </html>
@@ -8814,6 +8816,7 @@ def main():
             meta_out[k] = v
     chat_bubble_js = CHAT_BUBBLE_JS.read_text(encoding="utf-8")
     quick_chat_controller_js = QUICK_CHAT_CONTROLLER_JS.read_text(encoding="utf-8")
+    chat_markdown_js = CHAT_MARKDOWN_JS.read_text(encoding="utf-8")
     mapa_inmossa_svg = build_mapa_comunas_svg(FONDOS_CFG["TRI"]["page6"]["inmossa"]["comunas"])
     html = (
         HTML_TEMPLATE
@@ -8821,6 +8824,7 @@ def main():
         .replace("__KPI_META_JSON__", json.dumps(meta_out, ensure_ascii=False))
         .replace("__CHAT_BUBBLE_JS__", chat_bubble_js)
         .replace("__QUICK_CHAT_CONTROLLER_JS__", quick_chat_controller_js)
+        .replace("__CHAT_MARKDOWN_JS__", chat_markdown_js)
         .replace("__MAPA_INMOSA_SVG__", mapa_inmossa_svg)
     )
     OUT.write_text(html, encoding="utf-8")
