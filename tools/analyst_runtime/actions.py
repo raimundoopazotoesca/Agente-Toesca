@@ -343,6 +343,7 @@ class _AnalyticsCapabilityAction:
             },
             "period": {"type": "string", "description": "Initial month in YYYY-MM format."},
             "period_end": {"type": ["string", "null"], "description": "Optional inclusive final month in YYYY-MM format; use null for a point lookup."},
+            "aggregation": {"type": ["string", "null"], "enum": ["sum", "avg", "last", None], "description": "Optional temporal aggregation; it is accepted only when the metric contract permits it."},
         }
         if self.scope_field == "fund":
             properties["fund"] = {"type": "string", "description": "Canonical fund key scoping this operation."}
@@ -363,7 +364,7 @@ class _AnalyticsCapabilityAction:
             })
         return ToolSpec(self.name, self._description(), {
             "type": "object", "additionalProperties": False, "properties": properties,
-            "required": list(properties),
+            "required": [name for name in properties if name != "aggregation"],
         })
 
     def _description(self) -> str:
@@ -456,7 +457,7 @@ class _AnalyticsCapabilityAction:
         return capability_metric_keys(self._catalog())[self.capability]
 
     def _allowed_fields(self) -> frozenset[str]:
-        fields = {"metric", self.scope_field, "period", "period_end"}
+        fields = {"metric", self.scope_field, "period", "period_end", "aggregation"}
         if self.subset:
             fields.add("assets")
         if self.breakdown:
@@ -472,6 +473,7 @@ class _AnalyticsCapabilityAction:
             raise ValueError(f"metric is not available for {self.name}: {metric}")
         period = _required_string(arguments, "period")
         period_end = _optional_string(arguments, "period_end")
+        aggregation = _optional_string(arguments, "aggregation")
         universe_period = period_end or period
         if self.scope_field == "fund":
             fund = _required_string(arguments, "fund")
@@ -489,7 +491,7 @@ class _AnalyticsCapabilityAction:
         group_by = "asset" if (self.breakdown or (self.scope_field == "assets" and len(assets) > 1)) else None
         return AnalyticsQueryRequest(
             metric=metric, funds=funds, assets=assets, period=period, period_end=period_end,
-            group_by=group_by, order_by=order_by, limit=limit,
+            group_by=group_by, order_by=order_by, limit=limit, aggregation=aggregation,
         ), scope
 
 

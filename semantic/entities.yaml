@@ -1,13 +1,16 @@
 fondos:
   TRI:
     nombre: "Toesca Rentas Inmobiliarias Fondo de Inversion"
+    aliases: ["TRI", "Fondo TRI"]
     fondo_padre: null
   PT:
     nombre: "Fondo Toesca Rentas Inmobiliarias PT"
+    aliases: ["PT", "Parque Titanium"]
     fondo_padre: TRI
     participacion_en_padre: 0.3333
   Apo:
     nombre: "Fondo Toesca Rentas Inmob Apoquindo"
+    aliases: ["Apo", "Apoquindo", "Fondo Apoquindo"]
     fondo_padre: TRI
     participacion_en_padre: 0.30
 

@@ -13,6 +13,8 @@ metrics:
     status: active
     related_metrics: [vacancia_fisica_pct_activo, m2_vacantes]
     methodology: vacancia_ponderada_fondo_rentas_manual
+    nature: ratio
+    allowed_temporal_aggregations: []
   - key: vacancia_fisica_pct_activo
     display_name: Vacancia física por activo
     description: Superficie vacante dividida por GLA cuando la métrica física está disponible.
@@ -27,6 +29,8 @@ metrics:
     status: active
     related_metrics: [vacancia_pct_fondo, m2_vacantes]
     methodology: superficie_vacante_dividida_por_gla
+    nature: ratio
+    allowed_temporal_aggregations: []
   - key: m2_vacantes
     display_name: Metros cuadrados vacantes
     description: Superficie vacante observada a nivel activo.
@@ -40,6 +44,8 @@ metrics:
     status: active
     related_metrics: [vacancia_pct_fondo, vacancia_fisica_pct_activo]
     methodology: superficie_vacante_observada
+    nature: flow
+    allowed_temporal_aggregations: [sum]
   - key: ltv_fondo
     display_name: LTV del fondo
     description: Loan-to-value del fondo según su metodología canónica registrada.
@@ -54,6 +60,8 @@ metrics:
     status: active
     related_metrics: [ltv_activo]
     methodology: ltv_v1
+    nature: ratio
+    allowed_temporal_aggregations: []
   - key: ltv_activo
     display_name: LTV por activo
     description: Loan-to-value a nivel activo según su metodología canónica registrada.
@@ -68,6 +76,8 @@ metrics:
     status: active
     related_metrics: [ltv_fondo]
     methodology: ltv_v1
+    nature: ratio
+    allowed_temporal_aggregations: []
   - key: noi_mensual_activo
     display_name: NOI mensual por activo
     description: Resultado operacional neto mensual a nivel activo en pesos chilenos.
@@ -81,3 +91,35 @@ metrics:
     status: active
     related_metrics: []
     methodology: raw_er_noi_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]
+  - key: noi_mensual_fondo
+    display_name: NOI mensual del fondo
+    description: Resultado operacional neto mensual gobernado a nivel de fondo.
+    unit: UF
+    entity_grain: fund
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: fondo, kpi: noi_mes}
+    aggregation: non_additive
+    allowed_dimensions: [fund, period]
+    status: active
+    related_metrics: [noi_mensual_activo]
+    methodology: raw_er_noi_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]
+  - key: ingresos_mensual_fondo
+    display_name: Ingresos mensuales del fondo
+    description: Ingresos mensuales gobernados a nivel de fondo.
+    unit: UF
+    entity_grain: fund
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: fondo, kpi: ingresos_mes}
+    aggregation: non_additive
+    allowed_dimensions: [fund, period]
+    status: active
+    related_metrics: [noi_mensual_fondo]
+    methodology: raw_er_ingresos_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]

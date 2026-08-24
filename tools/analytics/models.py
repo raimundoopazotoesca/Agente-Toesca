@@ -1,7 +1,64 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 from typing import Literal
+
+
+class EntityType(StrEnum):
+    FUND = "fund"
+    ASSET = "asset"
+
+
+class MetricNature(StrEnum):
+    FLOW = "flow"
+    POINT_IN_TIME = "point_in_time"
+    RATIO = "ratio"
+    OTHER = "other"
+
+
+class Aggregation(StrEnum):
+    SUM = "sum"
+    AVG = "avg"
+    LAST = "last"
+
+
+@dataclass(frozen=True)
+class EntityReference:
+    """A canonical, typed entity selected by an upstream adapter.
+
+    This has no database, provider, or natural-language-resolution dependency.
+    """
+
+    entity_id: str
+    entity_type: EntityType
+
+
+@dataclass(frozen=True)
+class SemanticQuery:
+    """Provider-neutral business request executed through a metric contract."""
+
+    metric_id: str
+    entities: tuple[EntityReference, ...]
+    period_start: str
+    period_end: str | None = None
+    temporal_aggregation: Aggregation | None = None
+    display_unit: str | None = None
+    group_by: str | None = None
+    order_by: str | None = None
+    limit: int | None = None
+
+
+@dataclass(frozen=True)
+class EntityDefinition:
+    """Canonical identity and aliases, always scoped by entity type."""
+
+    entity_id: str
+    entity_type: EntityType
+    canonical_name: str
+    aliases: tuple[str, ...] = ()
+    valid_from: str | None = None
+    valid_to: str | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +104,16 @@ class MetricDefinition:
     related_metrics: tuple[str, ...]
     methodology: str
     display_unit: str | None = None
+    nature: MetricNature = MetricNature.OTHER
+    allowed_temporal_aggregations: tuple[Aggregation, ...] = ()
+
+    @property
+    def metric_id(self) -> str:
+        return self.key
+
+    @property
+    def native_unit(self) -> str:
+        return self.unit
 
 
 @dataclass(frozen=True)

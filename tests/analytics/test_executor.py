@@ -34,7 +34,7 @@ def test_physical_asset_vacancy_uses_governed_view_value():
     AnalyticsQueryRequest("vacancia_pct_fondo", funds=("TRI",), period="2026-06", group_by="asset"),
     AnalyticsQueryRequest("unknown", funds=("TRI",), period="2026-06"),
     AnalyticsQueryRequest("m2_vacantes", funds=("TRI",), period="2026-06", group_by="unknown"),
-    AnalyticsQueryRequest("m2_vacantes", funds=("TRI",), period="2026-06", aggregation="sum"),
+    AnalyticsQueryRequest("vacancia_pct_fondo", funds=("TRI",), period="2026-06", aggregation="sum"),
 ])
 def test_invalid_semantic_requests_fail_closed(query):
     with pytest.raises(SemanticQueryError):

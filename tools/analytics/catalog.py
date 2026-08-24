@@ -5,11 +5,11 @@ from typing import Any
 
 import yaml
 
-from tools.analytics.models import DerivedKpiAccess, MetricCatalog, MetricDefinition, ViewMetricAccess
+from tools.analytics.models import Aggregation, DerivedKpiAccess, MetricCatalog, MetricDefinition, MetricNature, ViewMetricAccess
 
 
 CATALOG_PATH = Path(__file__).with_name("catalog_v1.yaml")
-_UNITS = {"pct_0_100", "m2", "ratio_0_1", "clp"}
+_UNITS = {"pct_0_100", "m2", "ratio_0_1", "clp", "UF"}
 # `display_unit` is presentation-only: it never changes the semantic value
 # carried by evidence/claims, only how a bound fact is rendered for a human.
 _DISPLAY_UNITS = {"percent"}
@@ -18,6 +18,8 @@ _ENTITY_GRAINS = {"fund", "asset"}
 _PERIOD_GRAINS = {"month"}
 _SOURCE_KINDS = {"canonical", "breakdown", "alternative"}
 _AGGREGATIONS = {"non_additive", "sum_compatible_scope"}
+_NATURES = {item.value for item in MetricNature}
+_TEMPORAL_AGGREGATIONS = {item.value for item in Aggregation}
 _STATUSES = {"active"}
 _REQUIRED = {
     "key", "display_name", "description", "unit", "entity_grain", "period_grain", "source_kind",
@@ -62,6 +64,12 @@ def _metric(raw: Any) -> MetricDefinition:
             raise _invalid("malformed metric definition: invalid display_unit")
         if raw["unit"] not in _DISPLAY_UNIT_SOURCES[display_unit]:
             raise _invalid("malformed metric definition: display_unit incompatible with unit")
+    nature = raw.get("nature", "other")
+    aggregations = raw.get("allowed_temporal_aggregations", [])
+    if nature not in _NATURES or not isinstance(aggregations, list) or any(item not in _TEMPORAL_AGGREGATIONS for item in aggregations):
+        raise _invalid("malformed metric definition: invalid semantic aggregation contract")
+    if nature != MetricNature.FLOW.value and Aggregation.SUM.value in aggregations:
+        raise _invalid("malformed metric definition: SUM requires flow nature")
     return MetricDefinition(
         key=str(raw["key"]), display_name=str(raw["display_name"]), description=str(raw["description"]),
         unit=raw["unit"], entity_grain=raw["entity_grain"], period_grain=raw["period_grain"],
@@ -69,6 +77,8 @@ def _metric(raw: Any) -> MetricDefinition:
         allowed_dimensions=tuple(raw["allowed_dimensions"]), status=raw["status"],
         related_metrics=tuple(raw["related_metrics"]), methodology=str(raw["methodology"]),
         display_unit=display_unit,
+        nature=MetricNature(nature),
+        allowed_temporal_aggregations=tuple(Aggregation(item) for item in aggregations),
     )
 
 

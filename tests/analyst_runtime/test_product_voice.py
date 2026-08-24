@@ -205,6 +205,8 @@ def test_alpha_voice_stays_out_of_workspace_and_benchmark_contract(tmp_path):
     assert "raw_response" not in assistant_metadata
 
     manifest = build_run_manifest("offline", "0" * 40, "2026-08-19T00:00:00Z")
-    assert manifest["system_prompt_sha256"] == "b155ded6464def5a8cf7ba8d4e9c56af8dc3b402cf0227b5f9f097ab96e17f44"
+    # Catalog-derived capability affordances changed; the static prompt and
+    # tool schema hashes below remain the compatibility boundary.
+    assert manifest["system_prompt_sha256"] == "b4c6dab114ca78fbff88226cb02c380501fc5dfc9f13778e43bdf8d8b5e0c0b1"
     assert manifest["tool_schema_sha256"] == "d5623b5fc7f1cbc35d6f75b69403df87bbb326c9995d8e240f6a5e51d1b196ca"
     assert manifest["reserved_synthesis_prompt_sha256"] == "803fabd15e39afda32ca1d2044c5bcb77d9cb1ed7f28a4216c3998a2d06c0496"

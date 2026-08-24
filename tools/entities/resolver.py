@@ -3,6 +3,9 @@ import re, sqlite3, unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from tools.entities.catalog import ENTITY_TYPES
+from tools.entities.definitions import load_entity_definitions
+
+_ENTITY_DEFINITIONS_PATH = Path(__file__).resolve().parents[2] / "semantic" / "entities.yaml"
 
 def normalize(value: str) -> str:
     text = unicodedata.normalize("NFKD", value.casefold())
@@ -26,6 +29,11 @@ class EntityResolver:
         conn=sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro",uri=True); conn.row_factory=sqlite3.Row
         try:
             for typ in entity_types:
+                canonical = load_entity_definitions(_ENTITY_DEFINITIONS_PATH).resolve_exact(query, typ)
+                if canonical is not None:
+                    candidates.append(EntityCandidate(typ, canonical.entity_id, canonical.canonical_name, 100,
+                        "canonical_alias", {}, True, {"matched_fields": ["canonical_alias"]}))
+                    continue
                 definition=ENTITY_TYPES[typ]; fields=(definition.key_field,definition.display_field,*definition.parent_context_fields,definition.active_field)
                 rows=conn.execute(f"SELECT {','.join(x for x in fields if x)} FROM {definition.source_object}").fetchall()
                 for row in rows:

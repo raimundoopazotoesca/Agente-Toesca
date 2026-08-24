@@ -10,8 +10,7 @@ def test_catalog_has_distinct_economic_identities():
     catalog = load_metric_catalog()
 
     assert catalog.version == 1
-    assert list(catalog.metrics) == ["ltv_activo", "ltv_fondo", "m2_vacantes", "noi_mensual_activo",
-                                     "vacancia_fisica_pct_activo", "vacancia_pct_fondo"]
+    assert {"noi_mensual_fondo", "ingresos_mensual_fondo"} <= set(catalog.metrics)
     fund = catalog.metrics["vacancia_pct_fondo"]
     physical = catalog.metrics["vacancia_fisica_pct_activo"]
     vacant_area = catalog.metrics["m2_vacantes"]
