@@ -30,13 +30,29 @@ class _VisibleMessage:
 
 
 class _FakeResponses:
+    """A toolless turn now always makes a second, no-tools model round asking
+    for a structured SynthesisEnvelope (see session.py: routing toolless
+    turns through the same coverage_guard binding as any evidence-bearing
+    turn). This double emulates a real provider on that second call too --
+    when the request asks for the SynthesisEnvelope JSON schema, it returns a
+    minimal valid envelope wrapping the SAME plain-text answer in one text
+    fragment, instead of the plain prose it returns on an ordinary round."""
+
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
+        schema_name = kwargs.get("text", {}).get("format", {}).get("name")
+        if schema_name == "SynthesisEnvelope":
+            output_text = json.dumps({
+                "fragments": [{"type": "text", "text": "Respuesta del analista."}],
+                "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
+            })
+        else:
+            output_text = "Respuesta del analista."
         return SimpleNamespace(
-            output_text="Respuesta del analista.",
+            output_text=output_text,
             output=[],
             usage=SimpleNamespace(
                 input_tokens=1,
@@ -98,34 +114,50 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
 
 
-def test_alpha_session_does_not_present_an_unstructured_draft(tmp_path):
+def test_alpha_toolless_turn_with_unbound_quantity_fails_closed(tmp_path):
+    """A toolless turn (no new tool call this turn) is NOT exempt from
+    fact-integrity guarantees: it now always makes a second, no-tools model
+    round asking for a SynthesisEnvelope (see session.py), and that envelope
+    is validated by the SAME coverage_guard as any evidence-bearing turn. A
+    model that writes a numeric literal into free text instead of binding it
+    via a claim_ref must fail closed here exactly as it would for a
+    tool-calling turn -- this is the gap this fix closes."""
     draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
-    client = _SequencedClient([draft])
+    unbound_envelope = json.dumps({
+        "fragments": [{"type": "text", "text": draft}],
+        "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
+    })
+    client = _SequencedClient([draft, unbound_envelope])
     factory = OpenAIResponsesAnalystSessionFactory(
         _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
     )
 
     result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
 
-    assert result.text == draft
-    assert result.presentation_applied is False
-    assert result.presentation_integrity_status == "not_applicable"
-    assert result.original_answer_hash == result.presented_answer_hash
-    assert len(client.responses.calls) == 1
+    assert result.text != draft
+    assert len(client.responses.calls) == 2
 
 
-def test_alpha_session_keeps_an_unstructured_draft_without_a_provider_call(tmp_path):
-    draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
-    client = _SequencedClient([draft])
+def test_alpha_purely_conversational_toolless_turn_stays_usable(tmp_path):
+    """A toolless turn with NO quantitative facts at all must remain usable:
+    the second (finalize) round is a plain no-tools model call, never a new
+    investigation/tool round, so nothing forces a spurious tool call."""
+    draft = "Con gusto, cuéntame qué fondo o período te interesa revisar."
+    envelope = json.dumps({
+        "fragments": [{"type": "text", "text": draft}],
+        "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
+    })
+    client = _SequencedClient([draft, envelope])
     factory = OpenAIResponsesAnalystSessionFactory(
         _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
     )
 
-    result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
+    result = factory.create(object(), []).ask("Hola, buenos días")
 
     assert result.text == draft
     assert result.presentation_applied is False
     assert result.presentation_integrity_status == "not_applicable"
+    assert len(client.responses.calls) == 2
 
 
 def test_alpha_reformulates_the_interactive_evidence_instruction_only():

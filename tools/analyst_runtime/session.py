@@ -224,11 +224,31 @@ class OpenAIResponsesAnalystSession:
         validation = None
         if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             result = self._loop._legacy_finalize(investigation)
-        elif investigation.tool_calls and not _has_account_coverage_none(investigation):
+        elif not _has_account_coverage_none(investigation):
             # Any tool call -- not just a canonical/governed one -- may have
             # surfaced entity data (e.g. run_sql). Structured finalization plus
-            # coverage_guard is what closes the raw-only enumeration bypass;
-            # a toolless turn has no entity data to guard, so it stays legacy.
+            # coverage_guard is what closes the raw-only enumeration bypass.
+            #
+            # A turn that made NO new tool call this round is included here
+            # too (deliberately, no longer excluded): the "toolless" case is
+            # exactly a follow-up like "which one was more, and by how much?"
+            # that answers purely from evidence RETAINED from prior turns
+            # (``evidence`` above walks the full round_trajectory, retained
+            # history included). Sending it through the legacy path let the
+            # model compute and print unbound arithmetic ("una diferencia de
+            # 7.693,41 UF... 102% superior") straight into free text, with
+            # none of coverage_guard's unbound-quantity / derived-claim
+            # binding guarantees applied -- the exact fact-integrity gap this
+            # fix closes. Routing it through the SAME structured envelope +
+            # coverage_guard validation as a tool-calling turn means any
+            # arithmetic must arrive as a derived_metric_ref bound against
+            # already-validated claims, or the response fails closed exactly
+            # as it would for a tool-calling turn. A genuinely toolless,
+            # purely conversational turn with no quantitative facts at all
+            # still passes: its envelope is just a text fragment with no
+            # claims, and no tool call is forced to get there -- ``finalize``
+            # below is one more no-tools model round, not a new investigation
+            # round.
             result = self._loop.finalize(
                 investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA),
                 synthesis_context=render_evidence_inventory(evidence),

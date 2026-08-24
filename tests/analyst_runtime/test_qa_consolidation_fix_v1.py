@@ -154,3 +154,94 @@ def test_explicit_invalid_aggregation_request_still_rejects_deterministically():
     result = loop.investigate("promedia la vacancia pct fondo de Apoquindo durante 2025")
     assert result.termination_reason == "semantic_rejection"
     assert "No se puede" in result.final_text
+
+
+# ---------------------------------------------------------------------------
+# Toolless-turn fact-integrity gap: a follow-up that makes NO new tool call
+# must still bind arithmetic against RETAINED evidence via a derived_metric_ref
+# through the same coverage_guard pipeline -- never free-text arithmetic.
+# ---------------------------------------------------------------------------
+
+def _retained_evidence():
+    from tools.analyst_runtime.transport import ToolEvidence
+    # Simulates evidence a PRIOR turn's tool call produced and the session
+    # retained across turns -- coverage_guard only cares that the evidence_id
+    # still resolves, not which turn originally produced it.
+    return [
+        ToolEvidence("call_a", "canonical_metric",
+                     facts=({"metric_key": "contribuciones", "value": 15220.0, "unit": "UF",
+                             "entity_id": "Torre A", "period": "2025"},)),
+        ToolEvidence("call_b", "canonical_metric",
+                     facts=({"metric_key": "contribuciones", "value": 7526.0, "unit": "UF",
+                             "entity_id": "Boulevard PT", "period": "2025"},)),
+    ]
+
+
+def test_toolless_followup_difference_is_bound_via_derived_metric_ref():
+    envelope = {
+        "fragments": [
+            {"type": "text", "text": "Torre A tuvo un gasto mayor, por "},
+            {"type": "derived_metric_ref", "claim_id": "d1"},
+        ],
+        "canonical_metric_claims": [
+            {"claim_id": "ca", "evidence_id": "call_a", "metric_key": "contribuciones", "value": 15220.0, "unit": "UF", "entity_id": "Torre A", "period": "2025"},
+            {"claim_id": "cb", "evidence_id": "call_b", "metric_key": "contribuciones", "value": 7526.0, "unit": "UF", "entity_id": "Boulevard PT", "period": "2025"},
+        ],
+        "governed_dataset_claims": [],
+        "derived_metric_claims": [{"claim_id": "d1", "operation": "difference", "lhs_claim_id": "ca", "rhs_claim_id": "cb"}],
+    }
+    result = validate_and_render(envelope, _retained_evidence(), [])
+    assert result.valid
+    assert "7.694,00" in result.content or "7.693,41" in result.content or "7.694" in result.content
+    # Lineage is preserved end to end: the derived claim's operands are the
+    # SAME retained claim_ids, traceable back to their evidence_ids.
+    assert result.trace["canonical_claim_count"] == 2
+
+
+def test_toolless_followup_percent_is_bound_via_derived_metric_ref():
+    envelope = {
+        "fragments": [{"type": "derived_metric_ref", "claim_id": "d1"}],
+        "canonical_metric_claims": [
+            {"claim_id": "ca", "evidence_id": "call_a", "metric_key": "contribuciones", "value": 15220.0, "unit": "UF", "entity_id": "Torre A", "period": "2025"},
+            {"claim_id": "cb", "evidence_id": "call_b", "metric_key": "contribuciones", "value": 7526.0, "unit": "UF", "entity_id": "Boulevard PT", "period": "2025"},
+        ],
+        "governed_dataset_claims": [],
+        "derived_metric_claims": [{"claim_id": "d1", "operation": "percent_change", "lhs_claim_id": "cb", "rhs_claim_id": "ca"}],
+    }
+    result = validate_and_render(envelope, _retained_evidence(), [])
+    assert result.valid
+    assert "%" in result.content
+
+
+def test_toolless_followup_unbound_numeric_literal_fails_closed():
+    """The model tries to smuggle the computed difference as a raw digit in
+    free text instead of a derived_metric_ref -- must fail closed exactly as
+    it would on a tool-calling turn (same _UNBOUND_QUANTITY_RE guard)."""
+    envelope = {
+        "fragments": [{"type": "text", "text": "La diferencia fue de 7.693,41 UF."}],
+        "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
+    }
+    result = validate_and_render(envelope, _retained_evidence(), [])
+    assert not result.valid
+    assert result.trace["reason"] == "unbound_derived_quantity"
+
+
+def test_derived_claim_lineage_chains_back_to_retained_evidence_ids():
+    envelope = {
+        "fragments": [{"type": "derived_metric_ref", "claim_id": "d1"}],
+        "canonical_metric_claims": [
+            {"claim_id": "ca", "evidence_id": "call_a", "metric_key": "contribuciones", "value": 15220.0, "unit": "UF", "entity_id": "Torre A", "period": "2025"},
+            {"claim_id": "cb", "evidence_id": "call_b", "metric_key": "contribuciones", "value": 7526.0, "unit": "UF", "entity_id": "Boulevard PT", "period": "2025"},
+        ],
+        "governed_dataset_claims": [],
+        "derived_metric_claims": [{"claim_id": "d1", "operation": "difference", "lhs_claim_id": "ca", "rhs_claim_id": "cb"}],
+    }
+    from tools.analyst_runtime.derived_claims import compute_derived_claim
+    lhs_fact = {"metric_key": "contribuciones", "value": 15220.0, "unit": "UF", "entity_id": "Torre A", "period": "2025"}
+    rhs_fact = {"metric_key": "contribuciones", "value": 7526.0, "unit": "UF", "entity_id": "Boulevard PT", "period": "2025"}
+    derived = compute_derived_claim("d1", "difference", lhs_fact, rhs_fact, "ca", "cb")
+    assert derived.lineage["lhs_claim_id"] == "ca"
+    assert derived.lineage["rhs_claim_id"] == "cb"
+    assert derived.lineage["lhs_value"] == 15220.0 and derived.lineage["rhs_value"] == 7526.0
+    result = validate_and_render(envelope, _retained_evidence(), [])
+    assert result.valid

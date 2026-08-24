@@ -266,7 +266,14 @@ def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the
             "governed_dataset_claims": [],
         }),
     ]
-    transport = RecordingTransport(turn_one + [ModelResponse("Segunda vuelta.")])
+    turn_two = [
+        ModelResponse("Segunda vuelta."),
+        ModelResponse("ok", structured_output={
+            "fragments": [{"type": "text", "text": "Segunda vuelta."}],
+            "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
+        }),
+    ]
+    transport = RecordingTransport(turn_one + turn_two)
     session = _session(transport)
 
     session.ask("¿Cuál es el LTV de Apoquindo 3001 en junio de 2026?")
@@ -282,8 +289,10 @@ def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the
     # The user still sees the rendered answer, not the envelope JSON.
     assert any(item.role == "assistant" and "fragments" not in (item.text or "")
                for item in followup_history)
-    # And turn 2 really is allowed tools again.
-    assert transport.requests[-1].tools
+    # And turn 2 really is allowed tools again (its investigation round --
+    # the request immediately before the reserved, tool-free finalize round
+    # that now also runs for a toolless turn, see session.py).
+    assert transport.requests[-2].tools
 
 
 def _observed_ltv() -> float:

@@ -285,6 +285,13 @@ def _load_asset_catalog(db_path: Path) -> dict[str, str]:
     conn = sqlite3.connect(f"{Path(db_path).resolve().as_uri()}?mode=ro", uri=True)
     try:
         rows = conn.execute("SELECT activo_key, fondo_key FROM dim_activo").fetchall()
+    except sqlite3.OperationalError:
+        # A database without dim_activo (a minimal/legacy fixture, not a real
+        # deployment DB) simply has no asset catalog to check names against;
+        # the caller already treats an empty catalog as "skip this guard",
+        # so this degrades the entity-provenance check, never the numeric
+        # unbound-quantity guard or claim binding above it.
+        return {}
     finally:
         conn.close()
     return {activo_key: fondo_key for activo_key, fondo_key in rows}
