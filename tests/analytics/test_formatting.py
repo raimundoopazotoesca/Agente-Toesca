@@ -80,3 +80,10 @@ def test_catalog_rejects_unknown_display_unit(tmp_path):
     path.write_text(source, encoding="utf-8")
     with pytest.raises(CatalogValidationError):
         load_metric_catalog(path)
+
+
+def test_asset_vacancy_is_a_ratio_and_renders_as_percent():
+    """v_vacancia_activo.vacancia_pct is a 0-1 ratio, unlike the fund-level
+    derived_kpi which is already percent-scale."""
+    assert render_metric_value("vacancia_fisica_pct_activo", 0.3620316883059285, "ratio_0_1") == "36.20%"
+    assert load_metric_catalog().metrics["vacancia_fisica_pct_activo"].display_unit == "percent"

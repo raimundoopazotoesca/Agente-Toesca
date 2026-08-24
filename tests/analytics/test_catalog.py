@@ -16,7 +16,7 @@ def test_catalog_has_distinct_economic_identities():
     physical = catalog.metrics["vacancia_fisica_pct_activo"]
     vacant_area = catalog.metrics["m2_vacantes"]
     assert (fund.entity_grain, fund.period_grain, fund.unit, fund.source_kind) == ("fund", "month", "pct_0_100", "canonical")
-    assert (physical.entity_grain, physical.period_grain, physical.unit, physical.source_kind) == ("asset", "month", "pct_0_100", "breakdown")
+    assert (physical.entity_grain, physical.period_grain, physical.unit, physical.source_kind) == ("asset", "month", "ratio_0_1", "breakdown")
     assert (vacant_area.entity_grain, vacant_area.period_grain, vacant_area.unit, vacant_area.source_kind) == ("asset", "month", "m2", "breakdown")
     assert fund.aggregation == "non_additive"
     assert vacant_area.aggregation == "sum_compatible_scope"

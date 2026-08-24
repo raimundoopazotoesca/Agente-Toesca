@@ -16,7 +16,8 @@ metrics:
   - key: vacancia_fisica_pct_activo
     display_name: Vacancia física por activo
     description: Superficie vacante dividida por GLA cuando la métrica física está disponible.
-    unit: pct_0_100
+    unit: ratio_0_1
+    display_unit: percent
     entity_grain: asset
     period_grain: month
     source_kind: breakdown

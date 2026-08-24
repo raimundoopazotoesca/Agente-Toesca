@@ -171,8 +171,17 @@ def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:
 
 
 def _render_governed(bound: dict[str, Any]) -> str:
-    listing = ", ".join(f"{fact['entity_id']}: {render_fact(fact)}" for fact in bound["facts"])
+    listing = ", ".join(_render_entity_fact(fact) for fact in bound["facts"])
     return _coverage_prefix(bound["coverage"], len(bound["facts"])) + listing
+
+
+def _render_entity_fact(fact: dict[str, Any]) -> str:
+    """A governed fact without a metric (an entity enumeration) has no value
+    to render -- only its identity."""
+    if fact.get("metric_key") is None and fact.get("value") is None:
+        name = fact.get("name")
+        return f"{fact['entity_id']} ({name})" if name and name != fact.get("entity_id") else str(fact["entity_id"])
+    return f"{fact['entity_id']}: {render_fact(fact)}"
 
 
 def _entities_backed(text: str, catalog: dict[str, str], backed_entity_ids: set[str]) -> bool:
