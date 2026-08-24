@@ -133,8 +133,28 @@ class AnalystLoop:
                 results.append(result)
                 tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
                 if result.control and result.control.get("kind") in {"clarification_required", "semantic_rejection"}:
+                    kind = str(result.control["kind"])
+                    if kind == "semantic_rejection" and not _is_explicit_user_aggregation(
+                        message, result.control.get("requested_aggregation")
+                    ):
+                        # The USER never asked for this aggregation -- the
+                        # planner picked it on its own while answering an open
+                        # question. Surfacing the internal semantic rejection
+                        # verbatim as the final answer would leak a planning
+                        # error as if it were a fact about the portfolio. This
+                        # is a bounded recovery: the rejection is handed back
+                        # to the model as an ordinary tool result (like any
+                        # other failed tool call) and the model gets to try
+                        # again within the SAME existing round budget -- no
+                        # new rounds, no retry loop, no keyword/entity/metric
+                        # branch. If it cannot recover, MAX_INVESTIGATION_ROUNDS
+                        # is exhausted exactly as for any other case and the
+                        # existing mandatory synthesis round (below) produces
+                        # the final answer instead.
+                        result.trace["semantic_rejection_recovery"] = "bounded_internal_retry"
+                        continue
                     result.trace["blocked_followup_tool_calls"] = [request.name for request in response.tool_requests[index + 1:]]
-                    termination_reason = str(result.control["kind"])
+                    termination_reason = kind
                     result.trace["termination_reason"] = termination_reason
                     final_text = (_clarification_text(result.control) if termination_reason == "clarification_required"
                                   else _semantic_rejection_text(result.control))
@@ -219,6 +239,26 @@ def _clarification_text(control: dict[str, object]) -> str:
     if len(names) == 1:
         return f"¿Te referías a {names[0]}?"
     return f"No pude resolver '{query}' a una entidad canónica con suficiente confianza. ¿Puedes precisar a qué entidad te refieres?"
+
+
+# Same aggregation vocabulary already surfaced to the user in
+# ``_semantic_rejection_text`` -- reused here (not duplicated per-metric or
+# per-fund) as the one generic signal available to tell "the user typed this
+# operation" apart from "the planner picked this operation on its own": no
+# structured explicit_user_operation flag is threaded through the tool-call
+# contract today, so this is the documented, bounded fallback the spec allows
+# when no better metadata source exists.
+_AGGREGATION_VERBS = {"sum": ("sum", "suma", "sumar", "sumando", "sumatoria"),
+                      "avg": ("avg", "promedio", "promediar", "promediando", "media"),
+                      "last": ("último valor", "ultimo valor", "tomar el último", "tomar el ultimo")}
+
+
+def _is_explicit_user_aggregation(user_message: str, requested_aggregation: object) -> bool:
+    if not isinstance(requested_aggregation, str) or not user_message:
+        return False
+    verbs = _AGGREGATION_VERBS.get(requested_aggregation, (requested_aggregation,))
+    lowered = user_message.casefold()
+    return any(verb in lowered for verb in verbs)
 
 
 def _semantic_rejection_text(control: dict[str, object]) -> str:

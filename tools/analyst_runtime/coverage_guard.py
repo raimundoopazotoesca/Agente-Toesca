@@ -188,13 +188,13 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             # unrounded float literals a model fragment may still carry get
             # relabelled deterministically. Never changes which facts were
             # validated above -- provenance is checked against the raw text.
-            rendered.append(humanize_text(text, db_path))
+            _append_fragment(rendered, humanize_text(text, db_path))
         elif kind == "canonical_metric_ref" and fragment.get("claim_id") in bound_canonical:
-            rendered.append(render_fact(bound_canonical[fragment["claim_id"]]))
+            _append_fragment(rendered, render_fact(bound_canonical[fragment["claim_id"]]))
         elif kind == "governed_dataset_ref" and fragment.get("claim_id") in bound_governed:
-            rendered.append(_render_governed(bound_governed[fragment["claim_id"]], db_path))
+            _append_fragment(rendered, _render_governed(bound_governed[fragment["claim_id"]], db_path))
         elif kind == "derived_metric_ref" and fragment.get("claim_id") in bound_derived:
-            rendered.append(render_derived_claim(bound_derived[fragment["claim_id"]]))
+            _append_fragment(rendered, render_derived_claim(bound_derived[fragment["claim_id"]]))
         else:
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment")
 
@@ -206,6 +206,30 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     return CoverageValidation(True, prefix + "".join(rendered), _trace(
         canonical_claims=bound_canonical, governed_coverage=governed_coverage,
         result="pass", provenance=("pass" if provenance_checked else "not_applicable")))
+
+
+_GLUE_BOUNDARY_RE = re.compile(r"[\s([{–—-]$")
+_GLUE_START_RE = re.compile(r"^[\s.,;:!?)\]}%]")
+
+
+def _append_fragment(rendered: list[str], chunk: str) -> None:
+    """Join rendered fact/text fragments with a generic whitespace glue.
+
+    A model-authored synthesis envelope may emit two structurally rendered
+    fragments (two ``governed_dataset_ref``/``canonical_metric_ref`` facts,
+    or a fact directly followed by prose) with no separating text fragment
+    in between. Concatenating them with bare ``"".join`` then produces
+    "Entity: valueEntity: value" -- a formatting defect, not a factual one:
+    the values themselves are untouched. This inserts a single space at any
+    fragment boundary that isn't already whitespace/opening-bracket on one
+    side or punctuation/closing-bracket on the other. It is content-agnostic:
+    it never looks at which entity, fund, or metric produced the chunk.
+    """
+    if not chunk:
+        return
+    if rendered and rendered[-1] and not _GLUE_BOUNDARY_RE.search(rendered[-1]) and not _GLUE_START_RE.match(chunk):
+        rendered.append(" ")
+    rendered.append(chunk)
 
 
 def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:

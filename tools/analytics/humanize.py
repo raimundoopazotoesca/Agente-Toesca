@@ -266,6 +266,13 @@ def humanize_text(text: str, db_path: Path | str | None = None) -> str:
     # leading preposition the model's own prose left in front of them.
     result = re.sub(r"\b[Ee]n (durante|entre)\b", lambda m: m.group(1), result)
 
+    # 7. Markdown-escape artifacts (a model backslash-escaping punctuation to
+    # dodge Markdown list/emphasis parsing, e.g. "fueron\:", "PT\.") leak the
+    # backslash verbatim once rendered outside a Markdown-aware viewer. This
+    # is a generic de-escape of any backslash-escaped ASCII punctuation, not a
+    # fix for one character or one fragment.
+    result = re.sub(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])", r"\1", result)
+
     return result
 
 

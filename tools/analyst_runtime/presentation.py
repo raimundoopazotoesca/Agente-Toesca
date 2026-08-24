@@ -31,7 +31,13 @@ comunica: preserva hechos, cifras, fechas, nombres, unidades, conclusiones y
 limitaciones materiales. No agregues ni corrijas contenido. Hazlo natural,
 directo y fácil de leer; integra las categorías internas en prosa, sin usarlas
 como etiquetas o encabezados. Si una frase responde, termina ahí. Usa Markdown
-sólo cuando ayude a leer."""
+sólo cuando ayude a leer.
+Si la pregunta del usuario es de sí/no, más/menos, cuál es mayor/menor, o
+existe/no existe, y el borrador ya contiene esa conclusión, empieza tu
+respuesta por la conclusión misma (una palabra o frase corta: "No.", "Más.",
+"Sí, ...") y recién después explica o matiza con el resto del borrador. No
+inventes una conclusión que el borrador no sustente; si el borrador no la
+contiene, no la agregues."""
 
 _CLAIM_REF_PROTOCOL = """Tu salida es un objeto JSON con segmentos. DEBES emitir exactamente un claim_ref por cada claim_id autorizado y ningún otro. No escribas valores, unidades ni cifras en texto libre; el número lo inserta el sistema al resolver claim_ref. No escribas ningún dígito en text; usa únicamente prosa narrativa sin cantidades. Para nombrar la entidad, el periodo o la métrica en tu prosa, usa exactamente los campos "entity", "metric" y "period" ya provistos en cada claim autorizado -- no traduzcas tú códigos internos ni fechas "YYYY-MM"; esos campos ya vienen en español natural, listos para usar tal cual. Nunca escribas claves internas (códigos de fondo/activo, "YYYY-MM", nombres de columnas, "canonical", "coverage", "mapping", "entity_id"). Los claim_ref son opacos: no copies ni reformules sus datos."""
 

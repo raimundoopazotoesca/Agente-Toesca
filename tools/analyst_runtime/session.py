@@ -242,7 +242,19 @@ class OpenAIResponsesAnalystSession:
                 result.turn.raw.update(validation.trace)
         else:
             result = self._loop._legacy_finalize(investigation)
-            no_evidence = _account_no_evidence_payload(investigation)
+            # Only override with the canned NONE sentence when THIS turn
+            # actually re-queried the account and got no evidence again.
+            # Without this guard, a follow-up turn that asks a NEW question
+            # about the same prior NONE (e.g. "does that mean it was zero?")
+            # and makes no new tool call at all still matched stale
+            # analytics_account_query evidence retained from a PRIOR turn's
+            # history, and had the model's own (correct, on-topic) answer to
+            # the new question silently replaced by a verbatim repeat of the
+            # old answer. Gating on "this turn queried the account again"
+            # keeps the override for its real purpose -- a fresh NONE result
+            # -- without reaching backward into unrelated history.
+            queried_account_this_turn = any(call.name == "analytics_account_query" for call in investigation.tool_calls)
+            no_evidence = _account_no_evidence_payload(investigation) if queried_account_this_turn else None
             if no_evidence is not None:
                 result.turn.text = _account_no_evidence_text(no_evidence, self._db_path)
                 result.turn.raw["account_no_evidence"] = no_evidence
