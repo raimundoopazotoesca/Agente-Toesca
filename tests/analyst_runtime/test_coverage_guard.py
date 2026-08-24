@@ -159,6 +159,28 @@ def test_governed_dataset_ref_with_unknown_claim_id_fails(catalog_db):
     assert not result.valid
 
 
+# ---- Golden: canonical KPI fallback never leaks internal metric/unit keys ----
+
+def test_canonical_conflict_fallback_uses_catalog_display_name_and_human_unit():
+    """Alpha Product Validation v1, Hallazgo #2 (cases 01, 11): a real catalog
+    metric_key/unit code (e.g. 'vacancia_pct_fondo' / 'pct_0_100') must never
+    reach the user even on the fail-closed path; the catalog's display_name
+    and a human unit label must be used instead."""
+    real_metric_evidence = ToolEvidence(
+        "e1", "canonical_metric",
+        facts=({"metric_key": "vacancia_pct_fondo", "value": 5.945, "unit": "pct_0_100",
+                "entity_id": "TRI", "period": "2026-06"},),
+    )
+    envelope = {"fragments": [{"type": "canonical_metric_ref", "claim_id": "c"}],
+                "canonical_metric_claims": [{"claim_id": "c", "evidence_id": "e1", "metric_key": "vacancia_pct_fondo",
+                                              "value": 5.39, "unit": "pct_0_100", "entity_id": "TRI", "period": "2026-06"}]}
+    result = validate_and_render(envelope, [real_metric_evidence], [])
+    assert not result.valid
+    assert "vacancia_pct_fondo" not in result.content
+    assert "pct_0_100" not in result.content
+    assert result.content == "Vacancia del fondo: 5.945%"
+
+
 def test_trace_reports_required_coverage_fields(catalog_db):
     evidence = _governed_evidence(_rows("Torre A", "Boulevard"),
                                     {"status": "partial", "eligible_count": 3, "observed_count": 2})

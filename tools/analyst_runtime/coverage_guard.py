@@ -22,6 +22,12 @@ from pathlib import Path
 from typing import Any
 
 from tools.analyst_runtime.transport import ToolEvidence
+from tools.analytics.catalog import load_metric_catalog
+
+# Human-readable suffixes for the metric catalog's internal unit codes. Used
+# only to render a fail-closed fallback for a *human* reader; the catalog
+# codes themselves (e.g. "pct_0_100") must never reach the user.
+_UNIT_LABELS = {"pct_0_100": "%", "m2": " m2"}
 
 _PARTIAL_PREFIX = "Cobertura parcial: observados {observed} de {eligible} miembros aplicables. "
 _UNKNOWN_PREFIX = "No puede garantizarse completitud de este conjunto con la evidencia disponible. "
@@ -190,9 +196,25 @@ def _worst_status(statuses) -> str | None:
     return max(ranked, key=lambda s: priority[s])
 
 
+def _render_fact_human(fact: dict[str, Any]) -> str:
+    """Render one canonical fact for a fail-closed fallback using the metric
+    catalog's human display_name and a human unit label -- never the internal
+    metric_key or unit code. Falls back to the raw key/unit only for a
+    metric_key the catalog doesn't recognize (legacy/test fixtures), which is
+    already human-shaped in every real caller."""
+    try:
+        metric = load_metric_catalog().metrics.get(fact.get("metric_key"))
+    except Exception:
+        metric = None
+    if metric is None:
+        return f"{fact['metric_key']}: {fact['value']}{fact['unit']}"
+    unit_label = _UNIT_LABELS.get(metric.unit, f" {metric.unit}")
+    return f"{metric.display_name}: {fact['value']}{unit_label}"
+
+
 def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEvidence], reason: str) -> CoverageValidation:
     facts = [fact for item in canonical_evidence for fact in item.facts]
-    content = "\n".join(f"{fact['metric_key']}: {fact['value']}{fact['unit']}" for fact in facts)
+    content = "\n".join(_render_fact_human(fact) for fact in facts)
     if not content and governed_evidence:
         content = _PROVENANCE_FALLBACK
     return CoverageValidation(False, content, {
