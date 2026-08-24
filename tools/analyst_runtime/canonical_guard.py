@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tools.analyst_runtime.transport import ToolEvidence
+from tools.analytics.formatting import render_fact
 
 
 @dataclass(frozen=True)
@@ -38,8 +39,9 @@ def validate_and_render(envelope: dict[str, Any], evidence: list[ToolEvidence]) 
         if kind in {"text", "raw_text"} and isinstance(fragment.get("text"), str):
             rendered.append(fragment["text"])
         elif kind == "canonical_metric_ref" and fragment.get("claim_id") in bound:
-            fact = bound[fragment["claim_id"]]
-            rendered.append(f"{fact['value']}{fact['unit']}")
+            # Binding already succeeded on the raw semantic value; only the
+            # rendered string applies the catalog's display_unit.
+            rendered.append(render_fact(bound[fragment["claim_id"]]))
         else:
             return _conflict(evidence, "invalid_fragment")
     return CanonicalValidation(True, "".join(rendered), {"canonical_validation_applied": True,
@@ -50,7 +52,7 @@ def validate_and_render(envelope: dict[str, Any], evidence: list[ToolEvidence]) 
 
 def _conflict(evidence: list[ToolEvidence], reason: str) -> CanonicalValidation:
     facts = [fact for item in evidence if item.evidence_class == "canonical_metric" for fact in item.facts]
-    content = "\n".join(f"{fact['metric_key']}: {fact['value']}{fact['unit']}" for fact in facts)
+    content = "\n".join(f"{fact['metric_key']}: {render_fact(fact)}" for fact in facts)
     return CanonicalValidation(False, content, {"canonical_validation_applied": True,
         "canonical_validation_scope": "scalar", "canonical_claim_count": 0, "canonical_conflict": True,
         "conflicting_evidence_ids": [item.evidence_id for item in evidence if item.evidence_class == "canonical_metric"],

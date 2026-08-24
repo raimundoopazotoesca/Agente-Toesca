@@ -22,12 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from tools.analyst_runtime.transport import ToolEvidence
-from tools.analytics.catalog import load_metric_catalog
-
-# Human-readable suffixes for the metric catalog's internal unit codes. Used
-# only to render a fail-closed fallback for a *human* reader; the catalog
-# codes themselves (e.g. "pct_0_100") must never reach the user.
-_UNIT_LABELS = {"pct_0_100": "%", "m2": " m2"}
+from tools.analytics.formatting import render_fact, render_named_fact
 
 _PARTIAL_PREFIX = "Cobertura parcial: observados {observed} de {eligible} miembros aplicables. "
 _UNKNOWN_PREFIX = "No puede garantizarse completitud de este conjunto con la evidencia disponible. "
@@ -108,8 +103,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                     provenance_ok = False
             rendered.append(text)
         elif kind == "canonical_metric_ref" and fragment.get("claim_id") in bound_canonical:
-            fact = bound_canonical[fragment["claim_id"]]
-            rendered.append(f"{fact['value']}{fact['unit']}")
+            rendered.append(render_fact(bound_canonical[fragment["claim_id"]]))
         elif kind == "governed_dataset_ref" and fragment.get("claim_id") in bound_governed:
             rendered.append(_render_governed(bound_governed[fragment["claim_id"]]))
         else:
@@ -127,7 +121,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
 
 def _render_governed(bound: dict[str, Any]) -> str:
     status = bound["coverage"].get("status", "unknown")
-    listing = ", ".join(f"{fact['entity_id']}: {fact['value']}{fact['unit']}" for fact in bound["facts"])
+    listing = ", ".join(f"{fact['entity_id']}: {render_fact(fact)}" for fact in bound["facts"])
     if status == "partial":
         eligible = bound["coverage"].get("eligible_count") or 0
         observed = bound["coverage"].get("observed_count") or len(bound["facts"])
@@ -198,18 +192,10 @@ def _worst_status(statuses) -> str | None:
 
 def _render_fact_human(fact: dict[str, Any]) -> str:
     """Render one canonical fact for a fail-closed fallback using the metric
-    catalog's human display_name and a human unit label -- never the internal
+    catalog's human display_name and display scale -- never the internal
     metric_key or unit code. Falls back to the raw key/unit only for a
-    metric_key the catalog doesn't recognize (legacy/test fixtures), which is
-    already human-shaped in every real caller."""
-    try:
-        metric = load_metric_catalog().metrics.get(fact.get("metric_key"))
-    except Exception:
-        metric = None
-    if metric is None:
-        return f"{fact['metric_key']}: {fact['value']}{fact['unit']}"
-    unit_label = _UNIT_LABELS.get(metric.unit, f" {metric.unit}")
-    return f"{metric.display_name}: {fact['value']}{unit_label}"
+    metric_key the catalog doesn't recognize (legacy/test fixtures)."""
+    return render_named_fact(fact)
 
 
 def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEvidence], reason: str) -> CoverageValidation:
