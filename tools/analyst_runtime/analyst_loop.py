@@ -132,14 +132,15 @@ class AnalystLoop:
                 result = self.action_executor.execute(tr)
                 results.append(result)
                 tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
-                if result.control and result.control.get("kind") == "clarification_required":
+                if result.control and result.control.get("kind") in {"clarification_required", "semantic_rejection"}:
                     result.trace["blocked_followup_tool_calls"] = [request.name for request in response.tool_requests[index + 1:]]
-                    result.trace["termination_reason"] = "clarification_required"
-                    termination_reason = "clarification_required"
-                    final_text = _clarification_text(result.control)
+                    termination_reason = str(result.control["kind"])
+                    result.trace["termination_reason"] = termination_reason
+                    final_text = (_clarification_text(result.control) if termination_reason == "clarification_required"
+                                  else _semantic_rejection_text(result.control))
                     break
             round_history = _append_turn(round_history, user_text, response, results)
-            if termination_reason == "clarification_required":
+            if termination_reason in {"clarification_required", "semantic_rejection"}:
                 break
         total_usage.latency_ms = (time.monotonic() - started) * 1000
         return InvestigationResult(round_history, tool_calls_log, total_usage, termination_reason, final_text)
@@ -161,7 +162,7 @@ class AnalystLoop:
             tool_calls=investigation.tool_calls,
             usage=total_usage,
             raw={"final_text": final_text, **({"termination_reason": termination_reason}
-                                                if termination_reason == "clarification_required" else {})},
+                                                if termination_reason in {"clarification_required", "semantic_rejection"} else {})},
         )
         return LoopResult(turn=turn, round_trajectory=round_history)
 
@@ -175,7 +176,7 @@ class AnalystLoop:
         concern. When it is empty the synthesis message stays byte-identical to
         `_SYNTHESIS_INSTRUCTION`.
         """
-        if investigation.termination_reason == "clarification_required":
+        if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             return self._legacy_finalize(investigation)
         message = f"{_SYNTHESIS_INSTRUCTION}\n\n{synthesis_context}" if synthesis_context else _SYNTHESIS_INSTRUCTION
         request = ModelRequest(self.system_prompt, investigation.round_trajectory, message, [], output_contract)
@@ -203,11 +204,31 @@ def _append_turn(history: list[TranscriptItem], user_text: str | None, response:
 def _clarification_text(control: dict[str, object]) -> str:
     query = str(control.get("entity_query", "la entidad"))
     status = control.get("resolution_status")
+    candidates = control.get("candidates", [])
+    candidate_types = {item.get("entity_type") for item in candidates if isinstance(item, dict)}
+    if {"fund", "asset"} <= candidate_types:
+        return f"¿Te refieres al fondo {query} o a alguno de los activos de {query}?"
+    if status == "ambiguous" and candidate_types == {"asset"}:
+        names = [str(item.get("canonical_name")) for item in candidates if isinstance(item, dict)]
+        return f"Encontré más de un activo que podría coincidir con '{query}': {', '.join(names)}. ¿Cuál buscas?"
     if status == "ambiguous":
-        return f"No pude resolver '{query}' a una entidad canÃ³nica Ãºnica. Â¿Puedes precisar a quÃ© activo te refieres?"
+        return f"No pude resolver '{query}' a una entidad canónica única. ¿Puedes precisar a qué entidad te refieres?"
     if status == "not_found":
-        return f"No encontrÃ© una entidad canÃ³nica para '{query}'. Â¿Puedes precisar a quÃ© activo te refieres?"
-    return f"No pude resolver '{query}' a una entidad canÃ³nica con suficiente confianza. Â¿Puedes precisar a quÃ© activo te refieres?"
+        return f"No encontré una entidad canónica para '{query}'. ¿Puedes precisar a qué entidad te refieres?"
+    names = [str(item.get("canonical_name")) for item in candidates if isinstance(item, dict)]
+    if len(names) == 1:
+        return f"¿Te referías a {names[0]}?"
+    return f"No pude resolver '{query}' a una entidad canónica con suficiente confianza. ¿Puedes precisar a qué entidad te refieres?"
+
+
+def _semantic_rejection_text(control: dict[str, object]) -> str:
+    requested = str(control.get("requested_aggregation", "esa operación"))
+    requested = {"sum": "sumar", "avg": "promediar", "last": "tomar el último valor"}.get(requested, requested)
+    metric = str(control.get("metric_id", "esta métrica")).replace("_", " ")
+    alternatives = control.get("allowed_aggregations", [])
+    if alternatives:
+        return f"No se puede {requested} {metric}; las operaciones permitidas son: {', '.join(map(str, alternatives))}."
+    return f"No se puede {requested} {metric}, porque es una métrica de punto en el tiempo o razón y no admite esa agregación."
 
 
 def _accumulate(total: Usage, call: Usage) -> None:

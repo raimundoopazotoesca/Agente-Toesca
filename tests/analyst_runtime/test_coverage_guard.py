@@ -41,14 +41,14 @@ def test_canonical_only_envelope_renders_identically_to_stage_5_3():
     envelope = {"fragments": [{"type": "text", "text": "Fue "}, {"type": "canonical_metric_ref", "claim_id": "c"}],
                 "canonical_metric_claims": [{"claim_id": "c", "evidence_id": "e1", "metric_key": "vacancia", "value": 5.945, "unit": "%", "entity_id": "A", "period": "2026-06"}]}
     result = validate_and_render(envelope, [CANONICAL_EVIDENCE], [])
-    assert result.valid and result.content == "Fue 5.945%"
+    assert result.valid and result.content == "Fue 5,95%"
 
 
 def test_canonical_conflict_fails_closed_unchanged():
     envelope = {"fragments": [{"type": "canonical_metric_ref", "claim_id": "c"}],
                 "canonical_metric_claims": [{"claim_id": "c", "evidence_id": "e1", "metric_key": "vacancia", "value": 5.39, "unit": "%", "entity_id": "A", "period": "2026-06"}]}
     result = validate_and_render(envelope, [CANONICAL_EVIDENCE], [])
-    assert not result.valid and result.content == "vacancia: 5.945%"
+    assert not result.valid and result.content == "vacancia: 5,95%"
 
 
 # ---- Governed dataset: complete / partial / unknown ----
@@ -178,7 +178,7 @@ def test_canonical_conflict_fallback_uses_catalog_display_name_and_human_unit():
     assert not result.valid
     assert "vacancia_pct_fondo" not in result.content
     assert "pct_0_100" not in result.content
-    assert result.content == "Vacancia del fondo: 5.945%"
+    assert result.content == "Vacancia del fondo: 5,95%"
 
 
 def test_trace_reports_required_coverage_fields(catalog_db):

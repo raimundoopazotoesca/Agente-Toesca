@@ -48,7 +48,7 @@ def test_case02_asset_ltv_renders_as_percent_only_after_binding():
     validation = validate_and_render(envelope, [result.evidence], [])
 
     assert validation.valid
-    assert validation.content == "El LTV es 71.15%"
+    assert validation.content == "El LTV es 71,15%"
 
 
 def test_case12_fund_ltv_lookup_distinguishes_tri_from_pt():
@@ -105,7 +105,7 @@ def test_period_range_claim_binds_the_exact_requested_month():
     validation = validate_and_render(_series_envelope("2026-06"), [], [evidence])
 
     assert validation.valid
-    assert validation.content == "Apo3001: 71.15%"
+    assert validation.content == "Apo3001: 71,15%"
 
 
 def test_period_range_claim_for_an_absent_month_fails_closed():
@@ -277,7 +277,7 @@ def test_canonical_claim_can_select_one_period_from_a_series():
     validation = validate_and_render(_canonical_claim_envelope({"evidence_id": "e1", **fact}), [], [evidence])
 
     assert validation.valid
-    assert validation.content == "El valor es 71.15%"
+    assert validation.content == "El valor es 71,15%"
 
 
 def test_canonical_claim_selecting_a_wrong_period_value_fails_closed():

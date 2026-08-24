@@ -210,7 +210,7 @@ class OpenAIResponsesAnalystSession:
         canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
         governed = [item for item in evidence if item.evidence_class == "governed_dataset"]
         validation = None
-        if investigation.termination_reason == "clarification_required":
+        if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             result = self._loop._legacy_finalize(investigation)
         elif investigation.tool_calls:
             # Any tool call -- not just a canonical/governed one -- may have
@@ -221,15 +221,20 @@ class OpenAIResponsesAnalystSession:
                 investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA),
                 synthesis_context=render_evidence_inventory(evidence),
             )
-            validation = validate_and_render(result.turn.raw["structured_output"] or {}, canonical, governed, self._db_path)
-            result.turn.text = validation.content
-            result.turn.raw.update(validation.trace)
+            # ``finalize`` may relay an early deterministic termination from
+            # the loop. Such a result has no model-produced synthesis envelope
+            # and must never be forced through the structured-output parser.
+            if result.turn.raw.get("termination_reason") not in {"clarification_required", "semantic_rejection"}:
+                validation = validate_and_render(result.turn.raw.get("structured_output") or {}, canonical, governed, self._db_path)
+                result.turn.text = validation.content
+                result.turn.raw.update(validation.trace)
         else:
             result = self._loop._legacy_finalize(investigation)
         turn = result.turn
         self._history = _retained_history(investigation, turn.text)
         termination_reason = turn.raw.get("termination_reason")
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
+                        else _semantic_rejection_presentation(turn.text) if termination_reason == "semantic_rejection"
                         else _conflict_presentation(turn.text) if validation and not validation.valid
                         else self._present(turn.text, text, _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence)))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
@@ -310,6 +315,10 @@ def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptIt
 
 def _clarification_presentation(content: str) -> PresentationResult:
     return PresentationResult(content, False, None, None, None, "clarification_required")
+
+
+def _semantic_rejection_presentation(content: str) -> PresentationResult:
+    return PresentationResult(content, False, None, None, None, "semantic_rejection")
 
 
 def _conflict_presentation(content: str) -> PresentationResult:

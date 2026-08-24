@@ -49,8 +49,7 @@ def render_claim(claim: AllowedClaim) -> str:
         rendered_value = f"{value} {claim.unit}" if claim.unit else value
     else:
         rendered_value = catalog_value
-    aggregation = f" · {claim.aggregation}" if claim.aggregation else ""
-    return f"{claim.entity_id} · {claim.period}{aggregation}: {rendered_value}"
+    return rendered_value
 
 
 def render_segments(output: dict[str, object], claims: tuple[AllowedClaim, ...]) -> str:

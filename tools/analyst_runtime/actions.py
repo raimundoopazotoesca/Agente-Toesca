@@ -232,6 +232,7 @@ class ResolveEntityAction:
                     "reason": result.status,
                     "entity_query": query,
                     "resolution_status": result.status,
+                    "candidates": [candidate.as_dict() for candidate in result.candidates],
                 }
                 trace.update({"resolution_status": result.status, "clarification_required": True})
             else:
@@ -444,9 +445,16 @@ class _AnalyticsCapabilityAction:
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
         except SemanticQueryError as exc:
-            payload = {"error_type": "semantic_query_error", "error": str(exc)}
+            if exc.code != "invalid_aggregation":
+                payload = {"error_type": "semantic_query_error", "error": str(exc)}
+                return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
+                                  trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
+            rejection = {"code": exc.code, **exc.metadata}
+            payload = {"error_type": "semantic_rejection", "error": str(exc), "semantic_rejection": rejection}
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
-                              trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
+                              trace={**_capability_trace(request.arguments, {}, payload, self._allowed_fields()),
+                                     "semantic_rejection": rejection},
+                              control={"kind": "semantic_rejection", **rejection})
         except (KeyError, TypeError, ValueError) as exc:
             payload = {"error_type": "invalid_request", "error": str(exc)}
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),

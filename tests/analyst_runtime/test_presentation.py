@@ -37,7 +37,7 @@ def test_presenter_accepts_structured_segments_and_renders_the_claim():
     draft = "La vacancia de TRI en junio de 2026 fue 5,945%.\n\nDato verificado: corresponde al KPI."
     result, calls = _present(draft, '{"segments":[{"type":"text","text":"la vacancia fue "},{"type":"claim_ref","claim_id":"c1"}]}')
     assert result.applied is True
-    assert result.content == "la vacancia fue TRI · 2026-06: 5,95 %"
+    assert result.content == "la vacancia fue 5,95%"
     assert result.integrity_status == "passed"
     assert calls[0]["tools"] == []
     assert calls[0]["tool_choice"] == "none"

@@ -97,6 +97,23 @@ def test_canonical_fund_context_filters_asset_candidates():
     assert result.candidates[0].entity_key == "Apo3001"
 
 
+@pytest.mark.parametrize("query,entity_types,expected_key", [
+    ("TP", ("fund",), "PT"),
+    ("apoqundo", ("fund",), "Apo"),
+    ("Fóndo Apoquindo", ("fund",), "Apo"),
+])
+def test_resolver_safely_suggests_or_resolves_reasonable_typed_typos(query, entity_types, expected_key):
+    result = EntityResolver(DB).resolve(query, entity_types)
+    assert result.candidates[0].entity_key == expected_key
+    assert result.status in {"resolved", "low_confidence"}
+
+
+def test_cross_type_ambiguity_retains_all_candidate_types():
+    result = EntityResolver(DB).resolve("Apoquindo", ("fund", "asset"))
+    assert result.status == "ambiguous"
+    assert {candidate.entity_type for candidate in result.candidates} == {"fund", "asset"}
+
+
 def test_resolve_entity_action_reports_unexpected_db_error(tmp_path: Path):
     action = ResolveEntityAction(tmp_path / "missing.sqlite")
     result = action.execute(ToolRequest("resolve", action.name, {"query": "Apoquindo 3001", "entity_types": ["asset"], "fund": None}))

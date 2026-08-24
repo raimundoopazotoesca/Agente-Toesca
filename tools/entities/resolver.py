@@ -34,6 +34,11 @@ class EntityResolver:
                     candidates.append(EntityCandidate(typ, canonical.entity_id, canonical.canonical_name, 100,
                         "canonical_alias", {}, True, {"matched_fields": ["canonical_alias"]}))
                     continue
+                fuzzy = load_entity_definitions(_ENTITY_DEFINITIONS_PATH).resolve_fuzzy(query, typ)
+                if fuzzy is not None:
+                    candidates.append(EntityCandidate(typ, fuzzy.entity_id, fuzzy.canonical_name, 80,
+                        "fuzzy_alias", {}, True, {"matched_fields": ["fuzzy_alias"]}))
+                    continue
                 definition=ENTITY_TYPES[typ]; fields=(definition.key_field,definition.display_field,*definition.parent_context_fields,definition.active_field)
                 rows=conn.execute(f"SELECT {','.join(x for x in fields if x)} FROM {definition.source_object}").fetchall()
                 for row in rows:
@@ -47,6 +52,7 @@ class EntityResolver:
         finally: conn.close()
         candidates.sort(key=lambda c:(-c.score,c.entity_type,c.entity_key)); top=tuple(candidates[:5])
         if not top: status="not_found"
+        elif len({candidate.entity_type for candidate in top}) > 1: status="ambiguous"
         elif len(top)>1 and top[0].score==top[1].score: status="ambiguous"
         elif top[0].score >= 95: status="resolved"
         else: status="low_confidence"

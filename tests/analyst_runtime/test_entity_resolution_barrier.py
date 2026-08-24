@@ -71,7 +71,7 @@ def test_low_confidence_terminates_before_sql_and_auto_promotion():
     assert [call.name for call in result.turn.tool_calls] == ["resolve_entity"]
     assert sql.calls == []
     assert transport.calls == 1
-    assert "No pude resolver" in result.turn.text
+    assert "¿Te referías a" in result.turn.text
 
 
 @pytest.mark.parametrize("query,status", [("activo inexistente", "not_found")])
@@ -162,3 +162,14 @@ def test_clarification_does_not_invoke_final_presenter():
 
     assert result.presentation_integrity_status == "clarification_required"
     assert presenter.calls == 0
+
+
+def test_clarification_uses_candidate_entity_types_and_utf8_text():
+    transport = ScriptedTransport([ModelResponse("", [ToolRequest("ambiguous", "resolve_entity", {
+        "query": "Apoquindo", "entity_types": ["fund", "asset"], "fund": None,
+    })])])
+    registry = ActionRegistry([ResolveEntityAction(DB)])
+    result = AnalystLoop("sys", transport, registry, registry.tool_specs()).ask("Apoquindo")
+    assert "fondo Apoquindo" in result.turn.text
+    assert "activos de Apoquindo" in result.turn.text
+    assert "Ã" not in result.turn.text

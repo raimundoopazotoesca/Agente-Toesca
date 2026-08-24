@@ -11,7 +11,12 @@ from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 
 
 class SemanticQueryError(ValueError):
-    pass
+    """A fail-closed semantic-contract rejection with safe explanation data."""
+
+    def __init__(self, message: str, *, code: str = "semantic_query_error", metadata: dict[str, object] | None = None):
+        super().__init__(message)
+        self.code = code
+        self.metadata = metadata or {}
 
 
 @dataclass(frozen=True)
@@ -68,7 +73,16 @@ class AnalyticsExecutor:
         if not query.period_start:
             raise SemanticQueryError("period is required")
         if query.temporal_aggregation not in (None, *metric.allowed_temporal_aggregations):
-            raise SemanticQueryError("aggregation is not permitted by metric contract")
+            raise SemanticQueryError(
+                "aggregation is not permitted by metric contract",
+                code="invalid_aggregation",
+                metadata={
+                    "metric_id": metric.key,
+                    "metric_nature": metric.nature.value,
+                    "requested_aggregation": query.temporal_aggregation.value,
+                    "allowed_aggregations": [item.value for item in metric.allowed_temporal_aggregations],
+                },
+            )
         if request.group_by and request.group_by not in metric.allowed_dimensions:
             raise SemanticQueryError("grouping is not permitted by metric contract")
         if request.group_by and request.group_by != metric.entity_grain:

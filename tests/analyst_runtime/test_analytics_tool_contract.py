@@ -16,7 +16,7 @@ from tools.analyst_runtime.actions import (
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
-from tools.analyst_runtime.session import OpenAIResponsesAnalystSessionFactory
+from tools.analyst_runtime.session import OpenAIResponsesAnalystSession, OpenAIResponsesAnalystSessionFactory
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
 
 
@@ -56,6 +56,44 @@ def test_lookup_fund_emits_traceable_evidence_for_metadata_defined_aggregate():
     assert fact["value"] == pytest.approx(172868.06, abs=0.01)
     assert fact["period"] == "2025-01..2025-12"
     assert result.evidence.provenance["source_period_count"] == 12
+
+
+def test_invalid_aggregation_stops_the_turn_before_unrelated_fallbacks():
+    action = AnalyticsLookupFundAction(DB)
+    registry = ActionRegistry([action, RunSqlAction(LiveReadOnlySandbox(DB))])
+
+    class ScriptedTransport:
+        def __init__(self):
+            self.responses = iter([ModelResponse("", [
+                ToolRequest("ltv", action.name, {"metric": "ltv_fondo", "fund": "TRI", "period": "2025-01", "period_end": "2025-12", "aggregation": "sum"}),
+                ToolRequest("sql", "run_sql", {"query": "SELECT 1"}),
+            ])])
+        def complete(self, _request): return next(self.responses)
+
+    result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("suma LTV")
+
+    assert result.turn.raw["termination_reason"] == "semantic_rejection"
+    assert [call.name for call in result.turn.tool_calls] == [action.name]
+    assert result.turn.tool_calls[0].trace["semantic_rejection"]["code"] == "invalid_aggregation"
+    assert "no se puede sumar" in result.turn.text.lower()
+
+
+def test_semantic_rejection_returns_through_session_without_structured_finalization():
+    action = AnalyticsLookupFundAction(DB)
+    registry = ActionRegistry([action])
+
+    class ScriptedTransport:
+        def complete(self, _request):
+            return ModelResponse("", [ToolRequest("ltv", action.name, {
+                "metric": "ltv_fondo", "fund": "TRI", "period": "2025-01", "period_end": "2025-12", "aggregation": "sum",
+            })])
+
+    session = OpenAIResponsesAnalystSession(AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()), presenter=None)
+    result = session.ask("suma LTV")
+
+    assert result.termination_reason == "semantic_rejection"
+    assert result.text.lower().startswith("no se puede sumar")
+    assert result.presentation_integrity_status == "semantic_rejection"
 
 
 def test_lookup_fund_maps_scope_to_executor_and_preserves_semantic_trace():

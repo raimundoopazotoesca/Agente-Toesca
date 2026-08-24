@@ -75,6 +75,19 @@ def test_synthetic_point_in_time_rejects_sum_from_its_contract(tmp_path: Path):
         ))
 
 
+def test_invalid_aggregation_exposes_structured_contract_metadata(tmp_path: Path):
+    with pytest.raises(SemanticQueryError) as raised:
+        _fixture_executor(tmp_path, "synthetic_ratio", "ratio", "[]").execute(AnalyticsQueryRequest(
+            metric="synthetic_ratio", funds=("fund-a",), period="2026-01", period_end="2026-03", aggregation="sum",
+        ))
+
+    assert raised.value.code == "invalid_aggregation"
+    assert raised.value.metadata == {
+        "metric_id": "synthetic_ratio", "metric_nature": "ratio",
+        "requested_aggregation": "sum", "allowed_aggregations": [],
+    }
+
+
 def test_fourth_real_metric_requires_only_metadata_for_aggregation():
     result = AnalyticsExecutor(DB).execute(AnalyticsQueryRequest(
         metric="ingresos_mensual_fondo", funds=("PT",), period="2025-01", period_end="2025-03", aggregation="sum",

@@ -353,4 +353,4 @@ def test_true_entity_ambiguity_still_stops_the_turn_for_clarification():
     result = session.ask("¿cómo viene Apoquindo este trimestre?")
 
     assert result.termination_reason == "clarification_required"
-    assert "precisar" in result.text.lower()
+    assert "cuál buscas" in result.text.lower()

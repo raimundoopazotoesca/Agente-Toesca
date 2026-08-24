@@ -18,11 +18,11 @@ from tools.analytics.catalog import load_metric_catalog
 
 # Human suffix per internal unit code. The internal code itself must never
 # reach a user.
-_UNIT_SUFFIX = {"pct_0_100": "%", "m2": " m2", "clp": " CLP", "ratio_0_1": ""}
+_UNIT_SUFFIX = {"pct_0_100": "%", "%": "%", "m2": " m²", "clp": " CLP", "ratio_0_1": "", "UF": " UF"}
 
 # Display precision per unit code. Deliberately absent for pct_0_100, which
 # is already expressed in its display scale and must render unrounded.
-_UNIT_PRECISION = {"clp": 2}
+_UNIT_PRECISION = {"UF": 0, "clp": 0, "m2": 1, "pct_0_100": 2, "%": 2}
 
 # Scale transforms keyed by (unit, display_unit). Value -> (factor, suffix).
 _DISPLAY_TRANSFORMS = {("ratio_0_1", "percent"): (100.0, "%")}
@@ -35,20 +35,23 @@ def render_metric_value(metric_key: Any, value: Any, unit: Any) -> str:
     fixtures and any legacy caller keep their exact previous output.
     """
     metric = _metric(metric_key)
-    if metric is None:
-        return f"{value}{unit}"
-    transform = _DISPLAY_TRANSFORMS.get((metric.unit, metric.display_unit))
+    effective_unit = metric.unit if metric is not None else unit
+    display_unit = metric.display_unit if metric is not None else None
+    transform = _DISPLAY_TRANSFORMS.get((effective_unit, display_unit))
     if transform is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
         factor, suffix = transform
-        # Rounding is applied only where a scale conversion happened, so
-        # metrics already expressed in their display scale (e.g. pct_0_100)
-        # render byte-identically to before.
-        return f"{value * factor:.2f}{suffix}"
-    suffix = _UNIT_SUFFIX.get(metric.unit, f" {metric.unit}")
-    precision = _UNIT_PRECISION.get(metric.unit)
+        return _number(value * factor, 2) + suffix
+    suffix = _UNIT_SUFFIX.get(effective_unit, f" {effective_unit}" if effective_unit else "")
+    precision = _UNIT_PRECISION.get(effective_unit)
     if precision is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
-        return f"{value:.{precision}f}{suffix}"
+        return _number(value, precision) + suffix
     return f"{value}{suffix}"
+
+
+def _number(value: float, precision: int) -> str:
+    """Locale-neutral deterministic Chilean display, independent of KPI names."""
+    rendered = f"{value:,.{precision}f}"
+    return rendered.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def render_fact(fact: dict[str, Any]) -> str:
