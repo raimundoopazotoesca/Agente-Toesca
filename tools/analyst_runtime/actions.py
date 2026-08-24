@@ -353,10 +353,20 @@ class _AnalyticsCapabilityAction:
                 "order_by": {"type": ["string", "null"], "enum": ["value_desc", "value_asc", None], "description": "Ordering for comparable metric values; use null for the native order."},
                 "limit": {"type": ["integer", "null"], "minimum": 1, "description": "Maximum number of rows returned; use null for the capability default."},
             })
-        return ToolSpec(self.name, self.description, {
+        return ToolSpec(self.name, self._description(), {
             "type": "object", "additionalProperties": False, "properties": properties,
             "required": list(properties),
         })
+
+    def _description(self) -> str:
+        """Name the metrics this capability covers, straight from the catalog.
+        Without it the metrics are discoverable only inside a JSON enum of
+        opaque keys, and the model falls back to raw exploration for questions
+        the governed path already answers."""
+        catalog = load_metric_catalog().metrics
+        available = ", ".join(f"{catalog[key].display_name} ({key})"
+                              for key in self._metric_keys() if key in catalog)
+        return f"{self.description} Métricas disponibles: {available}."
 
     def execute(self, request: ToolRequest) -> ToolResult:
         try:
