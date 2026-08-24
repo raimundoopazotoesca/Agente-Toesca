@@ -121,14 +121,23 @@ def test_none_account_query_reaches_a_natural_final_answer_without_canonical_con
     session = OpenAIResponsesAnalystSession(AnalystLoop("sys", Transport(), ActionRegistry([action]), [action.tool_spec()]), presenter=None)
     result = session.ask("consulta")
 
-    assert result.text == "No pude verificar un monto para insurance en missing durante 2025-01..2025-03 con la evidencia gobernada disponible. Esto no implica que el gasto haya sido cero."
+    # Human Analytical Presentation v1: NONE answers use the account-concept
+    # catalog display name and the generic period formatter, not raw
+    # internal identifiers or "YYYY-MM..YYYY-MM" notation.
+    assert result.text == (
+        "No encontré evidencia de gasto en seguros para missing entre enero y marzo de 2025. "
+        "Esto no implica que el gasto haya sido cero, sólo que no hay datos gobernados que lo respalden."
+    )
     assert result.presentation_integrity_status == "not_configured"
 
 
 def test_parent_none_composition_preserves_requested_scope():
     from tools.analyst_runtime.session import _account_no_evidence_text
 
-    assert _account_no_evidence_text({"concept_id": "insurance", "entity": "Apo", "entity_type": "fund", "period": "2025-01..2025-12"}) == "No pude verificar un monto para insurance en Apo durante 2025-01..2025-12 con la evidencia gobernada disponible. Esto no implica que el gasto haya sido cero."
+    assert _account_no_evidence_text({"concept_id": "insurance", "entity": "Apo", "entity_type": "fund", "period": "2025-01..2025-12"}) == (
+        "No encontré evidencia de gasto en seguros para Apo durante 2025. "
+        "Esto no implica que el gasto haya sido cero, sólo que no hay datos gobernados que lo respalden."
+    )
 
 
 def test_account_capability_has_one_generic_discoverability_instruction():

@@ -26,6 +26,7 @@ from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
+from tools.analytics.humanize import entity_display_name, format_period, format_period_as_of, format_period_range
 
 INTERACTIVE_EVIDENCE_INSTRUCTION = """Responde en español, distingue datos verificados de inferencias y usa la
 herramienta SQL sólo para consultas de lectura cuando necesites evidencia."""
@@ -86,6 +87,13 @@ Modela esa presentación así: ante una pregunta simple, responde "La vacancia f
 la concentración de la vacancia en pocos activos. Esto sugiere que una mejora en
 ellos podría mover materialmente el indicador." Si la incertidumbre es material,
 di "El dato apunta a una mejora, aunque la cobertura del período es parcial."
+
+Cuando una capacidad gobernada informe una base contable (por ejemplo,
+devengado/EERR) y la pregunta del usuario esté formulada en términos de caja
+("pagamos", "desembolsamos", "salió de la cuenta"), acláralo con una frase
+natural y breve -- no la omitas ni la etiquetes con el nombre interno del
+campo; dilo como lo diría un analista ("este monto es el gasto contable del
+período, no necesariamente lo efectivamente pagado en caja").
 
 Adapta la extensión y la presentación a la pregunta. Usa Markdown sólo cuando
 ayude a leer: negritas para cifras o hallazgos clave, tablas para comparaciones
@@ -235,7 +243,7 @@ class OpenAIResponsesAnalystSession:
             result = self._loop._legacy_finalize(investigation)
             no_evidence = _account_no_evidence_payload(investigation)
             if no_evidence is not None:
-                result.turn.text = _account_no_evidence_text(no_evidence)
+                result.turn.text = _account_no_evidence_text(no_evidence, self._db_path)
                 result.turn.raw["account_no_evidence"] = no_evidence
         turn = result.turn
         self._history = _retained_history(investigation, turn.text)
@@ -243,7 +251,7 @@ class OpenAIResponsesAnalystSession:
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
                         else _semantic_rejection_presentation(turn.text) if termination_reason == "semantic_rejection"
                         else _conflict_presentation(turn.text) if validation and not validation.valid
-                        else self._present(turn.text, text, _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence)))
+                        else self._present(turn.text, text, _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path)))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
         return AnalystSessionResult(
             text=presentation.content,
@@ -266,7 +274,23 @@ class OpenAIResponsesAnalystSession:
         return self._presenter.present(user_message=user_message, draft_answer=draft, claims=claims)
 
 
-def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> tuple[AllowedClaim, ...]:
+def _display_period(period_value: str, aggregation: str | None) -> str:
+    """Deterministic period phrasing for an :class:`AllowedClaim`.
+
+    ``period_value`` may be a single ``YYYY-MM`` or a ``start..end`` range
+    (an aggregation over several months) -- both come from the same raw
+    ``period`` field on the evidence fact, never a new source of truth.
+    """
+    if ".." in period_value:
+        start, end = period_value.split("..", 1)
+        return format_period_range(start, end)
+    if aggregation == "point_in_time":
+        return format_period_as_of(period_value)
+    return format_period(period_value)
+
+
+def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
+                     db_path: Path | None = None) -> tuple[AllowedClaim, ...]:
     by_evidence_id = {item.evidence_id: item for item in evidence}
     source_claims = envelope.get("canonical_metric_claims", [])
     if not isinstance(source_claims, list):
@@ -286,12 +310,19 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> t
         if fact is None:
             return ()
         seen.add(claim_id)
+        aggregation = source.semantic_contract.get("aggregation")
+        period_value = str(fact["period"])
         claims.append(AllowedClaim(
             claim_id=claim_id, evidence_id=source.evidence_id,
             metric_key=str(fact["metric_key"]), entity_id=str(fact["entity_id"]),
-            value=float(fact["value"]), unit=str(fact["unit"]), period=str(fact["period"]),
-            aggregation=source.semantic_contract.get("aggregation"),
+            value=float(fact["value"]), unit=str(fact["unit"]), period=period_value,
+            aggregation=aggregation,
             lineage=deepcopy(source.provenance),
+            # Precomputed, deterministic display strings so the presentation
+            # LLM phrases the entity/period in natural language without ever
+            # having to translate a raw key or YYYY-MM code itself.
+            entity_display=entity_display_name(fact["entity_id"], db_path),
+            period_display=_display_period(period_value, aggregation),
         ))
     return tuple(claims)
 
@@ -343,12 +374,33 @@ def _account_no_evidence_payload(investigation: Any) -> dict[str, Any] | None:
     return payload
 
 
-def _account_no_evidence_text(payload: dict[str, Any]) -> str:
-    concept = str(payload.get("concept_id", "este concepto")).replace("_", " ")
-    entity = str(payload.get("entity", "la entidad solicitada"))
-    period = str(payload.get("period", "el período solicitado"))
-    return (f"No pude verificar un monto para {concept} en {entity} durante {period} con la evidencia gobernada disponible. "
-            "Esto no implica que el gasto haya sido cero.")
+def _account_no_evidence_text(payload: dict[str, Any], db_path: Path | None = None) -> str:
+    """Human phrasing for a NONE account-coverage answer -- deterministic,
+    metadata-driven (account-concept catalog display name, entity catalog,
+    period formatter); never a raw internal identifier."""
+    concept_id = payload.get("concept_id")
+    concept = _account_concept_display_name(concept_id) if concept_id else "este concepto"
+    raw_entity = payload.get("entity")
+    entity = entity_display_name(raw_entity, db_path) if isinstance(raw_entity, str) else "la entidad solicitada"
+    raw_period = payload.get("period")
+    period = _display_period_phrase(raw_period) if isinstance(raw_period, str) else "el período solicitado"
+    return (f"No encontré evidencia de gasto en {concept} para {entity} {period}. "
+            "Esto no implica que el gasto haya sido cero, sólo que no hay datos gobernados que lo respalden.")
+
+
+def _display_period_phrase(period_value: str) -> str:
+    if ".." in period_value:
+        start, end = period_value.split("..", 1)
+        return format_period_range(start, end)
+    return format_period(period_value)
+
+
+def _account_concept_display_name(concept_id: str) -> str:
+    try:
+        from tools.analytics.account_concepts import AccountConceptCatalog
+        return AccountConceptCatalog.load().get(concept_id).display_name.lower()
+    except Exception:  # noqa: BLE001 -- display must never raise
+        return str(concept_id).replace("_", " ")
 
 
 def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:

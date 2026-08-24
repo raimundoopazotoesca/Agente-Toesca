@@ -77,7 +77,7 @@ def test_partial_fund_enumeration_renders_deterministic_caveat(catalog_db):
                                               "entity_ids": ["Torre A", "Boulevard"], "period": "2026-06", "universe_kind": "fund_assets"}]}
     result = validate_and_render(envelope, [], [evidence], catalog_db)
     assert result.valid
-    assert result.content.startswith("Cobertura parcial: observados 2 de 3 miembros aplicables.")
+    assert result.content.startswith("Ojo: estos datos alcanzan a 2 de 3 elementos aplicables")
 
 
 def test_unknown_scope_renders_deterministic_uncertainty_language(catalog_db):
@@ -87,7 +87,7 @@ def test_unknown_scope_renders_deterministic_uncertainty_language(catalog_db):
                                               "entity_ids": ["Torre A"], "period": "2026-06", "universe_kind": "fund_assets"}]}
     result = validate_and_render(envelope, [], [evidence], catalog_db)
     assert result.valid
-    assert "no puede garantizarse completitud" in result.content.lower()
+    assert "no es posible confirmar que estos datos representen el conjunto completo" in result.content.lower()
 
 
 def test_explicit_three_asset_subset_is_complete_over_the_subset(catalog_db):

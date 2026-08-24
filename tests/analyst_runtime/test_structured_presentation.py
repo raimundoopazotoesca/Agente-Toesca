@@ -67,7 +67,11 @@ def test_allowed_claims_preserve_aggregation_and_lineage_from_evidence():
         "metric_key": "synthetic_flow", "value": 1234.5, "unit": "UF", "entity_id": "fund-a",
         "period": "2025-01..2025-02"}]}, [evidence])
     assert claims == (AllowedClaim("c1", "e1", "synthetic_flow", "fund-a", 1234.5, "UF",
-                                   "2025-01..2025-02", "sum", {"source_periods": ["2025-01", "2025-02"]}),)
+                                   "2025-01..2025-02", "sum", {"source_periods": ["2025-01", "2025-02"]},
+                                   # No db_path given -> entity display falls back to the raw key;
+                                   # the range covers only Jan..Feb of the same year.
+                                   entity_display="fund-a",
+                                   period_display="entre enero y febrero de 2025"),)
 
 
 def test_free_prose_can_differ_while_fact_stays_deterministic():

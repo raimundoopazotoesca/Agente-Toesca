@@ -70,4 +70,6 @@ def test_raw_sql_single_asset_analysis_is_not_blocked():
 
     result = session.ask("¿Cómo estuvo Apoquindo 3001?")
 
-    assert result.text == "Apo3001 tuvo vacancia alta este mes."
+    # Human Analytical Presentation v1: raw_text fragments are humanized
+    # (raw asset key -> display name) before reaching the reader.
+    assert result.text == "Apoquindo 3001 tuvo vacancia alta este mes."

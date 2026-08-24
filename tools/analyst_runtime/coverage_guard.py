@@ -23,9 +23,10 @@ from typing import Any
 
 from tools.analyst_runtime.transport import ToolEvidence
 from tools.analytics.formatting import render_fact, render_named_fact
+from tools.analytics.humanize import entity_display_name, humanize_text
 
-_PARTIAL_PREFIX = "Cobertura parcial: observados {observed} de {eligible} miembros aplicables. "
-_UNKNOWN_PREFIX = "No puede garantizarse completitud de este conjunto con la evidencia disponible. "
+_PARTIAL_PREFIX = "Ojo: estos datos alcanzan a {observed} de {eligible} elementos aplicables; el resto no está disponible. "
+_UNKNOWN_PREFIX = "No es posible confirmar que estos datos representen el conjunto completo. "
 _PROVENANCE_FALLBACK = (
     "No puedo confirmar que este listado de activos este completo ni respaldado "
     "por datos gobernados; te puedo dar el detalle de un activo especifico si lo indicas."
@@ -142,11 +143,15 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                 provenance_checked = True
                 if not _entities_backed(text, catalog, backed_entity_ids):
                     provenance_ok = False
-            rendered.append(text)
+            # Presentation-only cleanup: raw entity keys / YYYY-MM notation /
+            # unrounded float literals a model fragment may still carry get
+            # relabelled deterministically. Never changes which facts were
+            # validated above -- provenance is checked against the raw text.
+            rendered.append(humanize_text(text, db_path))
         elif kind == "canonical_metric_ref" and fragment.get("claim_id") in bound_canonical:
             rendered.append(render_fact(bound_canonical[fragment["claim_id"]]))
         elif kind == "governed_dataset_ref" and fragment.get("claim_id") in bound_governed:
-            rendered.append(_render_governed(bound_governed[fragment["claim_id"]]))
+            rendered.append(_render_governed(bound_governed[fragment["claim_id"]], db_path))
         else:
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment")
 
@@ -170,18 +175,25 @@ def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:
     return ""
 
 
-def _render_governed(bound: dict[str, Any]) -> str:
-    listing = ", ".join(_render_entity_fact(fact) for fact in bound["facts"])
+def _render_governed(bound: dict[str, Any], db_path: Path | None = None) -> str:
+    listing = ", ".join(_render_entity_fact(fact, db_path) for fact in bound["facts"])
     return _coverage_prefix(bound["coverage"], len(bound["facts"])) + listing
 
 
-def _render_entity_fact(fact: dict[str, Any]) -> str:
+def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None) -> str:
     """A governed fact without a metric (an entity enumeration) has no value
-    to render -- only its identity."""
+    to render -- only its identity, shown with its human display name where
+    the entity catalog has one (falls back to the raw key otherwise)."""
+    display = entity_display_name(fact.get("entity_id"), db_path)
     if fact.get("metric_key") is None and fact.get("value") is None:
         name = fact.get("name")
-        return f"{fact['entity_id']} ({name})" if name and name != fact.get("entity_id") else str(fact["entity_id"])
-    return f"{fact['entity_id']}: {render_fact(fact)}"
+        # Only add a parenthetical when it says something the display name
+        # doesn't already say (avoids "Apoquindo 3001 (Apoquindo 3001)" when
+        # both ultimately resolve to the same dim_activo.nombre).
+        if name and name != fact.get("entity_id") and name != display:
+            return f"{display} ({name})"
+        return str(display)
+    return f"{display}: {render_fact(fact)}"
 
 
 def _entities_backed(text: str, catalog: dict[str, str], backed_entity_ids: set[str]) -> bool:

@@ -319,7 +319,7 @@ def test_partial_coverage_is_surfaced_even_when_claims_are_per_entity():
     validation = validate_and_render(envelope, [], [result.evidence], DB)
 
     assert validation.valid
-    assert validation.content.startswith("Cobertura parcial: observados 4 de ")
+    assert validation.content.startswith("Ojo: estos datos alcanzan a 4 de ")
     assert validation.trace["coverage_status"] == "partial"
 
 

@@ -45,6 +45,11 @@ def render_metric_value(metric_key: Any, value: Any, unit: Any) -> str:
     precision = _UNIT_PRECISION.get(effective_unit)
     if precision is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
         return _number(value, precision) + suffix
+    # No catalogued precision for this unit: still never surface a raw
+    # unrounded Python float to a reader. Default to 2dp Chilean formatting
+    # (sensible for an unmodelled unit) rather than str(value).
+    if isinstance(value, float) and not isinstance(value, bool):
+        return _number(value, 2) + suffix
     return f"{value}{suffix}"
 
 

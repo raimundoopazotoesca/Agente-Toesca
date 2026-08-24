@@ -6,7 +6,16 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.formatting import render_metric_value
+
+
+def _metric_display_name(metric_key: str) -> str:
+    try:
+        metric = load_metric_catalog().metrics.get(metric_key)
+    except Exception:  # noqa: BLE001 -- display must never raise
+        metric = None
+    return metric.display_name if metric is not None else metric_key
 
 PRESENTATION_INSTRUCTION = """Eres la capa final de presentación de un analista inmobiliario.
 El borrador ya fue investigado y decidido por otra capa. Reescribe sólo cómo se
@@ -16,7 +25,7 @@ directo y fácil de leer; integra las categorías internas en prosa, sin usarlas
 como etiquetas o encabezados. Si una frase responde, termina ahí. Usa Markdown
 sólo cuando ayude a leer."""
 
-_CLAIM_REF_PROTOCOL = """Tu salida es un objeto JSON con segmentos. DEBES emitir exactamente un claim_ref por cada claim_id autorizado y ningún otro. No escribas valores, unidades, entidades, periodos ni agregaciones en texto libre. No escribas ningún dígito en text; usa únicamente prose narrativa sin cantidades. Los claim_ref son opacos: no copies ni reformules sus datos."""
+_CLAIM_REF_PROTOCOL = """Tu salida es un objeto JSON con segmentos. DEBES emitir exactamente un claim_ref por cada claim_id autorizado y ningún otro. No escribas valores, unidades ni cifras en texto libre; el número lo inserta el sistema al resolver claim_ref. No escribas ningún dígito en text; usa únicamente prosa narrativa sin cantidades. Para nombrar la entidad, el periodo o la métrica en tu prosa, usa exactamente los campos "entity", "metric" y "period" ya provistos en cada claim autorizado -- no traduzcas tú códigos internos ni fechas "YYYY-MM"; esos campos ya vienen en español natural, listos para usar tal cual. Nunca escribas claves internas (códigos de fondo/activo, "YYYY-MM", nombres de columnas, "canonical", "coverage", "mapping", "entity_id"). Los claim_ref son opacos: no copies ni reformules sus datos."""
 
 
 @dataclass(frozen=True)
@@ -40,6 +49,11 @@ class AllowedClaim:
     period: str
     aggregation: str | None = None
     lineage: dict[str, object] = field(default_factory=dict)
+    # Deterministic, pre-translated display strings (never computed by the
+    # presentation LLM itself) so it can phrase entity/period naturally
+    # without touching the raw key / YYYY-MM code.
+    entity_display: str | None = None
+    period_display: str | None = None
 
 
 def render_claim(claim: AllowedClaim) -> str:
@@ -140,8 +154,10 @@ class OpenAIResponsesFinalPresenter:
             # There is no factual presentation contract for free-form output.
             return PresentationResult(draft_answer, False, 0.0, None, None, "not_applicable")
         try:
-            allowed = [{"claim_id": c.claim_id, "metric_key": c.metric_key, "entity_id": c.entity_id,
-                        "period": c.period, "unit": c.unit, "aggregation": c.aggregation} for c in claims]
+            allowed = [{"claim_id": c.claim_id, "entity": c.entity_display or c.entity_id,
+                        "metric": _metric_display_name(c.metric_key),
+                        "period": c.period_display or c.period, "unit": c.unit,
+                        "aggregation": c.aggregation} for c in claims]
             schema = {"type":"object","additionalProperties":False,"required":["segments"],"properties":{"segments":{"type":"array","items":{"anyOf":[{"type":"object","additionalProperties":False,"required":["type","text"],"properties":{"type":{"type":"string","const":"text"},"text":{"type":"string"}}},{"type":"object","additionalProperties":False,"required":["type","claim_id"],"properties":{"type":{"type":"string","const":"claim_ref"},"claim_id":{"type":"string"}}}]}}}}
             response = self._client.responses.create(
                 model=self._model,
