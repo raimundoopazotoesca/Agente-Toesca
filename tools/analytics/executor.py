@@ -76,6 +76,8 @@ class AnalyticsExecutor:
         return AnalyticsResult(self._catalog.version, "breakdown" if request.group_by else "scalar", rows)
 
     def _derived_sql(self, access: DerivedKpiAccess, request: AnalyticsQueryRequest):
+        if access.entity_type != "fondo":
+            return self._derived_asset_sql(access, request)
         if request.assets or request.group_by:
             raise SemanticQueryError("metric does not support asset scope or grouping")
         funds = request.funds or ()
@@ -86,6 +88,35 @@ class AnalyticsExecutor:
                f"WHERE entidad_tipo=? AND kpi=? AND periodo BETWEEN ? AND ? AND entidad_key IN ({placeholders}) "
                "ORDER BY periodo, entidad_key")
         return sql, (access.entity_type, access.kpi, request.period, request.period_end or request.period, *funds), "fund"
+
+    def _derived_asset_sql(self, access: DerivedKpiAccess, request: AnalyticsQueryRequest):
+        """Asset-grain derived_kpi access: explicit-asset lookup, or a
+        fund-scoped breakdown joined to dim_activo (same join shape as
+        `_view_sql`) with an optional explicit asset subset."""
+        if request.funds and len(request.funds) > 1:
+            raise SemanticQueryError("asset-grain metrics accept at most one fund scope")
+        period_end = request.period_end or request.period
+        params: list[object] = [access.entity_type, access.kpi, request.period, period_end]
+        filters = ["k.entidad_tipo=?", "k.kpi=?", "k.periodo BETWEEN ? AND ?"]
+        join = ""
+        if request.funds:
+            join = " JOIN dim_activo a ON a.activo_key=k.entidad_key"
+            filters.append("a.fondo_key=?")
+            params.append(request.funds[0])
+        elif not request.assets:
+            raise SemanticQueryError("asset or fund scope is required")
+        if request.assets:
+            filters.append("k.entidad_key IN (" + ",".join("?" for _ in request.assets) + ")")
+            params.extend(request.assets)
+        if request.order_by:
+            order = "DESC" if request.order_by == "value_desc" else "ASC"
+            order_clause = f"k.valor {order}, k.entidad_key"
+        else:
+            order_clause = "k.periodo, k.entidad_key"
+        limit = f" LIMIT {int(request.limit)}" if request.limit else ""
+        sql = ("SELECT k.entidad_key, k.periodo, k.valor, k.formula, k.ingest_run_id "
+               f"FROM derived_kpi k{join} WHERE {' AND '.join(filters)} ORDER BY {order_clause}{limit}")
+        return sql, tuple(params), "asset"
 
     def _view_sql(self, access: ViewMetricAccess, request: AnalyticsQueryRequest):
         filters, params = ["v.periodo BETWEEN ? AND ?"], [request.period, request.period_end or request.period]
