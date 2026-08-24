@@ -57,7 +57,7 @@
     line-height:1.45;word-wrap:break-word}
   .tc-msg.user{align-self:flex-end;background:#0f172a;color:#fff;border-bottom-right-radius:4px}
   .tc-msg.bot{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;
-    color:#0f172a;border-bottom-left-radius:4px}
+    color:#0f172a;border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
   .tc-msg.bot h1,.tc-msg.bot h2,.tc-msg.bot h3{margin:.4em 0;font-size:14px}
   .tc-msg.bot table{border-collapse:collapse;margin:.4em 0;font-size:12px}
   .tc-msg.bot th,.tc-msg.bot td{border:1px solid #e2e8f0;padding:3px 6px;text-align:left}
@@ -73,7 +73,16 @@
   .tc-sql-body{display:none;margin-top:6px;background:#0f172a;color:#e2e8f0;
     padding:8px;border-radius:6px;font-size:11px;overflow-x:auto;white-space:pre-wrap}
   .tc-sql.open .tc-sql-body{display:block}
-  .tc-typing{align-self:flex-start;color:#64748b;font-size:12.5px;font-style:italic}
+  .tc-typing{align-self:flex-start;display:flex;align-items:center;gap:7px;
+    padding:9px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;
+    border-bottom-left-radius:4px}
+  .tc-typing-dots{display:flex;gap:3px}
+  .tc-typing-dots span{width:5px;height:5px;border-radius:50%;background:#94a3b8;
+    animation:tc-bounce 1.1s infinite ease-in-out both}
+  .tc-typing-dots span:nth-child(1){animation-delay:-.24s}
+  .tc-typing-dots span:nth-child(2){animation-delay:-.12s}
+  @keyframes tc-bounce{0%,80%,100%{transform:scale(.6);opacity:.5}40%{transform:scale(1);opacity:1}}
+  .tc-typing-label{color:#94a3b8;font-size:12px}
   .tc-error{margin:0 14px 10px;color:#b91c1c;font-size:12.5px;line-height:1.35}
   .tc-input{border-top:1px solid #e2e8f0;padding:10px;background:#fff;
     display:flex;gap:8px}
@@ -265,7 +274,8 @@
   function addTyping() {
     const div = document.createElement("div");
     div.className = "tc-typing";
-    div.textContent = "Consultando informacion…";
+    div.innerHTML = `<span class="tc-typing-dots"><span></span><span></span><span></span></span>
+      <span class="tc-typing-label">Consultando información…</span>`;
     body.appendChild(div);
     body.scrollTop = body.scrollHeight;
     return div;

@@ -217,36 +217,66 @@
     chatSub.textContent = "Selecciona o crea un chat";
   }
 
-  function addRow(role, html) {
-    const row = document.createElement("div");
-    row.className = "row " + role;
+  function addTurn(role, html) {
+    const turn = document.createElement("div");
+    turn.className = "turn " + role;
     if (role === "assistant") {
-      row.innerHTML = `<span class="mark-sm">t.</span><div class="bubble assistant">${html}</div>`;
+      turn.innerHTML = `<div class="turn-label"><span class="mark-sm">t.</span> Toesca Analyst</div>
+        <div class="prose">${html}</div>`;
     } else {
-      row.innerHTML = `<div class="bubble user"></div>`;
-      row.querySelector(".bubble").innerHTML = html;
+      turn.innerHTML = `<div class="user-bubble"></div>`;
+      turn.querySelector(".user-bubble").innerHTML = html;
     }
-    conversationEl.appendChild(row);
+    conversationEl.appendChild(turn);
     scrollArea.scrollTop = scrollArea.scrollHeight;
-    return row;
+    return turn;
   }
 
   function renderMessages(messages) {
     conversationEl.innerHTML = "";
     messages.forEach((m) => {
-      if (m.role === "assistant") addRow("assistant", mdToHtml(m.content || ""));
-      else if (m.role === "user") addRow("user", escapeHtml(m.content || ""));
+      if (m.role === "assistant") addTurn("assistant", mdToHtml(m.content || ""));
+      else if (m.role === "user") addTurn("user", escapeHtml(m.content || ""));
     });
     scrollArea.scrollTop = scrollArea.scrollHeight;
   }
 
   function addTyping() {
     const div = document.createElement("div");
-    div.className = "typing";
-    div.textContent = "Consultando información…";
+    div.className = "thinking";
+    div.innerHTML = `<span class="thinking-dots"><span></span><span></span><span></span></span>
+      Consultando información…`;
     conversationEl.appendChild(div);
     scrollArea.scrollTop = scrollArea.scrollHeight;
     return div;
+  }
+
+  // Frontend-only progressive reveal: the backend returns the complete
+  // answer in one response (no token streaming today), so this replays
+  // already-received plain text in chunks to *feel* like it's being
+  // written. It is a visual approximation, not real streaming — see
+  // typePlainText in chat_bubble.js, which uses the same technique.
+  function typePlainText(el, content) {
+    return new Promise((resolve) => {
+      const chunk = Math.max(1, Math.floor(content.length / 200));
+      let i = 0;
+      el.textContent = "";
+      el.style.whiteSpace = "pre-wrap";
+      function step() {
+        if (i >= content.length) {
+          el.style.whiteSpace = "";
+          resolve();
+          return;
+        }
+        let end = Math.min(content.length, i + chunk);
+        while (end < content.length && !/\s/.test(content[end])) end++;
+        el.textContent += content.slice(i, end);
+        i = end;
+        scrollArea.scrollTop = scrollArea.scrollHeight;
+        requestAnimationFrame(() => setTimeout(step, 14));
+      }
+      step();
+    });
   }
 
   async function selectConversation(id, { pushHistory = true } = {}) {
@@ -294,16 +324,25 @@
     const text = composerInput.value.trim();
     if (!text) return;
     composerInput.value = "";
-    composerInput.style.height = "46px";
+    composerInput.style.height = "24px";
     composerSend.disabled = true;
     pending = true;
 
-    addRow("user", escapeHtml(text));
+    addTurn("user", escapeHtml(text));
     const typing = addTyping();
     try {
       const message = await sendMessage(activeId, text);
       typing.remove();
-      addRow("assistant", mdToHtml(message.content || "(sin respuesta)"));
+      const content = message.content || "(sin respuesta)";
+      if (hasComplexMarkdown(content)) {
+        addTurn("assistant", mdToHtml(content));
+      } else {
+        const turn = addTurn("assistant", "");
+        const proseEl = turn.querySelector(".prose");
+        await typePlainText(proseEl, content);
+        proseEl.innerHTML = mdToHtml(content);
+        scrollArea.scrollTop = scrollArea.scrollHeight;
+      }
       const conv = conversations.find((c) => c.id === activeId);
       if (conv) { conv.updated_at = message.created_at; renderSidebar(); }
     } catch (_err) {
@@ -327,7 +366,7 @@
     }
   });
   composerInput.addEventListener("input", () => {
-    composerInput.style.height = "46px";
+    composerInput.style.height = "24px";
     composerInput.style.height = Math.min(composerInput.scrollHeight, 160) + "px";
   });
 
