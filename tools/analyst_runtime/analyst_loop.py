@@ -165,15 +165,24 @@ class AnalystLoop:
         )
         return LoopResult(turn=turn, round_trajectory=round_history)
 
-    def finalize(self, investigation: InvestigationResult, output_contract: object | None = None) -> LoopResult:
-        """Perform one tool-free finalization without interpreting its content."""
+    def finalize(self, investigation: InvestigationResult, output_contract: object | None = None,
+                 synthesis_context: str = "") -> LoopResult:
+        """Perform one tool-free finalization without interpreting its content.
+
+        `synthesis_context` is opaque extra text the caller appends to the
+        reserved synthesis message. AnalystLoop neither builds nor inspects it:
+        what an evidence inventory is, and whether one exists, is the session's
+        concern. When it is empty the synthesis message stays byte-identical to
+        `_SYNTHESIS_INSTRUCTION`.
+        """
         if investigation.termination_reason == "clarification_required":
             return self._legacy_finalize(investigation)
-        request = ModelRequest(self.system_prompt, investigation.round_trajectory, _SYNTHESIS_INSTRUCTION, [], output_contract)
+        message = f"{_SYNTHESIS_INSTRUCTION}\n\n{synthesis_context}" if synthesis_context else _SYNTHESIS_INSTRUCTION
+        request = ModelRequest(self.system_prompt, investigation.round_trajectory, message, [], output_contract)
         response = self.transport.complete(request)
         total_usage = investigation.usage
         _accumulate(total_usage, response.usage)
-        history = _append_turn(investigation.round_trajectory, _SYNTHESIS_INSTRUCTION, response, [])
+        history = _append_turn(investigation.round_trajectory, message, response, [])
         turn = Turn(response.text, _extract_artifacts(response.text), investigation.tool_calls, total_usage,
                     raw={"final_text": response.text, "structured_output": response.structured_output})
         return LoopResult(turn, history)
