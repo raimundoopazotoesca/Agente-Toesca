@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from hashlib import sha256
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,7 +23,7 @@ from tools.analyst_runtime.coverage_guard import validate_and_render
 from tools.analyst_runtime.evidence_inventory import render_evidence_inventory
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
-from tools.analyst_runtime.presentation import FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
+from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
 
@@ -42,6 +43,10 @@ entidades, comparación, contribución relativa o cambio en el tiempo, reúne un
 base comparable suficiente cuando una consulta de lectura razonable pueda cambiar
 materialmente la respuesta. Si no puede obtenerse, explica naturalmente el
 alcance de lo observado.
+
+Trata los identificadores de entidades resueltos por las capacidades gobernadas
+como entidades, aunque también puedan parecer abreviaturas temporales o
+financieras en lenguaje natural.
 
 Cuando la entidad y el alcance ya están suficientemente determinados y lo único
 abierto es el ángulo analítico, investiga con las capacidades disponibles y
@@ -226,7 +231,7 @@ class OpenAIResponsesAnalystSession:
         termination_reason = turn.raw.get("termination_reason")
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
                         else _conflict_presentation(turn.text) if validation and not validation.valid
-                        else self._present(turn.text, text))
+                        else self._present(turn.text, text, _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence)))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
         return AnalystSessionResult(
             text=presentation.content,
@@ -243,10 +248,40 @@ class OpenAIResponsesAnalystSession:
             termination_reason=termination_reason,
         )
 
-    def _present(self, draft: str, user_message: str) -> PresentationResult:
+    def _present(self, draft: str, user_message: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult:
         if self._presenter is None:
             return PresentationResult(draft, False, None, None, None, "not_configured")
-        return self._presenter.present(user_message=user_message, draft_answer=draft)
+        return self._presenter.present(user_message=user_message, draft_answer=draft, claims=claims)
+
+
+def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> tuple[AllowedClaim, ...]:
+    by_evidence_id = {item.evidence_id: item for item in evidence}
+    source_claims = envelope.get("canonical_metric_claims", [])
+    if not isinstance(source_claims, list):
+        return ()
+    claims: list[AllowedClaim] = []
+    seen: set[str] = set()
+    keys = ("metric_key", "value", "unit", "entity_id", "period")
+    for item in source_claims:
+        if not isinstance(item, dict):
+            return ()
+        claim_id, evidence_id = item.get("claim_id"), item.get("evidence_id")
+        source = by_evidence_id.get(evidence_id)
+        if not isinstance(claim_id, str) or claim_id in seen or source is None:
+            return ()
+        fact = next((candidate for candidate in source.facts
+                     if all(candidate.get(key) == item.get(key) for key in keys)), None)
+        if fact is None:
+            return ()
+        seen.add(claim_id)
+        claims.append(AllowedClaim(
+            claim_id=claim_id, evidence_id=source.evidence_id,
+            metric_key=str(fact["metric_key"]), entity_id=str(fact["entity_id"]),
+            value=float(fact["value"]), unit=str(fact["unit"]), period=str(fact["period"]),
+            aggregation=source.semantic_contract.get("aggregation"),
+            lineage=deepcopy(source.provenance),
+        ))
+    return tuple(claims)
 
 
 def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:

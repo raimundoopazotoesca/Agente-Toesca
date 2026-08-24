@@ -408,7 +408,8 @@ class _AnalyticsCapabilityAction:
                     evidence_class="canonical_metric",
                     source={"tool_name": self.name, "source_kind": row.source_kind},
                     scope=scope,
-                    semantic_contract={"metric_key": row.metric_key},
+                    semantic_contract={"metric_key": row.metric_key,
+                                       "aggregation": request.arguments.get("aggregation")},
                     provenance=row.provenance,
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
                             "entity_id": row.entity_id, "period": row.period},),
@@ -430,7 +431,8 @@ class _AnalyticsCapabilityAction:
                     semantic_contract={"metric_key": result.rows[0].metric_key,
                                        "entity_grain": result.rows[0].entity_type,
                                        "period_grain": "month",
-                                       "universe_kind": coverage["universe_kind"]},
+                                       "universe_kind": coverage["universe_kind"],
+                                       "aggregation": request.arguments.get("aggregation")},
                     provenance={"ingest_run_ids": sorted({
                         r.provenance.get("ingest_run_id") for r in result.rows
                         if isinstance(r.provenance, dict) and isinstance(r.provenance.get("ingest_run_id"), int)

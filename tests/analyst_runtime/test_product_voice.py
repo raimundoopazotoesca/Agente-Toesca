@@ -98,28 +98,9 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
 
 
-def test_alpha_session_presents_the_final_draft_and_keeps_safe_metadata(tmp_path):
+def test_alpha_session_does_not_present_an_unstructured_draft(tmp_path):
     draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
-    presented = "La vacancia de TRI en junio de 2026 fue **5,945%**."
-    client = _SequencedClient([draft, presented])
-    factory = OpenAIResponsesAnalystSessionFactory(
-        _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
-    )
-
-    result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
-
-    assert result.text == presented
-    assert result.presentation_applied is True
-    assert result.presentation_integrity_status == "passed"
-    assert result.original_answer_hash != draft
-    assert len(client.responses.calls) == 2
-    assert client.responses.calls[1]["tools"] == []
-    assert client.responses.calls[1]["tool_choice"] == "none"
-
-
-def test_alpha_session_keeps_the_draft_when_presentation_fails_integrity(tmp_path):
-    draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
-    client = _SequencedClient([draft, "La vacancia de TRI en junio de 2026 fue 6,2%."])
+    client = _SequencedClient([draft])
     factory = OpenAIResponsesAnalystSessionFactory(
         _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
     )
@@ -128,7 +109,23 @@ def test_alpha_session_keeps_the_draft_when_presentation_fails_integrity(tmp_pat
 
     assert result.text == draft
     assert result.presentation_applied is False
-    assert result.presentation_integrity_status == "failed_facts"
+    assert result.presentation_integrity_status == "not_applicable"
+    assert result.original_answer_hash == result.presented_answer_hash
+    assert len(client.responses.calls) == 1
+
+
+def test_alpha_session_keeps_an_unstructured_draft_without_a_provider_call(tmp_path):
+    draft = "La vacancia de TRI en junio de 2026 fue 5,945%."
+    client = _SequencedClient([draft])
+    factory = OpenAIResponsesAnalystSessionFactory(
+        _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
+    )
+
+    result = factory.create(object(), []).ask("¿Cuál es la vacancia?")
+
+    assert result.text == draft
+    assert result.presentation_applied is False
+    assert result.presentation_integrity_status == "not_applicable"
 
 
 def test_alpha_reformulates_the_interactive_evidence_instruction_only():
@@ -198,8 +195,8 @@ def test_alpha_voice_stays_out_of_workspace_and_benchmark_contract(tmp_path):
         [message.metadata for message in persisted], ensure_ascii=False
     )
     assistant_metadata = persisted[-1].metadata
-    assert assistant_metadata["presentation_applied"] is True
-    assert assistant_metadata["presentation_integrity_status"] == "passed"
+    assert assistant_metadata["presentation_applied"] is False
+    assert assistant_metadata["presentation_integrity_status"] == "not_applicable"
     assert len(assistant_metadata["original_answer_hash"]) == 64
     assert "draft" not in json.dumps(assistant_metadata, ensure_ascii=False).lower()
     assert "raw_response" not in assistant_metadata
