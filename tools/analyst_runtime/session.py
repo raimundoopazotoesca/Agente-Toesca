@@ -19,6 +19,7 @@ from tools.analyst_runtime.actions import (
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.coverage_guard import validate_and_render
+from tools.analyst_runtime.evidence_inventory import render_evidence_inventory
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
@@ -40,7 +41,13 @@ no sólo para una observación prudente. Si la conclusión requiere relación en
 entidades, comparación, contribución relativa o cambio en el tiempo, reúne una
 base comparable suficiente cuando una consulta de lectura razonable pueda cambiar
 materialmente la respuesta. Si no puede obtenerse, explica naturalmente el
-alcance de lo observado."""
+alcance de lo observado.
+
+Cuando la entidad y el alcance ya están suficientemente determinados y lo único
+abierto es el ángulo analítico, investiga con las capacidades disponibles y
+entrega una lectura útil antes de pedir más precisión. Pide aclaración sólo
+cuando existan varias interpretaciones que cambien materialmente qué entidad o
+qué alcance se está analizando."""
 
 DEFAULT_INTERACTIVE_SYSTEM_PROMPT = (
     "Eres el Asistente Inmobiliario Toesca.\n"
@@ -205,14 +212,17 @@ class OpenAIResponsesAnalystSession:
             # surfaced entity data (e.g. run_sql). Structured finalization plus
             # coverage_guard is what closes the raw-only enumeration bypass;
             # a toolless turn has no entity data to guard, so it stays legacy.
-            result = self._loop.finalize(investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA))
+            result = self._loop.finalize(
+                investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA),
+                synthesis_context=render_evidence_inventory(evidence),
+            )
             validation = validate_and_render(result.turn.raw["structured_output"] or {}, canonical, governed, self._db_path)
             result.turn.text = validation.content
             result.turn.raw.update(validation.trace)
         else:
             result = self._loop._legacy_finalize(investigation)
-        self._history = result.round_trajectory
         turn = result.turn
+        self._history = _retained_history(investigation, turn.text)
         termination_reason = turn.raw.get("termination_reason")
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
                         else _conflict_presentation(turn.text) if validation and not validation.valid
@@ -237,6 +247,30 @@ class OpenAIResponsesAnalystSession:
         if self._presenter is None:
             return PresentationResult(draft, False, None, None, None, "not_configured")
         return self._presenter.present(user_message=user_message, draft_answer=draft)
+
+
+def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:
+    """Cross-turn retention policy (AnalystLoop deliberately leaves it to the
+    session, see analyst_loop.py's docstring).
+
+    Retain the INVESTIGATION trajectory -- the user's question plus the real
+    tool calls and their results, which is where the resolved entity, metric
+    and period actually live in structured form -- followed by the answer the
+    user saw. The finalization exchange is dropped: its user message is the
+    reserved synthesis instruction ("this is your last intervention, you have
+    no tools, do not open new lines of investigation"), which is true of that
+    round only. Replaying it as conversation history told the model, on the
+    NEXT turn, that it had no tools -- so a follow-up that merely shifts the
+    period was answered by refusing instead of by looking it up. Its assistant
+    message is the raw SynthesisEnvelope JSON, which is likewise noise next
+    turn; the rendered answer replaces it.
+    """
+    history = list(investigation.round_trajectory)
+    if investigation.termination_reason == "model_terminal":
+        # The trajectory already ends with the model's own answer.
+        return history
+    history.append(TranscriptItem(role="assistant", text=answer_text))
+    return history
 
 
 def _clarification_presentation(content: str) -> PresentationResult:
