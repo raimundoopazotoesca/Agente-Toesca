@@ -6,11 +6,19 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from tools.analyst_runtime.derived_claims import DerivedClaim, render_derived_claim
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.formatting import render_metric_value
 
+_DERIVED_OPERATION_DISPLAY = {
+    "difference": "diferencia", "percent_change": "variación porcentual",
+    "percentage_point_difference": "diferencia en puntos porcentuales", "ratio": "razón",
+}
+
 
 def _metric_display_name(metric_key: str) -> str:
+    if metric_key.startswith("derived:"):
+        return _DERIVED_OPERATION_DISPLAY.get(metric_key.removeprefix("derived:"), metric_key)
     try:
         metric = load_metric_catalog().metrics.get(metric_key)
     except Exception:  # noqa: BLE001 -- display must never raise
@@ -57,6 +65,9 @@ class AllowedClaim:
 
 
 def render_claim(claim: AllowedClaim) -> str:
+    if claim.metric_key.startswith("derived:"):
+        operation = claim.metric_key.removeprefix("derived:")
+        return render_derived_claim(DerivedClaim(claim.claim_id, operation, claim.value, claim.unit, claim.lineage))
     catalog_value = render_metric_value(claim.metric_key, claim.value, claim.unit)
     if catalog_value == f"{claim.value}{claim.unit}":
         value = f"{claim.value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

@@ -51,6 +51,14 @@ def test_claim_omission_fails_closed():
         validate_structured_output({"segments": [{"type": "text", "text": "resultado"}]}, (CLAIM,))
 
 
+def test_derived_claim_renders_through_presenter_with_locale_correct_magnitude():
+    """A derived AllowedClaim (metric_key="derived:<op>") must render with the
+    SAME deterministic Chilean-locale formatter as any other claim -- the
+    presenter never re-derives or reformats the value itself."""
+    derived = AllowedClaim("d1", "", "derived:difference", "", 8256.0, "UF", "")
+    assert render_segments({"segments": [{"type": "claim_ref", "claim_id": "d1"}]}, (derived,)) == "8.256 UF"
+
+
 def test_multiple_claims_must_each_be_rendered_once():
     assert validate_structured_output({"segments": [
         {"type": "text", "text": "primero "}, {"type": "claim_ref", "claim_id": "c1"},

@@ -20,6 +20,7 @@ from tools.analyst_runtime.actions import (
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.coverage_guard import validate_and_render
+from tools.analyst_runtime.derived_claims import DerivedClaimError, compute_derived_claim
 from tools.analyst_runtime.evidence_inventory import render_evidence_inventory
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
@@ -296,6 +297,7 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
     if not isinstance(source_claims, list):
         return ()
     claims: list[AllowedClaim] = []
+    facts_by_claim_id: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
     keys = ("metric_key", "value", "unit", "entity_id", "period")
     for item in source_claims:
@@ -310,6 +312,7 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
         if fact is None:
             return ()
         seen.add(claim_id)
+        facts_by_claim_id[claim_id] = fact
         aggregation = source.semantic_contract.get("aggregation")
         period_value = str(fact["period"])
         claims.append(AllowedClaim(
@@ -324,6 +327,37 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
             entity_display=entity_display_name(fact["entity_id"], db_path),
             period_display=_display_period(period_value, aggregation),
         ))
+
+    # Derived (arithmetic) claims re-bind operands by claim_id against the
+    # SAME already-validated facts above -- never against a display string --
+    # so a difference/percent_change the presenter narrates is exactly the
+    # value coverage_guard.validate_and_render already computed and rendered
+    # into the draft. A derived claim referencing an unknown/unbound operand
+    # is dropped fail-closed rather than guessed at.
+    derived_source = envelope.get("derived_metric_claims", [])
+    if isinstance(derived_source, list):
+        for item in derived_source:
+            if not isinstance(item, dict):
+                continue
+            claim_id = item.get("claim_id")
+            if not isinstance(claim_id, str) or claim_id in seen:
+                continue
+            lhs_fact = facts_by_claim_id.get(item.get("lhs_claim_id"))
+            rhs_fact = facts_by_claim_id.get(item.get("rhs_claim_id"))
+            operation = item.get("operation")
+            if lhs_fact is None or rhs_fact is None or not isinstance(operation, str):
+                continue
+            try:
+                derived = compute_derived_claim(claim_id, operation, lhs_fact, rhs_fact,
+                                                 item.get("lhs_claim_id"), item.get("rhs_claim_id"))
+            except DerivedClaimError:
+                continue
+            seen.add(claim_id)
+            claims.append(AllowedClaim(
+                claim_id=claim_id, evidence_id="", metric_key=f"derived:{operation}",
+                entity_id="", value=derived.value, unit=derived.unit, period="",
+                aggregation=None, lineage=derived.lineage,
+            ))
     return tuple(claims)
 
 

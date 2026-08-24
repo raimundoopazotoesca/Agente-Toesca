@@ -21,9 +21,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tools.analyst_runtime.derived_claims import DerivedClaimError, compute_derived_claim, render_derived_claim
 from tools.analyst_runtime.transport import ToolEvidence
 from tools.analytics.formatting import render_fact, render_named_fact
 from tools.analytics.humanize import entity_display_name, humanize_text
+
+# A decimal-separated or percent-suffixed numeric literal in free prose is
+# always a computed/derived quantity (an integer like a year or a raw
+# unformatted DB key is not) -- see derived_claims.py. Any such literal MUST
+# come from a derived_metric_ref instead: this is the fail-closed guard that
+# closes the bypass where a model wrote an unvalidated arithmetic result
+# (e.g. a percent change) directly into a text/raw_text fragment.
+_UNBOUND_QUANTITY_RE = re.compile(r"\d[\d.,]*[.,]\d+\s*%?|\d[\d.,]*\d\s*%")
 
 _PARTIAL_PREFIX = "Ojo: estos datos alcanzan a {observed} de {eligible} elementos aplicables; el resto no está disponible. "
 _UNKNOWN_PREFIX = "No es posible confirmar que estos datos representen el conjunto completo. "
@@ -52,7 +61,9 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     fragments = envelope.get("fragments")
     canonical_claims = envelope.get("canonical_metric_claims")
     governed_claims = envelope.get("governed_dataset_claims", [])
-    if not isinstance(fragments, list) or not isinstance(canonical_claims, list) or not isinstance(governed_claims, list):
+    derived_claims = envelope.get("derived_metric_claims", [])
+    if not isinstance(fragments, list) or not isinstance(canonical_claims, list) or not isinstance(governed_claims, list) \
+            or not isinstance(derived_claims, list):
         return _fail(canonical_evidence, governed_evidence, "invalid_envelope")
 
     bound_canonical: dict[str, dict[str, Any]] = {}
@@ -120,6 +131,28 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         selected_from_governed.pop(item.evidence_id, None)
         backed_entity_ids.update(claim_entity_ids)
 
+    # Derived (arithmetic) claims: each operand MUST reference a claim_id
+    # already bound above (canonical, never a raw evidence_id and never a
+    # governed claim, so the operand set is exactly the single-fact values a
+    # reader could otherwise see rendered). The arithmetic runs on raw
+    # ``value`` floats inside compute_derived_claim -- this function never
+    # touches a rendered/humanized display string.
+    bound_derived: dict[str, Any] = {}
+    for claim in derived_claims:
+        if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) \
+                or claim["claim_id"] in bound_derived or claim["claim_id"] in bound_canonical:
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim")
+        operation = claim.get("operation")
+        lhs_claim_id, rhs_claim_id = claim.get("lhs_claim_id"), claim.get("rhs_claim_id")
+        lhs_fact, rhs_fact = bound_canonical.get(lhs_claim_id), bound_canonical.get(rhs_claim_id)
+        if lhs_fact is None or rhs_fact is None or not isinstance(operation, str):
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+        try:
+            bound_derived[claim["claim_id"]] = compute_derived_claim(
+                claim["claim_id"], operation, lhs_fact, rhs_fact, lhs_claim_id, rhs_claim_id)
+        except DerivedClaimError:
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+
     # Coverage of a governed dataset a claim cherry-picked facts from must
     # still reach the reader: otherwise a partial ranking could be presented
     # as if it were the whole universe.
@@ -139,6 +172,14 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         kind = fragment.get("type")
         if kind in {"text", "raw_text"} and isinstance(fragment.get("text"), str):
             text = fragment["text"]
+            if _UNBOUND_QUANTITY_RE.search(text):
+                # A decimal/percent literal in free prose is always a computed
+                # quantity (a difference, a percent change, ...); it must come
+                # from a derived_metric_ref instead. Plain integers (years,
+                # counts) are unaffected. Fail-closed rather than plausible:
+                # this is the guard that stops "8,26 UF" from ever reaching a
+                # reader unbound.
+                return _fail(canonical_evidence, governed_evidence, "unbound_derived_quantity")
             if catalog:
                 provenance_checked = True
                 if not _entities_backed(text, catalog, backed_entity_ids):
@@ -152,6 +193,8 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             rendered.append(render_fact(bound_canonical[fragment["claim_id"]]))
         elif kind == "governed_dataset_ref" and fragment.get("claim_id") in bound_governed:
             rendered.append(_render_governed(bound_governed[fragment["claim_id"]], db_path))
+        elif kind == "derived_metric_ref" and fragment.get("claim_id") in bound_derived:
+            rendered.append(render_derived_claim(bound_derived[fragment["claim_id"]]))
         else:
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment")
 

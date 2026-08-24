@@ -59,6 +59,24 @@ def _number(value: float, precision: int) -> str:
     return rendered.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def render_derived_value(operation: str, value: float, unit: str) -> str:
+    """Deterministic rendering for a derived_claims.DerivedClaim -- the ONLY
+    place a computed difference/percent_change/percentage_point_difference/
+    ratio becomes display text. Formatting happens strictly after the
+    arithmetic in derived_claims.py; this function never computes anything."""
+    if operation == "percent_change":
+        return _number(value, 1) + "%"
+    if operation == "percentage_point_difference":
+        return _number(value, 2) + " pp"
+    if operation == "ratio":
+        return _number(value, 2) + "x"
+    if operation == "difference":
+        suffix = _UNIT_SUFFIX.get(unit, f" {unit}" if unit else "")
+        precision = _UNIT_PRECISION.get(unit, 2)
+        return _number(value, precision) + suffix
+    raise ValueError(f"unknown derived operation: {operation}")
+
+
 def render_fact(fact: dict[str, Any]) -> str:
     return render_metric_value(fact.get("metric_key"), fact.get("value"), fact.get("unit"))
 
