@@ -325,6 +325,15 @@ def _structured_output(response: Any, required: bool) -> dict[str, Any] | None:
     if not required: return None
     value = getattr(response, "output_parsed", None)
     if hasattr(value, "model_dump"): value = value.model_dump()
+    if not isinstance(value, dict):
+        # `client.responses.create()` (unlike the `.parse()` helper) never
+        # sets `output_parsed`; the real, provider-validated JSON comes back
+        # as `output_text` and must be decoded explicitly.
+        text = getattr(response, "output_text", None)
+        try:
+            value = json.loads(text) if text else None
+        except json.JSONDecodeError:
+            value = None
     if not isinstance(value, dict): raise ValueError("structured_output_required")
     return value
 
