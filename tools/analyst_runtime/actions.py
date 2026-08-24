@@ -27,6 +27,7 @@ from tools.analyst_runtime.transport import ToolEvidence, ToolRequest, ToolResul
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
 from tools.analytics.capabilities import capability_metric_keys, metric_period_bounds
 from tools.analytics.catalog import load_metric_catalog
+from tools.analytics.account_concepts import AccountConceptCatalog, AccountQuery, AccountQueryError, AccountQueryExecutor
 from tools.schema_discovery import (
     DEFAULT_SCHEMA_SEARCH_LIMIT,
     MAX_SCHEMA_SEARCH_LIMIT,
@@ -528,6 +529,47 @@ class AnalyticsBreakdownAssetAction(_AnalyticsCapabilityAction):
     scope_field = "fund"
     breakdown = True
     subset = True
+
+
+@dataclass
+class AnalyticsAccountQueryAction:
+    """One generic governed capability for catalog-defined account concepts."""
+    db_path: Path
+    catalog: AccountConceptCatalog | None = None
+    name: str = "analytics_account_query"
+
+    def __post_init__(self) -> None:
+        self.catalog = self.catalog or AccountConceptCatalog.load()
+
+    def tool_spec(self) -> ToolSpec:
+        assert self.catalog is not None
+        concepts = "; ".join(f"{item.display_name} ({item.concept_id}; aliases: {', '.join(item.aliases)})" for item in self.catalog._concepts.values())
+        return ToolSpec(self.name, f"Consulta conceptos contables canónicos a nivel de activo mediante mappings exactos gobernados. Para gastos, pagos, contribuciones, seguros u otras cuentas disponibles, úsala en vez de SQL crudo. La base es ER/devengado: no prueba pago de caja. Conceptos disponibles: {concepts}.", {"type": "object", "additionalProperties": False, "properties": {
+            "concept": {"type": "string", "enum": sorted(self.catalog._concepts)}, "entity": {"type": "string"},
+            "entity_type": {"type": "string", "enum": ["asset"]}, "period": {"type": "string"},
+            "period_end": {"type": ["string", "null"]}, "aggregation": {"type": ["string", "null"], "enum": ["sum", None]},
+        }, "required": ["concept", "entity", "entity_type", "period", "period_end", "aggregation"]})
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        try:
+            if set(request.arguments) != {"concept", "entity", "entity_type", "period", "period_end", "aggregation"}:
+                raise ValueError("invalid analytics_account_query fields")
+            args = request.arguments
+            result = AccountQueryExecutor(self.db_path, self.catalog).execute(AccountQuery(
+                _required_string(args, "concept"), _required_string(args, "entity"), _required_string(args, "entity_type"),
+                _required_string(args, "period"), _optional_string(args, "period_end"), _optional_string(args, "aggregation")))
+            fact = {"metric_key": result.concept_id, "value": result.value, "unit": result.unit, "entity_id": result.entity_id, "period": result.period}
+            coverage = {**result.coverage, "universe_kind": "account_mapping", "eligible_count": len(result.coverage["expected_periods"]), "observed_count": len(result.coverage["observed_periods"])}
+            payload = {"evidence_id": request.call_id, "concept_id": result.concept_id, "entity": result.entity_id, "period": result.period, "value": result.value, "unit": result.unit, "basis": result.basis, "coverage": coverage, "mapped_account_rows": result.account_row_count, "source_mappings": result.source_mappings, "lineage": result.lineage}
+            # A NONE result deliberately has no fact to bind.  Keeping an
+            # empty governed dataset would make the synthesis guard render a
+            # misleading entity-enumeration fallback instead of allowing the
+            # model to state that evidence is unavailable (which is not zero).
+            evidence = (ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "account_concept"}, {"asset": result.entity_id}, {"metric_key": result.concept_id, "aggregation": args["aggregation"], "accounting_basis": result.basis, "entity_grain": result.entity_type, "period_grain": "month", "universe_kind": "account_mapping"}, result.lineage, coverage, (fact,)) if result.value is not None else None)
+            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "arguments": args, "coverage": coverage, "accounting_basis": result.basis, "mapped_account_rows": result.account_row_count}, evidence=evidence)
+        except (AccountQueryError, KeyError, TypeError, ValueError) as exc:
+            payload = {"error_type": "semantic_query_error", "error": str(exc)}
+            return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), {"tool_name": self.name, "error": payload})
 
 
 @dataclass

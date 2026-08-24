@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from tools.analyst_runtime.actions import (
-    ActionRegistry, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
+    ActionRegistry, AnalyticsAccountQueryAction, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
     AnalyticsLookupFundAction, ListAssetsAction, RunSqlAction, SchemaSearchAction,
     ResolveEntityAction,
 )
@@ -57,6 +57,9 @@ qué alcance se está analizando."""
 DEFAULT_INTERACTIVE_SYSTEM_PROMPT = (
     "Eres el Asistente Inmobiliario Toesca.\n"
     f"{INTERACTIVE_EVIDENCE_INSTRUCTION}"
+    "\nPara consultas de cuentas contables u operacionales a nivel de activo, usa la capacidad "
+    "analytics_account_query cuando el concepto solicitado esté disponible; es la autoridad de mappings, "
+    "signo, unidad, cobertura y base contable. No sustituyas esa capacidad por búsquedas SQL de nombres de cuenta."
 )
 
 ALPHA_PRODUCT_VOICE = """\
@@ -212,7 +215,7 @@ class OpenAIResponsesAnalystSession:
         validation = None
         if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             result = self._loop._legacy_finalize(investigation)
-        elif investigation.tool_calls:
+        elif investigation.tool_calls and not _has_account_coverage_none(investigation):
             # Any tool call -- not just a canonical/governed one -- may have
             # surfaced entity data (e.g. run_sql). Structured finalization plus
             # coverage_guard is what closes the raw-only enumeration bypass;
@@ -230,6 +233,10 @@ class OpenAIResponsesAnalystSession:
                 result.turn.raw.update(validation.trace)
         else:
             result = self._loop._legacy_finalize(investigation)
+            no_evidence = _account_no_evidence_payload(investigation)
+            if no_evidence is not None:
+                result.turn.text = _account_no_evidence_text(no_evidence)
+                result.turn.raw["account_no_evidence"] = no_evidence
         turn = result.turn
         self._history = _retained_history(investigation, turn.text)
         termination_reason = turn.raw.get("termination_reason")
@@ -287,6 +294,61 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> t
             lineage=deepcopy(source.provenance),
         ))
     return tuple(claims)
+
+
+def _has_account_coverage_none(investigation: Any) -> bool:
+    """A NONE account query has no numeric fact to bind.
+
+    It must use the ordinary finalization path so the assistant can state the
+    evidence limitation naturally, instead of sending an empty dataset through
+    the deterministic fact renderer.
+    """
+    statuses = [
+        call.trace["coverage"].get("status")
+        for call in investigation.tool_calls
+        if call.name == "analytics_account_query" and isinstance(call.trace, dict)
+        and isinstance(call.trace.get("coverage"), dict)
+    ]
+    return bool(statuses) and set(statuses) == {"none"}
+
+
+def _account_no_evidence_payload(investigation: Any) -> dict[str, Any] | None:
+    account_payloads: list[dict[str, Any]] = []
+    parent_scope: dict[str, Any] | None = None
+    for item in reversed(investigation.round_trajectory):
+        for result in reversed(item.tool_results):
+            if result.evidence is not None and result.evidence.source.get("tool_name") == "list_assets":
+                scope = result.evidence.scope
+                if isinstance(scope.get("fund"), str):
+                    parent_scope = {"entity": scope["fund"], "entity_type": "fund"}
+            if result.trace.get("tool_name") != "analytics_account_query":
+                continue
+            coverage = result.trace.get("coverage")
+            if not isinstance(coverage, dict) or coverage.get("status") != "none":
+                continue
+            try:
+                payload = json.loads(result.content)
+            except (TypeError, json.JSONDecodeError):
+                return None
+            if isinstance(payload, dict):
+                account_payloads.append(payload)
+    if not account_payloads:
+        return None
+    # A parent scope exists only when a governed enumeration established the
+    # child universe. Every observed child here is NONE, so the parent is NONE
+    # too; retain the requested parent rather than an arbitrary child.
+    payload = account_payloads[0]
+    if parent_scope:
+        return {**payload, **parent_scope, "coverage": {**payload.get("coverage", {}), "status": "none", "composition": "all_children_none"}}
+    return payload
+
+
+def _account_no_evidence_text(payload: dict[str, Any]) -> str:
+    concept = str(payload.get("concept_id", "este concepto")).replace("_", " ")
+    entity = str(payload.get("entity", "la entidad solicitada"))
+    period = str(payload.get("period", "el período solicitado"))
+    return (f"No pude verificar un monto para {concept} en {entity} durante {period} con la evidencia gobernada disponible. "
+            "Esto no implica que el gasto haya sido cero.")
 
 
 def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:
@@ -355,6 +417,7 @@ class OpenAIResponsesAnalystSessionFactory:
             AnalyticsLookupFundAction(self.knowledge_db_path),
             AnalyticsLookupAssetAction(self.knowledge_db_path),
             AnalyticsBreakdownAssetAction(self.knowledge_db_path),
+            AnalyticsAccountQueryAction(self.knowledge_db_path),
             ListAssetsAction(self.knowledge_db_path),
         ])
         client = self._client_factory()

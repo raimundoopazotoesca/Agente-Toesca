@@ -1,0 +1,77 @@
+catalog_version: 1
+concepts:
+  - concept_id: property_tax
+    display_name: Contribuciones / impuesto territorial
+    aliases: [contribuciones, impuesto territorial, impuesto predial]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [UF, clp]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: PT_CONTRIB, concept_id: property_tax, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped, note: "PT legacy: monto_clp contiene UF"}
+      - {code: APO_CONTRIB, concept_id: property_tax, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped, note: "Apo legacy: monto_clp contiene UF; split histórico ya materializado por activo"}
+      - {code: INMOSA_CONTRIB, concept_id: property_tax, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: SUCDEN_CONTRIB, concept_id: property_tax, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: 3-1-40-102, concept_id: property_tax, sign_rule: expense_magnitude, unit: clp, amount_field: monto_clp, status: mapped}
+      - {code: APO3001_CONTRIB_SOBRETASA, concept_id: property_tax, status: ambiguous, note: "Cuenta combinada contribuciones + sobretasa sin split gobernado"}
+  - concept_id: property_tax_surtax
+    display_name: Sobretasa de contribuciones
+    aliases: [sobretasa de contribuciones, sobretasa]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [clp]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: 3-1-40-119, concept_id: property_tax_surtax, sign_rule: expense_magnitude, unit: clp, amount_field: monto_clp, status: mapped}
+      - {code: APO3001_CONTRIB_SOBRETASA, concept_id: property_tax_surtax, status: ambiguous, note: "Cuenta combinada contribuciones + sobretasa sin split gobernado"}
+  - concept_id: insurance
+    display_name: Seguros
+    aliases: [seguros, seguro, prima de seguros, gasto en seguros]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [UF, clp]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: PT_SEG, concept_id: insurance, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped, note: "PT legacy: monto_clp contiene UF"}
+      - {code: APO3001_SEG, concept_id: insurance, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped, note: "Apo3001 legacy: monto_clp contiene UF"}
+      - {code: INMOSA_SEG, concept_id: insurance, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: SUCDEN_SEG, concept_id: insurance, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: 3-1-40-100, concept_id: insurance, sign_rule: expense_magnitude, unit: clp, amount_field: monto_clp, status: mapped}
+  - concept_id: common_expenses
+    display_name: Gastos comunes
+    aliases: [gastos comunes, gasto común, ggcc]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [UF]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: PT_GC_VAC, concept_id: common_expenses, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: APO_GC_VAC, concept_id: common_expenses, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+  - concept_id: administration_fees
+    display_name: Administración / honorarios de administración
+    aliases: [administración, honorarios administración, fee administrativo]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [UF, clp]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: PT_ADM, concept_id: administration_fees, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: APO_ADM, concept_id: administration_fees, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: INMOSA_ADM, concept_id: administration_fees, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}
+      - {code: 3-1-10-102, concept_id: administration_fees, sign_rule: expense_magnitude, unit: clp, amount_field: monto_clp, status: mapped}
+      - {code: 3-1-10-105, concept_id: administration_fees, sign_rule: expense_magnitude, unit: clp, amount_field: monto_clp, status: mapped}
+  - concept_id: maintenance_repairs
+    display_name: Mantenimiento / reparaciones
+    aliases: [mantenimiento, reparaciones, provisión reparaciones]
+    basis: accrued_pnl_expense
+    nature: flow
+    units: [UF]
+    allowed_aggregations: [sum]
+    entity_types: [asset]
+    mappings:
+      - {code: INMOSA_PROV_REP, concept_id: maintenance_repairs, sign_rule: expense_magnitude, unit: UF, amount_field: monto_clp, status: mapped}

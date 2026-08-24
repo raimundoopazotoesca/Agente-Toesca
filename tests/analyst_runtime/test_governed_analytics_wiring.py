@@ -24,7 +24,7 @@ def test_alpha_factory_registers_exactly_governed_and_exploratory_actions():
     session = factory.create(None, [])
     registry = session._loop.action_executor
     assert set(registry._by_name) == {
-        "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset",
+        "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset", "analytics_account_query",
         "resolve_entity", "list_assets",
     }
     assert isinstance(registry._by_name["run_sql"], RunSqlAction)
