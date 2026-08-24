@@ -20,6 +20,10 @@ from tools.analytics.catalog import load_metric_catalog
 # reach a user.
 _UNIT_SUFFIX = {"pct_0_100": "%", "m2": " m2", "clp": " CLP", "ratio_0_1": ""}
 
+# Display precision per unit code. Deliberately absent for pct_0_100, which
+# is already expressed in its display scale and must render unrounded.
+_UNIT_PRECISION = {"clp": 2}
+
 # Scale transforms keyed by (unit, display_unit). Value -> (factor, suffix).
 _DISPLAY_TRANSFORMS = {("ratio_0_1", "percent"): (100.0, "%")}
 
@@ -40,7 +44,11 @@ def render_metric_value(metric_key: Any, value: Any, unit: Any) -> str:
         # metrics already expressed in their display scale (e.g. pct_0_100)
         # render byte-identically to before.
         return f"{value * factor:.2f}{suffix}"
-    return f"{value}{_UNIT_SUFFIX.get(metric.unit, f' {metric.unit}')}"
+    suffix = _UNIT_SUFFIX.get(metric.unit, f" {metric.unit}")
+    precision = _UNIT_PRECISION.get(metric.unit)
+    if precision is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value:.{precision}f}{suffix}"
+    return f"{value}{suffix}"
 
 
 def render_fact(fact: dict[str, Any]) -> str:

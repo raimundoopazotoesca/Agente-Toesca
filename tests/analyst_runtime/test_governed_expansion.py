@@ -258,3 +258,96 @@ def test_lookup_rejects_a_repeated_or_empty_asset_list():
                                "period": "2026-06", "period_end": None})
         assert not result.ok
         assert json.loads(result.content)["error_type"] == "invalid_request"
+
+
+# ------------------------- canonical claims selecting one governed fact -----
+
+def _canonical_claim_envelope(claim, text_before="El valor es "):
+    return {
+        "fragments": [{"type": "text", "text": text_before},
+                      {"type": "canonical_metric_ref", "claim_id": "c"}],
+        "canonical_metric_claims": [{"claim_id": "c", **claim}],
+        "governed_dataset_claims": [],
+    }
+
+
+def test_canonical_claim_can_select_one_period_from_a_series():
+    evidence = _period_range_evidence()
+    fact = next(f for f in evidence.facts if f["period"] == "2026-06")
+    validation = validate_and_render(_canonical_claim_envelope({"evidence_id": "e1", **fact}), [], [evidence])
+
+    assert validation.valid
+    assert validation.content == "El valor es 71.15%"
+
+
+def test_canonical_claim_selecting_a_wrong_period_value_fails_closed():
+    evidence = _period_range_evidence()
+    fact = next(f for f in evidence.facts if f["period"] == "2026-06")
+    other = next(f for f in evidence.facts if f["period"] != "2026-06")
+    claim = {"evidence_id": "e1", **fact, "value": other["value"]}
+    validation = validate_and_render(_canonical_claim_envelope(claim), [], [evidence])
+
+    assert not validation.valid
+    assert validation.trace["reason"] == "binding_mismatch"
+
+
+def test_canonical_claim_for_an_absent_period_fails_closed():
+    evidence = _period_range_evidence()
+    fact = next(f for f in evidence.facts if f["period"] == "2026-06")
+    validation = validate_and_render(
+        _canonical_claim_envelope({"evidence_id": "e1", **fact, "period": "2019-01"}), [], [evidence])
+
+    assert not validation.valid
+    assert validation.trace["reason"] == "binding_mismatch"
+
+
+def test_partial_coverage_is_surfaced_even_when_claims_are_per_entity():
+    """Case 06: the model narrates a ranking with per-entity canonical claims;
+    the underlying dataset covers 4 of 12 TRI assets, so the partial-coverage
+    caveat must still reach the reader."""
+    result = _run(AnalyticsBreakdownAssetAction(DB), {
+        "metric": "noi_mensual_activo", "fund": "TRI", "assets": None, "period": "2026-06",
+        "period_end": None, "order_by": "value_desc", "limit": None}, "e1")
+    facts = result.evidence.facts
+    envelope = {
+        "fragments": ([{"type": "text", "text": "Ranking: "}] +
+                      [{"type": "canonical_metric_ref", "claim_id": f"c{i}"} for i in range(len(facts))]),
+        "canonical_metric_claims": [{"claim_id": f"c{i}", "evidence_id": "e1", **fact}
+                                    for i, fact in enumerate(facts)],
+        "governed_dataset_claims": [],
+    }
+    validation = validate_and_render(envelope, [], [result.evidence], DB)
+
+    assert validation.valid
+    assert validation.content.startswith("Cobertura parcial: observados 4 de ")
+    assert validation.trace["coverage_status"] == "partial"
+
+
+def test_complete_coverage_adds_no_caveat():
+    result = _run(AnalyticsBreakdownAssetAction(DB), {
+        "metric": "noi_mensual_activo", "fund": "TRI",
+        "assets": ["INMOSA", "Viña Centro", "Mall Curicó"], "period": "2026-06",
+        "period_end": None, "order_by": "value_desc", "limit": None}, "e1")
+    fact = result.evidence.facts[0]
+    validation = validate_and_render(_canonical_claim_envelope({"evidence_id": "e1", **fact}), [], [result.evidence])
+
+    assert validation.valid
+    assert not validation.content.startswith("Cobertura parcial")
+
+
+def test_canonical_claim_against_an_unknown_evidence_id_fails_closed():
+    evidence = _period_range_evidence()
+    fact = evidence.facts[0]
+    validation = validate_and_render(
+        _canonical_claim_envelope({"evidence_id": "inventado", **fact}), [], [evidence])
+    assert not validation.valid
+    assert validation.trace["reason"] == "binding_mismatch"
+
+
+def test_tool_payload_exposes_the_evidence_id_the_model_must_cite():
+    result = _run(AnalyticsLookupAssetAction(DB), {
+        "metric": "ltv_activo", "assets": ["Apo3001"], "period": "2026-06", "period_end": None}, "call_xyz")
+    assert json.loads(result.content)["evidence_id"] == "call_xyz"
+    assert result.evidence.evidence_id == "call_xyz"
+    listed = _run(ListAssetsAction(DB), {"fund": "TRI", "period": None}, "call_abc")
+    assert json.loads(listed.content)["evidence_id"] == "call_abc"

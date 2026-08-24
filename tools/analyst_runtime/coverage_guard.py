@@ -55,18 +55,41 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         return _fail(canonical_evidence, governed_evidence, "invalid_envelope")
 
     bound_canonical: dict[str, dict[str, Any]] = {}
+    backed_entity_ids: set[str] = set()
+    # governed_dataset evidence a canonical claim selected a single fact from;
+    # its coverage still has to be surfaced (see _coverage_prefix below).
+    selected_from_governed: dict[str, ToolEvidence] = {}
     for claim in canonical_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_canonical:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim")
-        item = canonical_by_id.get(claim.get("evidence_id"))
-        fact = item.facts[0] if item and item.evidence_class == "canonical_metric" and len(item.facts) == 1 else None
+        evidence_id = claim.get("evidence_id")
+        item = canonical_by_id.get(evidence_id)
+        if item is not None and item.evidence_class == "canonical_metric":
+            fact = item.facts[0] if len(item.facts) == 1 else None
+        else:
+            # A claim may also name ONE fact inside a governed_dataset -- the
+            # period-selection path for a time series, and the per-entity path
+            # for a breakdown. Selection is by exact (entity_id, period) and
+            # must be unambiguous; the same 5-field equality check applies, so
+            # this carries no less authority than a single-fact evidence item.
+            item = governed_by_id.get(evidence_id)
+            if item is None or item.evidence_class != "governed_dataset":
+                return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            matches = [candidate for candidate in item.facts
+                       if candidate.get("entity_id") == claim.get("entity_id")
+                       and candidate.get("period") == claim.get("period")]
+            if len(matches) > 1:
+                return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding")
+            fact = matches[0] if matches else None
         if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period")):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
         bound_canonical[claim["claim_id"]] = fact
+        if item.evidence_class == "governed_dataset":
+            selected_from_governed[item.evidence_id] = item
+            backed_entity_ids.add(str(fact.get("entity_id")))
 
     bound_governed: dict[str, dict[str, Any]] = {}
     governed_coverage: list[dict[str, Any]] = []
-    backed_entity_ids: set[str] = set()
     for claim in governed_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_governed:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim")
@@ -93,7 +116,17 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         coverage = item.coverage or {"status": "unknown", "eligible_count": None, "observed_count": len(item.facts)}
         bound_governed[claim["claim_id"]] = {"facts": facts, "scope": item.scope, "coverage": coverage}
         governed_coverage.append({**coverage, "scope": item.scope, "universe_kind": coverage.get("universe_kind")})
+        selected_from_governed.pop(item.evidence_id, None)
         backed_entity_ids.update(claim_entity_ids)
+
+    # Coverage of a governed dataset a claim cherry-picked facts from must
+    # still reach the reader: otherwise a partial ranking could be presented
+    # as if it were the whole universe.
+    prefix = ""
+    for item in selected_from_governed.values():
+        coverage = item.coverage or {"status": "unknown", "eligible_count": None, "observed_count": len(item.facts)}
+        governed_coverage.append({**coverage, "scope": item.scope, "universe_kind": coverage.get("universe_kind")})
+        prefix += _coverage_prefix(coverage, len(item.facts))
 
     rendered: list[str] = []
     provenance_ok = True
@@ -122,21 +155,24 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             canonical_claims=bound_canonical, governed_coverage=governed_coverage,
             result="fail", provenance="fail", reason="entity_provenance_violation"))
 
-    return CoverageValidation(True, "".join(rendered), _trace(
+    return CoverageValidation(True, prefix + "".join(rendered), _trace(
         canonical_claims=bound_canonical, governed_coverage=governed_coverage,
         result="pass", provenance=("pass" if provenance_checked else "not_applicable")))
 
 
-def _render_governed(bound: dict[str, Any]) -> str:
-    status = bound["coverage"].get("status", "unknown")
-    listing = ", ".join(f"{fact['entity_id']}: {render_fact(fact)}" for fact in bound["facts"])
+def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:
+    status = coverage.get("status", "unknown")
     if status == "partial":
-        eligible = bound["coverage"].get("eligible_count") or 0
-        observed = bound["coverage"].get("observed_count") or len(bound["facts"])
-        return _PARTIAL_PREFIX.format(observed=observed, eligible=eligible) + listing
+        return _PARTIAL_PREFIX.format(observed=coverage.get("observed_count") or fact_count,
+                                      eligible=coverage.get("eligible_count") or 0)
     if status == "unknown":
-        return _UNKNOWN_PREFIX + listing
-    return listing
+        return _UNKNOWN_PREFIX
+    return ""
+
+
+def _render_governed(bound: dict[str, Any]) -> str:
+    listing = ", ".join(f"{fact['entity_id']}: {render_fact(fact)}" for fact in bound["facts"])
+    return _coverage_prefix(bound["coverage"], len(bound["facts"])) + listing
 
 
 def _entities_backed(text: str, catalog: dict[str, str], backed_entity_ids: set[str]) -> bool:

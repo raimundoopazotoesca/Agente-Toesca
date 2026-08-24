@@ -363,6 +363,9 @@ class _AnalyticsCapabilityAction:
             analytics_request, scope = self._request(request.arguments)
             result = AnalyticsExecutor(self.db_path).execute(analytics_request)
             payload = {
+                # The evidence_id must be visible to the model: a structured
+                # claim can only bind to evidence it can name.
+                "evidence_id": request.call_id,
                 "catalog_version": result.catalog_version,
                 "result_kind": result.result_kind,
                 "rows": [row.__dict__ for row in result.rows],
@@ -533,7 +536,7 @@ class ListAssetsAction:
                         "observed_count": len(observed), "eligible_ids": sorted(eligible),
                         "observed_ids": sorted(observed),
                         "status": "complete" if eligible and eligible <= observed else ("partial" if eligible else "unknown")}
-            payload = {"fund": fund, "period": period, "assets": list(facts),
+            payload = {"evidence_id": request.call_id, "fund": fund, "period": period, "assets": list(facts),
                        "applicable_count": len(observed), "total_count": len(facts)}
             evidence = ToolEvidence(
                 evidence_id=request.call_id, evidence_class="governed_dataset",
