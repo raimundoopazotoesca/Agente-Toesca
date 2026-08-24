@@ -46,6 +46,7 @@ class MetricDefinition:
     status: str
     related_metrics: tuple[str, ...]
     methodology: str
+    display_unit: str | None = None
 
 
 @dataclass(frozen=True)

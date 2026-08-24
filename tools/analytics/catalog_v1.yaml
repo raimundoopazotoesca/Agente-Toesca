@@ -39,3 +39,44 @@ metrics:
     status: active
     related_metrics: [vacancia_pct_fondo, vacancia_fisica_pct_activo]
     methodology: superficie_vacante_observada
+  - key: ltv_fondo
+    display_name: LTV del fondo
+    description: Loan-to-value del fondo según su metodología canónica registrada.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: fund
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: fondo, kpi: ltv}
+    aggregation: non_additive
+    allowed_dimensions: [fund, period]
+    status: active
+    related_metrics: [ltv_activo]
+    methodology: ltv_v1
+  - key: ltv_activo
+    display_name: LTV por activo
+    description: Loan-to-value a nivel activo según su metodología canónica registrada.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: asset
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: activo, kpi: ltv}
+    aggregation: non_additive
+    allowed_dimensions: [asset, fund, period]
+    status: active
+    related_metrics: [ltv_fondo]
+    methodology: ltv_v1
+  - key: noi_mensual_activo
+    display_name: NOI mensual por activo
+    description: Resultado operacional neto mensual a nivel activo en pesos chilenos.
+    unit: clp
+    entity_grain: asset
+    period_grain: month
+    source_kind: canonical
+    access: {kind: derived_kpi, entity_type: activo, kpi: noi_mensual}
+    aggregation: sum_compatible_scope
+    allowed_dimensions: [asset, fund, period]
+    status: active
+    related_metrics: []
+    methodology: raw_er_noi_v1

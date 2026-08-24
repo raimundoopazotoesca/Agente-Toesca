@@ -27,9 +27,9 @@ def test_catalog_derives_capability_metric_keys_from_semantic_metadata():
     metrics = capability_metric_keys(load_metric_catalog())
 
     assert metrics == {
-        "fund_lookup": ("vacancia_pct_fondo",),
-        "asset_lookup": ("m2_vacantes", "vacancia_fisica_pct_activo"),
-        "asset_breakdown": ("m2_vacantes", "vacancia_fisica_pct_activo"),
+        "fund_lookup": ("ltv_fondo", "vacancia_pct_fondo"),
+        "asset_lookup": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo"),
+        "asset_breakdown": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo"),
     }
 
 
@@ -38,7 +38,7 @@ def test_lookup_fund_schema_makes_m1_grouping_unrepresentable():
 
     assert spec.name == "analytics_lookup_fund"
     assert spec.parameters["additionalProperties"] is False
-    assert spec.parameters["properties"]["metric"]["enum"] == ["vacancia_pct_fondo"]
+    assert spec.parameters["properties"]["metric"]["enum"] == ["ltv_fondo", "vacancia_pct_fondo"]
     assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end"}
     assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end"}
     assert spec.parameters["properties"]["period_end"]["type"] == ["string", "null"]

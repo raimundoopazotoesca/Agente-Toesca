@@ -12,8 +12,12 @@ def capability_metric_keys(catalog: MetricCatalog) -> dict[str, tuple[str, ...]]
         "asset_lookup": tuple(metric.key for metric in active if metric.entity_grain == "asset"),
         "asset_breakdown": tuple(
             metric.key for metric in active
+            # Purely dimensional: a metric is breakdownable when its grain is
+            # the asset and its contract permits both the fund and the asset
+            # dimension. `source_kind` describes the authority of the datum,
+            # not which operation is allowed over it -- gating on it would
+            # wrongly exclude canonical asset-grain metrics (LTV, NOI).
             if metric.entity_grain == "asset"
-            and metric.source_kind == "breakdown"
             and {"fund", "asset"}.issubset(metric.allowed_dimensions)
         ),
     }

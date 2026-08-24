@@ -9,7 +9,11 @@ from tools.analytics.models import DerivedKpiAccess, MetricCatalog, MetricDefini
 
 
 CATALOG_PATH = Path(__file__).with_name("catalog_v1.yaml")
-_UNITS = {"pct_0_100", "m2"}
+_UNITS = {"pct_0_100", "m2", "ratio_0_1", "clp"}
+# `display_unit` is presentation-only: it never changes the semantic value
+# carried by evidence/claims, only how a bound fact is rendered for a human.
+_DISPLAY_UNITS = {"percent"}
+_DISPLAY_UNIT_SOURCES = {"percent": {"ratio_0_1"}}
 _ENTITY_GRAINS = {"fund", "asset"}
 _PERIOD_GRAINS = {"month"}
 _SOURCE_KINDS = {"canonical", "breakdown", "alternative"}
@@ -52,12 +56,19 @@ def _metric(raw: Any) -> MetricDefinition:
             raise _invalid(f"malformed metric definition: invalid {field}")
     if not isinstance(raw["allowed_dimensions"], list) or not isinstance(raw["related_metrics"], list):
         raise _invalid("malformed metric definition: dimensions and relations must be lists")
+    display_unit = raw.get("display_unit")
+    if display_unit is not None:
+        if display_unit not in _DISPLAY_UNITS:
+            raise _invalid("malformed metric definition: invalid display_unit")
+        if raw["unit"] not in _DISPLAY_UNIT_SOURCES[display_unit]:
+            raise _invalid("malformed metric definition: display_unit incompatible with unit")
     return MetricDefinition(
         key=str(raw["key"]), display_name=str(raw["display_name"]), description=str(raw["description"]),
         unit=raw["unit"], entity_grain=raw["entity_grain"], period_grain=raw["period_grain"],
         source_kind=raw["source_kind"], access=_access(raw["access"]), aggregation=raw["aggregation"],
         allowed_dimensions=tuple(raw["allowed_dimensions"]), status=raw["status"],
         related_metrics=tuple(raw["related_metrics"]), methodology=str(raw["methodology"]),
+        display_unit=display_unit,
     )
 
 
