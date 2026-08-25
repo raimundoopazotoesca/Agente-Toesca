@@ -188,10 +188,12 @@ def test_stale_financial_terminal_is_rejected_before_dataset_tools_and_never_ret
     """
     tenant_envelope = _tenant_envelope()
     tenant_envelope["governed_dataset_claims"][0]["evidence_id"] = "dataset-1"
+    financial_envelope = _financial_envelope()
+    financial_envelope["canonical_metric_claims"][0]["evidence_id"] = "financial-0"
     transport = _Transport([
         ModelResponse("", [ToolRequest("financial-0", "financial", {})]),
         ModelResponse("LTV TRI: 61,02%."),
-        ModelResponse("ok", structured_output=_financial_envelope()),
+        ModelResponse("ok", structured_output=financial_envelope),
         ModelResponse("LTV TRI: 61,02%."),
         ModelResponse("", structured_output={
             "request_kind": "new_factual", "ambiguous": False,
@@ -203,9 +205,10 @@ def test_stale_financial_terminal_is_rejected_before_dataset_tools_and_never_ret
     ])
     session = OpenAIResponsesAnalystSession(AnalystLoop("sys", transport, _Executor()), presenter=None)
 
-    session.ask("¿Cuál fue el LTV de TRI?")
+    first = session.ask("¿Cuál fue el LTV de TRI?")
     result = session.ask("Top 5 arrendatarios por GLA de Apo3001.")
 
+    assert "61,02%" in first.text
     assert "Tenant A" in result.text and "61,02%" not in result.text
     current_request = next(request for request in transport.requests
                            if request.output_contract and request.output_contract.name == "CurrentRequest")
@@ -242,6 +245,87 @@ def test_table_turn_after_financial_turn_cannot_reuse_the_financial_scalar():
     assert "Tenant A" in table.text and "Tenant B" in table.text
     assert "|" in table.text
     assert "61,02%" not in table.text
+
+
+class _FailOnDatasetExecutor:
+    """Like _Executor, but the governed dataset tool errors -- no evidence,
+    ok=False -- mirroring a real planner mistake (e.g. an invalid order_by)."""
+
+    def execute(self, request):
+        if request.name == "dataset":
+            return ToolResult(request.call_id, False,
+                               '{"error": "order_by must name a selected measure"}',
+                               trace={"error": "order_by must name a selected measure"})
+        evidence = FINANCIAL if request.name == "financial" else TENANTS
+        return ToolResult(request.call_id, True, "{}", evidence=replace(evidence, evidence_id=request.call_id))
+
+
+def test_failed_tool_call_does_not_bias_the_next_unrelated_requests_tool_choice():
+    """P0 regression: a failed/no-evidence turn's tool trajectory (planner
+    scratch -- the erroring tool call, its aftermath) must not survive as
+    active planning context for a later, explicit and unrelated request.
+
+    Live reproduction: A (LTV, financial, correct) -> B (tenant ranking, the
+    governed dataset tool errors, model declines) -> C (LTV again, same
+    question as A) came back routed through the dataset tool and rejected
+    (canonical_conflict) instead of repeating A's clean financial answer.
+    """
+    transport = _Transport([
+        *_turn("financial", _financial_envelope(), 0),
+        ModelResponse("", [ToolRequest("dataset-fail-0", "dataset", {})]),
+        ModelResponse("No puedo confirmar el top 5 arrendatarios."),
+        ModelResponse("ok", structured_output={
+            "fragments": [{"type": "text", "text": "No puedo confirmar el top 5 arrendatarios."}],
+            "canonical_metric_claims": [], "governed_dataset_claims": [],
+            "derived_metric_claims": [], "table_claims": [],
+        }),
+        *_turn("financial", _financial_envelope(), 1),
+    ])
+    session = OpenAIResponsesAnalystSession(AnalystLoop("sys", transport, _FailOnDatasetExecutor()), presenter=None)
+
+    first = session.ask("¿Cuál fue el LTV de TRI?")
+    failed = session.ask("Top 5 arrendatarios por GLA de Apo3001.")
+    boundary = len(transport.requests)
+    third = session.ask("¿Cuál fue el LTV de TRI?")
+
+    assert "61,02%" in first.text
+    assert "61,02%" not in failed.text
+    assert "61,02%" in third.text
+    # None of the model calls made while answering C may see the failed
+    # dataset tool request or its errored (ok=False) result in their history.
+    assert all(
+        tool_request.name != "dataset"
+        for request in transport.requests[boundary:]
+        for item in request.history
+        for tool_request in item.tool_requests
+    )
+    assert all(
+        tool_result.ok
+        for request in transport.requests[boundary:]
+        for item in request.history
+        for tool_result in item.tool_results
+    )
+
+
+def test_canonical_conflict_turn_does_not_bias_the_next_unrelated_dataset_request():
+    """A turn rejected by coverage_guard (canonical_conflict) is also a
+    failed turn: its trajectory must not bias the NEXT, unrelated request."""
+    session, transport = _session(
+        ("financial", None), ("dataset", _tenant_envelope()),
+    )
+
+    conflicted = session.ask("¿Cuál fue el LTV de TRI?")
+    boundary = len(transport.requests)
+    tenants = session.ask("Top 5 arrendatarios por GLA de Apo3001.")
+
+    assert conflicted.presentation_integrity_status == "canonical_conflict"
+    assert "Tenant A" in tenants.text
+    assert all(
+        tool_request.name != "financial"
+        for request in transport.requests[boundary:]
+        for item in request.history
+        for tool_request in item.tool_requests
+    )
 
 
 def test_repeated_financial_dataset_sequence_and_none_turn_do_not_replay_visible_output():

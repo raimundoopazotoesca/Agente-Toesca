@@ -369,8 +369,15 @@ class OpenAIResponsesAnalystSession:
                 result.turn.text = _account_no_evidence_text(no_evidence, self._db_path)
                 result.turn.raw["account_no_evidence"] = no_evidence
         turn = result.turn
-        self._history = _retained_history(investigation, turn.text)
         termination_reason = turn.raw.get("termination_reason")
+        current_turn_items = investigation.round_trajectory[retained_history_length:]
+        tool_error_this_turn = any(not tool_result.ok for item in current_turn_items for tool_result in item.tool_results)
+        turn_failed = (
+            termination_reason in {"clarification_required", "semantic_rejection"}
+            or (validation is not None and not validation.valid)
+            or tool_error_this_turn
+        )
+        self._history = _retained_history(investigation, turn.text, retained_history_length, text, turn_failed)
         has_tables = bool(validation is not None and validation.valid and validation.tables)
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
                         else _semantic_rejection_presentation(turn.text) if termination_reason == "semantic_rejection"
@@ -662,7 +669,8 @@ def _investigation_for_current_synthesis(investigation: Any, retained_history_le
     return investigation
 
 
-def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:
+def _retained_history(investigation: Any, answer_text: str, retained_history_length: int,
+                       user_text: str, turn_failed: bool) -> list[TranscriptItem]:
     """Cross-turn retention policy (AnalystLoop deliberately leaves it to the
     session, see analyst_loop.py's docstring).
 
@@ -677,7 +685,24 @@ def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptIt
     period was answered by refusing instead of by looking it up. Its assistant
     message is the raw SynthesisEnvelope JSON, which is likewise noise next
     turn; the rendered answer replaces it.
+
+    A turn that ends WITHOUT accepted evidence (a tool error, a rejected
+    structured synthesis, a safe refusal) is different: its tool trajectory
+    is planner scratch -- schema lookups, an erroring or inconclusive tool
+    call, a fallback attempt -- not settled fact. Replaying that scratch as
+    ordinary history biases the NEXT turn's own tool choice toward whatever
+    domain this failed attempt happened to be exploring, even when the next
+    request is explicit and unrelated (see test_stale_structured_output.py's
+    failed-turn-lifecycle tests). Only the ordinary fact that the exchange
+    happened -- the user's question and the answer they saw -- may survive;
+    the tool_requests/tool_results are dropped, so `ask()`'s historical
+    evidence pool for the next turn drops them too, automatically.
     """
+    if turn_failed:
+        history = list(investigation.round_trajectory[:retained_history_length])
+        history.append(TranscriptItem(role="user", text=user_text))
+        history.append(TranscriptItem(role="assistant", text=answer_text))
+        return history[-12:]
     history = list(investigation.round_trajectory)
     if investigation.termination_reason == "model_terminal":
         # The trajectory already ends with the model's own answer.
