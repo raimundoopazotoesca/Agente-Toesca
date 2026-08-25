@@ -1,4 +1,6 @@
 from pathlib import Path
+import shutil
+import sqlite3
 
 import pytest
 
@@ -68,3 +70,18 @@ def test_same_entity_period_segmented_claims_bind_without_collision():
         ], "governed_dataset_claims": [], "derived_metric_claims": [], "table_claims": [],
     }, [office.evidence, retail.evidence], [], DB)
     assert result.valid
+
+
+def test_governed_vacancy_view_normalizes_raw_parking_without_reclassifying_other(tmp_path):
+    db = tmp_path / "vacancy.db"
+    shutil.copy2(DB, db)
+    from tools.db.connection import apply_migrations
+    assert 84 in apply_migrations(str(db))
+    conn = sqlite3.connect(db)
+    try:
+        parking = conn.execute("SELECT tipo_unidad, m2_gla FROM v_vacancia_activo_tipo WHERE activo_key='Viña Centro' AND periodo='2026-05' AND tipo_unidad='Estacionamiento'").fetchone()
+        other = conn.execute("SELECT COUNT(*) FROM v_vacancia_activo_tipo WHERE activo_key='Mall Curicó' AND periodo='2026-05' AND tipo_unidad='Otro'").fetchone()[0]
+    finally:
+        conn.close()
+    assert parking == ("Estacionamiento", 1.0)
+    assert other == 1
