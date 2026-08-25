@@ -40,11 +40,13 @@ def test_catalog_is_contract_only_without_values_or_entity_lists():
         "primary": {"kind": "derived_kpi", "entity_type": "fondo", "kpi": "vacancia_pct"},
         "fallback": {
             "kind": "rollup_ratio_view",
-            "views": {"PT": "v_vacancia_pt_consolidado_tipo", "Apo": "v_vacancia_apoquindo_consolidado_tipo"},
+            "view": "v_vacancia_activo", "entity_column": "activo_key",
+            "asset_groups": {
+                "Apo": (("Apo4501", "Apo4700"), ("Fondo Apoquindo",)),
+                "PT": (("Torre A", "Boulevard"), ("PT_consolidado",)),
+            },
             "numerator_column": "m2_vacantes", "denominator_column": "m2_gla",
-            "exclude_column": "tipo_unidad", "exclude_value": "Estacionamiento",
-            "dedupe_columns": ("tipo_unidad",), "precedence_column": "fuente",
-            "precedence_order": ("rent_roll", "manual"),
+            "exclude_column": None, "exclude_value": None,
         },
     }
 

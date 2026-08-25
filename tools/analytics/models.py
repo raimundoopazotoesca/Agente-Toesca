@@ -91,32 +91,38 @@ class ViewMetricAccess(AccessStrategy):
 @dataclass(frozen=True)
 class RollupRatioViewAccess(AccessStrategy):
     """Fund-level ratio computed as SUM(numerator)/SUM(denominator) over a
-    per-fund governed view, keyed deterministically by fund via `views`
-    (no per-fund code branching). Used as a fallback source when a fund
-    has no materialized row in the primary source for a period."""
+    shared entity-grain governed view (e.g. v_vacancia_activo), summed
+    across the component entities that make up a fund.
 
-    views: dict
+    `asset_groups` maps fund_key -> an ORDERED tuple of candidate entity-key
+    groups (no per-fund code branching — the group membership is data, not
+    logic). For a given period, the first group with any valid component
+    pair wins; later groups are only consulted for periods the earlier
+    group is silent on. This lets a fund whose governed source changed
+    representation over time (e.g. per-asset rent-roll rows in one era,
+    a single fund-level manual total row in an earlier era) resolve to
+    the right one per period, deterministically."""
+
+    view: str
+    entity_column: str
+    asset_groups: dict
     numerator_column: str
     denominator_column: str
     exclude_column: str | None
     exclude_value: str | None
-    dedupe_columns: tuple
-    precedence_column: str | None
-    precedence_order: tuple
 
-    def __init__(self, views: dict, numerator_column: str, denominator_column: str,
-                 exclude_column: str | None = None, exclude_value: str | None = None,
-                 dedupe_columns: tuple = (), precedence_column: str | None = None,
-                 precedence_order: tuple = ()):
+    def __init__(self, view: str, entity_column: str, asset_groups: dict, numerator_column: str,
+                 denominator_column: str, exclude_column: str | None = None, exclude_value: str | None = None):
         object.__setattr__(self, "kind", "rollup_ratio_view")
-        object.__setattr__(self, "views", dict(views))
+        object.__setattr__(self, "view", view)
+        object.__setattr__(self, "entity_column", entity_column)
+        object.__setattr__(self, "asset_groups", {
+            fund: tuple(tuple(group) for group in groups) for fund, groups in asset_groups.items()
+        })
         object.__setattr__(self, "numerator_column", numerator_column)
         object.__setattr__(self, "denominator_column", denominator_column)
         object.__setattr__(self, "exclude_column", exclude_column)
         object.__setattr__(self, "exclude_value", exclude_value)
-        object.__setattr__(self, "dedupe_columns", tuple(dedupe_columns))
-        object.__setattr__(self, "precedence_column", precedence_column)
-        object.__setattr__(self, "precedence_order", tuple(precedence_order))
 
 
 @dataclass(frozen=True)

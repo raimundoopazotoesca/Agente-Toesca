@@ -48,23 +48,23 @@ def _access(raw: Any) -> AccessStrategy:
     if kind == "view_metric" and set(raw) == {"kind", "view", "value_column"}:
         return ViewMetricAccess(view=str(raw["view"]), value_column=str(raw["value_column"]))
     if kind == "rollup_ratio_view" and set(raw) <= {
-        "kind", "views", "numerator_column", "denominator_column", "exclude_column", "exclude_value",
-        "dedupe_columns", "precedence_column", "precedence_order",
-    } and {"kind", "views", "numerator_column", "denominator_column"} <= set(raw):
-        views = raw["views"]
-        if not isinstance(views, dict) or not views or not all(isinstance(k, str) and isinstance(v, str) for k, v in views.items()):
-            raise _invalid("malformed access strategy: rollup views must be a non-empty fund_key->view map")
-        dedupe_columns = raw.get("dedupe_columns", [])
-        precedence_order = raw.get("precedence_order", [])
-        if not isinstance(dedupe_columns, list) or not isinstance(precedence_order, list):
-            raise _invalid("malformed access strategy: dedupe_columns/precedence_order must be lists")
+        "kind", "view", "entity_column", "asset_groups", "numerator_column", "denominator_column",
+        "exclude_column", "exclude_value",
+    } and {"kind", "view", "entity_column", "asset_groups", "numerator_column", "denominator_column"} <= set(raw):
+        asset_groups = raw["asset_groups"]
+        if not isinstance(asset_groups, dict) or not asset_groups:
+            raise _invalid("malformed access strategy: asset_groups must be a non-empty fund_key->groups map")
+        for fund, groups in asset_groups.items():
+            if not isinstance(fund, str) or not isinstance(groups, list) or not groups:
+                raise _invalid("malformed access strategy: asset_groups values must be non-empty lists of groups")
+            for group in groups:
+                if not isinstance(group, list) or not group or not all(isinstance(item, str) for item in group):
+                    raise _invalid("malformed access strategy: each asset group must be a non-empty list of entity keys")
         return RollupRatioViewAccess(
-            views=views, numerator_column=str(raw["numerator_column"]), denominator_column=str(raw["denominator_column"]),
+            view=str(raw["view"]), entity_column=str(raw["entity_column"]), asset_groups=asset_groups,
+            numerator_column=str(raw["numerator_column"]), denominator_column=str(raw["denominator_column"]),
             exclude_column=(str(raw["exclude_column"]) if raw.get("exclude_column") is not None else None),
             exclude_value=(str(raw["exclude_value"]) if raw.get("exclude_value") is not None else None),
-            dedupe_columns=tuple(str(item) for item in dedupe_columns),
-            precedence_column=(str(raw["precedence_column"]) if raw.get("precedence_column") is not None else None),
-            precedence_order=tuple(str(item) for item in precedence_order),
         )
     if kind == "fallback_chain" and set(raw) == {"kind", "primary", "fallback"}:
         return FallbackAccess(primary=_access(raw["primary"]), fallback=_access(raw["fallback"]))

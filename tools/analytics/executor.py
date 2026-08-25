@@ -149,53 +149,46 @@ class AnalyticsExecutor:
         records = list(primary_records)
         if isinstance(access.fallback, RollupRatioViewAccess):
             for fund in request.funds or ():
-                if fund not in access.fallback.views:
+                groups = access.fallback.asset_groups.get(fund)
+                if not groups:
                     continue
-                fb_sql, fb_params = self._rollup_sql(access.fallback, fund, request)
-                with self._sandbox.connect() as connection:
-                    fb_records = connection.execute(fb_sql, fb_params).fetchall()
-                for record in fb_records:
-                    key = (record[0], record[1])
-                    if key not in covered:
-                        records.append(record)
-                        covered.add(key)
+                for group in groups:
+                    sql, params = self._rollup_sql(access.fallback, fund, group, request)
+                    with self._sandbox.connect() as connection:
+                        fb_records = connection.execute(sql, params).fetchall()
+                    for record in fb_records:
+                        key = (record[0], record[1])
+                        if key not in covered:
+                            records.append(record)
+                            covered.add(key)
         records.sort(key=lambda record: (record[1], record[0]))
         return records, entity_type
 
-    def _rollup_sql(self, access: RollupRatioViewAccess, fund: str, request: AnalyticsQueryRequest):
-        view = access.views[fund]
+    def _rollup_sql(self, access: RollupRatioViewAccess, fund: str, group: tuple[str, ...], request: AnalyticsQueryRequest):
         exclude_clause = ""
-        params: list[object] = []
+        exclude_params: list[object] = []
         if access.exclude_column:
             exclude_clause = f" AND ({access.exclude_column} IS NULL OR {access.exclude_column} != ?)"
-            params.append(access.exclude_value)
-        formula = f"rollup_ratio:{view}:sum({access.numerator_column})/sum({access.denominator_column})"
+            exclude_params.append(access.exclude_value)
+        components = ",".join(sorted(group))
+        formula = (
+            f"rollup_ratio:{access.view}:[{components}]:"
+            f"sum({access.numerator_column})/sum({access.denominator_column})"
+        )
         # Only sum rows where both sides of the ratio are present for the same
         # observation — a numerator-only or denominator-only row is not a valid
         # component pair and would silently skew the ratio of sums.
         pair_clause = f"{access.numerator_column} IS NOT NULL AND {access.denominator_column} IS NOT NULL"
-        source = view
-        if access.dedupe_columns and access.precedence_column and access.precedence_order:
-            partition = ", ".join(["periodo", *access.dedupe_columns])
-            precedence_case = " ".join(
-                f"WHEN {access.precedence_column}=? THEN {rank}" for rank, _ in enumerate(access.precedence_order)
-            )
-            source = (
-                f"(SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition} "
-                f"ORDER BY (CASE {precedence_case} ELSE 999 END)) AS rn FROM {view})"
-            )
-            precedence_params = list(access.precedence_order)
-        else:
-            precedence_params = []
-        rn_filter = " AND rn = 1" if precedence_params else ""
+        entity_placeholders = ",".join("?" for _ in group)
         sql = (
             f"SELECT ? AS entidad_key, periodo, "
             f"SUM({access.numerator_column}) * 100.0 / SUM({access.denominator_column}) AS valor, "
             f"'{formula}' AS formula, NULL AS ingest_run_id "
-            f"FROM {source} WHERE periodo BETWEEN ? AND ?{exclude_clause} AND {pair_clause}{rn_filter} "
+            f"FROM {access.view} WHERE {access.entity_column} IN ({entity_placeholders}) "
+            f"AND periodo BETWEEN ? AND ?{exclude_clause} AND {pair_clause} "
             f"GROUP BY periodo HAVING SUM({access.denominator_column}) > 0 ORDER BY periodo"
         )
-        params = [fund, *precedence_params, request.period, request.period_end or request.period, *params]
+        params = [fund, *group, request.period, request.period_end or request.period, *exclude_params]
         return sql, tuple(params)
 
     def _derived_sql(self, access: DerivedKpiAccess, request: AnalyticsQueryRequest):
