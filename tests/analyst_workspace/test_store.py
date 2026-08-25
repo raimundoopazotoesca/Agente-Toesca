@@ -29,7 +29,7 @@ def test_initialize_creates_versioned_schema(tmp_path):
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"conversation", "message", "feedback", "user", "user_session"} <= tables
         assert {"analytical_turn", "fact_claim", "evidence_snapshot", "claim_dependency", "analytical_turn_evidence"} <= tables
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
     finally:
         conn.close()
 
@@ -46,7 +46,7 @@ def test_create_and_get_conversation_round_trips_context(store):
     context = {"source_surface": "factsheet", "fund": "PT", "period": "2026-06"}
     conversation = store.create_conversation(context=context)
     loaded = store.get_conversation(conversation.id)
-    assert loaded.title == "Nuevo chat"
+    assert loaded.title == "Nueva conversación"
     assert loaded.context == context
     assert loaded.archived_at is None
 

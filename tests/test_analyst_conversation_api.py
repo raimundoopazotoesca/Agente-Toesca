@@ -16,7 +16,7 @@ from tools.analyst_workspace.store import ConversationNotFoundError, MessageNotF
 @dataclass
 class FakeConversation:
     id: str = "conv-1"
-    title: str = "Nuevo chat"
+    title: str = "Nueva conversación"
     created_at: str = "2026-08-19T12:00:00Z"
     updated_at: str = "2026-08-19T12:00:00Z"
     context: dict | None = None
@@ -59,7 +59,7 @@ class FakeConversationService:
     def create_conversation(self, *, title=None, context=None, user_id=None):
         if self.raise_on_create:
             raise self.raise_on_create
-        self.conversation = FakeConversation(title=title or "Nuevo chat", context=context)
+        self.conversation = FakeConversation(title=title or "Nueva conversación", context=context)
         return self.conversation
 
     def list_conversations(self, *, include_archived=False):
@@ -171,7 +171,7 @@ def test_create_conversation_returns_public_schema(client, headers):
 def test_list_conversations_returns_public_schema(client, headers):
     response = client.get("/api/analyst/conversations", headers=headers)
     assert response.status_code == 200
-    assert response.get_json()["conversations"] == [{"id": "conv-1", "title": "Nuevo chat", "created_at": "2026-08-19T12:00:00Z", "updated_at": "2026-08-19T12:00:00Z", "context": None, "archived_at": None}]
+    assert response.get_json()["conversations"] == [{"id": "conv-1", "title": "Nueva conversación", "created_at": "2026-08-19T12:00:00Z", "updated_at": "2026-08-19T12:00:00Z", "context": None, "archived_at": None}]
 
 
 def test_get_conversation(client, headers):

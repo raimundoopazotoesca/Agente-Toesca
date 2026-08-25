@@ -115,7 +115,9 @@ class AnalystLoop:
 
         for _ in range(MAX_INVESTIGATION_ROUNDS):
             request = ModelRequest(system_prompt=self.system_prompt, history=round_history, message=next_message, tools=self.tool_specs)
+            llm_started = time.monotonic()
             response = self.transport.complete(request)
+            response.usage.llm_latency_ms = (time.monotonic() - llm_started) * 1000
             _accumulate(total_usage, response.usage)
 
             user_text = next_message if next_message else None
@@ -129,9 +131,12 @@ class AnalystLoop:
 
             results: list[ToolResult] = []
             for index, tr in enumerate(response.tool_requests):
+                tool_started = time.monotonic()
                 result = self.action_executor.execute(tr)
+                tool_duration_ms = (time.monotonic() - tool_started) * 1000
                 results.append(result)
-                tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
+                tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok,
+                                               duration_ms=tool_duration_ms, trace=result.trace))
                 if result.control and result.control.get("kind") in {"clarification_required", "semantic_rejection"}:
                     kind = str(result.control["kind"])
                     if (kind == "semantic_rejection"
@@ -173,7 +178,9 @@ class AnalystLoop:
         termination_reason = investigation.termination_reason
         if termination_reason == "budget_exhausted":
             request = ModelRequest(self.system_prompt, round_history, _SYNTHESIS_INSTRUCTION, [])
+            llm_started = time.monotonic()
             response = self.transport.complete(request)
+            response.usage.llm_latency_ms = (time.monotonic() - llm_started) * 1000
             _accumulate(total_usage, response.usage)
             final_text = response.text
             round_history = _append_turn(round_history, _SYNTHESIS_INSTRUCTION, response, [])
@@ -201,7 +208,9 @@ class AnalystLoop:
             return self._legacy_finalize(investigation)
         message = f"{_SYNTHESIS_INSTRUCTION}\n\n{synthesis_context}" if synthesis_context else _SYNTHESIS_INSTRUCTION
         request = ModelRequest(self.system_prompt, investigation.round_trajectory, message, [], output_contract)
+        llm_started = time.monotonic()
         response = self.transport.complete(request)
+        response.usage.llm_latency_ms = (time.monotonic() - llm_started) * 1000
         total_usage = investigation.usage
         _accumulate(total_usage, response.usage)
         history = _append_turn(investigation.round_trajectory, message, response, [])
@@ -343,7 +352,7 @@ def _semantic_rejection_text(control: dict[str, object]) -> str:
 
 def _accumulate(total: Usage, call: Usage) -> None:
     total.calls += call.calls or 1
-    for field_name in ("input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens"):
+    for field_name in ("input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens", "llm_latency_ms"):
         addend = getattr(call, field_name)
         if addend is not None:
             setattr(total, field_name, (getattr(total, field_name) or 0) + addend)

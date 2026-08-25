@@ -19,8 +19,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from tools.analyst_workspace.models import Conversation, Feedback, Message
 
-SCHEMA_VERSION = 5
-DEFAULT_TITLE = "Nuevo chat"
+SCHEMA_VERSION = 6
+DEFAULT_TITLE = "Nueva conversación"
 _ROLES = {"user", "assistant"}
 _RATINGS = {"up", "down"}
 
@@ -174,6 +174,15 @@ class WorkspaceStore:
                     CREATE INDEX idx_turn_evidence_turn ON analytical_turn_evidence(analytical_turn_id);
                     """)
                     conn.execute("PRAGMA user_version = 5")
+                    version = 5
+                if version < 6:
+                    conn.executescript("""
+                    ALTER TABLE conversation ADD COLUMN title_origin TEXT NOT NULL DEFAULT 'default'
+                        CHECK(title_origin IN ('default', 'auto', 'manual'));
+                    UPDATE conversation
+                    SET title_origin = CASE WHEN title IN ('Nueva conversación', 'Nuevo chat') THEN 'default' ELSE 'manual' END;
+                    """)
+                    conn.execute("PRAGMA user_version = 6")
         finally:
             conn.close()
 
@@ -188,11 +197,12 @@ class WorkspaceStore:
         try:
             with conn:
                 owner = owner_user_id or self._initial_admin_id(conn)
-                conversation = Conversation(conversation_id, normalized_title, now, now, context, None, owner)
+                title_origin = "default" if normalized_title == DEFAULT_TITLE else "manual"
+                conversation = Conversation(conversation_id, normalized_title, now, now, context, None, owner, title_origin)
                 conn.execute(
-                    "INSERT INTO conversation (id,title,created_at,updated_at,context_json,archived_at,owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO conversation (id,title,created_at,updated_at,context_json,archived_at,owner_user_id,title_origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (conversation.id, conversation.title, conversation.created_at, conversation.updated_at,
-                     serialized_context, conversation.archived_at, owner),
+                     serialized_context, conversation.archived_at, owner, conversation.title_origin),
                 )
         finally:
             conn.close()
@@ -325,7 +335,23 @@ class WorkspaceStore:
 
     def rename_conversation(self, conversation_id: str, title: str) -> Conversation:
         normalized_title = _normalize_title(title)
-        return self._update_conversation(conversation_id, "title = ?", (normalized_title,))
+        return self._update_conversation(conversation_id, "title = ?, title_origin = 'manual'", (normalized_title,))
+
+    def auto_title_conversation(self, conversation_id: str, title: str) -> Conversation:
+        normalized_title = _normalize_title(title)
+        now = _utc_now()
+        conn = self._connect()
+        try:
+            with conn:
+                cursor = conn.execute(
+                    "UPDATE conversation SET title=?, title_origin='auto', updated_at=? WHERE id=? AND title_origin='default'",
+                    (normalized_title, now, conversation_id),
+                )
+                if cursor.rowcount == 0:
+                    self._require_conversation(conn, conversation_id)
+            return self.get_conversation(conversation_id)
+        finally:
+            conn.close()
 
     def archive_conversation(self, conversation_id: str) -> Conversation:
         return self._update_conversation(conversation_id, "archived_at = ?", (_utc_now(),))
@@ -588,7 +614,8 @@ def _serialize_object(value: dict[str, Any] | None, field: str) -> str | None:
 
 def _conversation_from_row(row: sqlite3.Row) -> Conversation:
     return Conversation(row["id"], row["title"], row["created_at"], row["updated_at"],
-                        _deserialize_object(row["context_json"]), row["archived_at"], row["owner_user_id"] if "owner_user_id" in row.keys() else None)
+                        _deserialize_object(row["context_json"]), row["archived_at"], row["owner_user_id"] if "owner_user_id" in row.keys() else None,
+                        row["title_origin"] if "title_origin" in row.keys() else "default")
 
 
 def _message_from_row(row: sqlite3.Row) -> Message:

@@ -116,7 +116,7 @@
 
       const title = document.createElement("div");
       title.className = "conv-title";
-      title.textContent = conv.title || "Nuevo chat";
+      title.textContent = conv.title || "Nueva conversación";
       const meta = document.createElement("div");
       meta.className = "conv-meta";
       meta.textContent = fmtDate(conv.updated_at);
@@ -293,7 +293,7 @@
     conversationEl.innerHTML = "";
     try {
       const [conv, messages] = await Promise.all([getConversation(id), listMessages(id)]);
-      chatTitle.textContent = conv.title || "Nuevo chat";
+      chatTitle.textContent = conv.title || "Nueva conversación";
       chatSub.textContent = `Actualizado ${fmtDate(conv.updated_at)}`;
       renderMessages(messages);
       composerInput.focus();

@@ -41,6 +41,7 @@ class Usage:
     cached_tokens: int | None = None
     retries: int = 0
     latency_ms: float | None = None
+    llm_latency_ms: float | None = None
 
 
 @dataclass

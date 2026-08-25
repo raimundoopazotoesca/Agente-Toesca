@@ -133,6 +133,9 @@ class AnalystSessionResult:
     presented_answer_hash: str | None = None
     termination_reason: str | None = None
     durable_memory: dict[str, Any] | None = None
+    hydrated_claim_count: int = 0
+    reused_evidence_count: int = 0
+    fresh_evidence_count: int = 0
 
 
 class AnalystSession(Protocol):
@@ -211,12 +214,14 @@ class OpenAIResponsesTransport:
 class OpenAIResponsesAnalystSession:
     """Keeps the provider's opaque replay trajectory only in process memory."""
 
-    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None, db_path: Path | None = None, durable_evidence: list[ToolEvidence] | None = None):
+    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None, db_path: Path | None = None, durable_evidence: list[ToolEvidence] | None = None,
+                 hydrated_claim_count: int = 0):
         self._loop = loop
         self._history: list[TranscriptItem] = list(history or [])
         self._presenter = presenter
         self._db_path = db_path
         self._durable_evidence = list(durable_evidence or [])
+        self._hydrated_claim_count = hydrated_claim_count
         self._active_monetary_unit: str | None = None
 
     def ask(self, text: str) -> AnalystSessionResult:
@@ -339,6 +344,9 @@ class OpenAIResponsesAnalystSession:
             presented_answer_hash=_answer_hash(final_text),
             termination_reason=termination_reason,
             durable_memory=durable_memory,
+            hydrated_claim_count=self._hydrated_claim_count,
+            reused_evidence_count=len(self._durable_evidence),
+            fresh_evidence_count=len(evidence) - len(self._durable_evidence),
         )
 
     def _present(self, draft: str, user_message: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult:
@@ -597,6 +605,7 @@ class OpenAIResponsesAnalystSessionFactory:
         return OpenAIResponsesAnalystSession(
             AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
             db_path=self.knowledge_db_path, durable_evidence=durable_evidence,
+            hydrated_claim_count=len(claims) + len(durable.get("derived_claims", [])),
         )
 
 

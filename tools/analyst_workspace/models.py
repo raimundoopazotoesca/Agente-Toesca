@@ -14,6 +14,7 @@ class Conversation:
     context: dict[str, Any] | None
     archived_at: str | None
     owner_user_id: str | None = None
+    title_origin: str = "default"
 
 
 @dataclass(frozen=True)

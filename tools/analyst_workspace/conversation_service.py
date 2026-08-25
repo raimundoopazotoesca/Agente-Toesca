@@ -12,6 +12,7 @@ from typing import Any
 from tools.analyst_runtime.session import AnalystSession, AnalystSessionFactory, AnalystSessionResult
 from tools.analyst_workspace.models import Conversation, Feedback, Message
 from tools.analyst_workspace.store import DEFAULT_TITLE, WorkspaceStore
+from tools.analyst_workspace.title_generator import LightweightTitleGenerator, TitleGenerator, is_substantive_text
 
 
 class ConversationServiceError(Exception):
@@ -19,9 +20,11 @@ class ConversationServiceError(Exception):
 
 
 class ConversationService:
-    def __init__(self, store: WorkspaceStore, session_factory: AnalystSessionFactory):
+    def __init__(self, store: WorkspaceStore, session_factory: AnalystSessionFactory,
+                 title_generator: TitleGenerator | None = None):
         self.store = store
         self.session_factory = session_factory
+        self.title_generator = title_generator or LightweightTitleGenerator()
         self._sessions: dict[str, AnalystSession] = {}
 
     def create_conversation(self, context: dict[str, Any] | None = None, title: str | None = None, user_id: str | None = None) -> Conversation:
@@ -65,12 +68,8 @@ class ConversationService:
             raise ConversationServiceError("message text cannot be empty")
         conversation = self.store.get_conversation(conversation_id)
         user_message = self.store.append_message(conversation_id, "user", text)
-        if conversation.title == DEFAULT_TITLE and len(self.store.list_messages(conversation_id)) == 1:
-            conversation = self.store.rename_conversation(conversation_id, _auto_title(text))
-        else:
-            conversation = self.store.get_conversation(conversation_id)
-
         session = self._sessions.get(conversation_id)
+        hydration_latency_ms = 0.0
         if session is None:
             messages = self.store.list_messages(conversation_id)
             visible_history = messages[:-1] if messages and messages[-1].id == user_message.id else messages
@@ -78,8 +77,10 @@ class ConversationService:
             # Scope is checked from the conversation owner before this fetch;
             # the store has no global user-facing claim lookup.
             if conversation.owner_user_id:
+                hydration_started = time.monotonic()
                 runtime_context["durable_analytical_context"] = self.store.load_durable_context_for_user(
                     conversation_id, conversation.owner_user_id)
+                hydration_latency_ms = (time.monotonic() - hydration_started) * 1000
             session = self.session_factory.create(conversation, visible_history, runtime_context=runtime_context)
             self._sessions[conversation_id] = session
 
@@ -87,10 +88,17 @@ class ConversationService:
         result = session.ask(text)
         latency_ms = (time.monotonic() - started) * 1000
         assistant = self.store.append_message(
-            conversation_id, "assistant", result.text, metadata=runtime_result_to_metadata(result, latency_ms)
+            conversation_id, "assistant", result.text, metadata=runtime_result_to_metadata(result, latency_ms, hydration_latency_ms)
         )
         if result.durable_memory:
             self.store.persist_analytical_turn(conversation_id, user_message.id, assistant.id, result.durable_memory)
+        if conversation.title_origin == "default" and is_substantive_text(text):
+            try:
+                title = self.title_generator.generate(text, result.text)
+                if title:
+                    self.store.auto_title_conversation(conversation_id, title)
+            except Exception:
+                pass
         return assistant
 
     def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Message:
@@ -113,7 +121,7 @@ class ConversationService:
         return self.store.get_feedback(message_id)
 
 
-def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) -> dict[str, Any]:
+def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float, hydration_latency_ms: float = 0.0) -> dict[str, Any]:
     """Return only the operational fields safe to retain in workspace SQLite."""
     usage = result.usage
     token_usage = {
@@ -143,6 +151,22 @@ def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float) 
         "token_usage": token_usage,
         "provider": usage.provider,
         "model": usage.model,
+        "turn_metrics": {
+            "total_turn_latency_ms": latency_ms,
+            "llm_rounds": usage.calls,
+            "llm_latency_ms": usage.llm_latency_ms if usage.llm_latency_ms is not None else usage.latency_ms,
+            "tool_calls": len(result.tool_calls),
+            "tool_latency_ms": sum(call.duration_ms or 0.0 for call in result.tool_calls),
+            "sql_tool_latency_ms": sum((call.duration_ms or 0.0) for call in result.tool_calls if call.name == "run_sql"),
+            "hydration_latency_ms": hydration_latency_ms,
+            "hydrated_claim_count": result.hydrated_claim_count,
+            "evidence_count": result.reused_evidence_count + result.fresh_evidence_count,
+            "reused_evidence_count": result.reused_evidence_count,
+            "fresh_evidence_count": result.fresh_evidence_count,
+            **token_usage,
+            **({"provider": usage.provider} if usage.provider else {}),
+            **({"model": usage.model} if usage.model else {}),
+        },
         **({"termination_reason": result.termination_reason} if result.termination_reason else {}),
     }
     presentation = {

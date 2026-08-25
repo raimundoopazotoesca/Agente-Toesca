@@ -39,6 +39,19 @@ class FakeFactory:
         return session
 
 
+@dataclass
+class FakeTitleGenerator:
+    responses: list[str | None | Exception]
+    calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def generate(self, user_text: str, assistant_text: str) -> str | None:
+        self.calls.append((user_text, assistant_text))
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
 def _result(text="Respuesta", **kwargs):
     return AnalystSessionResult(text=text, **kwargs)
 
@@ -137,6 +150,7 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
     service = ConversationService(workspace, FakeFactory([result]))
     conversation = service.create_conversation()
     assistant = service.send_message(conversation.id, "Consulta")
+    assert assistant.metadata.pop("turn_metrics")["llm_rounds"] == 2
     assert assistant.metadata == {
         "latency_ms": pytest.approx(assistant.metadata["latency_ms"]),
         "model_calls": 2,
@@ -186,11 +200,55 @@ def test_first_user_message_sets_deterministic_auto_title(workspace):
 
 
 def test_manual_title_is_preserved(workspace):
-    service = ConversationService(workspace, FakeFactory([_result()]))
+    titles = FakeTitleGenerator(["No debe usarse"])
+    service = ConversationService(workspace, FakeFactory([_result()]), titles)
     conversation = service.create_conversation()
     workspace.rename_conversation(conversation.id, "Mi análisis")
     service.send_message(conversation.id, "Una pregunta inicial")
     assert workspace.get_conversation(conversation.id).title == "Mi análisis"
+
+
+    assert titles.calls == []
+
+
+def test_greeting_keeps_default_title_until_a_substantive_turn_completes(workspace):
+    titles = FakeTitleGenerator(["Vacancia TRI junio 2026"])
+    service = ConversationService(workspace, FakeFactory([_result("Hola"), _result("La vacancia fue 5%.")]), titles)
+    conversation = service.create_conversation()
+    assert conversation.title == "Nueva conversación"
+    service.send_message(conversation.id, "Hola")
+    assert workspace.get_conversation(conversation.id).title == "Nueva conversación"
+    service.send_message(conversation.id, "¿Cuál fue la vacancia de TRI en junio 2026?")
+    assert workspace.get_conversation(conversation.id).title == "Vacancia TRI junio 2026"
+    assert titles.calls == [("¿Cuál fue la vacancia de TRI en junio 2026?", "La vacancia fue 5%.")]
+
+
+def test_failed_title_generation_does_not_fail_the_analyst_turn(workspace):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")]), FakeTitleGenerator([RuntimeError("timeout")]))
+    conversation = service.create_conversation()
+    assistant = service.send_message(conversation.id, "Vacancia TRI junio 2026")
+    assert assistant.content == "Respuesta"
+    assert workspace.get_conversation(conversation.id).title == "Nueva conversación"
+
+
+def test_runtime_metadata_includes_turn_latency_breakdown(workspace):
+    result = _result("Respuesta", usage=Usage(provider="openai", model="gpt-test", calls=2, latency_ms=18.0),
+                     tool_calls=[ToolCall(name="run_sql", duration_ms=4.0)])
+    result.hydrated_claim_count = 3
+    result.reused_evidence_count = 2
+    result.fresh_evidence_count = 1
+    service = ConversationService(workspace, FakeFactory([result]))
+    conversation = service.create_conversation()
+    assistant = service.send_message(conversation.id, "Consulta material")
+    metrics = assistant.metadata["turn_metrics"]
+    assert metrics["llm_rounds"] == 2
+    assert metrics["llm_latency_ms"] == 18.0
+    assert metrics["tool_calls"] == 1
+    assert metrics["tool_latency_ms"] == 4.0
+    assert metrics["sql_tool_latency_ms"] == 4.0
+    assert metrics["hydrated_claim_count"] == 3
+    assert metrics["reused_evidence_count"] == 2
+    assert metrics["fresh_evidence_count"] == 1
 
 
 def test_archive_invalidates_cached_session(workspace):
