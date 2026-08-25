@@ -68,7 +68,34 @@ def test_unit_and_tenant_contract_keeps_each_snapshot_lease_expiry_separate():
     assert all("unidad" in row and "vencimiento" in row and "rent_rate_uf_m2" in row for row in result.rows)
 
 
-def test_floor_is_not_exposed_without_a_source_governed_field():
-    executor = GovernedDatasetExecutor(DB)
-    with pytest.raises(DatasetQueryError):
-        executor.execute(query(group_by=("floor",)))
+def test_floor_uses_only_declared_asset_level_source_mappings_and_computes_vacancy_from_gla():
+    result = GovernedDatasetExecutor(DB).execute(query(
+        filters=(DatasetFilter("activo_key", "eq", "Apo4700"), DatasetFilter("periodo", "eq", "2026-06")),
+        group_by=("floor",), measures=(DatasetMeasure("vacancy_pct", "ratio"), DatasetMeasure("gla_m2", "sum")),
+        order_by="vacancy_pct", limit=None, share_of_total=False,
+    ))
+    assert result.rows
+    assert all(row["floor"] is not None for row in result.rows)
+    assert all(0 <= row["vacancy_pct"] <= 1 for row in result.rows)
+    assert result.contract["dimension_coverage"]["floor"] == ["Apo3001", "Apo4501", "Apo4700"]
+
+
+def test_floor_fails_closed_for_an_asset_without_declared_coverage():
+    with pytest.raises(DatasetQueryError, match="floor is unsupported"):
+        GovernedDatasetExecutor(DB).execute(query(
+            filters=(DatasetFilter("activo_key", "eq", "Torre A"), DatasetFilter("periodo", "eq", "2026-06")),
+            group_by=("floor",),
+        ))
+
+
+def test_floor_composes_with_unit_tenant_rate_and_snapshot_expiry():
+    result = GovernedDatasetExecutor(DB).execute(query(
+        filters=(DatasetFilter("activo_key", "eq", "Apo3001"), DatasetFilter("periodo", "eq", "2026-06"),
+                 DatasetFilter("floor", "eq", "8")),
+        group_by=("floor", "unidad", "arrendatario", "vencimiento"),
+        measures=(DatasetMeasure("gla_m2", "sum"), DatasetMeasure("rent_rate_uf_m2", "avg")),
+        order_by="gla_m2", limit=None, share_of_total=False,
+    ))
+    assert result.rows == ({"floor": "8", "unidad": "Piso 8", "arrendatario": "Help SpA",
+                            "vencimiento": "2026-07-31", "gla_m2": pytest.approx(443.4),
+                            "rent_rate_uf_m2": pytest.approx(0.49)},)

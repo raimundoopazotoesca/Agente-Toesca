@@ -21,6 +21,7 @@ class DatasetDefinition:
     field_types: dict[str, str]
     measures: dict[str, dict[str, object]]
     status: str
+    dimension_coverage: dict[str, tuple[str, ...]]
     source_sql: str | None = None
     snapshot_semantics: str | None = None
 
@@ -42,6 +43,7 @@ class DatasetDefinition:
             "provenance_fields": list(self.provenance_fields),
             "field_types": self.field_types,
             "measures": self.measures,
+            "dimension_coverage": {field: list(assets) for field, assets in self.dimension_coverage.items()},
             "snapshot_semantics": self.snapshot_semantics,
             "status": self.status,
         }

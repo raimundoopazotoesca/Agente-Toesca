@@ -734,7 +734,7 @@ class AnalyticsDatasetQueryAction:
                 "dataset": {"type": "string", "enum": sorted(catalog.datasets)},
                 "filters": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {"field": {"type": "string"}, "op": {"type": "string", "enum": ["eq", "in", "lt", "lte", "gt", "gte", "between"]}, "value": {}, "value_end": {}}, "required": ["field", "op", "value", "value_end"]}},
                 "group_by": {"type": "array", "items": {"type": "string"}},
-                "measures": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": False, "properties": {"measure": {"type": "string"}, "aggregation": {"type": "string", "enum": ["sum", "count", "distinct_count", "avg"]}}, "required": ["measure", "aggregation"]}},
+                "measures": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": False, "properties": {"measure": {"type": "string"}, "aggregation": {"type": "string", "enum": ["sum", "count", "distinct_count", "avg", "ratio"]}}, "required": ["measure", "aggregation"]}},
                 "order_by": {"type": ["string", "null"]}, "descending": {"type": "boolean"}, "limit": {"type": ["integer", "null"], "minimum": 1}, "share_of_total": {"type": "boolean"},
                 "row_axis": {"type": ["string", "null"]}, "column_axis": {"type": ["string", "null"]},
             }, "required": ["dataset", "filters", "group_by", "measures", "order_by", "descending", "limit", "share_of_total", "row_axis", "column_axis"]})

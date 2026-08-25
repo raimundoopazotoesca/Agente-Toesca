@@ -20,7 +20,7 @@ class DatasetCatalogValidationError(ValueError):
 
 
 def _dataset(raw: Any) -> DatasetDefinition:
-    optional = {"field_types", "measures", "source_sql", "snapshot_semantics"}
+    optional = {"field_types", "measures", "source_sql", "snapshot_semantics", "dimension_coverage"}
     if not isinstance(raw, dict) or not _REQUIRED <= set(raw) or not set(raw) <= (_REQUIRED | optional):
         raise DatasetCatalogValidationError("malformed dataset definition")
     sequence_fields = ("dimensions", "fields", "semantic_fields", "provenance_fields")
@@ -58,16 +58,24 @@ def _dataset(raw: Any) -> DatasetDefinition:
     if not isinstance(measures, dict):
         raise DatasetCatalogValidationError("malformed dataset measures")
     for key, measure in measures.items():
-        if not isinstance(key, str) or not isinstance(measure, dict) or set(measure) != {"field", "unit", "allowed_aggregations"}:
+        allowed_keys = {"field", "unit", "allowed_aggregations", "sql_expression"}
+        if not isinstance(key, str) or not isinstance(measure, dict) or not {"field", "unit", "allowed_aggregations"} <= set(measure) or not set(measure) <= allowed_keys:
             raise DatasetCatalogValidationError("malformed dataset measure")
-        if measure["field"] not in raw["fields"] or not isinstance(measure["unit"], str) or not isinstance(measure["allowed_aggregations"], list) or not set(measure["allowed_aggregations"]) <= {"sum", "count", "distinct_count", "avg"}:
+        if measure["field"] not in raw["fields"] or not isinstance(measure["unit"], str) or not isinstance(measure["allowed_aggregations"], list) or not set(measure["allowed_aggregations"]) <= {"sum", "count", "distinct_count", "avg", "ratio"}:
             raise DatasetCatalogValidationError("invalid dataset measure contract")
+        if "sql_expression" in measure and (not isinstance(measure["sql_expression"], str) or ";" in measure["sql_expression"]):
+            raise DatasetCatalogValidationError("invalid governed measure expression")
     source_sql = raw.get("source_sql")
     if source_sql is not None and (not isinstance(source_sql, str) or not source_sql.lstrip().upper().startswith("SELECT") or ";" in source_sql):
         raise DatasetCatalogValidationError("invalid governed dataset source")
     snapshot_semantics = raw.get("snapshot_semantics")
     if snapshot_semantics is not None and not isinstance(snapshot_semantics, str):
         raise DatasetCatalogValidationError("invalid snapshot semantics")
+    dimension_coverage = raw.get("dimension_coverage", {})
+    if (not isinstance(dimension_coverage, dict) or not set(dimension_coverage) <= set(raw["fields"])
+            or any(not isinstance(assets, list) or not assets or not all(isinstance(asset, str) and asset for asset in assets)
+                   for assets in dimension_coverage.values())):
+        raise DatasetCatalogValidationError("invalid dimension coverage")
     if raw["status"] != "active" or raw["grain"] != "rent_roll_row":
         raise DatasetCatalogValidationError("unsupported dataset status or grain")
     return DatasetDefinition(
@@ -79,7 +87,8 @@ def _dataset(raw: Any) -> DatasetDefinition:
         field_descriptions=dict(field_descriptions), field_value_domains=normalized_domains,
         semantic_fields=tuple(raw["semantic_fields"]), provenance_fields=tuple(raw["provenance_fields"]),
         field_types=dict(field_types), measures={key: dict(value) for key, value in measures.items()},
-        status=raw["status"], source_sql=source_sql, snapshot_semantics=snapshot_semantics,
+        status=raw["status"], dimension_coverage={field: tuple(assets) for field, assets in dimension_coverage.items()},
+        source_sql=source_sql, snapshot_semantics=snapshot_semantics,
     )
 
 

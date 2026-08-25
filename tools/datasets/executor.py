@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import re
 
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.datasets.catalog import load_dataset_catalog
@@ -70,7 +71,20 @@ class GovernedDatasetExecutor:
             raise DatasetQueryError("at most four visible dimensions are supported")
         if query.column_axis and not query.row_axis:
             raise DatasetQueryError("column_axis requires row_axis")
+        used_fields = set(grouping) | {item.field for item in query.filters}
+        for field, supported_assets in definition.dimension_coverage.items():
+            if field not in used_fields:
+                continue
+            asset_filters = [item for item in query.filters if item.field == "activo_key" and item.op in {"eq", "in"}]
+            requested_assets = {str(asset_filters[0].value)} if asset_filters and asset_filters[0].op == "eq" else (
+                {str(value) for value in asset_filters[0].value} if asset_filters else set())
+            unsupported = requested_assets - set(supported_assets)
+            if unsupported:
+                raise DatasetQueryError(f"{field} is unsupported for asset: {', '.join(sorted(unsupported))}")
         where, params = ["is_current=1"], []
+        for field in set(grouping) | {item.field for item in query.filters}:
+            if field in definition.dimension_coverage:
+                where.append(f'"{field}" IS NOT NULL')
         operators = {"eq": "=", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}
         for item in query.filters:
             if item.field not in visible_fields:
@@ -89,8 +103,11 @@ class GovernedDatasetExecutor:
             if not spec or item.aggregation not in spec["allowed_aggregations"]:
                 raise DatasetQueryError("aggregation is not permitted by measure contract")
             field = str(spec["field"])
-            aggregate = {"sum": "SUM", "count": "COUNT", "distinct_count": "COUNT(DISTINCT", "avg": "AVG"}[item.aggregation]
-            expr = f'{aggregate}("{field}")' if item.aggregation != "distinct_count" else f'COUNT(DISTINCT "{field}")'
+            if "sql_expression" in spec:
+                expr = str(spec["sql_expression"])
+            else:
+                aggregate = {"sum": "SUM", "count": "COUNT", "distinct_count": "COUNT(DISTINCT", "avg": "AVG"}[item.aggregation]
+                expr = f'{aggregate}("{field}")' if item.aggregation != "distinct_count" else f'COUNT(DISTINCT "{field}")'
             expressions.append(f'{expr} AS "{item.measure}"')
         select_dimensions = [f'"{field}"' for field in grouping]
         source = f'({definition.source_sql})' if definition.source_sql else f'"{definition.object_name}"'
@@ -100,6 +117,7 @@ class GovernedDatasetExecutor:
             if query.order_by not in {m.measure for m in query.measures}: raise DatasetQueryError("order_by must name a selected measure")
             sql += f' ORDER BY "{query.order_by}" {"DESC" if query.descending else "ASC"}'
         with self._sandbox.connect() as conn:
+            conn.create_function("governed_jll_floor", 1, _jll_floor)
             eligible_count = conn.execute(f'SELECT COUNT(*) FROM {source} WHERE {" AND ".join(where)}', params).fetchone()[0]
             cursor = conn.execute(sql, params)
             columns = [column[0] for column in cursor.description]
@@ -128,5 +146,18 @@ class GovernedDatasetExecutor:
                     "axes": {"row": query.row_axis, "column": query.column_axis},
                     "measures": [item.__dict__ for item in query.measures], "order_by": query.order_by,
                     "descending": query.descending, "limit": query.limit, "share_of_total": query.share_of_total,
-                    "snapshot_semantics": definition.snapshot_semantics}
+                    "snapshot_semantics": definition.snapshot_semantics,
+                    "dimension_coverage": {field: list(assets) for field, assets in definition.dimension_coverage.items()}}
         return DatasetQueryResult(tuple(rows), {"status": "complete" if eligible_count else "none", "eligible_row_count": eligible_count, "observed_row_count": full_count, "full_universe_scanned": True, "output_intentionally_limited": query.limit is not None}, contract)
+
+
+_JLL_FLOOR = re.compile(r"^(\d+)")
+
+
+def _jll_floor(unidad: object) -> str | None:
+    """JLL Apo nomenclature: final two digits identify the unit within its floor."""
+    match = _JLL_FLOOR.match(str(unidad or "").strip())
+    if match is None:
+        return None
+    digits = match.group(1)
+    return digits[:-2] if len(digits) > 2 else digits

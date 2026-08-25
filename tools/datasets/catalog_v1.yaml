@@ -8,12 +8,13 @@ datasets:
     row_represents: Unidad o espacio individual reportado por la fuente del rent roll.
     description: Dataset gobernado de rent roll fila a fila por activo y período, con estado de ocupación, categoría de unidad, calidad de identidad y provenance de fuente normalizados.
     dimensions: [activo_key, periodo]
-    fields: [dataset_key, semantic_version, activo_key, periodo, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, tenant_type, vencimiento, expiry_year, is_current]
+    fields: [dataset_key, semantic_version, activo_key, periodo, floor, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, tenant_type, vencimiento, expiry_year, is_current]
     field_descriptions:
       dataset_key: Identidad del dataset gobernado.
       semantic_version: Versión del contrato semántico del dataset.
       activo_key: Identificador del activo al que corresponde la fila.
       periodo: Período mensual del rent roll.
+      floor: "Piso de oficinas: etiqueta fuente en Apo3001 o mapping JLL documentado en Apo4501/Apo4700; disponible sólo para esos activos."
       unidad: Identificador o etiqueta de la unidad o espacio reportado por la fuente.
       unit_identity_quality: Calidad de la identidad de unidad reportada por la fuente.
       arrendatario: Arrendatario o marca de vacancia reportada por la fuente.
@@ -38,6 +39,7 @@ datasets:
       semantic_version: text
       activo_key: text
       periodo: text
+      floor: text
       unidad: text
       unit_identity_quality: text
       arrendatario: text
@@ -55,11 +57,18 @@ datasets:
       unit_count: {field: unidad, unit: rows, allowed_aggregations: [count, distinct_count]}
       tenant_count: {field: arrendatario, unit: tenants, allowed_aggregations: [distinct_count]}
       rent_rate_uf_m2: {field: renta_uf, unit: UF/m2, allowed_aggregations: [avg]}
+      vacancy_pct: {field: m2, unit: '%', allowed_aggregations: [ratio], sql_expression: "SUM(CASE WHEN occupancy_status='vacant' THEN m2 ELSE 0 END) / NULLIF(SUM(m2), 0)"}
     status: active
+    dimension_coverage:
+      floor: [Apo3001, Apo4501, Apo4700]
     snapshot_semantics: current_rent_roll_snapshot
     source_sql: >-
       SELECT 'rent_roll' AS dataset_key, 'rent_roll_semantics_v1' AS semantic_version,
-        r.activo_key, r.periodo, r.unidad,
+        r.activo_key, r.periodo,
+        CASE WHEN r.activo_key='Apo3001' AND LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2')))='oficina' AND r.unidad LIKE 'Piso %' THEN substr(substr(r.unidad, 6), 1, instr(substr(r.unidad, 6) || ' ', ' ') - 1)
+             WHEN r.activo_key IN ('Apo4501', 'Apo4700') AND LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2')))='oficina' THEN governed_jll_floor(r.unidad)
+             ELSE NULL END AS floor,
+        r.unidad,
         CASE WHEN r.unidad LIKE '(sin detalle, fila %)' THEN 'synthetic_missing_source_identity' ELSE 'source_identity' END AS unit_identity_quality,
         r.arrendatario, r.m2, r.renta_uf,
         CASE WHEN LOWER(TRIM(r.arrendatario)) = 'vacante' THEN 'vacant' WHEN r.arrendatario IS NULL OR TRIM(r.arrendatario) = '' THEN 'unknown' WHEN LOWER(TRIM(r.arrendatario)) LIKE '%vacante%' THEN 'unknown' ELSE 'occupied' END AS occupancy_status,
