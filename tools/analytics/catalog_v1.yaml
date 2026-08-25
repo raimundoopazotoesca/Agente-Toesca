@@ -42,6 +42,44 @@ metrics:
     methodology: superficie_vacante_dividida_por_gla
     nature: ratio
     allowed_temporal_aggregations: []
+  - key: vacancia_fisica_pct_segmentada_activo
+    display_name: Vacancia física segmentada por activo
+    description: Vacancia física por tipo de espacio, calculada como suma de vacantes dividida por suma de GLA.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: asset
+    period_grain: month
+    source_kind: breakdown
+    access: &segmented_vacancy
+      kind: segmented_vacancy
+      view: v_vacancia_activo_tipo
+      entity_column: activo_key
+      asset_groups: {Apo: [[Apo4501, Apo4700], [Fondo Apoquindo]], PT: [[Torre A, Boulevard], [PT_consolidado]]}
+      source_labels: {office: [Oficinas], retail: [Locales Comerciales], storage: [Bodegas], parking: [Estacionamiento]}
+      measurement_units: {office: m2, retail: m2, storage: m2, parking: m2}
+    aggregation: non_additive
+    allowed_dimensions: [asset, fund, period, space_type]
+    status: active
+    related_metrics: [vacancia_fisica_pct_activo, vacancia_fisica_pct_segmentada_fondo]
+    methodology: physical_vacancy_by_canonical_space_type_v1
+    nature: ratio
+    allowed_temporal_aggregations: []
+  - key: vacancia_fisica_pct_segmentada_fondo
+    display_name: Vacancia física segmentada del fondo
+    description: Vacancia física del fondo por tipo de espacio, con precedencia de fuente canónica existente.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: fund
+    period_grain: month
+    source_kind: breakdown
+    access: *segmented_vacancy
+    aggregation: non_additive
+    allowed_dimensions: [fund, period, space_type]
+    status: active
+    related_metrics: [vacancia_pct_fondo, vacancia_fisica_pct_segmentada_activo]
+    methodology: physical_vacancy_by_canonical_space_type_v1
+    nature: ratio
+    allowed_temporal_aggregations: []
   - key: m2_vacantes
     display_name: Metros cuadrados vacantes
     description: Superficie vacante observada a nivel activo.

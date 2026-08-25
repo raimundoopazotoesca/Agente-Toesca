@@ -363,7 +363,7 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
     claims: list[AllowedClaim] = []
     facts_by_claim_id: dict[str, dict[str, Any]] = {}
     seen: set[str] = set()
-    keys = ("metric_key", "value", "unit", "entity_id", "period")
+    keys = ("metric_key", "value", "unit", "entity_id", "period", "space_type", "space_types", "measurement_unit")
     for item in source_claims:
         if not isinstance(item, dict):
             return ()

@@ -47,6 +47,7 @@ class SemanticQuery:
     group_by: str | None = None
     order_by: str | None = None
     limit: int | None = None
+    space_types: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,25 @@ class ViewMetricAccess(AccessStrategy):
         object.__setattr__(self, "kind", "view_metric")
         object.__setattr__(self, "view", view)
         object.__setattr__(self, "value_column", value_column)
+
+
+@dataclass(frozen=True)
+class SegmentedVacancyAccess(AccessStrategy):
+    """Physical vacancy segmented through the existing authoritative view."""
+    view: str
+    entity_column: str
+    asset_groups: dict
+    source_labels: dict[str, tuple[str, ...]]
+    measurement_units: dict[str, str]
+
+    def __init__(self, view: str, entity_column: str, asset_groups: dict,
+                 source_labels: dict[str, tuple[str, ...]], measurement_units: dict[str, str]):
+        object.__setattr__(self, "kind", "segmented_vacancy")
+        object.__setattr__(self, "view", view)
+        object.__setattr__(self, "entity_column", entity_column)
+        object.__setattr__(self, "asset_groups", {k: tuple(tuple(g) for g in v) for k, v in asset_groups.items()})
+        object.__setattr__(self, "source_labels", {k: tuple(v) for k, v in source_labels.items()})
+        object.__setattr__(self, "measurement_units", dict(measurement_units))
 
 
 @dataclass(frozen=True)

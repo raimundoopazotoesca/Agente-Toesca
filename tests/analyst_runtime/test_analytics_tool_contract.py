@@ -27,9 +27,9 @@ def test_catalog_derives_capability_metric_keys_from_semantic_metadata():
     metrics = capability_metric_keys(load_metric_catalog())
 
     assert metrics == {
-        "fund_lookup": ("ingresos_mensual_fondo", "ltv_fondo", "noi_mensual_fondo", "vacancia_pct_fondo"),
-        "asset_lookup": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo"),
-        "asset_breakdown": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo"),
+        "fund_lookup": ("ingresos_mensual_fondo", "ltv_fondo", "noi_mensual_fondo", "vacancia_fisica_pct_segmentada_fondo", "vacancia_pct_fondo"),
+        "asset_lookup": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo", "vacancia_fisica_pct_segmentada_activo"),
+        "asset_breakdown": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo", "vacancia_fisica_pct_segmentada_activo"),
     }
 
 
@@ -38,9 +38,9 @@ def test_lookup_fund_schema_makes_m1_grouping_unrepresentable():
 
     assert spec.name == "analytics_lookup_fund"
     assert spec.parameters["additionalProperties"] is False
-    assert spec.parameters["properties"]["metric"]["enum"] == ["ingresos_mensual_fondo", "ltv_fondo", "noi_mensual_fondo", "vacancia_pct_fondo"]
-    assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end", "aggregation"}
-    assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end"}
+    assert spec.parameters["properties"]["metric"]["enum"] == ["ingresos_mensual_fondo", "ltv_fondo", "noi_mensual_fondo", "vacancia_fisica_pct_segmentada_fondo", "vacancia_pct_fondo"]
+    assert set(spec.parameters["properties"]) == {"metric", "fund", "period", "period_end", "aggregation", "space_types"}
+    assert set(spec.parameters["required"]) == {"metric", "fund", "period", "period_end", "space_types"}
     assert spec.parameters["properties"]["period_end"]["type"] == ["string", "null"]
 
 
@@ -120,7 +120,7 @@ def test_lookup_asset_schema_has_no_breakdown_controls_and_maps_asset_scope():
         "metric": "vacancia_fisica_pct_activo", "assets": ["Apo3001"], "period": "2026-06",
     }))
 
-    assert set(spec.parameters["properties"]) == {"metric", "assets", "period", "period_end", "aggregation"}
+    assert set(spec.parameters["properties"]) == {"metric", "assets", "period", "period_end", "aggregation", "space_types"}
     assert spec.parameters["properties"]["assets"]["type"] == "array"
     assert json.loads(result.content)["rows"][0]["value"] == pytest.approx(0.3620316883)
     assert result.trace["scope"] == {"asset": "Apo3001"}
@@ -130,9 +130,9 @@ def test_breakdown_schema_cannot_select_fund_metric_and_fixes_grouping_internall
     action = AnalyticsBreakdownAssetAction(DB)
     spec = action.tool_spec()
 
-    assert set(spec.parameters["properties"]) == {"metric", "fund", "assets", "period", "period_end", "aggregation", "order_by", "limit"}
+    assert set(spec.parameters["properties"]) == {"metric", "fund", "assets", "period", "period_end", "aggregation", "space_types", "order_by", "limit"}
     assert "vacancia_pct_fondo" not in spec.parameters["properties"]["metric"]["enum"]
-    assert set(spec.parameters["required"]) == {"metric", "fund", "assets", "period", "period_end", "order_by", "limit"}
+    assert set(spec.parameters["required"]) == {"metric", "fund", "assets", "period", "period_end", "space_types", "order_by", "limit"}
     assert spec.parameters["properties"]["order_by"]["enum"] == ["value_desc", "value_asc", None]
     invalid = action.execute(ToolRequest("bad", action.name, {
         "metric": "vacancia_pct_fondo", "fund": "TRI", "period": "2026-06",

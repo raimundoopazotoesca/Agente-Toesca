@@ -7,7 +7,7 @@ import yaml
 
 from tools.analytics.models import (
     AccessStrategy, Aggregation, DerivedKpiAccess, FallbackAccess, MetricCatalog, MetricDefinition,
-    MetricNature, RollupRatioViewAccess, ViewMetricAccess,
+    MetricNature, RollupRatioViewAccess, SegmentedVacancyAccess, ViewMetricAccess,
 )
 
 
@@ -47,6 +47,15 @@ def _access(raw: Any) -> AccessStrategy:
         return DerivedKpiAccess(entity_type=str(raw["entity_type"]), kpi=str(raw["kpi"]))
     if kind == "view_metric" and set(raw) == {"kind", "view", "value_column"}:
         return ViewMetricAccess(view=str(raw["view"]), value_column=str(raw["value_column"]))
+    if kind == "segmented_vacancy" and set(raw) == {"kind", "view", "entity_column", "asset_groups", "source_labels", "measurement_units"}:
+        labels, units, groups = raw["source_labels"], raw["measurement_units"], raw["asset_groups"]
+        if (not isinstance(labels, dict) or not labels or not isinstance(units, dict)
+                or set(labels) != set(units) or not all(isinstance(v, list) and v for v in labels.values())
+                or not isinstance(groups, dict)):
+            raise _invalid("malformed segmented vacancy access")
+        return SegmentedVacancyAccess(str(raw["view"]), str(raw["entity_column"]), groups,
+                                      {str(k): tuple(map(str, v)) for k, v in labels.items()},
+                                      {str(k): str(v) for k, v in units.items()})
     if kind == "rollup_ratio_view" and set(raw) <= {
         "kind", "view", "entity_column", "asset_groups", "numerator_column", "denominator_column",
         "exclude_column", "exclude_value",

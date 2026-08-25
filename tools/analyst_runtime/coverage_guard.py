@@ -123,11 +123,12 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                 return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
             matches = [candidate for candidate in item.facts
                        if candidate.get("entity_id") == claim.get("entity_id")
-                       and candidate.get("period") == claim.get("period")]
+                       and candidate.get("period") == claim.get("period")
+                       and candidate.get("space_type") == claim.get("space_type")]
             if len(matches) > 1:
                 return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
             fact = matches[0] if matches else None
-        if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period")):
+        if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period", "space_type", "space_types", "measurement_unit")):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         bound_canonical[claim["claim_id"]] = fact
         if item.evidence_class == "governed_dataset":

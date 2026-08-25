@@ -28,7 +28,7 @@ def validate_and_render(envelope: dict[str, Any], evidence: list[ToolEvidence]) 
             return _conflict(evidence, "invalid_claim")
         item = by_id.get(claim.get("evidence_id"))
         fact = item.facts[0] if item and len(item.facts) == 1 else None
-        if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period")):
+        if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period", "space_type", "space_types", "measurement_unit")):
             return _conflict(evidence, "binding_mismatch")
         bound[claim["claim_id"]] = fact
     rendered: list[str] = []

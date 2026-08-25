@@ -346,6 +346,8 @@ class _AnalyticsCapabilityAction:
             "period": {"type": "string", "description": "Initial month in YYYY-MM format."},
             "period_end": {"type": ["string", "null"], "description": "Optional inclusive final month in YYYY-MM format; use null for a point lookup."},
             "aggregation": {"type": ["string", "null"], "enum": ["sum", "avg", "last", None], "description": "Optional temporal aggregation; it is accepted only when the metric contract permits it."},
+            "space_types": {"type": ["array", "null"], "items": {"type": "string"}, "minItems": 1,
+                            "description": "Optional canonical physical space types: office, retail, storage, parking. Use null for metrics without a segment filter."},
         }
         if self.scope_field == "fund":
             properties["fund"] = {"type": "string", "description": "Canonical fund key scoping this operation."}
@@ -414,7 +416,7 @@ class _AnalyticsCapabilityAction:
                                        "aggregation": request.arguments.get("aggregation")},
                     provenance=row.provenance,
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
-                            "entity_id": row.entity_id, "period": row.period},),
+                            "entity_id": row.entity_id, "period": row.period, **(row.dimensions or {})},),
                 )
             elif result.rows:
                 # A multi-row *scalar* result is a time series over one entity,
@@ -441,7 +443,7 @@ class _AnalyticsCapabilityAction:
                     })},
                     coverage=coverage,
                     facts=tuple({"metric_key": r.metric_key, "value": r.value, "unit": r.unit,
-                                 "entity_id": r.entity_id, "period": r.period} for r in result.rows),
+                                 "entity_id": r.entity_id, "period": r.period, **(r.dimensions or {})} for r in result.rows),
                 )
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
@@ -468,7 +470,7 @@ class _AnalyticsCapabilityAction:
         return capability_metric_keys(self._catalog())[self.capability]
 
     def _allowed_fields(self) -> frozenset[str]:
-        fields = {"metric", self.scope_field, "period", "period_end", "aggregation"}
+        fields = {"metric", self.scope_field, "period", "period_end", "aggregation", "space_types"}
         if self.subset:
             fields.add("assets")
         if self.breakdown:
@@ -485,6 +487,13 @@ class _AnalyticsCapabilityAction:
         period = _required_string(arguments, "period")
         period_end = _optional_string(arguments, "period_end")
         aggregation = _optional_string(arguments, "aggregation")
+        raw_space_types = arguments.get("space_types")
+        if raw_space_types is None:
+            space_types = ()
+        elif isinstance(raw_space_types, list) and raw_space_types and all(isinstance(item, str) and item for item in raw_space_types):
+            space_types = tuple(raw_space_types)
+        else:
+            raise ValueError("space_types must be null or a non-empty list of canonical space types")
         universe_period = period_end or period
         if self.scope_field == "fund":
             fund = _required_string(arguments, "fund")
@@ -502,7 +511,7 @@ class _AnalyticsCapabilityAction:
         group_by = "asset" if (self.breakdown or (self.scope_field == "assets" and len(assets) > 1)) else None
         return AnalyticsQueryRequest(
             metric=metric, funds=funds, assets=assets, period=period, period_end=period_end,
-            group_by=group_by, order_by=order_by, limit=limit, aggregation=aggregation,
+            group_by=group_by, order_by=order_by, limit=limit, aggregation=aggregation, space_types=space_types,
         ), scope
 
 

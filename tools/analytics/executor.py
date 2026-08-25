@@ -7,7 +7,7 @@ from typing import Literal
 
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.models import (
-    Aggregation, DerivedKpiAccess, EntityReference, EntityType, FallbackAccess, RollupRatioViewAccess,
+    Aggregation, DerivedKpiAccess, EntityReference, EntityType, FallbackAccess, RollupRatioViewAccess, SegmentedVacancyAccess,
     SemanticQuery, ViewMetricAccess,
 )
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
@@ -33,6 +33,7 @@ class AnalyticsQueryRequest:
     order_by: Literal["value_desc", "value_asc"] | None = None
     limit: int | None = None
     aggregation: str | None = None
+    space_types: tuple[str, ...] = ()
 
     def to_semantic_query(self) -> SemanticQuery:
         entities = tuple(
@@ -41,7 +42,7 @@ class AnalyticsQueryRequest:
         )
         aggregation = Aggregation(self.aggregation) if self.aggregation else None
         return SemanticQuery(self.metric, entities, self.period, self.period_end, aggregation,
-                             group_by=self.group_by, order_by=self.order_by, limit=self.limit)
+                             group_by=self.group_by, order_by=self.order_by, limit=self.limit, space_types=self.space_types)
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ class AnalyticsRow:
     unit: str
     source_kind: str
     provenance: dict[str, object]
+    dimensions: dict[str, object] = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,9 @@ class AnalyticsExecutor:
             raise SemanticQueryError("grouping must match metric entity grain")
         if request.order_by not in (None, "value_desc", "value_asc") or (request.limit is not None and request.limit < 1):
             raise SemanticQueryError("invalid order or limit")
+        if isinstance(metric.access, SegmentedVacancyAccess):
+            rows = self._segmented_rows(metric, request)
+            return AnalyticsResult(self._catalog.version, "scalar", tuple(rows))
         if isinstance(metric.access, FallbackAccess):
             records, entity_type = self._fallback_records(metric.access, request)
         else:
@@ -99,7 +104,7 @@ class AnalyticsExecutor:
             with self._sandbox.connect() as connection:
                 records = connection.execute(sql, params).fetchall()
         rows = tuple(AnalyticsRow(metric.key, record[0], entity_type, record[1], record[2], metric.unit,
-                                  metric.source_kind, {"formula": record[3], "ingest_run_id": record[4]}) for record in records)
+                                  metric.source_kind, {"formula": record[3], "ingest_run_id": record[4]}, {}) for record in records)
         if query.temporal_aggregation is not None:
             rows = self._aggregate(rows, query)
         return AnalyticsResult(self._catalog.version, "breakdown" if request.group_by else "scalar", rows)
@@ -136,6 +141,49 @@ class AnalyticsExecutor:
         if isinstance(access, ViewMetricAccess):
             return self._view_sql(access, request)
         raise SemanticQueryError("unsupported access strategy")
+
+    @staticmethod
+    def _validate_units(units: dict[str, str]) -> str:
+        values = set(units.values())
+        if len(values) != 1:
+            raise SemanticQueryError("incompatible physical units cannot be aggregated", code="incompatible_units")
+        return next(iter(values))
+
+    def _segmented_rows(self, metric, request: AnalyticsQueryRequest) -> list[AnalyticsRow]:
+        access: SegmentedVacancyAccess = metric.access
+        requested = request.space_types or tuple(access.source_labels)
+        if not requested or len(set(requested)) != len(requested) or any(item not in access.source_labels for item in requested):
+            raise SemanticQueryError("unknown or duplicate space type")
+        unit = self._validate_units({item: access.measurement_units[item] for item in requested})
+        if metric.entity_grain == "fund":
+            if len(request.funds) != 1 or request.assets:
+                raise SemanticQueryError("fund scope is required")
+            candidates = access.asset_groups.get(request.funds[0], ())
+            entity, entity_type = request.funds[0], "fund"
+        else:
+            if len(request.assets) != 1 or request.funds:
+                raise SemanticQueryError("asset scope is required")
+            candidates = (request.assets,)
+            entity, entity_type = request.assets[0], "asset"
+        labels = tuple(label for kind in requested for label in access.source_labels[kind])
+        for group in candidates:
+            placeholders, label_marks = ",".join("?" for _ in group), ",".join("?" for _ in labels)
+            sql = (f"SELECT SUM(m2_vacantes), SUM(m2_gla), COUNT(*) FROM {access.view} "
+                   f"WHERE {access.entity_column} IN ({placeholders}) AND periodo=? AND tipo_unidad IN ({label_marks}) "
+                   "AND m2_vacantes IS NOT NULL AND m2_gla IS NOT NULL")
+            with self._sandbox.connect() as connection:
+                numerator, denominator, count = connection.execute(sql, (*group, request.period, *labels)).fetchone()
+            if count:
+                value = float(numerator) / float(denominator) if denominator else None
+                return [AnalyticsRow(metric.key, entity, entity_type, request.period, value, metric.unit, metric.source_kind,
+                    {"formula": "sum(m2_vacantes)/sum(m2_gla)", "numerator": numerator, "denominator": denominator,
+                     "source_rows": count, "source_group": list(group)},
+                    {"space_types": tuple(requested), "space_type": requested[0] if len(requested) == 1 else "combined",
+                     "measurement_unit": unit, "coverage": "complete"})]
+        return [AnalyticsRow(metric.key, entity, entity_type, request.period, None, metric.unit, metric.source_kind,
+            {"formula": "sum(m2_vacantes)/sum(m2_gla)", "numerator": None, "denominator": None, "source_rows": 0},
+            {"space_types": tuple(requested), "space_type": requested[0] if len(requested) == 1 else "combined",
+             "measurement_unit": unit, "coverage": "none"})]
 
     def _fallback_records(self, access: FallbackAccess, request: AnalyticsQueryRequest):
         """Primary source wins for any (entity, period) it covers. The
