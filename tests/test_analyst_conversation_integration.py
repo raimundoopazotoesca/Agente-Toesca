@@ -44,6 +44,7 @@ def service(tmp_path):
 
 @pytest.fixture
 def client(monkeypatch, service):
+    monkeypatch.setitem(ingesta_server.app.config, "TESTING", True)
     monkeypatch.setitem(ingesta_server.app.config, "ANALYST_CONVERSATION_SERVICE_FACTORY", lambda: service)
     ingesta_server.app.extensions.pop("analyst_conversation_service", None)
     with ingesta_server.app.test_client() as test_client:
