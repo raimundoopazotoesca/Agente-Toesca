@@ -25,9 +25,11 @@ class FakeSession:
 class FakeFactory:
     responses: list[AnalystSessionResult | Exception]
     histories: list[list] = field(default_factory=list)
+    contexts: list[dict | None] = field(default_factory=list)
 
     def create(self, conversation, visible_messages, runtime_context=None):
         self.histories.append(list(visible_messages))
+        self.contexts.append(runtime_context)
         return FakeSession(list(self.responses))
 
 
@@ -43,8 +45,10 @@ def service(tmp_path):
 @pytest.fixture
 def client(monkeypatch, service):
     monkeypatch.setitem(ingesta_server.app.config, "ANALYST_CONVERSATION_SERVICE_FACTORY", lambda: service)
+    ingesta_server.app.extensions.pop("analyst_conversation_service", None)
     with ingesta_server.app.test_client() as test_client:
         yield test_client
+    ingesta_server.app.extensions.pop("analyst_conversation_service", None)
 
 
 @pytest.fixture
@@ -107,6 +111,22 @@ def test_restart_recreates_service_from_visible_history_without_raw_reasoning(cl
         ("user", "Primera"), ("assistant", "Respuesta")
     ]
     assert "raw_reasoning" not in str(response.get_json())
+
+
+def test_http_restart_hydrates_durable_claims_only_for_authorized_conversation(client, headers, service):
+    memory = {"evidence": [{"evidence_id": "e", "evidence_class": "canonical_metric", "source": {}, "scope": {"fund": "PT"},
+        "semantic_contract": {}, "provenance": {"source": "fixture"}, "coverage": {"status": "complete"},
+        "facts": [{"metric_key": "noi", "value": 172868.0, "unit": "UF", "entity_id": "PT", "period": "2025"}]}],
+        "envelope": {"canonical_metric_claims": [{"claim_id": "noi-2025", "evidence_id": "e", "metric_key": "noi", "value": 172868.0, "unit": "UF", "entity_id": "PT", "period": "2025"}], "derived_metric_claims": []}}
+    service.session_factory = FakeFactory([AnalystSessionResult("NOI", durable_memory=memory)])
+    conversation_id = client.post("/api/analyst/conversations", headers=headers, json={}).get_json()["id"]
+    assert client.post(f"/api/analyst/conversations/{conversation_id}/messages", headers=headers, json={"text": "NOI 2025"}).status_code == 201
+    restarted_factory = FakeFactory([AnalystSessionResult("Comparación")])
+    ingesta_server.app.config["ANALYST_CONVERSATION_SERVICE_FACTORY"] = lambda: ConversationService(service.store, restarted_factory)
+    assert client.post(f"/api/analyst/conversations/{conversation_id}/messages", headers=headers, json={"text": "¿y 2024?"}).status_code == 201
+    durable = restarted_factory.contexts[0]["durable_analytical_context"]
+    assert durable["claims"][0]["claim_id"] == "noi-2025"
+    assert durable["evidence"][0]["facts"][0]["value"] == 172868.0
 
 
 def test_default_lazy_factory_reuses_one_service_instance(monkeypatch):
