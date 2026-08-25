@@ -196,7 +196,7 @@ def test_first_user_message_sets_deterministic_auto_title(workspace):
     service = ConversationService(workspace, FakeFactory([_result()]))
     conversation = service.create_conversation()
     service.send_message(conversation.id, "¿Cómo ha evolucionado la vacancia de Parque Titanium?")
-    assert workspace.get_conversation(conversation.id).title == "¿Cómo ha evolucionado la vacancia de Parque…"
+    assert workspace.get_conversation(conversation.id).title == "Vacancia Parque Titanium"
 
 
 def test_manual_title_is_preserved(workspace):
