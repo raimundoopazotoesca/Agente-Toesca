@@ -4,10 +4,11 @@ import json
 import sqlite3
 from pathlib import Path
 
-from tools.analyst_runtime.actions import ActionRegistry, RunSqlAction, SchemaSearchAction
+from tools.analyst_runtime.actions import ActionRegistry, AnalyticsDatasetQueryAction, RunSqlAction, SchemaSearchAction
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
+from tools.datasets.catalog import load_dataset_catalog
 from tools.schema_discovery import SQLiteSchemaIntrospector
 
 
@@ -101,8 +102,8 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
                 ModelResponse("", [ToolRequest("schema", "schema_search", {
                     "query": "Apoquindo 3001 espacios pisos vacantes junio 2026", "limit": 10,
                 })]),
-                ModelResponse("", [ToolRequest("sql", "run_sql", {
-                    "query": "SELECT unidad, m2 FROM v_rent_roll_semantic WHERE activo_key = 'Apo3001' AND periodo = '2026-06' AND is_current = 1 AND occupancy_status = 'vacant' ORDER BY source_row",
+                ModelResponse("", [ToolRequest("dataset", "analytics_query_dataset", {
+                    "dataset": "rent_roll", "filters": [{"field": "activo_key", "op": "eq", "value": "Apo3001", "value_end": None}, {"field": "periodo", "op": "eq", "value": "2026-06", "value_end": None}, {"field": "occupancy_status", "op": "eq", "value": "vacant", "value_end": None}], "group_by": ["unidad"], "measures": [{"measure": "gla_m2", "aggregation": "sum"}], "order_by": "gla_m2", "descending": True, "limit": None, "share_of_total": False, "row_axis": None, "column_axis": None,
                 })]),
                 ModelResponse("respuesta"),
             ])
@@ -111,18 +112,18 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
             return next(self.responses)
 
     registry = ActionRegistry([
-        RunSqlAction(LiveReadOnlySandbox(DB)),
+        AnalyticsDatasetQueryAction(DB),
         SchemaSearchAction(DB),
     ])
     result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
 
     assert [(call.name, call.ok) for call in result.turn.tool_calls] == [
-        ("schema_search", True), ("run_sql", True),
+        ("schema_search", True), ("analytics_query_dataset", True),
     ]
     # The real Stage 3.17 wording must expose the governed row-level dataset.
     candidate_names = result.turn.tool_calls[0].trace["candidate_names"]
-    assert "v_rent_roll_semantic" in candidate_names
-    assert result.turn.tool_calls[0].trace["candidate_scores"]["v_rent_roll_semantic"] > 0
+    assert "raw_rent_roll_line" in candidate_names
+    assert result.turn.tool_calls[0].trace["candidate_scores"]["raw_rent_roll_line"] > 0
     schema_result = next(
         tool_result
         for round_ in result.round_trajectory
@@ -130,12 +131,10 @@ def test_scripted_loop_can_discover_schema_then_run_focal_sql_without_provider()
         if tool_result.call_id == "schema"
     )
     schema_payload = json.loads(schema_result.content)
-    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "v_rent_roll_semantic")
+    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "raw_rent_roll_line")
     assert semantic["dataset"]["dataset_key"] == "rent_roll"
     assert semantic["dataset"]["semantic_version"] == "rent_roll_semantics_v1"
-    assert {"occupancy_status", "unit_category", "is_current"} <= {
-        column["name"] for column in semantic["columns"]
-    }
+    assert {"occupancy_status", "unit_category", "is_current"} <= set(semantic["dataset"]["fields"])
     assert result.turn.usage.calls == 3
 
 
@@ -145,8 +144,8 @@ def test_schema_search_ranks_governed_row_level_dataset_from_generic_space_metad
     )
 
     names = [obj.name for obj in result.objects]
-    assert "v_rent_roll_semantic" in names
-    assert result.candidate_scores["v_rent_roll_semantic"] > 0
+    assert "raw_rent_roll_line" in names
+    assert result.candidate_scores["raw_rent_roll_line"] > 0
 
 
 def test_schema_search_retrieval_set_keeps_aggregate_breakdown_row_and_raw_candidates():
@@ -154,7 +153,7 @@ def test_schema_search_retrieval_set_keeps_aggregate_breakdown_row_and_raw_candi
     cases = {
         "vacancia por activo mensual": "v_vacancia_activo",
         "vacancia por tipo de unidad de un activo": "v_vacancia_activo_tipo",
-        "unidades espacios vacantes activo periodo": "v_rent_roll_semantic",
+        "unidades espacios vacantes activo periodo": "raw_rent_roll_line",
         "rent roll archivo fuente fila provenance": "raw_rent_roll_line",
         "movimientos de contrato por activo": "raw_movimiento_contrato",
     }

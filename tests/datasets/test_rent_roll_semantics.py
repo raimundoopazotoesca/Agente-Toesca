@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from tools.datasets.catalog import CATALOG_PATH, DatasetCatalogValidationError, load_dataset_catalog
-from tools.analyst_runtime.actions import ActionRegistry, ResolveEntityAction, RunSqlAction, SchemaSearchAction
+from tools.analyst_runtime.actions import ActionRegistry, AnalyticsDatasetQueryAction, ResolveEntityAction, RunSqlAction, SchemaSearchAction
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
@@ -125,11 +125,11 @@ def test_dataset_catalog_declares_the_row_level_rent_roll_contract_with_closed_v
     assert catalog.version == 1
     assert dataset.dataset_key == "rent_roll"
     assert dataset.semantic_version == "rent_roll_semantics_v1"
-    assert dataset.object_name == "v_rent_roll_semantic"
+    assert dataset.object_name == "raw_rent_roll_line"
     assert dataset.grain == "rent_roll_row"
     assert set(dataset.semantic_fields) == {
         "occupancy_status", "unit_category", "unit_category_source",
-        "unit_identity_quality", "is_current",
+        "unit_identity_quality", "tenant_type", "vencimiento", "expiry_year", "is_current",
     }
     assert {"source_file", "source_sheet", "source_row", "file_hash", "ingest_run_id"} <= set(dataset.provenance_fields)
     assert dataset.field_value_domains == {
@@ -270,10 +270,10 @@ def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(
         "query": "rent roll vacancy asset period", "limit": 5,
     }))
     payload = json.loads(result.content)
-    semantic = next(obj for obj in payload["objects"] if obj["name"] == "v_rent_roll_semantic")
+    semantic = next(obj for obj in payload["objects"] if obj["name"] == "raw_rent_roll_line")
 
     assert result.ok is True
-    assert payload["objects"][0]["name"] == "v_rent_roll_semantic"
+    assert payload["objects"][0]["name"] == "raw_rent_roll_line"
     assert {
         "dataset_key": "rent_roll", "semantic_version": "rent_roll_semantics_v1",
         "grain": "rent_roll_row", "description": semantic["description"],
@@ -288,7 +288,7 @@ def test_schema_search_discovers_the_governed_dataset_with_declarative_contract(
     assert semantic["dataset"]["field_value_domains"]["occupancy_status"] == {
         "type": "enum", "values": ["vacant", "occupied", "unknown"],
     }
-    assert {"occupancy_status", "unit_category", "is_current"} <= {column["name"] for column in semantic["columns"]}
+    assert {"occupancy_status", "unit_category", "is_current"} <= set(semantic["dataset"]["fields"])
 
 
 def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp_path: Path, monkeypatch):
@@ -301,20 +301,20 @@ def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp
         def __init__(self):
             self.responses = iter([
                 ModelResponse("", [ToolRequest("schema", "schema_search", {"query": "rent roll vacancy asset period", "limit": 5})]),
-                ModelResponse("", [ToolRequest("sql", "run_sql", {"query": "SELECT unidad, m2, unit_category FROM v_rent_roll_semantic WHERE activo_key='Apo3001' AND periodo='2026-06' AND is_current=1 AND occupancy_status='vacant' ORDER BY source_row"})]),
+                ModelResponse("", [ToolRequest("dataset", "analytics_query_dataset", {"dataset": "rent_roll", "filters": [{"field": "activo_key", "op": "eq", "value": "Apo3001", "value_end": None}, {"field": "periodo", "op": "eq", "value": "2026-06", "value_end": None}, {"field": "occupancy_status", "op": "eq", "value": "vacant", "value_end": None}], "group_by": ["unidad", "unit_category"], "measures": [{"measure": "gla_m2", "aggregation": "sum"}], "order_by": "gla_m2", "descending": True, "limit": None, "share_of_total": False, "row_axis": None, "column_axis": None})]),
                 ModelResponse("respuesta"),
             ])
 
         def complete(self, _request):
             return next(self.responses)
 
-    registry = ActionRegistry([SchemaSearchAction(db_path), RunSqlAction(LiveReadOnlySandbox(db_path))])
+    registry = ActionRegistry([SchemaSearchAction(db_path), AnalyticsDatasetQueryAction(db_path)])
     result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
     rows = json.loads(result.round_trajectory[-2].tool_results[0].content)["rows"]
 
-    assert [(call.name, call.ok) for call in result.turn.tool_calls] == [("schema_search", True), ("run_sql", True)]
+    assert [(call.name, call.ok) for call in result.turn.tool_calls] == [("schema_search", True), ("analytics_query_dataset", True)]
     assert len(rows) == 10
-    assert sum(row[1] for row in rows) == pytest.approx(1656.6)
+    assert sum(row["gla_m2"] for row in rows) == pytest.approx(1656.6)
 
 
 def test_scripted_m3_uses_visible_canonical_value_domain(tmp_path: Path, monkeypatch):
@@ -327,21 +327,21 @@ def test_scripted_m3_uses_visible_canonical_value_domain(tmp_path: Path, monkeyp
             self.responses = iter([
                 ModelResponse("", [ToolRequest("resolve", "resolve_entity", {"query": "Apoquindo 3001", "entity_types": ["asset"], "fund": None})]),
                 ModelResponse("", [ToolRequest("schema", "schema_search", {"query": "Apoquindo 3001 espacios pisos vacantes junio 2026", "limit": 10})]),
-                ModelResponse("", [ToolRequest("sql", "run_sql", {"query": "SELECT unidad, m2 FROM v_rent_roll_semantic WHERE activo_key='Apo3001' AND periodo='2026-06' AND occupancy_status='vacant' AND is_current=1 ORDER BY source_row"})]),
+                ModelResponse("", [ToolRequest("dataset", "analytics_query_dataset", {"dataset": "rent_roll", "filters": [{"field": "activo_key", "op": "eq", "value": "Apo3001", "value_end": None}, {"field": "periodo", "op": "eq", "value": "2026-06", "value_end": None}, {"field": "occupancy_status", "op": "eq", "value": "vacant", "value_end": None}], "group_by": ["unidad"], "measures": [{"measure": "gla_m2", "aggregation": "sum"}], "order_by": "gla_m2", "descending": True, "limit": None, "share_of_total": False, "row_axis": None, "column_axis": None})]),
                 ModelResponse("respuesta"),
             ])
 
         def complete(self, _request):
             return next(self.responses)
 
-    registry = ActionRegistry([ResolveEntityAction(db_path), SchemaSearchAction(db_path), RunSqlAction(LiveReadOnlySandbox(db_path))])
+    registry = ActionRegistry([ResolveEntityAction(db_path), SchemaSearchAction(db_path), AnalyticsDatasetQueryAction(db_path)])
     result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
     schema_payload = json.loads(result.round_trajectory[-3].tool_results[0].content)
-    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "v_rent_roll_semantic")
+    semantic = next(obj for obj in schema_payload["objects"] if obj["name"] == "raw_rent_roll_line")
     rows = json.loads(result.round_trajectory[-2].tool_results[0].content)["rows"]
 
-    assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "schema_search", "run_sql"]
-    assert "occupancy_status='vacant'" in result.turn.tool_calls[-1].args["query"]
+    assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "schema_search", "analytics_query_dataset"]
+    assert result.turn.tool_calls[-1].args["filters"][-1]["value"] == "vacant"
     assert semantic["dataset"]["field_value_domains"]["occupancy_status"]["values"] == ["vacant", "occupied", "unknown"]
     assert len(rows) == 10
-    assert sum(row[1] for row in rows) == pytest.approx(1656.6)
+    assert sum(row["gla_m2"] for row in rows) == pytest.approx(1656.6)
