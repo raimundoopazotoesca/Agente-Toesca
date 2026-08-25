@@ -56,7 +56,7 @@ class FakeConversationService:
         self.raise_on_create: Exception | None = None
         self.raise_on_send: Exception | None = None
 
-    def create_conversation(self, *, title=None, context=None):
+    def create_conversation(self, *, title=None, context=None, user_id=None):
         if self.raise_on_create:
             raise self.raise_on_create
         self.conversation = FakeConversation(title=title or "Nuevo chat", context=context)
@@ -114,6 +114,16 @@ class FakeConversationService:
             raise MessageNotFoundError(message_id)
         return FakeFeedback(rating=rating, note=note)
 
+    # Ownership-aware production API used by the HTTP adapter.
+    def list_conversations_for_user(self, user_id, include_archived=False): return self.list_conversations(include_archived=include_archived)
+    def get_conversation_for_user(self, conversation_id, user_id): return self.get_conversation(conversation_id)
+    def list_messages_for_user(self, conversation_id, user_id): return self.list_messages(conversation_id)
+    def rename_conversation_for_user(self, conversation_id, user_id, title): return self.rename_conversation(conversation_id, title)
+    def archive_conversation_for_user(self, conversation_id, user_id): return self.archive_conversation(conversation_id)
+    def unarchive_conversation_for_user(self, conversation_id, user_id): return self.conversation
+    def send_message_for_user(self, conversation_id, user_id, text): return self.send_message(conversation_id, text)
+    def set_feedback_for_user(self, message_id, user_id, rating, note=None): return self.set_feedback(message_id, rating, note)
+
 
 @pytest.fixture
 def service():
@@ -134,7 +144,7 @@ def client(service):
 
 @pytest.fixture
 def headers():
-    return {"X-Ingesta-Token": ingesta_server.API_TOKEN}
+    return {"X-Analyst-Test-User-Id": "test-user"}
 
 
 def test_analyst_api_requires_token(client):
@@ -325,7 +335,7 @@ def test_legacy_chat_remains_registered_and_uses_db_chat(client, headers, monkey
         return {"answer_md": "legacy", "sql": None, "columns": [], "rows": []}
 
     monkeypatch.setattr(ingesta_server.db_chat, "answer", fake_answer)
-    response = client.post("/api/chat", headers=headers, json={"question": "Pregunta", "history": []})
+    response = client.post("/api/chat", headers={"X-Ingesta-Token": ingesta_server.API_TOKEN}, json={"question": "Pregunta", "history": []})
     assert response.status_code == 200
     assert response.get_json()["answer_md"] == "legacy"
     assert called["question"] == "Pregunta"

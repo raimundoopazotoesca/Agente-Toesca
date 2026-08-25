@@ -35,6 +35,7 @@ class FakeFactory:
 def service(tmp_path):
     store = WorkspaceStore(tmp_path / "workspace.db")
     store.initialize()
+    ingesta_server.app.config["ANALYST_TEST_USER_ID"] = store.create_user("test", "Test", "test-password")
     factory = FakeFactory([AnalystSessionResult("Respuesta"), AnalystSessionResult("Segunda")])
     return ConversationService(store, factory)
 
@@ -48,7 +49,7 @@ def client(monkeypatch, service):
 
 @pytest.fixture
 def headers():
-    return {"X-Ingesta-Token": ingesta_server.API_TOKEN}
+    return {"X-Analyst-Test-User-Id": "test-user"}
 
 
 def test_http_uses_real_service_and_persists_visible_transcript(client, headers, service):

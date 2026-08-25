@@ -29,7 +29,7 @@ import re
 import secrets
 import sys
 import zipfile
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, redirect, request, send_file, send_from_directory
@@ -163,8 +163,7 @@ def _create_analyst_conversation_service():
     from tools.analyst_workspace.conversation_service import ConversationService
     from tools.analyst_workspace.store import WorkspaceStore
 
-    workspace = WorkspaceStore(ROOT / "memory" / "analyst_workspace.db")
-    workspace.initialize()
+    workspace = _workspace_store()
     session_factory = OpenAIResponsesAnalystSessionFactory(ROOT / "memory" / "agente_toesca_v2.db")
     service = ConversationService(workspace, session_factory)
     app.extensions["analyst_conversation_service"] = service
@@ -174,6 +173,19 @@ def _create_analyst_conversation_service():
 # Kept as a factory (rather than a service instance) so importing this module
 # neither creates a workspace DB nor requires an OpenAI credential.
 app.config.setdefault("ANALYST_CONVERSATION_SERVICE_FACTORY", _create_analyst_conversation_service)
+
+
+def _workspace_store():
+    from tools.analyst_workspace.store import WorkspaceStore
+    factory = app.config.get("ANALYST_WORKSPACE_STORE_FACTORY")
+    store = factory() if factory else WorkspaceStore(Path(os.environ.get("ANALYST_WORKSPACE_DB", ROOT / "memory" / "analyst_workspace.db")))
+    store.initialize()
+    return store
+
+
+ANALYST_SESSION_COOKIE = "toesca_analyst_session"
+app.config.setdefault("ANALYST_SESSION_DAYS", 7)
+app.config.setdefault("ANALYST_COOKIE_SECURE", os.environ.get("ANALYST_COOKIE_SECURE", "false").lower() == "true")
 
 # Tope de subida: los .xlsx de proveedores son de pocos MB; el RR JLL es el mayor.
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
@@ -221,6 +233,8 @@ def _token_ok() -> bool:
 
 @app.before_request
 def _require_token():
+    if request.path.startswith("/api/analyst/") or request.path in {"/api/auth/login", "/api/auth/logout", "/api/auth/me"}:
+        return None
     if not request.path.startswith("/api/"):
         return None
     if request.method == "OPTIONS":  # preflight: la validación va en la real
@@ -234,6 +248,29 @@ def _require_token():
                 "se inyecte automáticamente."
             ),
         }), 401
+    return None
+
+
+def _principal():
+    # Test-only authenticated helper; production always uses the opaque cookie.
+    if app.config.get("TESTING") and request.headers.get("X-Analyst-Test-User-Id"):
+        return {"id": app.config.get("ANALYST_TEST_USER_ID", request.headers["X-Analyst-Test-User-Id"]), "username": "test", "display_name": "Test", "role": "user"}
+    token = request.cookies.get(ANALYST_SESSION_COOKIE)
+    if not token:
+        return None
+    return _workspace_store().get_session_user(token)
+
+
+@app.before_request
+def _require_analyst_user():
+    if not request.path.startswith("/api/analyst/"):
+        return None
+    if request.method == "OPTIONS":
+        return None
+    principal = _principal()
+    if principal is None:
+        return jsonify({"error": "authentication_required"}), 401
+    request.analyst_user = principal
     return None
 
 
@@ -355,6 +392,8 @@ def serve_chat_bubble():
 
 @app.get("/analyst")
 def serve_analyst_workspace():
+    if _principal() is None:
+        return redirect("/login")
     return _serve_html_con_token(WEB_DIR, "analyst.html")
 
 
@@ -362,7 +401,52 @@ def serve_analyst_workspace():
 def serve_analyst_workspace_chat(conversation_id: str):
     # conversation_id se resuelve en el cliente (fetch a /api/analyst/...);
     # el servidor solo sirve el mismo shell para cualquier id, igual que una SPA.
+    if _principal() is None:
+        return redirect("/login")
     return _serve_html_con_token(WEB_DIR, "analyst.html")
+
+
+@app.get("/login")
+def serve_login():
+    if _principal() is not None:
+        return redirect("/analyst")
+    return send_from_directory(WEB_DIR, "login.html")
+
+
+@app.post("/api/auth/login")
+def analyst_login():
+    body = request.get_json(silent=True) or {}
+    username, password = body.get("username"), body.get("password")
+    if not isinstance(username, str) or not isinstance(password, str):
+        return jsonify({"error": "invalid_credentials"}), 401
+    from tools.analyst_workspace.store import AuthenticationError
+    try:
+        user = _workspace_store().authenticate(username, password)
+    except AuthenticationError:
+        return jsonify({"error": "invalid_credentials"}), 401
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(UTC) + timedelta(days=int(app.config["ANALYST_SESSION_DAYS"]))
+    _workspace_store().create_session(user["id"], token, expires.isoformat().replace("+00:00", "Z"))
+    response = jsonify({"username": user["username"], "display_name": user["display_name"]})
+    response.set_cookie(ANALYST_SESSION_COOKIE, token, httponly=True, samesite="Lax", secure=bool(app.config["ANALYST_COOKIE_SECURE"]), path="/", expires=expires)
+    return response
+
+
+@app.post("/api/auth/logout")
+def analyst_logout():
+    token = request.cookies.get(ANALYST_SESSION_COOKIE)
+    if token:
+        _workspace_store().revoke_session(token)
+    response = jsonify({"ok": True})
+    response.delete_cookie(ANALYST_SESSION_COOKIE, path="/")
+    return response
+
+
+@app.get("/api/auth/me")
+def analyst_me():
+    user = _principal()
+    if user is None: return jsonify({"error": "authentication_required"}), 401
+    return jsonify({"username": user["username"], "display_name": user["display_name"], "role": user["role"]})
 
 
 @app.get("/analyst_workspace.js")
@@ -457,11 +541,15 @@ def _analyst_adapter() -> analyst_api.ConversationApiAdapter:
     return analyst_api.get_adapter(app.config.get("ANALYST_CONVERSATION_SERVICE_FACTORY"))
 
 
+def _analyst_user_id() -> str:
+    return request.analyst_user["id"]
+
+
 @app.get("/api/analyst/conversations")
 def analyst_list_conversations():
     try:
         include_archived = request.args.get("include_archived", "false").lower() == "true"
-        return jsonify({"conversations": _analyst_adapter().list_conversations(include_archived=include_archived)})
+        return jsonify({"conversations": _analyst_adapter().list_conversations(_analyst_user_id(), include_archived=include_archived)})
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 
@@ -475,7 +563,7 @@ def analyst_create_conversation():
             raise ValueError("title must be a non-blank string")
         if context is not None and not isinstance(context, dict):
             raise ValueError("context must be an object")
-        return jsonify(_analyst_adapter().create_conversation(title=title.strip() if title else None, context=context)), 201
+        return jsonify(_analyst_adapter().create_conversation(_analyst_user_id(), title=title.strip() if title else None, context=context)), 201
     except ValueError:
         return _analyst_error("validation_error", 400)
     except analyst_api.AnalystValidationError:
@@ -487,7 +575,7 @@ def analyst_create_conversation():
 @app.get("/api/analyst/conversations/<conversation_id>")
 def analyst_get_conversation(conversation_id: str):
     try:
-        return jsonify(_analyst_adapter().get_conversation(conversation_id))
+        return jsonify(_analyst_adapter().get_conversation(conversation_id, _analyst_user_id()))
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystValidationError:
@@ -499,7 +587,7 @@ def analyst_get_conversation(conversation_id: str):
 @app.get("/api/analyst/conversations/<conversation_id>/messages")
 def analyst_list_messages(conversation_id: str):
     try:
-        return jsonify({"messages": _analyst_adapter().list_messages(conversation_id)})
+        return jsonify({"messages": _analyst_adapter().list_messages(conversation_id, _analyst_user_id())})
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystValidationError:
@@ -517,7 +605,7 @@ def analyst_update_conversation(conversation_id: str):
             raise ValueError("title must be a non-blank string")
         if archived is not None and not isinstance(archived, bool):
             raise ValueError("archived must be a boolean")
-        return jsonify(_analyst_adapter().update_conversation(conversation_id, title=title.strip() if title else None, archived=archived))
+        return jsonify(_analyst_adapter().update_conversation(conversation_id, _analyst_user_id(), title=title.strip() if title else None, archived=archived))
     except ValueError:
         return _analyst_error("validation_error", 400)
     except analyst_api.AnalystValidationError:
@@ -536,7 +624,7 @@ def analyst_send_message(conversation_id: str):
         text = _analyst_body().get("text")
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-blank string")
-        return jsonify(_analyst_adapter().send_message(conversation_id, text.strip())), 201
+        return jsonify(_analyst_adapter().send_message(conversation_id, _analyst_user_id(), text.strip())), 201
     except ValueError as exc:
         return _analyst_error("validation_error", 400, details=_analyst_request_validation_details(exc))
     except analyst_api.AnalystValidationError:
@@ -560,7 +648,7 @@ def analyst_set_feedback(message_id: str):
             raise ValueError("rating must be 'up' or 'down'")
         if note is not None and not isinstance(note, str):
             raise ValueError("note must be a string")
-        return jsonify(_analyst_adapter().set_feedback(message_id, rating, note))
+        return jsonify(_analyst_adapter().set_feedback(message_id, _analyst_user_id(), rating, note))
     except ValueError:
         return _analyst_error("validation_error", 400)
     except analyst_api.AnalystValidationError:

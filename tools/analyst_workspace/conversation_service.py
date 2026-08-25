@@ -24,25 +24,41 @@ class ConversationService:
         self.session_factory = session_factory
         self._sessions: dict[str, AnalystSession] = {}
 
-    def create_conversation(self, context: dict[str, Any] | None = None, title: str | None = None) -> Conversation:
-        return self.store.create_conversation(context=context, title=title)
+    def create_conversation(self, context: dict[str, Any] | None = None, title: str | None = None, user_id: str | None = None) -> Conversation:
+        return self.store.create_conversation(context=context, title=title, owner_user_id=user_id)
 
     def get_conversation(self, conversation_id: str) -> Conversation:
         return self.store.get_conversation(conversation_id)
 
+    def get_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
+        return self.store.get_conversation_for_user(conversation_id, user_id)
+
     def list_conversations(self, include_archived: bool = False) -> list[Conversation]:
         return self.store.list_conversations(include_archived=include_archived)
 
+    def list_conversations_for_user(self, user_id: str, include_archived: bool = False) -> list[Conversation]:
+        return self.store.list_conversations_for_user(user_id, include_archived)
+
     def rename_conversation(self, conversation_id: str, title: str) -> Conversation:
         return self.store.rename_conversation(conversation_id, title)
+
+    def rename_conversation_for_user(self, conversation_id: str, user_id: str, title: str) -> Conversation:
+        return self.store.rename_conversation_for_user(conversation_id, user_id, title)
 
     def archive_conversation(self, conversation_id: str) -> Conversation:
         conversation = self.store.archive_conversation(conversation_id)
         self._sessions.pop(conversation_id, None)
         return conversation
 
+    def archive_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
+        self.store.get_conversation_for_user(conversation_id, user_id)
+        return self.archive_conversation(conversation_id)
+
     def unarchive_conversation(self, conversation_id: str) -> Conversation:
         return self.store.unarchive_conversation(conversation_id)
+
+    def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
+        return self.store.unarchive_conversation_for_user(conversation_id, user_id)
 
     def send_message(self, conversation_id: str, text: str) -> Message:
         if not isinstance(text, str) or not text.strip():
@@ -68,11 +84,21 @@ class ConversationService:
             conversation_id, "assistant", result.text, metadata=runtime_result_to_metadata(result, latency_ms)
         )
 
+    def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Message:
+        self.store.get_conversation_for_user(conversation_id, user_id)
+        return self.send_message(conversation_id, text)
+
     def list_messages(self, conversation_id: str) -> list[Message]:
         return self.store.list_messages(conversation_id)
 
+    def list_messages_for_user(self, conversation_id: str, user_id: str) -> list[Message]:
+        return self.store.list_messages_for_user(conversation_id, user_id)
+
     def set_feedback(self, message_id: str, rating: str, note: str | None = None) -> Feedback:
         return self.store.set_feedback(message_id, rating, note)
+
+    def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Feedback:
+        return self.store.set_feedback_for_user(message_id, user_id, rating, note)
 
     def get_feedback(self, message_id: str) -> Feedback | None:
         return self.store.get_feedback(message_id)

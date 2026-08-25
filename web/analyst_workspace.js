@@ -20,6 +20,7 @@
     });
     const data = await response.json();
     if (!response.ok) {
+      if (response.status === 401) location.assign("/login");
       const error = new Error(data.error || "request_failed");
       error.status = response.status;
       throw error;
@@ -53,6 +54,10 @@
   const composerSend = document.getElementById("composer-send");
   const errorBanner = document.getElementById("error-banner");
   const scrollArea = document.getElementById("scroll-area");
+  document.getElementById("logout-btn").addEventListener("click", async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    location.assign("/login");
+  });
 
   let conversations = [];
   let activeId = null;

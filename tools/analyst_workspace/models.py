@@ -13,6 +13,7 @@ class Conversation:
     updated_at: str
     context: dict[str, Any] | None
     archived_at: str | None
+    owner_user_id: str | None = None
 
 
 @dataclass(frozen=True)

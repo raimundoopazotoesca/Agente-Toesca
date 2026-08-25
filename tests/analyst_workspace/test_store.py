@@ -27,8 +27,8 @@ def test_initialize_creates_versioned_schema(tmp_path):
     conn = sqlite3.connect(path)
     try:
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert {"conversation", "message", "feedback"} <= tables
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert {"conversation", "message", "feedback", "user", "user_session"} <= tables
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
     finally:
         conn.close()
 
