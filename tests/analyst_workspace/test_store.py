@@ -28,7 +28,8 @@ def test_initialize_creates_versioned_schema(tmp_path):
     try:
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"conversation", "message", "feedback", "user", "user_session"} <= tables
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert {"analytical_turn", "fact_claim", "evidence_snapshot", "claim_dependency", "analytical_turn_evidence"} <= tables
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
     finally:
         conn.close()
 
@@ -169,6 +170,40 @@ def test_conversations_are_isolated(store):
     store.append_message(first.id, "user", "Solo primero")
     assert len(store.list_messages(first.id)) == 1
     assert store.list_messages(second.id) == []
+
+
+def test_durable_analytical_claims_round_trip_and_are_owner_scoped(store):
+    first = store.create_conversation()
+    other_user = store.create_user("other", "Other", "password1")
+    second = store.create_conversation(owner_user_id=other_user)
+    user = store.append_message(first.id, "user", "Pregunta")
+    assistant = store.append_message(first.id, "assistant", "Respuesta")
+    store.persist_analytical_turn(first.id, user.id, assistant.id, {
+        "evidence": [{"evidence_id": "e1", "evidence_class": "canonical_metric", "source": {"tool_name": "x"},
+                      "scope": {"fund": "PT"}, "semantic_contract": {}, "provenance": {"source": "fixture"},
+                      "coverage": {"status": "complete"},
+                      "facts": [{"metric_key": "noi", "value": 10.0, "unit": "UF", "entity_id": "PT", "period": "2025"}]}],
+        "envelope": {"canonical_metric_claims": [{"claim_id": "c1", "evidence_id": "e1", "metric_key": "noi", "value": 10.0, "unit": "UF", "entity_id": "PT", "period": "2025"}],
+                     "derived_metric_claims": []},
+    })
+    durable = store.load_durable_context_for_user(first.id, first.owner_user_id)
+    assert durable["claims"][0]["claim_id"] == "c1"
+    assert durable["evidence"][0]["coverage"]["status"] == "complete"
+    with pytest.raises(ConversationNotFoundError):
+        store.load_durable_context_for_user(first.id, second.owner_user_id)
+
+
+def test_durable_none_coverage_survives_without_a_numeric_claim(store):
+    conversation = store.create_conversation()
+    user = store.append_message(conversation.id, "user", "Seguros")
+    assistant = store.append_message(conversation.id, "assistant", "Sin evidencia")
+    store.persist_analytical_turn(conversation.id, user.id, assistant.id, {"evidence": [{
+        "evidence_id": "none", "evidence_class": "governed_dataset", "source": {}, "scope": {"fund": "Apo"},
+        "semantic_contract": {}, "provenance": {}, "coverage": {"status": "none"}, "facts": []}],
+        "envelope": {"canonical_metric_claims": [], "derived_metric_claims": []}})
+    durable = store.load_durable_context_for_user(conversation.id, conversation.owner_user_id)
+    assert durable["claims"] == []
+    assert durable["evidence"][0]["coverage"]["status"] == "none"
 
 
 @pytest.mark.parametrize("field", ["context", "metadata"])

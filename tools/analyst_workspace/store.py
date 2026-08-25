@@ -19,7 +19,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from tools.analyst_workspace.models import Conversation, Feedback, Message
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 DEFAULT_TITLE = "Nuevo chat"
 _ROLES = {"user", "assistant"}
 _RATINGS = {"up", "down"}
@@ -132,6 +132,48 @@ class WorkspaceStore:
                     BEGIN SELECT RAISE(ABORT, 'conversation owner_user_id is required'); END;
                     """)
                     conn.execute("PRAGMA user_version = 3")
+                    version = 3
+                if version < 4:
+                    self._backup_before_durable_context_migration()
+                    conn.executescript("""
+                    CREATE TABLE analytical_turn (
+                        id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversation(id),
+                        user_message_id TEXT NOT NULL REFERENCES message(id),
+                        assistant_message_id TEXT NOT NULL UNIQUE REFERENCES message(id), created_at TEXT NOT NULL
+                    );
+                    CREATE TABLE evidence_snapshot (
+                        id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL UNIQUE, evidence_class TEXT NOT NULL,
+                        scope_json TEXT NOT NULL, provenance_json TEXT NOT NULL, coverage_json TEXT,
+                        semantic_contract_json TEXT NOT NULL, source_json TEXT NOT NULL, facts_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    CREATE TABLE fact_claim (
+                        id TEXT PRIMARY KEY, analytical_turn_id TEXT NOT NULL REFERENCES analytical_turn(id),
+                        kind TEXT NOT NULL CHECK(kind IN ('fact','derived_fact')),
+                        claim_key TEXT NOT NULL, metric_key TEXT, entity_id TEXT, period TEXT,
+                        value REAL, unit TEXT, evidence_snapshot_id TEXT REFERENCES evidence_snapshot(id),
+                        source_fingerprint TEXT, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
+                    );
+                    CREATE TABLE claim_dependency (
+                        derived_claim_id TEXT NOT NULL REFERENCES fact_claim(id),
+                        operand_claim_id TEXT NOT NULL REFERENCES fact_claim(id), ordinal INTEGER NOT NULL,
+                        PRIMARY KEY (derived_claim_id, ordinal)
+                    );
+                    CREATE INDEX idx_analytical_turn_conversation_created ON analytical_turn(conversation_id, created_at DESC);
+                    CREATE INDEX idx_fact_claim_turn ON fact_claim(analytical_turn_id);
+                    """)
+                    conn.execute("PRAGMA user_version = 4")
+                    version = 4
+                if version < 5:
+                    conn.executescript("""
+                    CREATE TABLE analytical_turn_evidence (
+                        analytical_turn_id TEXT NOT NULL REFERENCES analytical_turn(id),
+                        evidence_snapshot_id TEXT NOT NULL REFERENCES evidence_snapshot(id),
+                        PRIMARY KEY (analytical_turn_id, evidence_snapshot_id)
+                    );
+                    CREATE INDEX idx_turn_evidence_turn ON analytical_turn_evidence(analytical_turn_id);
+                    """)
+                    conn.execute("PRAGMA user_version = 5")
         finally:
             conn.close()
 
@@ -315,6 +357,90 @@ class WorkspaceStore:
             conn.close()
         return message
 
+    def persist_analytical_turn(self, conversation_id: str, user_message_id: str, assistant_message_id: str,
+                                memory: dict[str, Any]) -> None:
+        """Persist validated structured facts, never prose or provider payloads."""
+        if not isinstance(memory, dict):
+            raise ValidationError("analytical memory must be a dict")
+        evidence = memory.get("evidence", [])
+        envelope = memory.get("envelope", {})
+        if not isinstance(evidence, list) or not isinstance(envelope, dict):
+            raise ValidationError("analytical memory is invalid")
+        conn = self._connect()
+        try:
+            with conn:
+                self._require_conversation(conn, conversation_id)
+                if conn.execute("SELECT 1 FROM analytical_turn WHERE assistant_message_id=?", (assistant_message_id,)).fetchone():
+                    return
+                now, turn_id = _utc_now(), str(uuid4())
+                conn.execute("INSERT INTO analytical_turn VALUES (?, ?, ?, ?, ?)",
+                             (turn_id, conversation_id, user_message_id, assistant_message_id, now))
+                evidence_ids: dict[str, str] = {}
+                for item in evidence:
+                    if not isinstance(item, dict) or not isinstance(item.get("evidence_id"), str):
+                        continue
+                    compact = {key: item.get(key) for key in ("evidence_class", "source", "scope", "semantic_contract", "provenance", "coverage", "facts")}
+                    fingerprint = hashlib.sha256(json.dumps(compact, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+                    row = conn.execute("SELECT id FROM evidence_snapshot WHERE fingerprint=?", (fingerprint,)).fetchone()
+                    snapshot_id = row["id"] if row else str(uuid4())
+                    if row is None:
+                        conn.execute("INSERT INTO evidence_snapshot VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+                            snapshot_id, fingerprint, str(item.get("evidence_class", "unknown")),
+                            _serialize_object(item.get("scope") or {}, "scope"), _serialize_object(item.get("provenance") or {}, "provenance"),
+                            _serialize_object(item.get("coverage"), "coverage"), _serialize_object(item.get("semantic_contract") or {}, "semantic_contract"),
+                            _serialize_object(item.get("source") or {}, "source"), json.dumps(item.get("facts") or [], ensure_ascii=False, separators=(",", ":")), now))
+                    evidence_ids[item["evidence_id"]] = snapshot_id
+                    conn.execute("INSERT OR IGNORE INTO analytical_turn_evidence VALUES (?, ?)", (turn_id, snapshot_id))
+                claim_ids: dict[str, str] = {}
+                for claim in envelope.get("canonical_metric_claims", []):
+                    if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str): continue
+                    claim_id = str(uuid4()); claim_ids[claim["claim_id"]] = claim_id
+                    snapshot_id = evidence_ids.get(claim.get("evidence_id"))
+                    source = conn.execute("SELECT fingerprint FROM evidence_snapshot WHERE id=?", (snapshot_id,)).fetchone() if snapshot_id else None
+                    conn.execute("INSERT INTO fact_claim VALUES (?, ?, 'fact', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (claim_id, turn_id, claim["claim_id"], claim.get("metric_key"), claim.get("entity_id"), claim.get("period"), claim.get("value"), claim.get("unit"), snapshot_id, source["fingerprint"] if source else None, _serialize_object(claim, "claim"), now))
+                for claim in envelope.get("derived_metric_claims", []):
+                    if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str): continue
+                    claim_id = str(uuid4()); claim_ids[claim["claim_id"]] = claim_id
+                    conn.execute("INSERT INTO fact_claim VALUES (?, ?, 'derived_fact', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)",
+                        (claim_id, turn_id, claim["claim_id"], _serialize_object(claim, "claim"), now))
+                    for ordinal, operand in enumerate((claim.get("lhs_claim_id"), claim.get("rhs_claim_id"))):
+                        if operand in claim_ids: conn.execute("INSERT INTO claim_dependency VALUES (?, ?, ?)", (claim_id, claim_ids[operand], ordinal))
+        finally:
+            conn.close()
+
+    def load_durable_context_for_user(self, conversation_id: str, user_id: str, limit: int = 24) -> dict[str, Any]:
+        self._get_conversation_scoped(conversation_id, user_id)
+        conn = self._connect()
+        try:
+            rows = conn.execute("""SELECT fc.*, es.evidence_class, es.source_json, es.scope_json, es.semantic_contract_json,
+                es.provenance_json, es.coverage_json, es.facts_json FROM fact_claim fc
+                JOIN analytical_turn at ON at.id=fc.analytical_turn_id LEFT JOIN evidence_snapshot es ON es.id=fc.evidence_snapshot_id
+                WHERE at.conversation_id=? ORDER BY at.created_at DESC, fc.created_at DESC LIMIT ?""", (conversation_id, limit)).fetchall()
+            evidence_rows = conn.execute("""SELECT DISTINCT es.* FROM analytical_turn at
+                JOIN analytical_turn_evidence ate ON ate.analytical_turn_id=at.id JOIN evidence_snapshot es ON es.id=ate.evidence_snapshot_id
+                WHERE at.conversation_id=? ORDER BY at.created_at DESC LIMIT ?""", (conversation_id, limit)).fetchall()
+        finally:
+            conn.close()
+        evidence_by_id, claims, derived_claims = {}, [], []
+        for row in reversed(rows):
+            payload = _deserialize_object(row["payload_json"]) or {}
+            payload["claim_id"] = row["claim_key"]
+            if row["evidence_snapshot_id"]:
+                payload["evidence_id"] = row["evidence_snapshot_id"]
+            (derived_claims if row["kind"] == "derived_fact" else claims).append(payload)
+            if row["evidence_snapshot_id"] and row["evidence_snapshot_id"] not in evidence_by_id:
+                evidence_by_id[row["evidence_snapshot_id"]] = {"evidence_id": row["evidence_snapshot_id"], "evidence_class": row["evidence_class"],
+                    "source": _deserialize_object(row["source_json"]) or {}, "scope": _deserialize_object(row["scope_json"]) or {},
+                    "semantic_contract": _deserialize_object(row["semantic_contract_json"]) or {}, "provenance": _deserialize_object(row["provenance_json"]) or {},
+                    "coverage": _deserialize_object(row["coverage_json"]), "facts": json.loads(row["facts_json"])}
+        for row in evidence_rows:
+            evidence_by_id.setdefault(row["id"], {"evidence_id": row["id"], "evidence_class": row["evidence_class"],
+                "source": _deserialize_object(row["source_json"]) or {}, "scope": _deserialize_object(row["scope_json"]) or {},
+                "semantic_contract": _deserialize_object(row["semantic_contract_json"]) or {}, "provenance": _deserialize_object(row["provenance_json"]) or {},
+                "coverage": _deserialize_object(row["coverage_json"]), "facts": json.loads(row["facts_json"])})
+        return {"claims": claims, "derived_claims": derived_claims, "evidence": list(evidence_by_id.values())}
+
     def list_messages(self, conversation_id: str) -> list[Message]:
         conn = self._connect()
         try:
@@ -381,6 +507,11 @@ class WorkspaceStore:
 
     def _backup_before_migration(self) -> None:
         backup = self.db_path.with_suffix(self.db_path.suffix + ".pre_identity_v1.bak")
+        if self.db_path.exists() and not backup.exists():
+            shutil.copy2(self.db_path, backup)
+
+    def _backup_before_durable_context_migration(self) -> None:
+        backup = self.db_path.with_suffix(self.db_path.suffix + ".pre_durable_context_v1.bak")
         if self.db_path.exists() and not backup.exists():
             shutil.copy2(self.db_path, backup)
 

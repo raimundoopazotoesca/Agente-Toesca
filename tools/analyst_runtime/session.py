@@ -131,6 +131,7 @@ class AnalystSessionResult:
     original_answer_hash: str | None = None
     presented_answer_hash: str | None = None
     termination_reason: str | None = None
+    durable_memory: dict[str, Any] | None = None
 
 
 class AnalystSession(Protocol):
@@ -209,19 +210,21 @@ class OpenAIResponsesTransport:
 class OpenAIResponsesAnalystSession:
     """Keeps the provider's opaque replay trajectory only in process memory."""
 
-    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None, db_path: Path | None = None):
+    def __init__(self, loop: AnalystLoop, history: list[TranscriptItem] | None = None, presenter: FinalPresenter | None = None, db_path: Path | None = None, durable_evidence: list[ToolEvidence] | None = None):
         self._loop = loop
         self._history: list[TranscriptItem] = list(history or [])
         self._presenter = presenter
         self._db_path = db_path
+        self._durable_evidence = list(durable_evidence or [])
 
     def ask(self, text: str) -> AnalystSessionResult:
         investigation = self._loop.investigate(text, history=self._history)
-        evidence = [result.evidence for item in investigation.round_trajectory for result in item.tool_results
+        evidence = self._durable_evidence + [result.evidence for item in investigation.round_trajectory for result in item.tool_results
                     if result.evidence is not None]
         canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
         governed = [item for item in evidence if item.evidence_class == "governed_dataset"]
         validation = None
+        no_evidence = None
         if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             result = self._loop._legacy_finalize(investigation)
         elif not _has_account_coverage_none(investigation):
@@ -303,6 +306,17 @@ class OpenAIResponsesAnalystSession:
         # CoverageValidation.tables docstring).
         tables = validation.tables if has_tables else ()
         final_text = presentation.content + ("\n\n" + "\n\n".join(tables) if tables else "")
+        durable_memory = None
+        envelope = result.turn.raw.get("structured_output") if isinstance(result.turn.raw, dict) else None
+        if validation is not None and validation.valid and isinstance(envelope, dict):
+            durable_memory = {"evidence": [_evidence_to_memory(item) for item in evidence], "envelope": envelope}
+        elif no_evidence is not None:
+            durable_memory = {"evidence": [{"evidence_id": "none:" + _answer_hash(json.dumps(no_evidence, sort_keys=True)),
+                "evidence_class": "governed_dataset", "source": {"tool_name": "analytics_account_query"},
+                "scope": {key: no_evidence.get(key) for key in ("entity", "entity_type", "period", "concept_id") if no_evidence.get(key) is not None},
+                "semantic_contract": {"metric_key": no_evidence.get("concept_id")}, "provenance": no_evidence.get("lineage") or {},
+                "coverage": no_evidence.get("coverage") or {"status": "none"}, "facts": []}],
+                "envelope": {"canonical_metric_claims": [], "derived_metric_claims": []}}
         return AnalystSessionResult(
             text=final_text,
             usage=turn.usage,
@@ -316,6 +330,7 @@ class OpenAIResponsesAnalystSession:
             original_answer_hash=_answer_hash(turn.text),
             presented_answer_hash=_answer_hash(final_text),
             termination_reason=termination_reason,
+            durable_memory=durable_memory,
         )
 
     def _present(self, draft: str, user_message: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult:
@@ -540,9 +555,9 @@ class OpenAIResponsesAnalystSessionFactory:
         self._presenter_factory = presenter_factory
 
     def create(self, conversation: Any, visible_messages: list[Any], runtime_context: dict[str, Any] | None = None) -> AnalystSession:
-        # Visible history is sufficient for restart continuity. Opaque provider
-        # replay data is absent after a restart by design and never persisted.
-        del conversation, runtime_context
+        # Visible prose is supplemented by a bounded, structured claim/evidence
+        # context. Opaque provider replay data remains intentionally absent.
+        del conversation
         sandbox = LiveReadOnlySandbox(self.knowledge_db_path)
         action = RunSqlAction(sandbox=sandbox)
         registry = ActionRegistry([
@@ -558,10 +573,18 @@ class OpenAIResponsesAnalystSessionFactory:
         client = self._client_factory()
         transport = OpenAIResponsesTransport(client, self.model, registry.tool_specs())
         history = [TranscriptItem(role=message.role, text=message.content) for message in visible_messages]
+        durable = (runtime_context or {}).get("durable_analytical_context", {})
+        durable_evidence = [_memory_to_evidence(item) for item in durable.get("evidence", []) if isinstance(item, dict)]
+        claims = durable.get("claims", [])
+        if claims:
+            history.append(TranscriptItem(role="assistant", text=(
+                "Contexto analítico durable validado (usa estas claims sólo mediante el contrato estructurado; "
+                "no copies cifras a prose). Si el usuario pide actual/latest/refresh, consulta evidencia gobernada nueva: " +
+                json.dumps({"canonical_metric_claims": claims, "derived_metric_claims": durable.get("derived_claims", [])}, ensure_ascii=False))))
         presenter = self._presenter_factory(client, self.model) if self._presenter_factory else None
         return OpenAIResponsesAnalystSession(
             AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
-            db_path=self.knowledge_db_path,
+            db_path=self.knowledge_db_path, durable_evidence=durable_evidence,
         )
 
 
@@ -571,6 +594,21 @@ def _default_openai_client() -> Any:
     from openai import OpenAI
 
     return OpenAI(max_retries=0)
+
+
+def _evidence_to_memory(item: ToolEvidence) -> dict[str, Any]:
+    """Serialize only validated factual evidence; never provider/tool transcripts."""
+    return {"evidence_id": item.evidence_id, "evidence_class": item.evidence_class,
+            "source": deepcopy(item.source), "scope": deepcopy(item.scope),
+            "semantic_contract": deepcopy(item.semantic_contract), "provenance": deepcopy(item.provenance),
+            "coverage": deepcopy(item.coverage), "facts": [deepcopy(fact) for fact in item.facts]}
+
+
+def _memory_to_evidence(item: dict[str, Any]) -> ToolEvidence:
+    return ToolEvidence(str(item["evidence_id"]), str(item.get("evidence_class", "unknown")),
+                        deepcopy(item.get("source") or {}), deepcopy(item.get("scope") or {}),
+                        deepcopy(item.get("semantic_contract") or {}), deepcopy(item.get("provenance") or {}),
+                        deepcopy(item.get("coverage")), tuple(deepcopy(item.get("facts") or [])))
 
 
 def _item_dict(item: Any) -> dict[str, Any]:

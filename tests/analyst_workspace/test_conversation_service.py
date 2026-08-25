@@ -101,6 +101,21 @@ def test_new_service_rebuilds_session_from_visible_history_after_restart(workspa
     ]
 
 
+def test_restart_hydrates_structured_durable_context(workspace):
+    memory = {"evidence": [{"evidence_id": "e", "evidence_class": "canonical_metric", "source": {}, "scope": {},
+        "semantic_contract": {}, "provenance": {"source": "fixture"}, "coverage": {"status": "complete"},
+        "facts": [{"metric_key": "noi", "value": 10.0, "unit": "UF", "entity_id": "PT", "period": "2025"}]}],
+        "envelope": {"canonical_metric_claims": [{"claim_id": "noi-2025", "evidence_id": "e", "metric_key": "noi", "value": 10.0, "unit": "UF", "entity_id": "PT", "period": "2025"}], "derived_metric_claims": []}}
+    original = ConversationService(workspace, FakeFactory([_result("Respuesta previa", durable_memory=memory)]))
+    conversation = original.create_conversation()
+    original.send_message(conversation.id, "Pregunta previa")
+    restarted_factory = FakeFactory([_result("Respuesta nueva")])
+    ConversationService(workspace, restarted_factory).send_message(conversation.id, "Pregunta nueva")
+    durable = restarted_factory.creations[0][2]["durable_analytical_context"]
+    assert durable["claims"][0]["claim_id"] == "noi-2025"
+    assert durable["evidence"][0]["facts"][0]["value"] == 10.0
+
+
 def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(workspace):
     result = _result(
         "Respuesta",
@@ -202,4 +217,5 @@ def test_conversation_context_is_passed_to_the_session_factory(workspace):
     service = ConversationService(workspace, factory)
     conversation = service.create_conversation(context={"source_surface": "factsheet", "fund": "PT"})
     service.send_message(conversation.id, "Pregunta")
-    assert factory.creations[0][2] == {"source_surface": "factsheet", "fund": "PT"}
+    assert factory.creations[0][2] == {"source_surface": "factsheet", "fund": "PT",
+                                       "durable_analytical_context": {"claims": [], "derived_claims": [], "evidence": []}}

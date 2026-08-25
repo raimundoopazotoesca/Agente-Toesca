@@ -74,15 +74,24 @@ class ConversationService:
         if session is None:
             messages = self.store.list_messages(conversation_id)
             visible_history = messages[:-1] if messages and messages[-1].id == user_message.id else messages
-            session = self.session_factory.create(conversation, visible_history, runtime_context=conversation.context)
+            runtime_context = dict(conversation.context or {})
+            # Scope is checked from the conversation owner before this fetch;
+            # the store has no global user-facing claim lookup.
+            if conversation.owner_user_id:
+                runtime_context["durable_analytical_context"] = self.store.load_durable_context_for_user(
+                    conversation_id, conversation.owner_user_id)
+            session = self.session_factory.create(conversation, visible_history, runtime_context=runtime_context)
             self._sessions[conversation_id] = session
 
         started = time.monotonic()
         result = session.ask(text)
         latency_ms = (time.monotonic() - started) * 1000
-        return self.store.append_message(
+        assistant = self.store.append_message(
             conversation_id, "assistant", result.text, metadata=runtime_result_to_metadata(result, latency_ms)
         )
+        if result.durable_memory:
+            self.store.persist_analytical_turn(conversation_id, user_message.id, assistant.id, result.durable_memory)
+        return assistant
 
     def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Message:
         self.store.get_conversation_for_user(conversation_id, user_id)
