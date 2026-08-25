@@ -51,3 +51,17 @@ def test_scripted_loop_keeps_run_sql_available_and_benchmark_contract_has_no_ana
     assert result.turn.tool_calls[0].name == "run_sql"
     from eval.benchmark.adapters.track_b_frontier import _RUN_SQL_SPEC
     assert _RUN_SQL_SPEC.name == "run_sql"
+
+
+def test_dataset_action_keeps_the_full_query_contract_in_governed_evidence():
+    action = AnalyticsDatasetQueryAction(DB)
+    request = ToolRequest("dataset", action.name, {
+        "dataset": "rent_roll", "filters": [{"field": "activo_key", "op": "eq", "value": "Apo3001", "value_end": None}, {"field": "periodo", "op": "eq", "value": "2026-06", "value_end": None}],
+        "group_by": ["arrendatario"], "measures": [{"measure": "gla_m2", "aggregation": "sum"}],
+        "order_by": "gla_m2", "descending": True, "limit": 5, "share_of_total": True,
+        "row_axis": None, "column_axis": None,
+    })
+    result = action.execute(request)
+    assert result.ok and result.evidence is not None
+    assert result.evidence.semantic_contract["filters"] == request.arguments["filters"]
+    assert result.evidence.semantic_contract["limit"] == 5

@@ -21,6 +21,8 @@ class DatasetDefinition:
     field_types: dict[str, str]
     measures: dict[str, dict[str, object]]
     status: str
+    source_sql: str | None = None
+    snapshot_semantics: str | None = None
 
     def schema_metadata(self) -> dict[str, object]:
         return {
@@ -40,6 +42,7 @@ class DatasetDefinition:
             "provenance_fields": list(self.provenance_fields),
             "field_types": self.field_types,
             "measures": self.measures,
+            "snapshot_semantics": self.snapshot_semantics,
             "status": self.status,
         }
 

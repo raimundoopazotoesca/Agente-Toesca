@@ -736,22 +736,25 @@ class AnalyticsDatasetQueryAction:
                 "group_by": {"type": "array", "items": {"type": "string"}},
                 "measures": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": False, "properties": {"measure": {"type": "string"}, "aggregation": {"type": "string", "enum": ["sum", "count", "distinct_count", "avg"]}}, "required": ["measure", "aggregation"]}},
                 "order_by": {"type": ["string", "null"]}, "descending": {"type": "boolean"}, "limit": {"type": ["integer", "null"], "minimum": 1}, "share_of_total": {"type": "boolean"},
-            }, "required": ["dataset", "filters", "group_by", "measures", "order_by", "descending", "limit", "share_of_total"]})
+                "row_axis": {"type": ["string", "null"]}, "column_axis": {"type": ["string", "null"]},
+            }, "required": ["dataset", "filters", "group_by", "measures", "order_by", "descending", "limit", "share_of_total", "row_axis", "column_axis"]})
 
     def execute(self, request: ToolRequest) -> ToolResult:
         try:
             args = request.arguments
-            query = GovernedDatasetQuery(str(args["dataset"]), tuple(DatasetFilter(str(x["field"]), str(x["op"]), x["value"], x.get("value_end")) for x in args["filters"]), tuple(str(x) for x in args["group_by"]), tuple(DatasetMeasure(str(x["measure"]), str(x["aggregation"])) for x in args["measures"]), args.get("order_by"), bool(args["descending"]), args.get("limit"), bool(args["share_of_total"]))
+            query = GovernedDatasetQuery(str(args["dataset"]), tuple(DatasetFilter(str(x["field"]), str(x["op"]), x["value"], x.get("value_end")) for x in args["filters"]), tuple(str(x) for x in args["group_by"]), tuple(DatasetMeasure(str(x["measure"]), str(x["aggregation"])) for x in args["measures"]), args.get("order_by"), bool(args["descending"]), args.get("limit"), bool(args["share_of_total"]), args.get("row_axis"), args.get("column_axis"))
             result = GovernedDatasetExecutor(self.db_path).execute(query)
             facts = []
             for row in result.rows:
-                dimensions = {key: row[key] for key in result.contract["group_by"]}
+                dimensions = {key: row[key] for key in result.contract["group_by"] if key in row}
                 for measure in result.contract["measures"]:
                     name = measure["measure"]
+                    if name not in row:
+                        continue
                     facts.append({"metric_key": name, "value": row[name], "unit": load_dataset_catalog().datasets[query.dataset].measures[name]["unit"], "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
                     if "share_of_total" in row: facts.append({"metric_key": "share_of_total", "value": row["share_of_total"], "unit": "%", "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
             payload = {"evidence_id": request.call_id, "rows": result.rows, "coverage": result.coverage, "contract": result.contract}
-            evidence = ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "dataset"}, {}, result.contract, {"tables": [result.contract["source"]]}, result.coverage, tuple(facts)) if facts else None
+            evidence = ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "dataset"}, {}, result.contract, {"tables": [result.contract["source"]]}, result.coverage, tuple(facts))
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "coverage": result.coverage}, evidence=evidence)
         except (KeyError, TypeError, ValueError, DatasetQueryError) as exc:
             return ToolResult(request.call_id, False, json.dumps({"error_type": "semantic_query_error", "error": str(exc)}, ensure_ascii=False), {"tool_name": self.name, "error": str(exc)})

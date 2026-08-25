@@ -33,3 +33,42 @@ def test_undeclared_fields_and_invalid_aggregation_fail_closed():
     executor = GovernedDatasetExecutor(DB)
     with pytest.raises(DatasetQueryError): executor.execute(query(filters=(DatasetFilter("m2; DROP TABLE raw_rent_roll_line", "eq", 1),)))
     with pytest.raises(DatasetQueryError): executor.execute(query(measures=(DatasetMeasure("rent_rate_uf_m2", "sum"),)))
+
+
+def test_source_classification_and_snapshot_expiry_are_governed_dimensions():
+    result = GovernedDatasetExecutor(DB).execute(query(
+        filters=(DatasetFilter("activo_key", "eq", "Apo3001"), DatasetFilter("periodo", "eq", "2026-06"),
+                 DatasetFilter("expiry_year", "between", 2026, 2030)),
+        group_by=("tenant_type", "expiry_year"), limit=None,
+    ))
+    assert result.rows
+    assert result.contract["snapshot_semantics"] == "current_rent_roll_snapshot"
+    assert all("tenant_type" in row and "expiry_year" in row for row in result.rows)
+
+
+def test_two_declared_axes_pivot_a_measure_without_dimension_specific_handler():
+    result = GovernedDatasetExecutor(DB).execute(query(
+        group_by=(), row_axis="tenant_type", column_axis="occupancy_status", limit=None,
+    ))
+    assert result.contract["axes"] == {"row": "tenant_type", "column": "occupancy_status"}
+    assert result.rows
+    assert any("occupied__gla_m2" in row for row in result.rows)
+
+
+def test_unit_and_tenant_contract_keeps_each_snapshot_lease_expiry_separate():
+    result = GovernedDatasetExecutor(DB).execute(query(
+        filters=(DatasetFilter("activo_key", "eq", "Torre A"), DatasetFilter("periodo", "eq", "2026-06"),
+                 DatasetFilter("arrendatario", "eq", "Scotiabank Azul")),
+        group_by=("unidad", "arrendatario", "vencimiento"),
+        measures=(DatasetMeasure("gla_m2", "sum"), DatasetMeasure("rent_rate_uf_m2", "avg")),
+        order_by="gla_m2", limit=None, share_of_total=False,
+    ))
+    assert len(result.rows) > 1
+    assert all(row["arrendatario"] == "Scotiabank Azul" for row in result.rows)
+    assert all("unidad" in row and "vencimiento" in row and "rent_rate_uf_m2" in row for row in result.rows)
+
+
+def test_floor_is_not_exposed_without_a_source_governed_field():
+    executor = GovernedDatasetExecutor(DB)
+    with pytest.raises(DatasetQueryError):
+        executor.execute(query(group_by=("floor",)))

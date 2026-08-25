@@ -2,13 +2,13 @@ catalog_version: 1
 datasets:
   - dataset_key: rent_roll
     semantic_version: rent_roll_semantics_v1
-    object_name: v_rent_roll_semantic
+    object_name: raw_rent_roll_line
     grain: rent_roll_row
     grain_description: Fila individual de rent roll correspondiente a una unidad o espacio fuente para un activo y período.
     row_represents: Unidad o espacio individual reportado por la fuente del rent roll.
     description: Dataset gobernado de rent roll fila a fila por activo y período, con estado de ocupación, categoría de unidad, calidad de identidad y provenance de fuente normalizados.
     dimensions: [activo_key, periodo]
-    fields: [dataset_key, semantic_version, activo_key, periodo, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, is_current]
+    fields: [dataset_key, semantic_version, activo_key, periodo, unidad, unit_identity_quality, arrendatario, m2, renta_uf, occupancy_status, unit_category, unit_category_source, tenant_type, vencimiento, expiry_year, is_current]
     field_descriptions:
       dataset_key: Identidad del dataset gobernado.
       semantic_version: Versión del contrato semántico del dataset.
@@ -22,13 +22,16 @@ datasets:
       occupancy_status: Estado de ocupación gobernado de la fila, como vacante, ocupada o desconocida.
       unit_category: Categoría gobernada de la unidad o espacio.
       unit_category_source: Categoría de unidad declarada por la fuente.
+      tenant_type: Rubro o tipo de arrendatario tal como aparece en la fuente; NULL significa no informado.
+      vencimiento: Fecha de vencimiento declarada en el snapshot de rent roll; no es un movimiento histórico.
+      expiry_year: Año extraído del vencimiento declarado en el snapshot de rent roll.
       is_current: Indica si la fila corresponde a la versión vigente del registro.
     field_value_domains:
       occupancy_status: {type: enum, values: [vacant, occupied, unknown]}
       unit_category: {type: enum, values: [office, local, storage, parking, other_source_declared, unknown]}
       unit_identity_quality: {type: enum, values: [source_identity, synthetic_missing_source_identity]}
       is_current: {type: boolean, values: [0, 1]}
-    semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, is_current]
+    semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, tenant_type, vencimiento, expiry_year, is_current]
     provenance_fields: [source_file, source_sheet, source_row, file_hash, ingest_run_id]
     field_types:
       dataset_key: text
@@ -43,6 +46,9 @@ datasets:
       occupancy_status: text
       unit_category: text
       unit_category_source: text
+      tenant_type: text
+      vencimiento: date
+      expiry_year: number
       is_current: boolean
     measures:
       gla_m2: {field: m2, unit: m2, allowed_aggregations: [sum, avg]}
@@ -50,3 +56,17 @@ datasets:
       tenant_count: {field: arrendatario, unit: tenants, allowed_aggregations: [distinct_count]}
       rent_rate_uf_m2: {field: renta_uf, unit: UF/m2, allowed_aggregations: [avg]}
     status: active
+    snapshot_semantics: current_rent_roll_snapshot
+    source_sql: >-
+      SELECT 'rent_roll' AS dataset_key, 'rent_roll_semantics_v1' AS semantic_version,
+        r.activo_key, r.periodo, r.unidad,
+        CASE WHEN r.unidad LIKE '(sin detalle, fila %)' THEN 'synthetic_missing_source_identity' ELSE 'source_identity' END AS unit_identity_quality,
+        r.arrendatario, r.m2, r.renta_uf,
+        CASE WHEN LOWER(TRIM(r.arrendatario)) = 'vacante' THEN 'vacant' WHEN r.arrendatario IS NULL OR TRIM(r.arrendatario) = '' THEN 'unknown' WHEN LOWER(TRIM(r.arrendatario)) LIKE '%vacante%' THEN 'unknown' ELSE 'occupied' END AS occupancy_status,
+        CASE WHEN json_extract(r.extra_json, '$.tipo_activo_2') IS NULL OR TRIM(json_extract(r.extra_json, '$.tipo_activo_2')) = '' THEN 'unknown' WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'oficina' THEN 'office' WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'local' THEN 'local' WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'bodega' THEN 'storage' WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) IN ('estacionamiento', 'parking') THEN 'parking' ELSE 'other_source_declared' END AS unit_category,
+        json_extract(r.extra_json, '$.tipo_activo_2') AS unit_category_source,
+        json_extract(r.extra_json, '$.tipo_arrendatario') AS tenant_type, r.vencimiento,
+        CAST(substr(r.vencimiento, 1, 4) AS INTEGER) AS expiry_year,
+        CASE WHEN r.superseded_at IS NULL THEN 1 ELSE 0 END AS is_current,
+        r.source_file, r.source_sheet, r.source_row, r.file_hash, r.ingest_run_id
+      FROM raw_rent_roll_line r

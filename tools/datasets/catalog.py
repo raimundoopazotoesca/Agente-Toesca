@@ -20,7 +20,8 @@ class DatasetCatalogValidationError(ValueError):
 
 
 def _dataset(raw: Any) -> DatasetDefinition:
-    if not isinstance(raw, dict) or not _REQUIRED <= set(raw) or not set(raw) <= (_REQUIRED | {"field_types", "measures"}):
+    optional = {"field_types", "measures", "source_sql", "snapshot_semantics"}
+    if not isinstance(raw, dict) or not _REQUIRED <= set(raw) or not set(raw) <= (_REQUIRED | optional):
         raise DatasetCatalogValidationError("malformed dataset definition")
     sequence_fields = ("dimensions", "fields", "semantic_fields", "provenance_fields")
     if any(not isinstance(raw[name], list) or not all(isinstance(value, str) for value in raw[name]) for name in sequence_fields):
@@ -61,6 +62,12 @@ def _dataset(raw: Any) -> DatasetDefinition:
             raise DatasetCatalogValidationError("malformed dataset measure")
         if measure["field"] not in raw["fields"] or not isinstance(measure["unit"], str) or not isinstance(measure["allowed_aggregations"], list) or not set(measure["allowed_aggregations"]) <= {"sum", "count", "distinct_count", "avg"}:
             raise DatasetCatalogValidationError("invalid dataset measure contract")
+    source_sql = raw.get("source_sql")
+    if source_sql is not None and (not isinstance(source_sql, str) or not source_sql.lstrip().upper().startswith("SELECT") or ";" in source_sql):
+        raise DatasetCatalogValidationError("invalid governed dataset source")
+    snapshot_semantics = raw.get("snapshot_semantics")
+    if snapshot_semantics is not None and not isinstance(snapshot_semantics, str):
+        raise DatasetCatalogValidationError("invalid snapshot semantics")
     if raw["status"] != "active" or raw["grain"] != "rent_roll_row":
         raise DatasetCatalogValidationError("unsupported dataset status or grain")
     return DatasetDefinition(
@@ -72,7 +79,7 @@ def _dataset(raw: Any) -> DatasetDefinition:
         field_descriptions=dict(field_descriptions), field_value_domains=normalized_domains,
         semantic_fields=tuple(raw["semantic_fields"]), provenance_fields=tuple(raw["provenance_fields"]),
         field_types=dict(field_types), measures={key: dict(value) for key, value in measures.items()},
-        status=raw["status"],
+        status=raw["status"], source_sql=source_sql, snapshot_semantics=snapshot_semantics,
     )
 
 

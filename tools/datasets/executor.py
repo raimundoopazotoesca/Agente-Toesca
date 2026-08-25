@@ -37,6 +37,8 @@ class GovernedDatasetQuery:
     descending: bool = True
     limit: int | None = None
     share_of_total: bool = False
+    row_axis: str | None = None
+    column_axis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,10 +60,16 @@ class GovernedDatasetExecutor:
         if not query.measures or len({m.measure for m in query.measures}) != len(query.measures):
             raise DatasetQueryError("one or more unique measures are required")
         visible_fields = set(definition.fields)
-        if any(field not in definition.dimensions and field not in visible_fields for field in query.group_by):
+        axes = tuple(field for field in (query.row_axis, query.column_axis) if field is not None)
+        if query.group_by and axes:
+            raise DatasetQueryError("use group_by or row/column axes, not both")
+        grouping = axes or query.group_by
+        if any(field not in definition.dimensions and field not in visible_fields for field in grouping):
             raise DatasetQueryError("group_by field is not declared by dataset")
-        if len(query.group_by) > 2:
-            raise DatasetQueryError("at most two visible dimensions are supported")
+        if len(grouping) > 4:
+            raise DatasetQueryError("at most four visible dimensions are supported")
+        if query.column_axis and not query.row_axis:
+            raise DatasetQueryError("column_axis requires row_axis")
         where, params = ["is_current=1"], []
         operators = {"eq": "=", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}
         for item in query.filters:
@@ -84,14 +92,15 @@ class GovernedDatasetExecutor:
             aggregate = {"sum": "SUM", "count": "COUNT", "distinct_count": "COUNT(DISTINCT", "avg": "AVG"}[item.aggregation]
             expr = f'{aggregate}("{field}")' if item.aggregation != "distinct_count" else f'COUNT(DISTINCT "{field}")'
             expressions.append(f'{expr} AS "{item.measure}"')
-        select_dimensions = [f'"{field}"' for field in query.group_by]
-        sql = f'SELECT {", ".join(select_dimensions + expressions)} FROM "{definition.object_name}" WHERE {" AND ".join(where)}'
-        if query.group_by: sql += " GROUP BY " + ", ".join(select_dimensions)
+        select_dimensions = [f'"{field}"' for field in grouping]
+        source = f'({definition.source_sql})' if definition.source_sql else f'"{definition.object_name}"'
+        sql = f'SELECT {", ".join(select_dimensions + expressions)} FROM {source} WHERE {" AND ".join(where)}'
+        if grouping: sql += " GROUP BY " + ", ".join(select_dimensions)
         if query.order_by:
             if query.order_by not in {m.measure for m in query.measures}: raise DatasetQueryError("order_by must name a selected measure")
             sql += f' ORDER BY "{query.order_by}" {"DESC" if query.descending else "ASC"}'
         with self._sandbox.connect() as conn:
-            eligible_count = conn.execute(f'SELECT COUNT(*) FROM "{definition.object_name}" WHERE {" AND ".join(where)}', params).fetchone()[0]
+            eligible_count = conn.execute(f'SELECT COUNT(*) FROM {source} WHERE {" AND ".join(where)}', params).fetchone()[0]
             cursor = conn.execute(sql, params)
             columns = [column[0] for column in cursor.description]
             rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -104,4 +113,20 @@ class GovernedDatasetExecutor:
         if query.limit is not None:
             if query.limit < 1: raise DatasetQueryError("limit must be positive")
             rows = rows[:query.limit]
-        return DatasetQueryResult(tuple(rows), {"status": "complete" if eligible_count else "none", "eligible_row_count": eligible_count, "observed_row_count": full_count, "full_universe_scanned": True, "output_intentionally_limited": query.limit is not None}, {"dataset": definition.dataset_key, "source": definition.object_name, "filters": [item.__dict__ for item in query.filters], "group_by": list(query.group_by), "measures": [item.__dict__ for item in query.measures]})
+        if query.column_axis:
+            measure_names = [item.measure for item in query.measures]
+            pivoted: dict[object, dict[str, object]] = {}
+            for row in rows:
+                key = row[query.row_axis]  # validated above
+                target = pivoted.setdefault(key, {query.row_axis: key})
+                column = str(row[query.column_axis]) if row[query.column_axis] is not None else "missing"
+                for measure in measure_names:
+                    target[f"{column}__{measure}"] = row[measure]
+            rows = list(pivoted.values())
+        contract = {"dataset": definition.dataset_key, "source": definition.object_name,
+                    "filters": [item.__dict__ for item in query.filters], "group_by": list(grouping),
+                    "axes": {"row": query.row_axis, "column": query.column_axis},
+                    "measures": [item.__dict__ for item in query.measures], "order_by": query.order_by,
+                    "descending": query.descending, "limit": query.limit, "share_of_total": query.share_of_total,
+                    "snapshot_semantics": definition.snapshot_semantics}
+        return DatasetQueryResult(tuple(rows), {"status": "complete" if eligible_count else "none", "eligible_row_count": eligible_count, "observed_row_count": full_count, "full_universe_scanned": True, "output_intentionally_limited": query.limit is not None}, contract)
