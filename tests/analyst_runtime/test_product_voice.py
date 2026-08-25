@@ -107,10 +107,7 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
     assert result.text == "Respuesta del analista."
     request = client.responses.calls[0]
     assert ALPHA_PRODUCT_VOICE in request["instructions"]
-    assert request["input"] == [
-        {"role": "user", "content": "Pregunta previa"},
-        {"role": "user", "content": "Consulta actual"},
-    ]
+    assert request["input"] == [{"role": "user", "content": "Consulta actual"}]
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
 
 

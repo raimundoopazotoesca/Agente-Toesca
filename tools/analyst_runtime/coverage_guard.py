@@ -595,15 +595,23 @@ def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEv
     content = "\n".join(_render_fact_human(fact) for fact in facts)
     if not content and governed_evidence:
         content = _PROVENANCE_FALLBACK
-        if reason in {"vague_entity_reference", "unbound_qualitative_comparison"}:
-            # These two reasons mean the underlying facts were fine -- only
-            # the model's own prose was rejected (a vague placeholder, or an
-            # unbound qualitative claim) -- so still answer from the real
-            # governed rows (entity identity and values, deterministically
-            # rendered) rather than a bare "can't confirm" punt.
-            governed_facts = [fact for item in governed_evidence for fact in item.facts]
-            if governed_facts:
-                content = "\n".join(_render_entity_fact(fact, db_path) for fact in governed_facts)
+        # The envelope is untrusted, not the governed rows produced in this
+        # turn.  A structured-output failure must still render those rows
+        # deterministically; returning a generic sentence here used to leave
+        # the fallback without a current-turn answer.
+        # A claim-binding failure is different: it may be an attempted
+        # citation to an unrelated result, so preserve the normal fail-closed
+        # response.  Parse/shape failure has made no such claim and can safely
+        # fall back to this turn's complete governed result.
+        if reason in {"invalid_envelope", "vague_entity_reference", "unbound_qualitative_comparison"}:
+            rendered_sets = []
+            for item in governed_evidence:
+                if item.facts:
+                    coverage = item.coverage or {"status": "unknown"}
+                    rows = ", ".join(_render_entity_fact(fact, db_path) for fact in item.facts)
+                    rendered_sets.append(_coverage_prefix(coverage, len(item.facts)) + rows)
+            if rendered_sets:
+                content = "\n".join(rendered_sets)
     if not content:
         content = _NO_EVIDENCE_FALLBACK
     return CoverageValidation(False, content, {

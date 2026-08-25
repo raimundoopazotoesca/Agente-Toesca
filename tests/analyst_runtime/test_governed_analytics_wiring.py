@@ -65,3 +65,24 @@ def test_dataset_action_keeps_the_full_query_contract_in_governed_evidence():
     assert result.ok and result.evidence is not None
     assert result.evidence.semantic_contract["filters"] == request.arguments["filters"]
     assert result.evidence.semantic_contract["limit"] == 5
+
+
+def test_factory_does_not_replay_visible_transcript_after_restart():
+    """Restart reconstruction relies on durable context, never stale prose."""
+    factory = OpenAIResponsesAnalystSessionFactory(DB, client_factory=lambda: object(), presenter_factory=None)
+    messages = [
+        type("Message", (), {"role": "user" if index % 2 == 0 else "assistant", "content": f"turn-{index}"})()
+        for index in range(20)
+    ]
+
+    session = factory.create(None, messages)
+
+    assert session._history == []
+
+
+def test_factory_states_current_request_precedence_in_its_runtime_prompt():
+    factory = OpenAIResponsesAnalystSessionFactory(DB, client_factory=lambda: object(), presenter_factory=None)
+
+    session = factory.create(None, [])
+
+    assert "Prioriza la solicitud actual del usuario" in session._loop.system_prompt

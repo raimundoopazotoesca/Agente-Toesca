@@ -9,7 +9,7 @@ import json
 import os
 from copy import deepcopy
 from hashlib import sha256
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -26,6 +26,13 @@ from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
+
+
+_CONTEXT_ISOLATION_INSTRUCTION = (
+    "\n\nPrioriza la solicitud actual del usuario. Usa contexto previo únicamente "
+    "para completar referencias omitidas; nunca dejes que cambie, amplíe o "
+    "reemplace una solicitud nueva y explícita."
+)
 from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
 from tools.analytics.humanize import entity_display_name, format_period, format_period_as_of, format_period_range
 from tools.analytics.monetary import requested_monetary_unit
@@ -229,9 +236,11 @@ class OpenAIResponsesAnalystSession:
         if explicit_monetary_unit is not None:
             self._active_monetary_unit = explicit_monetary_unit
         requested_unit = explicit_monetary_unit or self._active_monetary_unit
+        retained_history_length = len(self._history)
         investigation = self._loop.investigate(text, history=self._history)
-        evidence = self._durable_evidence + [result.evidence for item in investigation.round_trajectory for result in item.tool_results
-                    if result.evidence is not None]
+        evidence = _evidence_for_current_answer(
+            investigation, retained_history_length, self._durable_evidence,
+        )
         canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
         governed = [item for item in evidence if item.evidence_class == "governed_dataset"]
         validation = None
@@ -264,7 +273,8 @@ class OpenAIResponsesAnalystSession:
             # below is one more no-tools model round, not a new investigation
             # round.
             result = self._loop.finalize(
-                investigation, StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA),
+                _investigation_for_current_synthesis(investigation, retained_history_length),
+                StructuredOutputContract("SynthesisEnvelope", SYNTHESIS_ENVELOPE_SCHEMA),
                 synthesis_context=render_evidence_inventory(evidence),
             )
             # ``finalize`` may relay an early deterministic termination from
@@ -519,6 +529,43 @@ def _account_concept_display_name(concept_id: str) -> str:
         return str(concept_id).replace("_", " ")
 
 
+def _evidence_for_current_answer(investigation: Any, retained_history_length: int,
+                                 durable_evidence: list[ToolEvidence]) -> list[ToolEvidence]:
+    """Select evidence without letting replay override a new tool-backed turn.
+
+    ``round_trajectory`` starts with the retained transcript.  If this turn
+    invokes any tool, its result is the current factual boundary: prior raw
+    replay and durable facts may help the model plan, but cannot be cited in
+    place of the evidence it just requested.  A genuinely tool-less follow-up
+    still receives the prior validated facts it needs for comparison or
+    arithmetic.
+    """
+    prior_items = investigation.round_trajectory[:retained_history_length]
+    current_items = investigation.round_trajectory[retained_history_length:]
+    current_results = [result for item in current_items for result in item.tool_results]
+    current_evidence = [result.evidence for result in current_results if result.evidence is not None]
+    if current_results:
+        return current_evidence
+    return list(durable_evidence) + [
+        result.evidence for item in prior_items for result in item.tool_results
+        if result.evidence is not None
+    ]
+
+
+def _investigation_for_current_synthesis(investigation: Any, retained_history_length: int) -> Any:
+    """Keep stale replay out of a tool-backed turn's final synthesis.
+
+    The current tools have already resolved a new explicit request.  Their
+    tool-free synthesis must therefore see only this turn's trajectory;
+    otherwise the model can repeat a prior answer despite correct current
+    tool execution.  Tool-less follow-ups retain prior trajectory normally.
+    """
+    current_items = investigation.round_trajectory[retained_history_length:]
+    if any(item.tool_results for item in current_items):
+        return replace(investigation, round_trajectory=list(current_items))
+    return investigation
+
+
 def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptItem]:
     """Cross-turn retention policy (AnalystLoop deliberately leaves it to the
     session, see analyst_loop.py's docstring).
@@ -538,9 +585,12 @@ def _retained_history(investigation: Any, answer_text: str) -> list[TranscriptIt
     history = list(investigation.round_trajectory)
     if investigation.termination_reason == "model_terminal":
         # The trajectory already ends with the model's own answer.
-        return history
+        return history[-12:]
     history.append(TranscriptItem(role="assistant", text=answer_text))
-    return history
+    # Durable evidence is persisted separately.  Bound transient provider
+    # replay so old clarification/tool trajectories cannot outrank a new,
+    # self-contained user request after a long topic-switching conversation.
+    return history[-12:]
 
 
 def _clarification_presentation(content: str) -> PresentationResult:
@@ -573,8 +623,10 @@ class OpenAIResponsesAnalystSessionFactory:
         self._presenter_factory = presenter_factory
 
     def create(self, conversation: Any, visible_messages: list[Any], runtime_context: dict[str, Any] | None = None) -> AnalystSession:
-        # Visible prose is supplemented by a bounded, structured claim/evidence
-        # context. Opaque provider replay data remains intentionally absent.
+        # A restarted process has no safe provider-native replay.  Replaying
+        # persisted visible prose can still carry a stale answer into a new,
+        # explicit request, so structured Durable Context is the only
+        # cross-process conversational context.
         del conversation
         sandbox = LiveReadOnlySandbox(self.knowledge_db_path)
         action = RunSqlAction(sandbox=sandbox)
@@ -592,7 +644,10 @@ class OpenAIResponsesAnalystSessionFactory:
         ])
         client = self._client_factory()
         transport = OpenAIResponsesTransport(client, self.model, registry.tool_specs())
-        history = [TranscriptItem(role=message.role, text=message.content) for message in visible_messages]
+        # A restart has no provider-native items, but its visible transcript is
+        # still transient context: keep the same bounded tail used by native
+        # in-process replay. Durable claims/evidence are hydrated separately.
+        history: list[TranscriptItem] = []
         durable = (runtime_context or {}).get("durable_analytical_context", {})
         durable_evidence = [_memory_to_evidence(item) for item in durable.get("evidence", []) if isinstance(item, dict)]
         claims = durable.get("claims", [])
@@ -603,7 +658,7 @@ class OpenAIResponsesAnalystSessionFactory:
                 json.dumps({"canonical_metric_claims": claims, "derived_metric_claims": durable.get("derived_claims", [])}, ensure_ascii=False))))
         presenter = self._presenter_factory(client, self.model) if self._presenter_factory else None
         return OpenAIResponsesAnalystSession(
-            AnalystLoop(self.system_prompt, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
+            AnalystLoop(self.system_prompt + _CONTEXT_ISOLATION_INSTRUCTION, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
             db_path=self.knowledge_db_path, durable_evidence=durable_evidence,
             hydrated_claim_count=len(claims) + len(durable.get("derived_claims", [])),
         )

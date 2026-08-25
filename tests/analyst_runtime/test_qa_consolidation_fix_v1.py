@@ -88,6 +88,42 @@ def test_account_no_evidence_override_only_fires_on_a_fresh_query():
     assert _account_no_evidence_payload(investigation) is not None
 
 
+def test_fresh_tool_evidence_excludes_stale_replay_evidence():
+    """A self-contained new request may not synthesize from an old claim.
+
+    Old evidence remains available only for a genuinely tool-less follow-up;
+    as soon as the current turn obtains governed evidence, that evidence is
+    the sole factual source for the current answer.
+    """
+    from tools.analyst_runtime.session import _evidence_for_current_answer
+    from tools.analyst_runtime.transport import ToolEvidence
+
+    stale = ToolEvidence("stale-ltv", "canonical_metric", facts=({"metric_key": "ltv", "value": 81.22, "unit": "%", "entity_id": "PT", "period": "2026-06"},))
+    fresh = ToolEvidence("fresh-dataset", "governed_dataset", facts=())
+    old_item = TranscriptItem(role="assistant", tool_results=[ToolResult("old", True, "{}", evidence=stale)])
+    new_item = TranscriptItem(role="assistant", tool_results=[ToolResult("new", True, "{}", evidence=fresh)])
+    investigation = SimpleNamespace(round_trajectory=[old_item, new_item])
+
+    selected = _evidence_for_current_answer(investigation, retained_history_length=1, durable_evidence=[])
+
+    assert [item.evidence_id for item in selected] == ["fresh-dataset"]
+
+
+def test_current_tool_turn_synthesizes_without_stale_replay_trajectory():
+    from tools.analyst_runtime.analyst_loop import InvestigationResult
+    from tools.analyst_runtime.base import Usage
+    from tools.analyst_runtime.session import _investigation_for_current_synthesis
+
+    old_item = TranscriptItem(role="assistant", text="El LTV de PT fue 81,22%.")
+    fresh_item = TranscriptItem(role="assistant", tool_results=[ToolResult("new", True, "{}")])
+    investigation = InvestigationResult([old_item, fresh_item], [], Usage(), "budget_exhausted")
+
+    selected = _investigation_for_current_synthesis(investigation, retained_history_length=1)
+
+    assert selected is not investigation
+    assert selected.round_trajectory == [fresh_item]
+
+
 # ---------------------------------------------------------------------------
 # C1/C2 -- explicit user-requested invalid aggregation still rejects;
 # a planner-only invalid proposal on an open question does not.
