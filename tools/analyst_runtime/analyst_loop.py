@@ -70,6 +70,13 @@ class ActionExecutor(Protocol):
     def execute(self, request: ToolRequest) -> ToolResult: ...
 
 
+class TerminalValidator(Protocol):
+    """Decides whether a no-tool terminal candidate may finish this turn."""
+
+    def accept(self, *, user_message: str, candidate: ModelResponse,
+               history: list[TranscriptItem]) -> bool: ...
+
+
 @dataclass
 class LoopResult:
     """`ask()`'s full answer: the neutral Turn plus this turn's complete round
@@ -103,6 +110,7 @@ class AnalystLoop:
     transport: ModelTransport
     action_executor: ActionExecutor
     tool_specs: list[ToolSpec] = field(default_factory=list)
+    terminal_validator: TerminalValidator | None = None
 
     def investigate(self, message: str, history: list[TranscriptItem] | None = None) -> InvestigationResult:
         started = time.monotonic()
@@ -124,6 +132,16 @@ class AnalystLoop:
             next_message = ""
 
             if not response.tool_requests:
+                if self.terminal_validator and not tool_calls_log and not self.terminal_validator.accept(
+                        user_message=message, candidate=response, history=round_history):
+                    # Keep opaque provider state replayable, but never retain
+                    # rejected prose as a factual assistant message.
+                    round_history.append(TranscriptItem(role="assistant", raw=response.raw_items))
+                    next_message = (
+                        "La respuesta terminal no satisface la solicitud actual con evidencia gobernada "
+                        "elegible. Continúa la investigación usando herramientas o pide aclaración."
+                    )
+                    continue
                 final_text = response.text
                 round_history = _append_turn(round_history, user_text, response, [])
                 termination_reason = "model_terminal"

@@ -45,3 +45,24 @@ def test_ask_legacy_finalizes_budget_once_without_tools():
     assert len(transport.requests) == MAX_INVESTIGATION_ROUNDS + 1
     assert transport.requests[-1].tools == []
     assert result.turn.usage.calls == MAX_INVESTIGATION_ROUNDS + 1
+
+
+def test_rejected_terminal_candidate_continues_same_investigation_without_stale_text():
+    class RejectFirst:
+        calls = 0
+
+        def accept(self, **_kwargs):
+            self.calls += 1
+            return self.calls > 1
+
+    validator = RejectFirst()
+    transport = Transport([
+        ModelResponse("LTV del fondo: 61,02%"),
+        ModelResponse("respuesta actual"),
+    ])
+    result = AnalystLoop("sys", transport, Executor(), terminal_validator=validator).investigate("Top tenants")
+
+    assert result.final_text == "respuesta actual"
+    assert len(transport.requests) == 2
+    assert "LTV" not in "".join(item.text or "" for item in result.round_trajectory)
+    assert "no satisface la solicitud actual" in transport.requests[1].message

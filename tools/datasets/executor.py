@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import hashlib
+import json
 import re
 
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
@@ -148,7 +150,12 @@ class GovernedDatasetExecutor:
                     "descending": query.descending, "limit": query.limit, "share_of_total": query.share_of_total,
                     "snapshot_semantics": definition.snapshot_semantics,
                     "dimension_coverage": {field: list(assets) for field, assets in definition.dimension_coverage.items()}}
-        return DatasetQueryResult(tuple(rows), {"status": "complete" if eligible_count else "none", "eligible_row_count": eligible_count, "observed_row_count": full_count, "full_universe_scanned": True, "output_intentionally_limited": query.limit is not None}, contract)
+        universe_payload = {key: contract[key] for key in ("dataset", "filters", "group_by", "axes", "measures", "order_by", "descending", "share_of_total", "snapshot_semantics")}
+        universe_id = hashlib.sha256(json.dumps(universe_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        coverage = {"status": "complete" if eligible_count else "none", "universe_kind": "governed_dataset_grouping",
+                    "universe_id": universe_id, "eligible_row_count": eligible_count, "observed_row_count": full_count,
+                    "full_universe_scanned": True, "output_intentionally_limited": query.limit is not None}
+        return DatasetQueryResult(tuple(rows), coverage, contract)
 
 
 _JLL_FLOOR = re.compile(r"^(\d+)")

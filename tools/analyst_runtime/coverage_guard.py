@@ -156,6 +156,9 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         item = governed_by_id.get(claim.get("evidence_id"))
         if item is None or item.evidence_class != "governed_dataset":
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
+        evidence_universe_kind = (item.coverage or {}).get("universe_kind")
+        if evidence_universe_kind is not None and claim.get("universe_kind") != evidence_universe_kind:
+            return _fail(canonical_evidence, governed_evidence, "universe_mismatch", db_path)
         claim_entity_ids = claim.get("entity_ids")
         if not isinstance(claim_entity_ids, list) or not claim_entity_ids:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)

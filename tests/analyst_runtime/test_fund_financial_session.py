@@ -422,6 +422,10 @@ def test_durable_context_restores_dimensions_for_a_toolless_follow_up():
     # A brand-new session (a restart) rebuilt from the durable memory can still
     # bind the same claim with no new tool call.
     resumed = build_session([
+        ModelResponse("", structured_output={
+            "request_kind": "prior_fact", "ambiguous": False,
+            "compatible_evidence_ids": ["dm"],
+        }),
         envelope([{"type": "text", "text": "Ese valor libro fue "},
                   {"type": "canonical_metric_ref", "claim_id": "v"}],
                  canonical=[claim("v", "dm", first_facts.facts[0])]),
@@ -433,6 +437,10 @@ def test_durable_context_restores_dimensions_for_a_toolless_follow_up():
     # ...and the same restored claim renders the native CLP figure when the
     # user asks for pesos, with no re-query.
     in_pesos = build_session([
+        ModelResponse("", structured_output={
+            "request_kind": "prior_formatting", "ambiguous": False,
+            "compatible_evidence_ids": ["dm"],
+        }),
         envelope([{"type": "text", "text": "En pesos fue "},
                   {"type": "canonical_metric_ref", "claim_id": "v"}],
                  canonical=[claim("v", "dm", first_facts.facts[0])]),

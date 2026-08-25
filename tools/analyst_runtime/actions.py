@@ -747,12 +747,15 @@ class AnalyticsDatasetQueryAction:
             facts = []
             for row in result.rows:
                 dimensions = {key: row[key] for key in result.contract["group_by"] if key in row}
+                entity_id = (str(dimensions["activo_key"]) if "activo_key" in dimensions else
+                             str(next(iter(dimensions.values()))) if len(dimensions) == 1 else
+                             json.dumps(dimensions, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
                 for measure in result.contract["measures"]:
                     name = measure["measure"]
                     if name not in row:
                         continue
-                    facts.append({"metric_key": name, "value": row[name], "unit": load_dataset_catalog().datasets[query.dataset].measures[name]["unit"], "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
-                    if "share_of_total" in row: facts.append({"metric_key": "share_of_total", "value": row["share_of_total"], "unit": "%", "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
+                    facts.append({"metric_key": name, "value": row[name], "unit": load_dataset_catalog().datasets[query.dataset].measures[name]["unit"], "entity_id": entity_id, "period": dimensions.get("periodo"), "dimensions": dimensions})
+                    if "share_of_total" in row: facts.append({"metric_key": "share_of_total", "value": row["share_of_total"], "unit": "%", "entity_id": entity_id, "period": dimensions.get("periodo"), "dimensions": dimensions})
             payload = {"evidence_id": request.call_id, "rows": result.rows, "coverage": result.coverage, "contract": result.contract}
             evidence = ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "dataset"}, {}, result.contract, {"tables": [result.contract["source"]]}, result.coverage, tuple(facts))
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "coverage": result.coverage}, evidence=evidence)

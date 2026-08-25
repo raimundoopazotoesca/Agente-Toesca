@@ -4,9 +4,11 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 
+import pytest
+
 from tools.analyst_runtime.coverage_guard import validate_and_render
 from tools.analyst_runtime.analyst_loop import AnalystLoop
-from tools.analyst_runtime.session import OpenAIResponsesAnalystSession
+from tools.analyst_runtime.session import OpenAIResponsesAnalystSession, _TerminalEvidenceValidator, _materialize_governed_dataset_claims
 from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest, ToolResult
 
 
@@ -67,9 +69,63 @@ class _Executor:
         return ToolResult(request.call_id, True, "{}", evidence=replace(evidence, evidence_id=request.call_id))
 
 
+class _NormalizationTransport:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def complete(self, _request):
+        return ModelResponse("", structured_output=self.payload)
+
+
+@pytest.mark.parametrize("request_kind", [
+    "prior_fact", "prior_explanation", "prior_formatting", "prior_comparison",
+])
+def test_current_request_allows_only_declared_compatible_prior_evidence(request_kind):
+    validator = _TerminalEvidenceValidator(
+        _NormalizationTransport({
+            "request_kind": request_kind, "ambiguous": False,
+            "compatible_evidence_ids": ["financial"],
+        }),
+        "sys", [FINANCIAL],
+    )
+
+    assert validator.accept(user_message="seguimiento", candidate=ModelResponse("candidato"), history=[])
+
+
+@pytest.mark.parametrize("payload", [
+    None,
+    {"request_kind": "new_factual", "ambiguous": False, "compatible_evidence_ids": []},
+    {"request_kind": "prior_fact", "ambiguous": True, "compatible_evidence_ids": ["financial"]},
+    {"request_kind": "prior_fact", "ambiguous": False, "compatible_evidence_ids": ["unknown"]},
+])
+def test_current_request_fails_closed_for_invalid_ambiguous_or_new_factual_reuse(payload):
+    validator = _TerminalEvidenceValidator(_NormalizationTransport(payload), "sys", [FINANCIAL])
+
+    assert not validator.accept(user_message="consulta nueva", candidate=ModelResponse("candidato"), history=[])
+
+
+def test_dataset_claim_identity_is_materialized_from_evidence_not_provider_fields():
+    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "complete", "universe_kind": "grouped", "universe_id": "u"}, facts=(
+        {"metric_key": "gla_m2", "value": 2.0, "unit": "m2", "entity_id": "Tenant A", "period": None},
+        {"metric_key": "gla_m2", "value": 1.0, "unit": "m2", "entity_id": "Tenant B", "period": None},
+    ))
+    envelope = {"governed_dataset_claims": [{"claim_id": "g", "evidence_id": "d", "metric_key": "wrong", "entity_ids": ["wrong"], "period": "2020", "universe_kind": "wrong"}]}
+
+    claim = _materialize_governed_dataset_claims(envelope, [evidence])["governed_dataset_claims"][0]
+
+    assert claim == {"claim_id": "g", "evidence_id": "d", "metric_key": "gla_m2", "entity_ids": ["Tenant A", "Tenant B"], "period": None, "universe_kind": "grouped"}
+
+
 def _turn(kind: str, envelope, turn_id: int):
     if kind == "none":
-        return [ModelResponse("Sin evidencia nueva."), ModelResponse("ok", structured_output=envelope)]
+        return [
+            ModelResponse("Sin evidencia nueva."),
+            ModelResponse("", structured_output={
+                "request_kind": "conversational", "ambiguous": False,
+                "compatible_evidence_ids": [],
+            }),
+            ModelResponse("ok", structured_output=envelope),
+        ]
     call_id = f"{kind}-{turn_id}"
     output = deepcopy(envelope)
     if output is not None:
@@ -120,6 +176,42 @@ def test_financial_then_dataset_synthesis_receives_only_current_turn_trajectory(
     assert "61,02%" not in second.text
     assert all("61,02%" not in (item.text or "") for item in final_request.history)
     assert [result.evidence.evidence_id for item in final_request.history for result in item.tool_results if result.evidence] == ["dataset-1"]
+
+
+def test_stale_financial_terminal_is_rejected_before_dataset_tools_and_never_retained():
+    """A new factual request cannot complete from the previous turn's evidence.
+
+    The scripted provider deliberately tries stale LTV prose.  CurrentRequest
+    identifies the new request as independent, so the loop must continue to a
+    governed dataset call; the rejected candidate is absent from both the
+    visible result and the retained/synthesis trajectories.
+    """
+    tenant_envelope = _tenant_envelope()
+    tenant_envelope["governed_dataset_claims"][0]["evidence_id"] = "dataset-1"
+    transport = _Transport([
+        ModelResponse("", [ToolRequest("financial-0", "financial", {})]),
+        ModelResponse("LTV TRI: 61,02%."),
+        ModelResponse("ok", structured_output=_financial_envelope()),
+        ModelResponse("LTV TRI: 61,02%."),
+        ModelResponse("", structured_output={
+            "request_kind": "new_factual", "ambiguous": False,
+            "compatible_evidence_ids": [],
+        }),
+        ModelResponse("", [ToolRequest("dataset-1", "dataset", {})]),
+        ModelResponse("Top arrendatarios."),
+        ModelResponse("ok", structured_output=tenant_envelope),
+    ])
+    session = OpenAIResponsesAnalystSession(AnalystLoop("sys", transport, _Executor()), presenter=None)
+
+    session.ask("¿Cuál fue el LTV de TRI?")
+    result = session.ask("Top 5 arrendatarios por GLA de Apo3001.")
+
+    assert "Tenant A" in result.text and "61,02%" not in result.text
+    current_request = next(request for request in transport.requests
+                           if request.output_contract and request.output_contract.name == "CurrentRequest")
+    assert current_request.output_contract.name == "CurrentRequest"
+    assert any("no satisface la solicitud actual" in request.message for request in transport.requests)
+    assert all("61,02%" not in (item.text or "") for item in transport.requests[-1].history)
 
 
 def test_dataset_then_financial_and_every_failure_fallback_remain_current_turn_scoped():

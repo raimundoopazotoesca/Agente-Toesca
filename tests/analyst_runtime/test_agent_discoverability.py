@@ -274,6 +274,10 @@ def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the
     ]
     turn_two = [
         ModelResponse("Segunda vuelta."),
+        ModelResponse("", structured_output={
+            "request_kind": "prior_fact", "ambiguous": False,
+            "compatible_evidence_ids": ["call_ltv"],
+        }),
         ModelResponse("ok", structured_output={
             "fragments": [{"type": "text", "text": "Segunda vuelta."}],
             "canonical_metric_claims": [], "governed_dataset_claims": [], "derived_metric_claims": [],
@@ -298,7 +302,7 @@ def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the
     # And turn 2 really is allowed tools again (its investigation round --
     # the request immediately before the reserved, tool-free finalize round
     # that now also runs for a toolless turn, see session.py).
-    assert transport.requests[-2].tools
+    assert transport.requests[-3].tools
 
 
 def _observed_ltv() -> float:

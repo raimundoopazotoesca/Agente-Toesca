@@ -33,6 +33,59 @@ _CONTEXT_ISOLATION_INSTRUCTION = (
     "para completar referencias omitidas; nunca dejes que cambie, amplíe o "
     "reemplace una solicitud nueva y explícita."
 )
+
+_CURRENT_REQUEST_KINDS = {
+    "new_factual", "prior_fact", "prior_explanation", "prior_formatting",
+    "prior_comparison", "conversational",
+}
+_PRIOR_EVIDENCE_REQUEST_KINDS = {
+    "prior_fact", "prior_explanation", "prior_formatting", "prior_comparison",
+}
+_CURRENT_REQUEST_SCHEMA = {"type": "object", "additionalProperties": False,
+    "required": ["request_kind", "ambiguous", "compatible_evidence_ids"], "properties": {
+        "request_kind": {"type": "string", "enum": sorted(_CURRENT_REQUEST_KINDS)},
+        "ambiguous": {"type": "boolean"},
+        "compatible_evidence_ids": {"type": "array", "items": {"type": "string"}},
+    }}
+
+
+class _TerminalEvidenceValidator:
+    """Late, minimal normalization for a no-tool terminal candidate only."""
+
+    def __init__(self, transport: Any, system_prompt: str, evidence: list[ToolEvidence]):
+        self._transport, self._system_prompt, self._evidence = transport, system_prompt, list(evidence)
+
+    def accept(self, *, user_message: str, candidate: ModelResponse, history: list[TranscriptItem]) -> bool:
+        context = render_evidence_inventory(self._evidence)
+        response = self._transport.complete(ModelRequest(
+            self._system_prompt,
+            [],
+            "Normaliza sólo la solicitud actual, sin responderla. request_kind debe ser exactamente uno de: "
+            "new_factual (solicitud factual/autocontenida nueva), prior_fact (recuerda un resultado previo), "
+            "prior_explanation (explica un resultado previo), prior_formatting (cambia formato de un resultado previo), "
+            "prior_comparison (compara resultados previos compatibles), conversational (saludo/conversación no factual). "
+            "Marca ambiguous=true si no puedes decidirlo con seguridad. compatible_evidence_ids sólo puede listar "
+            "evidencia que satisface exactamente esta solicitud; deja la lista vacía para new_factual y conversational.\n"
+            f"Solicitud actual: {user_message}\nContexto referencial estructurado:\n{context}",
+            [], StructuredOutputContract("CurrentRequest", _CURRENT_REQUEST_SCHEMA),
+        ))
+        normalized = response.structured_output
+        if not isinstance(normalized, dict):
+            return False
+        kind = normalized.get("request_kind")
+        ambiguous = normalized.get("ambiguous")
+        ids = normalized.get("compatible_evidence_ids")
+        if (kind not in _CURRENT_REQUEST_KINDS or not isinstance(ambiguous, bool)
+                or not isinstance(ids, list) or not all(isinstance(item, str) and item for item in ids)):
+            return False
+        if ambiguous:
+            return False
+        if kind == "conversational":
+            return not ids
+        if kind not in _PRIOR_EVIDENCE_REQUEST_KINDS:
+            return False
+        allowed = {item.evidence_id for item in self._evidence}
+        return bool(ids) and len(ids) == len(set(ids)) and set(ids) <= allowed
 from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
 from tools.analytics.humanize import entity_display_name, format_period, format_period_as_of, format_period_range
 from tools.analytics.monetary import requested_monetary_unit
@@ -237,6 +290,14 @@ class OpenAIResponsesAnalystSession:
             self._active_monetary_unit = explicit_monetary_unit
         requested_unit = explicit_monetary_unit or self._active_monetary_unit
         retained_history_length = len(self._history)
+        historical_evidence = list(self._durable_evidence) + [
+            result.evidence for item in self._history for result in item.tool_results
+            if result.evidence is not None
+        ]
+        self._loop.terminal_validator = (
+            _TerminalEvidenceValidator(self._loop.transport, self._loop.system_prompt, historical_evidence)
+            if historical_evidence else None
+        )
         investigation = self._loop.investigate(text, history=self._history)
         evidence = _evidence_for_current_answer(
             investigation, retained_history_length, self._durable_evidence,
@@ -281,7 +342,11 @@ class OpenAIResponsesAnalystSession:
             # the loop. Such a result has no model-produced synthesis envelope
             # and must never be forced through the structured-output parser.
             if result.turn.raw.get("termination_reason") not in {"clarification_required", "semantic_rejection"}:
-                validation = validate_and_render(result.turn.raw.get("structured_output") or {}, canonical, governed, self._db_path,
+                envelope = _materialize_governed_dataset_claims(
+                    result.turn.raw.get("structured_output") or {}, governed,
+                )
+                result.turn.raw["structured_output"] = envelope
+                validation = validate_and_render(envelope, canonical, governed, self._db_path,
                                                  requested_unit)
                 result.turn.text = validation.content
                 result.turn.raw.update(validation.trace)
@@ -550,6 +615,37 @@ def _evidence_for_current_answer(investigation: Any, retained_history_length: in
         result.evidence for item in prior_items for result in item.tool_results
         if result.evidence is not None
     ]
+
+
+def _materialize_governed_dataset_claims(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> dict[str, Any]:
+    """Make governed dataset claim identity evidence-owned, never model-owned."""
+    if not isinstance(envelope, dict):
+        return envelope
+    by_id = {item.evidence_id: item for item in evidence if item.evidence_class == "governed_dataset"}
+    materialized = deepcopy(envelope)
+    claims = materialized.get("governed_dataset_claims")
+    if not isinstance(claims, list):
+        return materialized
+    out = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            out.append(claim); continue
+        item = by_id.get(claim.get("evidence_id"))
+        if item is None:
+            out.append(claim); continue
+        groups: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+        for fact in item.facts:
+            groups.setdefault((fact.get("metric_key"), fact.get("period")), []).append(fact)
+        if len(groups) != 1:
+            out.append(claim); continue
+        (metric_key, period), facts = next(iter(groups.items()))
+        coverage = item.coverage or {}
+        out.append({"claim_id": claim.get("claim_id"), "evidence_id": item.evidence_id,
+                    "metric_key": metric_key,
+                    "entity_ids": [str(fact.get("entity_id")) for fact in facts],
+                    "period": period, "universe_kind": coverage.get("universe_kind")})
+    materialized["governed_dataset_claims"] = out
+    return materialized
 
 
 def _investigation_for_current_synthesis(investigation: Any, retained_history_length: int) -> Any:
