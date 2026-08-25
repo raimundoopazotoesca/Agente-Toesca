@@ -74,6 +74,12 @@ def render_derived_value(operation: str, value: float, unit: str) -> str:
         suffix = _UNIT_SUFFIX.get(unit, f" {unit}" if unit else "")
         precision = _UNIT_PRECISION.get(unit, 2)
         return _number(value, precision) + suffix
+    if operation == "comparison":
+        if value > 0:
+            return "es mayor que"
+        if value < 0:
+            return "es menor que"
+        return "es igual a"
     raise ValueError(f"unknown derived operation: {operation}")
 
 

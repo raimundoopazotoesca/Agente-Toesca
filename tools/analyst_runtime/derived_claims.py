@@ -20,7 +20,7 @@ from typing import Any
 
 from tools.analytics.formatting import render_derived_value
 
-SUPPORTED_OPERATIONS = frozenset({"difference", "percent_change", "percentage_point_difference", "ratio"})
+SUPPORTED_OPERATIONS = frozenset({"difference", "percent_change", "percentage_point_difference", "ratio", "comparison"})
 
 _PERCENT_UNITS = frozenset({"%", "pct_0_100"})
 
@@ -71,6 +71,13 @@ def compute_derived_claim(claim_id: str, operation: str, lhs_fact: dict[str, Any
         if rhs_value == 0:
             raise DerivedClaimError("ratio with a zero denominator is undefined")
         value, unit = lhs_value / rhs_value, "ratio"
+    elif operation == "comparison":
+        # A qualitative greater/less/equal relation, computed the same way as
+        # difference (raw value - raw value), never authored by the model: the
+        # sign alone decides which side is "greater". This exists so a
+        # narrative comparison ("X tiene mayor vacancia que Y") is always
+        # grounded in the real operand values instead of free LLM judgment.
+        value, unit = (1.0 if lhs_value > rhs_value else (-1.0 if lhs_value < rhs_value else 0.0)), "comparison"
     else:  # pragma: no cover -- guarded by SUPPORTED_OPERATIONS check above
         raise DerivedClaimError(f"unsupported operation: {operation}")
 

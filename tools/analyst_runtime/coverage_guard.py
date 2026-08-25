@@ -34,6 +34,30 @@ from tools.analytics.humanize import entity_display_name, humanize_text
 # (e.g. a percent change) directly into a text/raw_text fragment.
 _UNBOUND_QUANTITY_RE = re.compile(r"\d[\d.,]*[.,]\d+\s*%?|\d[\d.,]*\d\s*%")
 
+# Both guards below only fire in a "multi-component" context: this turn bound
+# 2+ distinct entities sharing the same metric_key+period (see
+# ``metric_entities`` in validate_and_render). That keeps them narrow to the
+# exact failure shape they close, instead of policing prose in general.
+#
+# A vague placeholder standing in for a real, already-resolved entity
+# identity (e.g. "uno de los activos"/"el otro") when the real display name
+# was available -- see humanize.py's entity_display_name, which never
+# returns a placeholder like this for a known key.
+_VAGUE_REFERENT_RE = re.compile(
+    r"\b(uno de los activos|el otro activo\w*|otro activo\b|"
+    r"el (primer|segundo|tercer) activo|el (primero|segundo|tercero)\b)",
+    re.IGNORECASE,
+)
+# A qualitative greater/less/equal assertion the model decided itself instead
+# of routing through a derived_metric_ref(operation="comparison") -- see
+# derived_claims.py. This is the guard that closes the "7,84% ... 22,91% ...
+# el primer activo exhibe la mayor tasa" inversion: the digits may be
+# correctly bound, but the CONCLUSION about which is bigger was free text.
+_COMPARISON_SUPERLATIVE_RE = re.compile(
+    r"\b(mayor|menor|m[aá]s alt[oa]|m[aá]s baj[oa]|superior|inferior|lidera|encabeza|concentra m[aá]s)\b",
+    re.IGNORECASE,
+)
+
 _PARTIAL_PREFIX = "Ojo: estos datos alcanzan a {observed} de {eligible} elementos aplicables; el resto no está disponible. "
 _UNKNOWN_PREFIX = "No es posible confirmar que estos datos representen el conjunto completo. "
 _PROVENANCE_FALLBACK = (
@@ -53,10 +77,10 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                           governed_evidence: list[ToolEvidence], db_path: Path | None = None) -> CoverageValidation:
     canonical_by_id = {item.evidence_id: item for item in canonical_evidence}
     if len(canonical_by_id) != len(canonical_evidence):
-        return _fail(canonical_evidence, governed_evidence, "duplicate_canonical_evidence_id")
+        return _fail(canonical_evidence, governed_evidence, "duplicate_canonical_evidence_id", db_path)
     governed_by_id = {item.evidence_id: item for item in governed_evidence}
     if len(governed_by_id) != len(governed_evidence):
-        return _fail(canonical_evidence, governed_evidence, "duplicate_governed_evidence_id")
+        return _fail(canonical_evidence, governed_evidence, "duplicate_governed_evidence_id", db_path)
 
     fragments = envelope.get("fragments")
     canonical_claims = envelope.get("canonical_metric_claims")
@@ -64,7 +88,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     derived_claims = envelope.get("derived_metric_claims", [])
     if not isinstance(fragments, list) or not isinstance(canonical_claims, list) or not isinstance(governed_claims, list) \
             or not isinstance(derived_claims, list):
-        return _fail(canonical_evidence, governed_evidence, "invalid_envelope")
+        return _fail(canonical_evidence, governed_evidence, "invalid_envelope", db_path)
 
     bound_canonical: dict[str, dict[str, Any]] = {}
     backed_entity_ids: set[str] = set()
@@ -73,7 +97,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     selected_from_governed: dict[str, ToolEvidence] = {}
     for claim in canonical_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_canonical:
-            return _fail(canonical_evidence, governed_evidence, "invalid_claim")
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         evidence_id = claim.get("evidence_id")
         item = canonical_by_id.get(evidence_id)
         if item is not None and item.evidence_class == "canonical_metric":
@@ -86,15 +110,15 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             # this carries no less authority than a single-fact evidence item.
             item = governed_by_id.get(evidence_id)
             if item is None or item.evidence_class != "governed_dataset":
-                return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+                return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
             matches = [candidate for candidate in item.facts
                        if candidate.get("entity_id") == claim.get("entity_id")
                        and candidate.get("period") == claim.get("period")]
             if len(matches) > 1:
-                return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding")
+                return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
             fact = matches[0] if matches else None
         if not isinstance(fact, dict) or any(claim.get(key) != fact.get(key) for key in ("metric_key", "value", "unit", "entity_id", "period")):
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         bound_canonical[claim["claim_id"]] = fact
         if item.evidence_class == "governed_dataset":
             selected_from_governed[item.evidence_id] = item
@@ -104,13 +128,13 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     governed_coverage: list[dict[str, Any]] = []
     for claim in governed_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_governed:
-            return _fail(canonical_evidence, governed_evidence, "invalid_claim")
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         item = governed_by_id.get(claim.get("evidence_id"))
         if item is None or item.evidence_class != "governed_dataset":
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         claim_entity_ids = claim.get("entity_ids")
         if not isinstance(claim_entity_ids, list) or not claim_entity_ids:
-            return _fail(canonical_evidence, governed_evidence, "invalid_claim")
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         # Select facts by (entity, period), never by entity alone: evidence
         # may hold several periods for the same entity (a `period_range`
         # series). Indexing by entity alone would silently collapse those and
@@ -119,12 +143,12 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         candidates = [fact for fact in item.facts if fact.get("period") == claim.get("period")]
         fact_by_entity = {fact.get("entity_id"): fact for fact in candidates}
         if len(fact_by_entity) != len(candidates):
-            return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding")
+            return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
         if not set(claim_entity_ids) <= set(fact_by_entity):
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         facts = [fact_by_entity[eid] for eid in claim_entity_ids]
         if any(fact.get("metric_key") != claim.get("metric_key") for fact in facts):
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         coverage = item.coverage or {"status": "unknown", "eligible_count": None, "observed_count": len(item.facts)}
         bound_governed[claim["claim_id"]] = {"facts": facts, "scope": item.scope, "coverage": coverage}
         governed_coverage.append({**coverage, "scope": item.scope, "universe_kind": coverage.get("universe_kind")})
@@ -141,17 +165,36 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     for claim in derived_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) \
                 or claim["claim_id"] in bound_derived or claim["claim_id"] in bound_canonical:
-            return _fail(canonical_evidence, governed_evidence, "invalid_claim")
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         operation = claim.get("operation")
         lhs_claim_id, rhs_claim_id = claim.get("lhs_claim_id"), claim.get("rhs_claim_id")
         lhs_fact, rhs_fact = bound_canonical.get(lhs_claim_id), bound_canonical.get(rhs_claim_id)
         if lhs_fact is None or rhs_fact is None or not isinstance(operation, str):
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         try:
             bound_derived[claim["claim_id"]] = compute_derived_claim(
                 claim["claim_id"], operation, lhs_fact, rhs_fact, lhs_claim_id, rhs_claim_id)
         except DerivedClaimError:
-            return _fail(canonical_evidence, governed_evidence, "binding_mismatch")
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
+
+    # A "multi-component" turn: 2+ distinct entities bound to the same
+    # metric_key+period in this envelope (a breakdown/comparison context).
+    # Drives both the vague-referent and unbound-comparison guards below.
+    metric_entities: dict[tuple[Any, Any], set[str]] = {}
+    for fact in bound_canonical.values():
+        metric_entities.setdefault((fact.get("metric_key"), fact.get("period")), set()).add(str(fact.get("entity_id")))
+    for bound in bound_governed.values():
+        for fact in bound["facts"]:
+            metric_entities.setdefault((fact.get("metric_key"), fact.get("period")), set()).add(str(fact.get("entity_id")))
+    multi_component_context = any(len(ids) >= 2 for ids in metric_entities.values())
+    # Any of these operations already grounds "which side is bigger" in a real
+    # computed value (comparison directly; difference/percentage_point_difference
+    # by sign; ratio by whether it's above/below 1) -- not just the dedicated
+    # "comparison" operation.
+    has_comparison_claim = any(
+        claim.operation in {"comparison", "difference", "percentage_point_difference", "ratio"}
+        for claim in bound_derived.values()
+    )
 
     # Coverage of a governed dataset a claim cherry-picked facts from must
     # still reach the reader: otherwise a partial ranking could be presented
@@ -168,7 +211,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     provenance_checked = False
     for fragment in fragments:
         if not isinstance(fragment, dict):
-            return _fail(canonical_evidence, governed_evidence, "invalid_fragment")
+            return _fail(canonical_evidence, governed_evidence, "invalid_fragment", db_path)
         kind = fragment.get("type")
         if kind in {"text", "raw_text"} and isinstance(fragment.get("text"), str):
             text = fragment["text"]
@@ -179,7 +222,11 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                 # counts) are unaffected. Fail-closed rather than plausible:
                 # this is the guard that stops "8,26 UF" from ever reaching a
                 # reader unbound.
-                return _fail(canonical_evidence, governed_evidence, "unbound_derived_quantity")
+                return _fail(canonical_evidence, governed_evidence, "unbound_derived_quantity", db_path)
+            if multi_component_context and _VAGUE_REFERENT_RE.search(text):
+                return _fail(canonical_evidence, governed_evidence, "vague_entity_reference", db_path)
+            if multi_component_context and not has_comparison_claim and _COMPARISON_SUPERLATIVE_RE.search(text):
+                return _fail(canonical_evidence, governed_evidence, "unbound_qualitative_comparison", db_path)
             if catalog:
                 provenance_checked = True
                 if not _entities_backed(text, catalog, backed_entity_ids):
@@ -196,7 +243,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         elif kind == "derived_metric_ref" and fragment.get("claim_id") in bound_derived:
             _append_fragment(rendered, render_derived_claim(bound_derived[fragment["claim_id"]]))
         else:
-            return _fail(canonical_evidence, governed_evidence, "invalid_fragment")
+            return _fail(canonical_evidence, governed_evidence, "invalid_fragment", db_path)
 
     if not provenance_ok:
         return CoverageValidation(False, _PROVENANCE_FALLBACK, _trace(
@@ -337,11 +384,21 @@ def _render_fact_human(fact: dict[str, Any]) -> str:
     return render_named_fact(fact)
 
 
-def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEvidence], reason: str) -> CoverageValidation:
+def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEvidence], reason: str,
+          db_path: Path | None = None) -> CoverageValidation:
     facts = [fact for item in canonical_evidence for fact in item.facts]
     content = "\n".join(_render_fact_human(fact) for fact in facts)
     if not content and governed_evidence:
         content = _PROVENANCE_FALLBACK
+        if reason in {"vague_entity_reference", "unbound_qualitative_comparison"}:
+            # These two reasons mean the underlying facts were fine -- only
+            # the model's own prose was rejected (a vague placeholder, or an
+            # unbound qualitative claim) -- so still answer from the real
+            # governed rows (entity identity and values, deterministically
+            # rendered) rather than a bare "can't confirm" punt.
+            governed_facts = [fact for item in governed_evidence for fact in item.facts]
+            if governed_facts:
+                content = "\n".join(_render_entity_fact(fact, db_path) for fact in governed_facts)
     return CoverageValidation(False, content, {
         "canonical_validation_applied": True, "canonical_claim_count": 0,
         "coverage_validation_applied": True, "coverage_scope": None, "coverage_universe_kind": None,

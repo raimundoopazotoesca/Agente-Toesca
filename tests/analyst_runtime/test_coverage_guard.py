@@ -130,6 +130,103 @@ def test_governed_backed_entities_in_raw_text_are_not_blocked(catalog_db):
     assert result.valid
 
 
+# ---- Vague-referent guard: multi-component breakdown must name real entities ----
+
+def _breakdown_envelope(text: str, extra_derived: list | None = None):
+    return {
+        "fragments": [{"type": "text", "text": text}, {"type": "governed_dataset_ref", "claim_id": "g"}],
+        "canonical_metric_claims": [],
+        "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "g1", "metric_key": "m2_vacantes",
+                                      "entity_ids": ["Torre A", "Boulevard"], "period": "2026-06", "universe_kind": "fund_assets"}],
+        "derived_metric_claims": extra_derived or [],
+    }
+
+
+def test_vague_placeholder_for_a_known_component_entity_fails_closed(catalog_db):
+    evidence = _governed_evidence(_rows("Torre A", "Boulevard"),
+                                    {"status": "complete", "eligible_count": 2, "observed_count": 2})
+    envelope = _breakdown_envelope("Uno de los activos tiene más vacancia que el otro activo.")
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert not result.valid
+    assert result.trace["reason"] == "vague_entity_reference"
+
+
+def test_vague_placeholder_fallback_still_lists_the_real_entities(catalog_db):
+    evidence = _governed_evidence(_rows("Torre A", "Boulevard"),
+                                    {"status": "complete", "eligible_count": 2, "observed_count": 2})
+    envelope = _breakdown_envelope("Uno de los activos tiene más vacancia que el otro activo.")
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert "Torre A" in result.content and "Boulevard" in result.content
+
+
+def test_single_component_context_permits_vague_language(catalog_db):
+    # Only one entity is bound for this metric+period -- the multi-component
+    # guard must not fire on unrelated prose that happens to contain "otro".
+    evidence = _governed_evidence(_rows("Torre A"), {"status": "complete", "eligible_count": 1, "observed_count": 1})
+    envelope = {"fragments": [{"type": "text", "text": "Torre A no tuvo cambios respecto al otro periodo revisado."},
+                               {"type": "governed_dataset_ref", "claim_id": "g"}],
+                "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "g1", "metric_key": "m2_vacantes",
+                                              "entity_ids": ["Torre A"], "period": "2026-06", "universe_kind": "fund_assets"}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert result.valid
+
+
+# ---- Qualitative comparison guard: greater/less must be claim-bound, not free text ----
+
+def test_free_text_superlative_between_two_components_fails_closed(catalog_db):
+    evidence = _governed_evidence(_rows("Torre A", "Boulevard"),
+                                    {"status": "complete", "eligible_count": 2, "observed_count": 2})
+    envelope = _breakdown_envelope("Torre A exhibe la mayor tasa de vacancia física.")
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert not result.valid
+    assert result.trace["reason"] == "unbound_qualitative_comparison"
+
+
+def test_superlative_backed_by_a_comparison_claim_is_permitted():
+    canonical_a = ToolEvidence("ea", "canonical_metric",
+        facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},))
+    canonical_b = ToolEvidence("eb", "canonical_metric",
+        facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},))
+    envelope = {
+        "fragments": [
+            {"type": "canonical_metric_ref", "claim_id": "ca"}, {"type": "text", "text": " "},
+            {"type": "derived_metric_ref", "claim_id": "d1"}, {"type": "text", "text": " "},
+            {"type": "canonical_metric_ref", "claim_id": "cb"},
+        ],
+        "canonical_metric_claims": [
+            {"claim_id": "ca", "evidence_id": "ea", "metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},
+            {"claim_id": "cb", "evidence_id": "eb", "metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},
+        ],
+        "governed_dataset_claims": [],
+        "derived_metric_claims": [{"claim_id": "d1", "operation": "comparison", "lhs_claim_id": "ca", "rhs_claim_id": "cb"}],
+    }
+    result = validate_and_render(envelope, [canonical_a, canonical_b], [])
+    assert result.valid
+    assert "es menor que" in result.content
+
+
+def test_comparison_operation_direction_is_computed_from_real_values_not_claim_order():
+    # lhs (Apo4700, 22.91) > rhs (Apo4501, 7.84): must render "mayor", never
+    # "menor" regardless of which claim the model happened to list first.
+    canonical_a = ToolEvidence("ea", "canonical_metric",
+        facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},))
+    canonical_b = ToolEvidence("eb", "canonical_metric",
+        facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},))
+    envelope = {
+        "fragments": [{"type": "canonical_metric_ref", "claim_id": "cb"}, {"type": "derived_metric_ref", "claim_id": "d1"}, {"type": "canonical_metric_ref", "claim_id": "ca"}],
+        "canonical_metric_claims": [
+            {"claim_id": "ca", "evidence_id": "ea", "metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},
+            {"claim_id": "cb", "evidence_id": "eb", "metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},
+        ],
+        "governed_dataset_claims": [],
+        "derived_metric_claims": [{"claim_id": "d1", "operation": "comparison", "lhs_claim_id": "cb", "rhs_claim_id": "ca"}],
+    }
+    result = validate_and_render(envelope, [canonical_a, canonical_b], [])
+    assert result.valid
+    assert "es mayor que" in result.content
+
+
 # ---- Structural claim-binding failures ----
 
 def test_governed_claim_with_invalid_evidence_id_fails(catalog_db):

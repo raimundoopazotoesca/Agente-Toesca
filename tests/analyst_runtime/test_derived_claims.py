@@ -138,6 +138,30 @@ def test_raw_values_untouched_by_display_formatting():
     assert claim.value == 172868.0 - 164612.0 == 8256.0
 
 
+def test_comparison_operation_greater():
+    claim = compute_derived_claim("d1", "comparison", NOI_TRI_2025.facts[0], NOI_PT_2025.facts[0], "c_tri", "c2025")
+    assert claim.value == 1.0
+    assert claim.unit == "comparison"
+
+
+def test_comparison_operation_lesser():
+    claim = compute_derived_claim("d1", "comparison", NOI_PT_2025.facts[0], NOI_TRI_2025.facts[0], "c2025", "c_tri")
+    assert claim.value == -1.0
+
+
+def test_comparison_operation_equal():
+    same = {"metric_key": "noi_anual", "value": 100.0, "unit": "UF", "entity_id": "PT", "period": "2025"}
+    claim = compute_derived_claim("d1", "comparison", same, same, "a", "b")
+    assert claim.value == 0.0
+
+
+def test_comparison_operation_rejects_unit_mismatch():
+    lhs = {"metric_key": "noi_anual", "value": 100.0, "unit": "UF", "entity_id": "PT", "period": "2025"}
+    rhs = {"metric_key": "gastos", "value": 50.0, "unit": "clp", "entity_id": "PT", "period": "2025"}
+    with pytest.raises(DerivedClaimError):
+        compute_derived_claim("d1", "comparison", lhs, rhs, "a", "b")
+
+
 def test_derived_claim_lineage_points_back_to_source_claim_ids():
     claim = compute_derived_claim("d1", "percent_change", NOI_PT_2024.facts[0], NOI_PT_2025.facts[0], "c2024", "c2025")
     assert claim.lineage["lhs_claim_id"] == "c2024"
