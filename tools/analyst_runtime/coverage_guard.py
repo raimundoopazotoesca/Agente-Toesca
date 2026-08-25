@@ -21,10 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tools.analyst_runtime.derived_claims import DerivedClaimError, compute_derived_claim, render_derived_claim
+from tools.analyst_runtime.derived_claims import DerivedClaim, DerivedClaimError, compute_derived_claim, render_derived_claim
 from tools.analyst_runtime.transport import ToolEvidence
+from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.formatting import render_fact, render_named_fact
-from tools.analytics.humanize import entity_display_name, humanize_text
+from tools.analytics.humanize import entity_display_name, entity_kind_label, format_period_short, humanize_text
 
 # A decimal-separated or percent-suffixed numeric literal in free prose is
 # always a computed/derived quantity (an integer like a year or a raw
@@ -71,6 +72,14 @@ class CoverageValidation:
     valid: bool
     content: str
     trace: dict[str, Any]
+    # Deterministically rendered Markdown table blocks (Stage: Structured
+    # Analytical Table Outputs). Kept OUT of ``content`` deliberately: content
+    # still flows through FinalPresenter's numeric-redaction rephrasing pass,
+    # which is safe only for the sentence-level prose it was built for -- a
+    # table's literal pipe/row/column structure has no representation in that
+    # protocol and would risk being paraphrased away or garbled. Tables are
+    # appended by the caller (session.py) AFTER presentation, verbatim.
+    tables: tuple[str, ...] = ()
 
 
 def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolEvidence],
@@ -86,8 +95,9 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     canonical_claims = envelope.get("canonical_metric_claims")
     governed_claims = envelope.get("governed_dataset_claims", [])
     derived_claims = envelope.get("derived_metric_claims", [])
+    table_claims = envelope.get("table_claims", [])
     if not isinstance(fragments, list) or not isinstance(canonical_claims, list) or not isinstance(governed_claims, list) \
-            or not isinstance(derived_claims, list):
+            or not isinstance(derived_claims, list) or not isinstance(table_claims, list):
         return _fail(canonical_evidence, governed_evidence, "invalid_envelope", db_path)
 
     bound_canonical: dict[str, dict[str, Any]] = {}
@@ -250,9 +260,14 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             canonical_claims=bound_canonical, governed_coverage=governed_coverage,
             result="fail", provenance="fail", reason="entity_provenance_violation"))
 
+    tables, table_fail_reason = _build_tables(table_claims, bound_canonical, bound_derived, db_path)
+    if table_fail_reason is not None:
+        return _fail(canonical_evidence, governed_evidence, table_fail_reason, db_path)
+
     return CoverageValidation(True, prefix + "".join(rendered), _trace(
         canonical_claims=bound_canonical, governed_coverage=governed_coverage,
-        result="pass", provenance=("pass" if provenance_checked else "not_applicable")))
+        result="pass", provenance=("pass" if provenance_checked else "not_applicable")),
+        tables=tuple(tables))
 
 
 _GLUE_BOUNDARY_RE = re.compile(r"[\s([{–—-]$")
@@ -308,6 +323,175 @@ def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None) -> st
             return f"{display} ({name})"
         return str(display)
     return f"{display}: {render_fact(fact)}"
+
+
+# Operations that render as a comparable numeric/derived value and can sit in
+# a table cell. "comparison" renders as a relation sentence ("es mayor que"),
+# not a value, so it can never be placed in a cell -- citing one as a table
+# cell_claim_id fails the whole table closed rather than being silently
+# dropped or coerced into a value it doesn't have.
+_TABLE_DERIVED_OPERATIONS = {"difference", "percent_change", "percentage_point_difference", "ratio"}
+
+_DERIVED_OPERATION_DISPLAY = {
+    "difference": "Diferencia", "percent_change": "Variación %",
+    "percentage_point_difference": "Cambio (pp)", "ratio": "Razón",
+}
+
+
+def _metric_label(metric_key: Any) -> str:
+    try:
+        metric = load_metric_catalog().metrics.get(metric_key)
+    except Exception:  # noqa: BLE001 -- display must never raise
+        metric = None
+    return metric.display_name if metric is not None else str(metric_key)
+
+
+def _ordered_unique(values: Any) -> list[Any]:
+    seen: list[Any] = []
+    for value in values:
+        if value not in seen:
+            seen.append(value)
+    return seen
+
+
+_DIM_TO_FACT_KEY = {"entity": "entity_id", "period": "period", "metric": "metric_key"}
+
+
+def _dim_value(fact: dict[str, Any], dim: str) -> Any:
+    return fact.get(_DIM_TO_FACT_KEY[dim])
+
+
+def _dim_label(dim: str, key: Any, db_path: Path | None) -> str:
+    if dim == "entity":
+        return entity_display_name(key, db_path)
+    if dim == "period":
+        return format_period_short(str(key))
+    return _metric_label(key)
+
+
+def _row_header_label(row_dim: str, row_keys: list[Any], db_path: Path | None) -> str:
+    if row_dim == "period":
+        return "Período"
+    if row_dim == "metric":
+        return "Métrica"
+    kinds = {entity_kind_label(key, db_path) for key in row_keys}
+    return kinds.pop() if len(kinds) == 1 else "Entidad"
+
+
+def _build_tables(table_claims: list[Any], bound_canonical: dict[str, dict[str, Any]],
+                   bound_derived: dict[str, DerivedClaim], db_path: Path | None) -> tuple[list[str] | None, str | None]:
+    tables: list[str] = []
+    seen_ids: set[str] = set()
+    for claim in table_claims:
+        if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in seen_ids:
+            return None, "invalid_table_claim"
+        seen_ids.add(claim["claim_id"])
+        rendered = _render_table(claim, bound_canonical, bound_derived, db_path)
+        if rendered is None:
+            return None, "invalid_table_claim"
+        if rendered not in tables:
+            # Two table_claims entries can legitimately cite the same facts
+            # under different claim_ids (or the same ones twice); since
+            # rendering is a pure function of the underlying facts, identical
+            # output means identical content -- never show a reader the same
+            # table rendered twice (spec: "No duplication").
+            tables.append(rendered)
+    return tables, None
+
+
+def _render_table(claim: dict[str, Any], bound_canonical: dict[str, dict[str, Any]],
+                   bound_derived: dict[str, DerivedClaim], db_path: Path | None) -> str | None:
+    cell_ids = claim.get("cell_claim_ids")
+    if not isinstance(cell_ids, list) or not cell_ids:
+        return None
+    canonical_cells: list[tuple[str, dict[str, Any]]] = []
+    derived_cells: list[tuple[str, DerivedClaim]] = []
+    seen: set[str] = set()
+    for cell_id in cell_ids:
+        if not isinstance(cell_id, str) or cell_id in seen:
+            return None
+        seen.add(cell_id)
+        if cell_id in bound_canonical:
+            canonical_cells.append((cell_id, bound_canonical[cell_id]))
+        elif cell_id in bound_derived:
+            derived = bound_derived[cell_id]
+            if derived.operation not in _TABLE_DERIVED_OPERATIONS:
+                return None
+            derived_cells.append((cell_id, derived))
+        else:
+            # Referenced a claim_id this table can't trace to an already-bound
+            # canonical or derived claim -- fail closed rather than silently
+            # dropping a cell (an unbound number must never reach a reader).
+            return None
+    if not canonical_cells:
+        return None
+
+    entities = {fact.get("entity_id") for _, fact in canonical_cells}
+    periods = {fact.get("period") for _, fact in canonical_cells}
+    metrics = {fact.get("metric_key") for _, fact in canonical_cells}
+    varying = {"entity": len(entities) > 1, "period": len(periods) > 1, "metric": len(metrics) > 1}
+    n_varying = sum(varying.values())
+    if n_varying == 0 or n_varying == 3:
+        # 0: a scalar -- a one-cell table is never useful, force prose instead.
+        # 3: a genuine 3D pivot -- out of v1 scope, keep tables 2-dimensional.
+        return None
+    if n_varying == 1:
+        row_dim = next(dim for dim, does_vary in varying.items() if does_vary)
+        col_dim: str | None = None
+    elif not varying["entity"]:
+        row_dim, col_dim = "metric", "period"
+    elif not varying["period"]:
+        row_dim, col_dim = "entity", "metric"
+    else:
+        row_dim, col_dim = "entity", "period"
+
+    row_keys = _ordered_unique(_dim_value(fact, row_dim) for _, fact in canonical_cells)
+    col_keys = _ordered_unique(_dim_value(fact, col_dim) for _, fact in canonical_cells) if col_dim else [None]
+
+    order_by = claim.get("order_by")
+    if order_by in ("value_desc", "value_asc") and row_dim == "entity" and col_dim is None:
+        value_by_row = {_dim_value(fact, row_dim): fact.get("value") for _, fact in canonical_cells}
+        row_keys = sorted(row_keys, key=lambda key: value_by_row.get(key, 0.0), reverse=(order_by == "value_desc"))
+
+    grid: dict[Any, dict[Any, dict[str, Any]]] = {row_key: {} for row_key in row_keys}
+    for _, fact in canonical_cells:
+        row_key = _dim_value(fact, row_dim)
+        col_key = _dim_value(fact, col_dim) if col_dim else None
+        if row_key not in grid or col_key in grid[row_key]:
+            return None  # unreachable row, or two claims landing on the same cell -- ambiguous, fail closed
+        grid[row_key][col_key] = fact
+
+    derived_by_row: dict[Any, DerivedClaim] = {}
+    for _, derived in derived_cells:
+        lhs_fact = bound_canonical.get(derived.lineage.get("lhs_claim_id"))
+        if lhs_fact is None:
+            return None
+        row_key = _dim_value(lhs_fact, row_dim)
+        if row_key not in grid or row_key in derived_by_row:
+            return None  # can't place this operand's row, or a second derived cell competing for the same row
+        derived_by_row[row_key] = derived
+    derived_operations = {derived.operation for derived in derived_by_row.values()}
+    change_header = (_DERIVED_OPERATION_DISPLAY[next(iter(derived_operations))]
+                      if len(derived_operations) == 1 else "Cambio")
+
+    if col_dim is None:
+        value_header = _metric_label(next(iter(metrics))) if row_dim != "metric" else "Valor"
+        col_headers = [value_header]
+    else:
+        col_headers = [_dim_label(col_dim, key, db_path) for key in col_keys]
+    if derived_by_row:
+        col_headers = col_headers + [change_header]
+
+    lines = ["| " + _row_header_label(row_dim, row_keys, db_path) + " | " + " | ".join(col_headers) + " |",
+             "|" + "---|" * (1 + len(col_headers))]
+    for row_key in row_keys:
+        cells = [render_fact(grid[row_key][col_key]) if col_key in grid[row_key] else "Sin dato"
+                 for col_key in col_keys]
+        if derived_by_row:
+            derived = derived_by_row.get(row_key)
+            cells.append(render_derived_claim(derived) if derived is not None else "Sin dato")
+        lines.append("| " + _dim_label(row_dim, row_key, db_path) + " | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def _entities_backed(text: str, catalog: dict[str, str], backed_entity_ids: set[str]) -> bool:

@@ -32,6 +32,13 @@ _MESES = {
     7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
 }
 
+_MESES_ABREV = {
+    1: "ene", 2: "feb", 3: "mar", 4: "abr", 5: "may", 6: "jun",
+    7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic",
+}
+
+_ENTITY_KIND_LABELS = {"fund": "Fondo", "asset": "Activo", "company": "Sociedad"}
+
 _FORBIDDEN_JARGON = [
     "canonical_metric_ref", "governed_dataset_ref", "canonical_metric",
     "governed_dataset", "ToolEvidence", "AllowedClaim", "SemanticQuery",
@@ -81,6 +88,23 @@ def entity_display_name(entity_key: Any, db_path: Path | str | None = None) -> s
     return entry[0] if entry else entity_key
 
 
+def entity_kind_label(entity_key: Any, db_path: Path | str | None = None) -> str:
+    """Generic Spanish noun for the entity's kind (``"Fondo"``/``"Activo"``/
+    ``"Sociedad"``), for a table's row-header column. Unknown keys or a
+    missing catalog fall back to the generic ``"Entidad"`` -- display-only,
+    never blocks rendering."""
+    if not isinstance(entity_key, str) or db_path is None:
+        return "Entidad"
+    try:
+        catalog = _entity_catalog(str(db_path))
+    except Exception:  # noqa: BLE001 -- display must never raise
+        return "Entidad"
+    entry = catalog.get(entity_key)
+    if entry is None:
+        return "Entidad"
+    return _ENTITY_KIND_LABELS.get(entry[1], "Entidad")
+
+
 def _entity_catalog_safe(db_path: Path | str | None) -> dict[str, tuple[str, str]]:
     if db_path is None:
         return {}
@@ -113,6 +137,17 @@ def format_period(period: str) -> str:
     if month not in _MESES:
         return period
     return f"en {_MESES[month]} de {year}"
+
+
+def format_period_short(period: str) -> str:
+    """Compact table-header phrasing, e.g. ``2026-06`` -> ``"jun-2026"``."""
+    parsed = _parse_period(period)
+    if parsed is None:
+        return period
+    year, month = parsed
+    if month not in _MESES_ABREV:
+        return period
+    return f"{_MESES_ABREV[month]}-{year}"
 
 
 def format_period_as_of(period: str) -> str:

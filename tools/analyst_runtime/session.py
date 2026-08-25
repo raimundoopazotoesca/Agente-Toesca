@@ -281,13 +281,30 @@ class OpenAIResponsesAnalystSession:
         turn = result.turn
         self._history = _retained_history(investigation, turn.text)
         termination_reason = turn.raw.get("termination_reason")
+        has_tables = bool(validation is not None and validation.valid and validation.tables)
         presentation = (_clarification_presentation(turn.text) if termination_reason == "clarification_required"
                         else _semantic_rejection_presentation(turn.text) if termination_reason == "semantic_rejection"
                         else _conflict_presentation(turn.text) if validation and not validation.valid
-                        else self._present(turn.text, text, _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path)))
+                        # FinalPresenter's own protocol allows it to add Markdown
+                        # "when it helps readability", including a claim_ref-backed
+                        # table of its own -- harmless on its own, but when a
+                        # governed table is ALSO about to be appended below, that
+                        # freelanced structure duplicates it. Skipping the rephrase
+                        # pass here (empty claims -> verbatim deterministic draft,
+                        # see FinalPresenter.present) removes the only place a
+                        # second table could come from, rather than trying to
+                        # detect/strip one after the fact.
+                        else self._present(turn.text, text, () if has_tables else
+                                            _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path)))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
+        # Tables are deterministic Markdown rendered by coverage_guard and
+        # appended here, AFTER presentation -- never passed through
+        # FinalPresenter's numeric-redaction rephrasing pass (see
+        # CoverageValidation.tables docstring).
+        tables = validation.tables if has_tables else ()
+        final_text = presentation.content + ("\n\n" + "\n\n".join(tables) if tables else "")
         return AnalystSessionResult(
-            text=presentation.content,
+            text=final_text,
             usage=turn.usage,
             tool_calls=turn.tool_calls,
             sql_queries=[call.args["query"] for call in turn.tool_calls if call.name == "run_sql" and "query" in call.args],
@@ -297,7 +314,7 @@ class OpenAIResponsesAnalystSession:
             presentation_latency_ms=presentation.latency_ms,
             presentation_integrity_status=presentation.integrity_status,
             original_answer_hash=_answer_hash(turn.text),
-            presented_answer_hash=_answer_hash(presentation.content),
+            presented_answer_hash=_answer_hash(final_text),
             termination_reason=termination_reason,
         )
 
