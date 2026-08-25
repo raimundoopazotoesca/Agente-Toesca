@@ -76,9 +76,11 @@ def test_governed_vacancy_view_normalizes_raw_parking_without_reclassifying_othe
     db = tmp_path / "vacancy.db"
     shutil.copy2(DB, db)
     from tools.db.connection import apply_migrations
-    assert 84 in apply_migrations(str(db))
+    assert apply_migrations(str(db)) == []  # production DB is already on schema 84
     conn = sqlite3.connect(db)
     try:
+        schema_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert schema_version == 84
         parking = conn.execute("SELECT tipo_unidad, m2_gla FROM v_vacancia_activo_tipo WHERE activo_key='Viña Centro' AND periodo='2026-05' AND tipo_unidad='Estacionamiento'").fetchone()
         other = conn.execute("SELECT COUNT(*) FROM v_vacancia_activo_tipo WHERE activo_key='Mall Curicó' AND periodo='2026-05' AND tipo_unidad='Otro'").fetchone()[0]
     finally:

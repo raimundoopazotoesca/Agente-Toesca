@@ -100,9 +100,18 @@ def _pre_083_db(tmp_path: Path, monkeypatch) -> Path:
 
 
 def _semantic_copy(tmp_path: Path, monkeypatch) -> sqlite3.Connection:
-    """Apply 083 once through the normal runner to a reproducible v82 fixture."""
+    """Apply 083 in isolation (migrations through 083 only) to a reproducible v82 fixture.
+
+    Capped below 084 on purpose: this fixture exercises the 083 governed rent-roll
+    dataset migration specifically, not the unrelated 084 vacancy/parking normalization.
+    """
     db_path = _pre_083_db(tmp_path, monkeypatch)
-    monkeypatch.setattr(db_connection, "MIGRATIONS_DIR", MIGRATIONS_DIR)
+    migration_dir_083 = tmp_path / "migrations-through-083"
+    migration_dir_083.mkdir()
+    for path in MIGRATIONS_DIR.glob("*.sql"):
+        if int(path.stem.split("_", 1)[0]) <= 83:
+            shutil.copy2(path, migration_dir_083 / path.name)
+    monkeypatch.setattr(db_connection, "MIGRATIONS_DIR", migration_dir_083)
     assert apply_migrations(str(db_path)) == [83]
     conn = get_conn_for(str(db_path))
     assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 83
