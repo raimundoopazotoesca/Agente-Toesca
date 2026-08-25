@@ -101,6 +101,23 @@ def test_explicit_three_asset_subset_is_complete_over_the_subset(catalog_db):
     assert "Cobertura parcial" not in result.content
 
 
+# ---- P0: fail-closed content is never empty ----
+
+def test_fail_closed_with_no_canonical_or_governed_evidence_is_never_empty():
+    """A turn that only ran run_sql (which emits no ToolEvidence) and produced
+    a rejected envelope used to fall through every branch in `_fail` with
+    nothing to render, leaving `content == ""` -- a blank visible_answer with
+    no explanation. This is the exact shape hit live on "valor cuota
+    contable" and "GLA por rubro" (see docs/toesca-data-semantic-architecture
+    coverage audit): correct SQL, rejected envelope, silent empty answer."""
+    envelope = {"fragments": [{"type": "canonical_metric_ref", "claim_id": "missing"}],
+                "canonical_metric_claims": [], "governed_dataset_claims": []}
+    result = validate_and_render(envelope, [], [])
+    assert not result.valid
+    assert result.content != ""
+    assert "no puedo confirmar" in result.content.lower()
+
+
 # ---- Entity provenance guard: text/raw_text bypass ----
 
 def test_raw_sql_enumeration_of_multiple_same_fund_assets_fails_closed(catalog_db):

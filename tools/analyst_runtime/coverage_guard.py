@@ -65,6 +65,18 @@ _PROVENANCE_FALLBACK = (
     "No puedo confirmar que este listado de activos este completo ni respaldado "
     "por datos gobernados; te puedo dar el detalle de un activo especifico si lo indicas."
 )
+# The generic fail-closed floor: no canonical_metric evidence to render, no
+# governed_dataset evidence to fall back on either (the common shape for a
+# turn that only ran run_sql -- run_sql never emits ToolEvidence, so a
+# rejected envelope over it has nothing to summarize). Without this, `_fail`
+# returned "" and the reader saw a blank answer with no explanation -- a
+# silent failure that looked like a broken pipeline rather than a governed
+# refusal. This is the last-resort text; every branch above it is preferred
+# when it has real facts to show.
+_NO_EVIDENCE_FALLBACK = (
+    "No puedo confirmar esta respuesta con datos gobernados: la consulta no produjo evidencia "
+    "validable para responder con certeza. Intenta reformular la pregunta o pedir el dato de forma más específica."
+)
 
 
 @dataclass(frozen=True)
@@ -592,6 +604,8 @@ def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEv
             governed_facts = [fact for item in governed_evidence for fact in item.facts]
             if governed_facts:
                 content = "\n".join(_render_entity_fact(fact, db_path) for fact in governed_facts)
+    if not content:
+        content = _NO_EVIDENCE_FALLBACK
     return CoverageValidation(False, content, {
         "canonical_validation_applied": True, "canonical_claim_count": 0,
         "coverage_validation_applied": True, "coverage_scope": None, "coverage_universe_kind": None,

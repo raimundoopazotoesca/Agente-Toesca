@@ -108,6 +108,29 @@ def test_resolver_safely_suggests_or_resolves_reasonable_typed_typos(query, enti
     assert result.status in {"resolved", "low_confidence"}
 
 
+def test_bare_fund_alias_is_not_spuriously_ambiguous_against_divested_entities():
+    """dim_activo/dim_sociedad retain divested entities for history (Machalí,
+    divested 2025) whose display names happen to contain "tri" as a raw
+    substring ("Strip Machalí"). Querying the fund alias "TRI" across all
+    entity types must resolve cleanly -- it must not surface that
+    coincidental letter overlap as a competing candidate."""
+    result = EntityResolver(DB).resolve("TRI", ("fund", "asset", "company"))
+    assert result.status == "resolved"
+    assert result.candidates[0].entity_key == "TRI"
+
+
+@pytest.mark.parametrize("query,serie", [
+    ("TRI serie A", "A"),
+    ("TRI Serie A", "A"),
+    ("serie I de TRI", "I"),
+])
+def test_fund_serie_compound_expressions_resolve_the_fund(query, serie):
+    result = EntityResolver(DB).resolve(query, ("fund", "asset", "company"))
+    assert result.status == "resolved"
+    assert result.candidates[0].entity_key == "TRI"
+    assert result.candidates[0].evidence.get("serie_qualifier") == serie
+
+
 def test_cross_type_ambiguity_retains_all_candidate_types():
     result = EntityResolver(DB).resolve("Apoquindo", ("fund", "asset"))
     assert result.status == "ambiguous"

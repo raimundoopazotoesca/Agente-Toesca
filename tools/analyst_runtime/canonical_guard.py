@@ -50,9 +50,15 @@ def validate_and_render(envelope: dict[str, Any], evidence: list[ToolEvidence]) 
         "deterministic_fallback_used": False})
 
 
+_NO_EVIDENCE_FALLBACK = (
+    "No puedo confirmar esta respuesta con datos gobernados: la consulta no produjo evidencia "
+    "validable para responder con certeza. Intenta reformular la pregunta o pedir el dato de forma más específica."
+)
+
+
 def _conflict(evidence: list[ToolEvidence], reason: str) -> CanonicalValidation:
     facts = [fact for item in evidence if item.evidence_class == "canonical_metric" for fact in item.facts]
-    content = "\n".join(f"{fact['metric_key']}: {render_fact(fact)}" for fact in facts)
+    content = "\n".join(f"{fact['metric_key']}: {render_fact(fact)}" for fact in facts) or _NO_EVIDENCE_FALLBACK
     return CanonicalValidation(False, content, {"canonical_validation_applied": True,
         "canonical_validation_scope": "scalar", "canonical_claim_count": 0, "canonical_conflict": True,
         "conflicting_evidence_ids": [item.evidence_id for item in evidence if item.evidence_class == "canonical_metric"],
