@@ -40,6 +40,16 @@ from tools.entities.canonical_scope import CanonicalScopeValidator, expected_ass
 
 MAX_ROWS_RETURNED = 50
 
+# Fail-closed semantic contract rejections that are USER-facing: the question,
+# as asked, does not identify a single governed figure. They are relayed to the
+# loop as a `semantic_rejection` control so the turn ends in a clarification
+# rather than in an arbitrarily chosen variant. Everything else stays an
+# ordinary tool error the model can recover from on its own.
+_SEMANTIC_REJECTION_CODES = frozenset({
+    "invalid_aggregation", "dimension_required", "unknown_dimension_value",
+    "unavailable_dimension_combination",
+})
+
 # Fixed, metric-agnostic half of every governed capability description; the
 # rest is generated from the Metric Catalog (see `_description`).
 _GOVERNED_AUTHORITY_NOTE = (
@@ -404,6 +414,18 @@ class _AnalyticsCapabilityAction:
                 "result_kind": result.result_kind,
                 "rows": [row.__dict__ for row in result.rows],
             }
+            if not result.rows:
+                # An empty governed result is an ABSENCE OF OBSERVATION, and
+                # the model has to be told so explicitly: left as a bare empty
+                # list it reads as "nothing happened", i.e. zero. There is no
+                # evidence to bind either, so the answer must state the
+                # limitation instead of reporting a figure.
+                payload["coverage"] = {
+                    "status": "none",
+                    "note": ("No hay observación gobernada para esa combinación de entidad, período y "
+                             "dimensiones. Ausencia de dato NO significa cero: dilo como falta de "
+                             "información, nunca como un valor."),
+                }
             evidence = None
             if result.result_kind == "scalar" and len(result.rows) == 1:
                 row = result.rows[0]
@@ -413,7 +435,8 @@ class _AnalyticsCapabilityAction:
                     source={"tool_name": self.name, "source_kind": row.source_kind},
                     scope=scope,
                     semantic_contract={"metric_key": row.metric_key,
-                                       "aggregation": request.arguments.get("aggregation")},
+                                       "aggregation": request.arguments.get("aggregation"),
+                                       **self._semantic_extras(request.arguments)},
                     provenance=row.provenance,
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
                             "entity_id": row.entity_id, "period": row.period, **(row.dimensions or {})},),
@@ -426,7 +449,7 @@ class _AnalyticsCapabilityAction:
                 # (entity_id, period) in either case.
                 period_range = result.result_kind == "scalar"
                 coverage = (_period_range_coverage(result.rows) if period_range
-                            else _governed_dataset_coverage(self.db_path, scope, request.arguments, result.rows))
+                            else self._dataset_coverage(scope, request.arguments, result.rows))
                 evidence = ToolEvidence(
                     evidence_id=request.call_id,
                     evidence_class="governed_dataset",
@@ -436,7 +459,8 @@ class _AnalyticsCapabilityAction:
                                        "entity_grain": result.rows[0].entity_type,
                                        "period_grain": "month",
                                        "universe_kind": coverage["universe_kind"],
-                                       "aggregation": request.arguments.get("aggregation")},
+                                       "aggregation": request.arguments.get("aggregation"),
+                                       **self._semantic_extras(request.arguments)},
                     provenance={"ingest_run_ids": sorted({
                         r.provenance.get("ingest_run_id") for r in result.rows
                         if isinstance(r.provenance, dict) and isinstance(r.provenance.get("ingest_run_id"), int)
@@ -448,7 +472,7 @@ class _AnalyticsCapabilityAction:
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
         except SemanticQueryError as exc:
-            if exc.code != "invalid_aggregation":
+            if exc.code not in _SEMANTIC_REJECTION_CODES:
                 payload = {"error_type": "semantic_query_error", "error": str(exc)}
                 return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
                                   trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
@@ -462,6 +486,17 @@ class _AnalyticsCapabilityAction:
             payload = {"error_type": "invalid_request", "error": str(exc)}
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False),
                               trace=_capability_trace(request.arguments, {}, payload, self._allowed_fields()))
+
+    def _semantic_extras(self, arguments: dict[str, object]) -> dict[str, object]:
+        """Extra semantic-contract fields carried on this capability's evidence.
+        Empty for the classic capabilities; the dimensional one adds the
+        dimensions that identify the figure, so Durable Context can restore a
+        follow-up's basis/window without re-deriving them from prose."""
+        del arguments
+        return {}
+
+    def _dataset_coverage(self, scope: dict[str, str], arguments: dict[str, object], rows: tuple) -> dict[str, object]:
+        return _governed_dataset_coverage(self.db_path, scope, arguments, rows)
 
     def _catalog(self):
         return load_metric_catalog(self.catalog_path)
@@ -538,6 +573,149 @@ class AnalyticsBreakdownAssetAction(_AnalyticsCapabilityAction):
     scope_field = "fund"
     breakdown = True
     subset = True
+
+
+class AnalyticsDimensionalLookupAction(_AnalyticsCapabilityAction):
+    """The one governed surface for metrics that need semantic dimensions.
+
+    Deliberately NOT one action (or one branch) per KPI family: dividends,
+    dividend yield, TIR, unit values, capital, units outstanding, equity and
+    amortization all arrive here, and everything that differs between them --
+    which sub-entity scope applies, which dimensions identify the figure, and
+    which of them are optional -- is read from the metric catalog at
+    `tool_spec()` time. Adding a metric family is a catalog row.
+    """
+
+    name = "analytics_lookup_dimensional"
+    description = (
+        "Devuelve cifras financieras gobernadas de un fondo y sus series (rentabilidad, "
+        "dividend yield, distribuciones, valor cuota, capital, cuotas, patrimonio y "
+        "amortización de deuda), identificadas por serie y por las dimensiones semánticas "
+        "que correspondan."
+    )
+    capability = "dimensional_lookup"
+    scope_field = "fund"
+    breakdown = False
+
+    def tool_spec(self) -> ToolSpec:
+        catalog = self._catalog().metrics
+        metrics = [catalog[key] for key in self._metric_keys() if key in catalog]
+        properties: dict[str, object] = {
+            "metric": {"type": "string", "enum": [metric.key for metric in metrics],
+                       "description": "Identidad exacta de la métrica gobernada."},
+            "fund": {"type": "string", "description": "Clave canónica del fondo."},
+            "period": {"type": "string", "description": "Mes inicial en formato YYYY-MM."},
+            "period_end": {"type": ["string", "null"], "description": "Mes final inclusivo en YYYY-MM, o null para un punto."},
+            "aggregation": {"type": ["string", "null"], "enum": ["sum", None],
+                            "description": "Agregación temporal; sólo se acepta si el contrato de la métrica la permite."},
+            "series": {"type": ["string", "null"],
+                       "description": "Serie del fondo (por ejemplo A, C, I). Usa null para cubrir todas las series del fondo."},
+            "credit": {"type": ["string", "null"],
+                       "description": "Clave canónica de un crédito. Usa null para cubrir todos los créditos del fondo."},
+        }
+        for name, values in sorted(self._dimension_values(metrics).items()):
+            properties[name] = {
+                "type": ["string", "null"], "enum": sorted(values) + [None],
+                "description": (f"Dimensión semántica '{name}'. Obligatoria para las métricas que la declaran: "
+                                "sin ella la pregunta no identifica una cifra única y se pide aclaración."),
+            }
+        return ToolSpec(self.name, self._description(), {
+            "type": "object", "additionalProperties": False, "properties": properties,
+            "required": [name for name in properties],
+        })
+
+    @staticmethod
+    def _dimension_values(metrics) -> dict[str, set[str]]:
+        values: dict[str, set[str]] = {}
+        for metric in metrics:
+            for dimension in getattr(metric.access, "dimensions", ()):  # only DimensionedAccess has them
+                values.setdefault(dimension.name, set()).update(dimension.values)
+        return values
+
+    def _metric_affordance(self, metric) -> str:
+        bounds = metric_period_bounds(self.db_path, metric)
+        period_hint = f", períodos {bounds[0]}..{bounds[1]}" if bounds else ""
+        dimensions = getattr(metric.access, "dimensions", ())
+        dimension_hint = "".join(
+            f", {dimension.name}={'/'.join(dimension.values)}" for dimension in dimensions)
+        scope = getattr(metric.access, "scope", "")
+        scope_hint = {"series": ", por serie", "credit": ", por crédito"}.get(scope, "")
+        return f"{metric.display_name} ({metric.key}{period_hint}{scope_hint}{dimension_hint})"
+
+    def _allowed_fields(self) -> frozenset[str]:
+        catalog = self._catalog().metrics
+        metrics = [catalog[key] for key in self._metric_keys() if key in catalog]
+        return frozenset({"metric", "fund", "period", "period_end", "aggregation", "series", "credit"}
+                         | set(self._dimension_values(metrics)))
+
+    def _semantic_extras(self, arguments: dict[str, object]) -> dict[str, object]:
+        reserved = {"metric", "fund", "period", "period_end", "aggregation", "series", "credit"}
+        extras: dict[str, object] = {
+            name: arguments[name] for name in sorted(set(arguments) - reserved)
+            if arguments.get(name) is not None
+        }
+        for name in ("series", "credit"):
+            if arguments.get(name) is not None:
+                extras[name] = arguments[name]
+        return {"dimensions": extras} if extras else {}
+
+    def _dataset_coverage(self, scope: dict[str, str], arguments: dict[str, object], rows: tuple) -> dict[str, object]:
+        """Coverage over the fund's sub-entity universe (series or credits).
+
+        The eligible universe is the canonical dimension table, exactly as the
+        asset universe is for the asset capabilities -- never inferred from
+        what happened to come back.
+        """
+        del arguments
+        observed = frozenset(row.entity_id for row in rows)
+        entity_types = {row.entity_type for row in rows}
+        kind = "fund_series" if entity_types == {"series"} else (
+            "fund_credits" if entity_types == {"credit"} else "fund_assets")
+        if scope.get("series") or scope.get("credit") or kind == "fund_assets":
+            eligible = observed
+        else:
+            table, column = (("dim_serie", "nemotecnico") if kind == "fund_series"
+                             else ("dim_credito", "credito_key"))
+            connection = sqlite3.connect(f"{Path(self.db_path).resolve().as_uri()}?mode=ro", uri=True)
+            try:
+                eligible = frozenset(str(key) for (key,) in connection.execute(
+                    f"SELECT {column} FROM {table} WHERE fondo_key=?", (scope.get("fund"),)))
+            except sqlite3.OperationalError:
+                eligible = observed
+            finally:
+                connection.close()
+        status = "complete" if eligible and eligible <= observed else ("partial" if eligible else "unknown")
+        return {"universe_kind": kind, "eligible_count": len(eligible), "observed_count": len(observed),
+                "eligible_ids": sorted(eligible), "observed_ids": sorted(observed), "status": status}
+
+    def _request(self, arguments: dict[str, object]) -> tuple[AnalyticsQueryRequest, dict[str, str]]:
+        allowed = self._allowed_fields()
+        unknown = sorted(set(arguments) - allowed)
+        if unknown:
+            raise ValueError(f"unknown {self.name} fields: {', '.join(unknown)}")
+        metric_key = _required_string(arguments, "metric")
+        if metric_key not in self._metric_keys():
+            raise ValueError(f"metric is not available for {self.name}: {metric_key}")
+        fund = _required_string(arguments, "fund")
+        series = _optional_string(arguments, "series")
+        credit = _optional_string(arguments, "credit")
+        if series and credit:
+            raise ValueError("series and credit are mutually exclusive selectors")
+        dimensions = tuple(sorted(
+            (name, str(arguments[name])) for name in allowed - {"metric", "fund", "period", "period_end",
+                                                                "aggregation", "series", "credit"}
+            if arguments.get(name) is not None))
+        scope: dict[str, str] = {"fund": fund}
+        if series:
+            scope["series"] = series
+        if credit:
+            scope["credit"] = credit
+        return AnalyticsQueryRequest(
+            metric=metric_key, funds=(fund,), period=_required_string(arguments, "period"),
+            period_end=_optional_string(arguments, "period_end"),
+            aggregation=_optional_string(arguments, "aggregation"),
+            dimensions=dimensions, selector=series or credit,
+        ), scope
 
 
 @dataclass

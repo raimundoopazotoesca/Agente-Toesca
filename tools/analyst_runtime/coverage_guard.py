@@ -204,7 +204,8 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     # by sign; ratio by whether it's above/below 1) -- not just the dedicated
     # "comparison" operation.
     has_comparison_claim = any(
-        claim.operation in {"comparison", "difference", "percentage_point_difference", "ratio"}
+        claim.operation in {"comparison", "difference", "percentage_point_difference", "ratio",
+                            "discount_premium"}
         for claim in bound_derived.values()
     )
 
@@ -334,11 +335,13 @@ def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None,
 # not a value, so it can never be placed in a cell -- citing one as a table
 # cell_claim_id fails the whole table closed rather than being silently
 # dropped or coerced into a value it doesn't have.
-_TABLE_DERIVED_OPERATIONS = {"difference", "percent_change", "percentage_point_difference", "ratio"}
+_TABLE_DERIVED_OPERATIONS = {"difference", "percent_change", "percentage_point_difference", "ratio",
+                             "discount_premium"}
 
 _DERIVED_OPERATION_DISPLAY = {
     "difference": "Diferencia", "percent_change": "Variación %",
     "percentage_point_difference": "Cambio (pp)", "ratio": "Razón",
+    "discount_premium": "Descuento / premio",
 }
 
 

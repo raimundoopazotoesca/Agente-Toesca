@@ -28,6 +28,7 @@ from tools.analyst_runtime.session import (
     OpenAIResponsesAnalystSession, _alpha_system_prompt,
 )
 from tools.analytics.catalog import CATALOG_PATH, load_metric_catalog
+from tools.analytics.models import DimensionedAccess
 from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest
 
 DB = Path("memory/agente_toesca_v2.db")
@@ -71,13 +72,18 @@ def test_capability_descriptions_are_generated_from_the_metric_catalog():
         (AnalyticsLookupAssetAction, "asset"),
     ):
         description = action_class(DB).tool_spec().description
-        expected = [m for m in catalog.values() if m.entity_grain == grain and m.status == "active"]
+        # A dimensioned metric belongs to its own capability whatever its
+        # grain (it needs the basis/window arguments the plain lookups have no
+        # contract for), so it is not expected in these two descriptions.
+        expected = [m for m in catalog.values()
+                    if m.entity_grain == grain and m.status == "active"
+                    and not isinstance(m.access, DimensionedAccess)]
         assert expected, f"catalog defines no active {grain}-grain metric"
         for metric in expected:
             assert metric.key in description
             assert metric.display_name in description
         for metric in catalog.values():
-            if metric.entity_grain != grain:
+            if metric.entity_grain != grain or isinstance(metric.access, DimensionedAccess):
                 assert f"({metric.key}" not in description
 
 

@@ -19,11 +19,17 @@ from tools.analytics.monetary import present_monetary_fact
 
 # Human suffix per internal unit code. The internal code itself must never
 # reach a user.
-_UNIT_SUFFIX = {"pct_0_100": "%", "%": "%", "m2": " m²", "clp": " CLP", "ratio_0_1": "", "UF": " UF"}
+_UNIT_SUFFIX = {"pct_0_100": "%", "%": "%", "m2": " m²", "clp": " CLP", "ratio_0_1": "", "UF": " UF",
+                "cuotas": " cuotas"}
 
 # Display precision per unit code. Deliberately absent for pct_0_100, which
 # is already expressed in its display scale and must render unrounded.
-_UNIT_PRECISION = {"UF": 0, "clp": 0, "m2": 1, "pct_0_100": 2, "%": 2}
+# A per-unit distribution is a small fraction of a UF, so the shared UF
+# precision of 0 would render every dividend as "0 UF"; the formatter picks
+# the precision from the magnitude of the value, not from the metric name, so
+# this stays a display rule about small numbers rather than a per-KPI branch.
+_UNIT_PRECISION = {"UF": 0, "clp": 0, "m2": 1, "pct_0_100": 2, "%": 2, "cuotas": 0}
+_SMALL_MAGNITUDE_PRECISION = 4
 
 _UNIT_SUFFIX["CLP"] = _UNIT_SUFFIX["clp"]
 _UNIT_PRECISION["CLP"] = _UNIT_PRECISION["clp"]
@@ -52,6 +58,11 @@ def render_metric_value(metric_key: Any, value: Any, unit: Any, fact: dict[str, 
     suffix = _UNIT_SUFFIX.get(effective_unit, f" {effective_unit}" if effective_unit else "")
     precision = _UNIT_PRECISION.get(effective_unit)
     if precision is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
+        if precision == 0 and 0 < abs(float(value)) < 1:
+            # Rounding a genuinely sub-unit amount to 0 would turn a real
+            # figure into a false zero -- the one thing this surface must
+            # never do.
+            precision = _SMALL_MAGNITUDE_PRECISION
         return _number(value, precision) + suffix
     # No catalogued precision for this unit: still never surface a raw
     # unrounded Python float to a reader. Default to 2dp Chilean formatting
@@ -82,6 +93,15 @@ def render_derived_value(operation: str, value: float, unit: str) -> str:
         suffix = _UNIT_SUFFIX.get(unit, f" {unit}" if unit else "")
         precision = _UNIT_PRECISION.get(unit, 2)
         return _number(value, precision) + suffix
+    if operation == "discount_premium":
+        # The sign carries the business meaning: below its reference value is
+        # a discount, above it is a premium. The reader never sees a bare
+        # signed percentage they would have to interpret themselves.
+        if value < 0:
+            return "un descuento de " + _number(abs(value), 1) + "%"
+        if value > 0:
+            return "un premio de " + _number(value, 1) + "%"
+        return "sin descuento ni premio (0,0%)"
     if operation == "comparison":
         if value > 0:
             return "es mayor que"

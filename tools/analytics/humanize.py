@@ -37,7 +37,8 @@ _MESES_ABREV = {
     7: "jul", 8: "ago", 9: "sep", 10: "oct", 11: "nov", 12: "dic",
 }
 
-_ENTITY_KIND_LABELS = {"fund": "Fondo", "asset": "Activo", "company": "Sociedad"}
+_ENTITY_KIND_LABELS = {"fund": "Fondo", "asset": "Activo", "company": "Sociedad",
+                       "series": "Serie", "credit": "Crédito"}
 
 _FORBIDDEN_JARGON = [
     "canonical_metric_ref", "governed_dataset_ref", "canonical_metric",
@@ -69,6 +70,28 @@ def _entity_catalog(db_path: str) -> dict[str, tuple[str, str]]:
         for key, nombre in conn.execute("SELECT sociedad_key, nombre FROM dim_sociedad"):
             if key not in catalog and nombre:
                 catalog[key] = (nombre, "company")
+        # Series last and never overwriting an existing key: `dim_serie` uses
+        # the fund key itself as the nemotecnico for a single-series fund
+        # (e.g. Apo), and the FUND identity must win there -- a nemotecnico
+        # that is also a fund key is displayed as the fund, not twice.
+        try:
+            series = conn.execute("SELECT nemotecnico, fondo_key, serie FROM dim_serie").fetchall()
+        except sqlite3.OperationalError:
+            series = []
+        for key, fondo_key, serie in series:
+            if key in catalog or not key:
+                continue
+            catalog[key] = (f"serie {serie} de {fondo_key}" if serie and serie != "Única"
+                            else f"serie única de {fondo_key}", "series")
+        try:
+            creditos = conn.execute("SELECT credito_key, acreedor, activo_key FROM dim_credito").fetchall()
+        except sqlite3.OperationalError:
+            creditos = []
+        for key, acreedor, activo_key in creditos:
+            if key in catalog or not key:
+                continue
+            label = " - ".join(part for part in (acreedor, activo_key) if part)
+            catalog[key] = (f"crédito {label}" if label else str(key), "credit")
     finally:
         conn.close()
     return catalog

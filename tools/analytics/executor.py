@@ -7,8 +7,9 @@ from typing import Literal
 
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.models import (
-    Aggregation, DerivedKpiAccess, EntityReference, EntityType, FallbackAccess, RollupRatioViewAccess, SegmentedVacancyAccess,
-    SemanticQuery, ViewMetricAccess,
+    Aggregation, DerivedKpiAccess, DerivedKpiVariantSource, DimensionedAccess, EntityReference, EntityType,
+    FallbackAccess, MetricDefinition, RollupRatioViewAccess, SegmentedVacancyAccess,
+    SemanticQuery, TableVariantSource, ViewMetricAccess,
 )
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 
@@ -34,6 +35,8 @@ class AnalyticsQueryRequest:
     limit: int | None = None
     aggregation: str | None = None
     space_types: tuple[str, ...] = ()
+    dimensions: tuple[tuple[str, str], ...] = ()
+    selector: str | None = None
 
     def to_semantic_query(self) -> SemanticQuery:
         entities = tuple(
@@ -42,7 +45,9 @@ class AnalyticsQueryRequest:
         )
         aggregation = Aggregation(self.aggregation) if self.aggregation else None
         return SemanticQuery(self.metric, entities, self.period, self.period_end, aggregation,
-                             group_by=self.group_by, order_by=self.order_by, limit=self.limit, space_types=self.space_types)
+                             group_by=self.group_by, order_by=self.order_by, limit=self.limit,
+                             space_types=self.space_types,
+                             dimensions=tuple(sorted(self.dimensions)), selector=self.selector)
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,12 @@ class AnalyticsExecutor:
             raise SemanticQueryError("grouping must match metric entity grain")
         if request.order_by not in (None, "value_desc", "value_asc") or (request.limit is not None and request.limit < 1):
             raise SemanticQueryError("invalid order or limit")
+        if isinstance(metric.access, DimensionedAccess):
+            rows = tuple(self._dimensioned_rows(metric, request, query))
+            if query.temporal_aggregation is not None:
+                rows = self._aggregate(rows, query, metric)
+            kind = "scalar" if len({(row.entity_id, row.entity_type) for row in rows}) <= 1 else "breakdown"
+            return AnalyticsResult(self._catalog.version, kind, rows)
         if isinstance(metric.access, SegmentedVacancyAccess):
             rows = self._segmented_rows(metric, request)
             return AnalyticsResult(self._catalog.version, "scalar", tuple(rows))
@@ -110,28 +121,46 @@ class AnalyticsExecutor:
         return AnalyticsResult(self._catalog.version, "breakdown" if request.group_by else "scalar", rows)
 
     @staticmethod
-    def _aggregate(rows: tuple[AnalyticsRow, ...], query: SemanticQuery) -> tuple[AnalyticsRow, ...]:
+    def _aggregate(rows: tuple[AnalyticsRow, ...], query: SemanticQuery,
+                   metric: MetricDefinition | None = None) -> tuple[AnalyticsRow, ...]:
         expected = _month_range(query.period_start, query.period_end or query.period_start)
+        # An EVENT metric is observed only when the event happened: a month
+        # without a distribution is not a coverage gap and must not block the
+        # aggregation the way a missing month of a dense monthly series does.
+        # It still never turns absence into a zero -- with no events at all
+        # there are no rows here and nothing is aggregated or reported.
+        event_stream = metric is not None and metric.temporal_completeness == "event"
         by_entity: dict[tuple[str, str], list[AnalyticsRow]] = {}
         for row in rows:
             by_entity.setdefault((row.entity_id, row.entity_type), []).append(row)
         aggregated: list[AnalyticsRow] = []
         for (entity_id, entity_type), entity_rows in by_entity.items():
             observed = {row.period for row in entity_rows}
-            if observed != set(expected):
+            if event_stream:
+                if not observed <= set(expected):
+                    raise SemanticQueryError("aggregation covers periods outside the requested range")
+            elif observed != set(expected):
                 raise SemanticQueryError("coverage is incomplete for requested aggregation")
             if any(row.value is None for row in entity_rows):
                 raise SemanticQueryError("coverage contains null values for requested aggregation")
             value = sum(float(row.value) for row in entity_rows)
             lineage = {
-                "source_period_count": len(entity_rows), "source_periods": expected,
+                "source_period_count": len(entity_rows),
+                "source_periods": sorted(observed) if event_stream else expected,
+                "temporal_completeness": "event" if event_stream else "dense",
                 "formula": sorted({str(row.provenance.get("formula")) for row in entity_rows}),
                 "ingest_run_ids": sorted({row.provenance.get("ingest_run_id") for row in entity_rows if row.provenance.get("ingest_run_id") is not None}),
             }
             aggregated.append(AnalyticsRow(entity_id=entity_id, entity_type=entity_type,
                 metric_key=entity_rows[0].metric_key, period=f"{expected[0]}..{expected[-1]}",
                 value=value, unit=entity_rows[0].unit, source_kind=entity_rows[0].source_kind,
-                provenance=lineage))
+                provenance=lineage,
+                # An aggregated row keeps the semantic dimensions of its
+                # operands (they are identical by construction: one variant
+                # was selected for the whole request), so a summed fact is
+                # still self-describing -- "distribuciones tipo dividendo",
+                # not an unlabelled number.
+                dimensions=dict(entity_rows[0].dimensions or {})))
         return tuple(aggregated)
 
 
@@ -184,6 +213,268 @@ class AnalyticsExecutor:
             {"formula": "sum(m2_vacantes)/sum(m2_gla)", "numerator": None, "denominator": None, "source_rows": 0},
             {"space_types": tuple(requested), "space_type": requested[0] if len(requested) == 1 else "combined",
              "measurement_unit": unit, "coverage": "none"})]
+
+    # ------------------------------------------------------------------
+    # Dimensioned access (fund financial surface)
+    # ------------------------------------------------------------------
+
+    def _dimensioned_rows(self, metric: MetricDefinition, request: AnalyticsQueryRequest,
+                          query: SemanticQuery) -> list[AnalyticsRow]:
+        access: DimensionedAccess = metric.access
+        if len(request.funds) != 1 or request.assets:
+            raise SemanticQueryError("fund scope is required")
+        fund = request.funds[0]
+        selected = self._resolve_dimensions(access, query)
+        variant = access.select(selected)
+        if variant is None:
+            raise SemanticQueryError(
+                "the requested combination of dimensions is not available for this metric",
+                code="unavailable_dimension_combination",
+                metadata={"metric_id": metric.key, "requested_dimensions": selected,
+                          "available_combinations": [dict(item.values) for item in access.variants]},
+            )
+        entities = self._scope_entities(access, fund, request.selector)
+        if not entities:
+            raise SemanticQueryError(
+                "no canonical sub-entity matches that selection",
+                code="unknown_selector",
+                metadata={"metric_id": metric.key, "fund": fund, "selector": request.selector},
+            )
+        period_end = request.period_end or request.period
+        horizon = self._observed_horizon(access, fund)
+        if horizon is not None and period_end > horizon:
+            # The source is a payment SCHEDULE that runs decades past the last
+            # real close (CONSOLIDADO_TRI reaches 2072). Reporting those rows
+            # would present placeholder future entries -- many of them zero --
+            # as observed amortization. The requested window is clamped to the
+            # governed observed horizon instead; a window entirely beyond it
+            # simply yields no observation, which is coverage NONE, not zero.
+            period_end = horizon
+            if period_end < request.period:
+                return []
+        rows: list[AnalyticsRow] = []
+        for entity in entities:
+            rows.extend(self._variant_rows(metric, variant, entity, request.period, period_end,
+                                           selected, fund, horizon))
+        rows.sort(key=lambda row: (row.period, row.entity_id))
+        if request.order_by:
+            rows.sort(key=lambda row: (row.value is None, row.value or 0.0),
+                      reverse=request.order_by == "value_desc")
+        if request.limit:
+            rows = rows[: int(request.limit)]
+        return rows
+
+    @staticmethod
+    def _resolve_dimensions(access: DimensionedAccess, query: SemanticQuery) -> dict[str, str]:
+        """Apply catalog defaults, reject unknown values, and fail closed --
+        with the allowed values attached -- on a dimension the caller left
+        open and the catalog gives no default for."""
+        supplied = dict(query.dimensions)
+        unknown = sorted(set(supplied) - {dimension.name for dimension in access.dimensions})
+        if unknown:
+            raise SemanticQueryError(
+                f"dimension is not part of this metric contract: {', '.join(unknown)}",
+                code="unknown_dimension",
+                metadata={"metric_id": query.metric_id, "unknown_dimensions": unknown,
+                          "declared_dimensions": [dimension.name for dimension in access.dimensions]},
+            )
+        selected: dict[str, str] = {}
+        missing: list[dict[str, object]] = []
+        for dimension in access.dimensions:
+            value = supplied.get(dimension.name, dimension.default)
+            if value is None:
+                missing.append({"dimension": dimension.name, "allowed_values": list(dimension.values)})
+                continue
+            if value not in dimension.values:
+                raise SemanticQueryError(
+                    f"unknown value for dimension {dimension.name}: {value}",
+                    code="unknown_dimension_value",
+                    metadata={"metric_id": query.metric_id, "dimension": dimension.name,
+                              "requested_value": value, "allowed_values": list(dimension.values)},
+                )
+            selected[dimension.name] = value
+        if missing:
+            raise SemanticQueryError(
+                "the metric is not identified until every semantic dimension is chosen",
+                code="dimension_required",
+                metadata={"metric_id": query.metric_id, "missing_dimensions": missing},
+            )
+        return selected
+
+    def _scope_entities(self, access: DimensionedAccess, fund: str, selector: str | None) -> list[dict[str, str]]:
+        """Resolve the sub-entities of a fund for this metric's scope.
+
+        Returns dicts with the source key (what the SQL filters on) and the
+        reported canonical identity (what a claim binds to). They differ only
+        for ``fund_template``, where a synthetic consolidated key is read but
+        the fact belongs to the fund itself.
+        """
+        if access.scope == "fund_template":
+            assert access.entity_key_template is not None
+            if selector is not None:
+                raise SemanticQueryError("this metric has no sub-entity selector", code="unknown_selector")
+            return [{"source_key": access.entity_key_template.format(fund=fund),
+                     "entity_id": fund, "entity_type": "fund", "label": fund}]
+        if access.scope == "series":
+            sql = "SELECT nemotecnico, serie FROM dim_serie WHERE fondo_key=? ORDER BY serie, nemotecnico"
+            with self._sandbox.connect() as connection:
+                records = connection.execute(sql, (fund,)).fetchall()
+            candidates = [{"source_key": key, "entity_id": key, "entity_type": "series", "label": str(serie)}
+                          for key, serie in records]
+        else:
+            sql = "SELECT credito_key FROM dim_credito WHERE fondo_key=? ORDER BY credito_key"
+            with self._sandbox.connect() as connection:
+                records = connection.execute(sql, (fund,)).fetchall()
+            candidates = [{"source_key": key, "entity_id": key, "entity_type": "credit", "label": str(key)}
+                          for (key,) in records]
+        if selector is None:
+            return candidates
+        wanted = selector.strip().casefold()
+        return [item for item in candidates
+                if item["label"].casefold() == wanted or item["entity_id"].casefold() == wanted]
+
+    def _observed_horizon(self, access: DimensionedAccess, fund: str) -> str | None:
+        """Latest period for which the fund has a real observed financial
+        close, read from a governed backward-looking KPI series declared in
+        the catalog. It is what separates an amortization that ALREADY
+        happened from one that is merely scheduled -- without it,
+        MAX(periodo) on a payment schedule would report a placeholder row
+        decades in the future as the latest real amortization."""
+        source = access.observed_horizon
+        if source is None:
+            return None
+        with self._sandbox.connect() as connection:
+            row = connection.execute(
+                "SELECT MAX(periodo) FROM derived_kpi WHERE entidad_tipo=? AND kpi=? AND entidad_key=?",
+                (source.entity_type, source.kpi, fund)).fetchone()
+        return str(row[0]) if row and row[0] else None
+
+    def _variant_rows(self, metric: MetricDefinition, variant, entity: dict[str, str], period: str,
+                      period_end: str, selected: dict[str, str], fund: str,
+                      horizon: str | None) -> list[AnalyticsRow]:
+        source = variant.source
+        base_dimensions = {**selected, "fund": fund}
+        if entity["entity_type"] == "series":
+            base_dimensions["series"] = entity["label"]
+        elif entity["entity_type"] == "credit":
+            base_dimensions["credit"] = entity["entity_id"]
+        if isinstance(source, DerivedKpiVariantSource):
+            return self._persisted_kpi_rows(metric, source, entity, period, period_end, base_dimensions)
+        return self._table_rows(metric, source, entity, period, period_end, base_dimensions, horizon)
+
+    def _persisted_kpi_rows(self, metric: MetricDefinition, source: DerivedKpiVariantSource,
+                            entity: dict[str, str], period: str, period_end: str,
+                            dimensions: dict[str, object]) -> list[AnalyticsRow]:
+        variant_clause = "variante IS NULL" if source.variante is None else "variante=?"
+        params: list[object] = [source.entity_type, source.kpi, entity["source_key"], period, period_end]
+        if source.variante is not None:
+            params.append(source.variante)
+        sql = ("SELECT periodo, valor, formula, ingest_run_id, unidad FROM derived_kpi "
+               "WHERE entidad_tipo=? AND kpi=? AND entidad_key=? AND periodo BETWEEN ? AND ? "
+               f"AND {variant_clause} ORDER BY periodo")
+        with self._sandbox.connect() as connection:
+            records = connection.execute(sql, tuple(params)).fetchall()
+        return [AnalyticsRow(metric.key, entity["entity_id"], entity["entity_type"], str(record[0]),
+                             None if record[1] is None else float(record[1]), metric.unit, metric.source_kind,
+                             {"formula": record[2], "ingest_run_id": record[3],
+                              "source": "derived_kpi", "kpi": source.kpi, "variante": source.variante,
+                              "source_entity_key": entity["source_key"], "source_unit": record[4],
+                              "authority": "persisted_canonical_kpi"},
+                             dict(dimensions))
+                for record in records]
+
+    def _table_rows(self, metric: MetricDefinition, source: TableVariantSource, entity: dict[str, str],
+                    period: str, period_end: str, dimensions: dict[str, object],
+                    horizon: str | None) -> list[AnalyticsRow]:
+        filters = [f"{source.entity_column}=?"]
+        params: list[object] = [entity["source_key"]]
+        for column, value in source.filters:
+            if value is None:
+                filters.append(f"{column} IS NULL")
+            else:
+                filters.append(f"{column}=?")
+                params.append(value)
+        # A NULL measurement is missing data, never a zero: excluded at the
+        # source so it can never be summed or reported as an observation.
+        filters.append(f"{source.value_column} IS NOT NULL")
+        period_expression = source.period_column or f"substr({source.date_column},1,7)"
+        if source.temporal == "as_of":
+            filters.append(f"{period_expression}<=?")
+            params.append(period_end)
+        else:
+            filters.append(f"{period_expression} BETWEEN ? AND ?")
+            params.extend([period, period_end])
+        columns = [period_expression, source.value_column]
+        extra = list(dict.fromkeys(
+            [column for column in (source.date_column,) if column]
+            + list(source.provenance_columns)
+            + ([source.conversion.reference_column] if source.conversion else [])
+        ))
+        # Newest-first, with the measured value as the last tiebreak so the
+        # ordering is total and reproducible even for a view (no rowid) and
+        # even when a source holds two byte-identical snapshot rows.
+        order = (f"{period_expression} DESC, "
+                 + (f"{source.date_column} DESC, " if source.date_column else "")
+                 + f"{source.value_column} DESC")
+        sql = (f"SELECT {', '.join(columns + extra)} FROM {source.table} "
+               f"WHERE {' AND '.join(filters)} ORDER BY {order}")
+        with self._sandbox.connect() as connection:
+            records = connection.execute(sql, tuple(params)).fetchall()
+        return self._rows_from_records(metric, source, entity, records, extra, dimensions, horizon)
+
+    def _rows_from_records(self, metric: MetricDefinition, source: TableVariantSource, entity: dict[str, str],
+                           records: list, extra: list[str], dimensions: dict[str, object],
+                           horizon: str | None) -> list[AnalyticsRow]:
+        """Apply the declared temporal contract to already-ordered records.
+
+        Records arrive newest-first, so "the first record for a key wins" is
+        the single deterministic de-duplication rule used by every contract
+        here -- which is exactly what stops the duplicated legacy distribution
+        rows from being counted twice.
+        """
+        selected: list[tuple[str, object, dict[str, object]]] = []
+        seen: set[tuple] = set()
+        for record in records:
+            period_value, value = str(record[0]), record[1]
+            details = dict(zip(extra, record[2:]))
+            if source.temporal == "event":
+                key = (period_value, str(details.get(source.date_column))) + tuple(
+                    str(details.get(column)) for column in source.dedupe_columns)
+            else:
+                key = (period_value,)
+            if key in seen:
+                continue
+            seen.add(key)
+            selected.append((period_value, value, details))
+            if source.temporal == "as_of":
+                break
+        rows: list[AnalyticsRow] = []
+        for period_value, value, details in selected:
+            provenance: dict[str, object] = {
+                "formula": f"{source.table}.{source.value_column}", "ingest_run_id": None,
+                "source": source.table, "temporal_contract": source.temporal,
+                "source_entity_key": entity["source_key"], "authority": "raw_governed_source",
+                **{column: details[column] for column in extra if column in details},
+            }
+            row_dimensions = dict(dimensions)
+            if horizon is not None:
+                row_dimensions["schedule_basis"] = "observed" if period_value <= horizon else "scheduled"
+                provenance["observed_horizon"] = horizon
+            fact_extras: dict[str, object] = {}
+            if source.conversion is not None:
+                reference = details.get(source.conversion.reference_column)
+                if isinstance(reference, (int, float)) and reference > 0:
+                    fact_extras["presentation_conversion"] = {
+                        "from_unit": source.conversion.from_unit, "to_unit": source.conversion.to_unit,
+                        "temporal_basis": source.conversion.temporal_basis, "reference_value": float(reference),
+                        "source": f"{source.table}.{source.conversion.reference_column}",
+                        "reference_date": str(details.get(source.date_column) or period_value),
+                    }
+            rows.append(AnalyticsRow(metric.key, entity["entity_id"], entity["entity_type"], period_value,
+                                     None if value is None else float(value), metric.unit, metric.source_kind,
+                                     provenance, {**row_dimensions, **fact_extras}))
+        rows.sort(key=lambda row: row.period)
+        return rows
 
     def _fallback_records(self, access: FallbackAccess, request: AnalyticsQueryRequest):
         """Primary source wins for any (entity, period) it covers. The

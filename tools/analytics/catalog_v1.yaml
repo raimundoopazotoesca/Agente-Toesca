@@ -172,3 +172,364 @@ metrics:
     methodology: raw_er_ingresos_v1
     nature: flow
     allowed_temporal_aggregations: [sum]
+
+  # ---------------------------------------------------------------------
+  # Fund financial surface v1 -- series-level returns, distributions,
+  # unit values, capital and debt amortization.
+  #
+  # Every metric below uses the SAME generic `dimensioned` access strategy:
+  # what differs between them is data (scope, dimensions, variants, temporal
+  # contract), never code. Source authority is declared here and nowhere
+  # else: notably `derived_kpi.valor_cuota_libro` is deliberately NOT
+  # referenced -- raw_valor_cuota_contable is the authority for book unit
+  # value, and those stale derived rows would otherwise create a silent
+  # canonical conflict.
+  # ---------------------------------------------------------------------
+  - key: dividend_yield_serie
+    display_name: Dividend yield por serie
+    description: >-
+      Dividend yield de una serie segun la base de valoracion elegida (bursatil o contable),
+      tomado del KPI persistido y validado; no se recalcula desde flujos.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions:
+        - name: valuation_basis
+          values: [market, book]
+      variants:
+        - values: {valuation_basis: market}
+          source: {kind: derived_kpi, entity_type: serie, kpi: dy, variante: bursatil}
+        - values: {valuation_basis: book}
+          source: {kind: derived_kpi, entity_type: serie, kpi: dy, variante: contable}
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period, valuation_basis]
+    status: active
+    related_metrics: [distribucion_por_cuota_serie, valor_cuota_serie]
+    methodology: persisted_dy_v2
+    nature: ratio
+    allowed_temporal_aggregations: []
+  - key: tir_serie
+    display_name: TIR por serie
+    description: >-
+      Tasa interna de retorno persistida de una serie, identificada por base (bursatil o
+      contable) y ventana (desde inicio, ultimos 12 meses o ano corrido). Se expone tal como
+      esta calculada y trazada en el KPI canonico; nunca se reconstruyen los flujos.
+    unit: ratio_0_1
+    display_unit: percent
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions:
+        - name: return_basis
+          values: [market, book]
+        - name: return_window
+          values: [since_inception, trailing_12m, ytd]
+      variants:
+        - values: {return_basis: market, return_window: since_inception}
+          source: {kind: derived_kpi, entity_type: serie, kpi: tir_bursatil_desde_inicio}
+        - values: {return_basis: market, return_window: trailing_12m}
+          source: {kind: derived_kpi, entity_type: serie, kpi: tir_bursatil_u12m}
+        - values: {return_basis: book, return_window: since_inception}
+          source: {kind: derived_kpi, entity_type: serie, kpi: tir_contable_desde_inicio}
+        - values: {return_basis: book, return_window: trailing_12m}
+          source: {kind: derived_kpi, entity_type: serie, kpi: tir_contable_u12m}
+        - values: {return_basis: book, return_window: ytd}
+          source: {kind: derived_kpi, entity_type: serie, kpi: tir_contable_ytd}
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period, return_basis, return_window]
+    status: active
+    related_metrics: [dividend_yield_serie]
+    methodology: persisted_tir_v1
+    nature: ratio
+    allowed_temporal_aggregations: []
+  - key: valor_cuota_serie
+    display_name: Valor cuota por serie
+    description: >-
+      Valor de la cuota de una serie en CLP, contable (valor libro, cierre de EEFF) o bursatil
+      (ultima observacion de mercado del mes). Cada observacion lleva su fecha y su UF del dia
+      como referencia de conversion gobernada.
+    unit: clp
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions:
+        - name: valuation_basis
+          values: [book, market]
+      variants:
+        - values: {valuation_basis: book}
+          source:
+            kind: table
+            table: raw_valor_cuota_contable
+            entity_column: nemotecnico
+            value_column: precio_clp
+            temporal: period_point
+            period_column: periodo
+            date_column: fecha
+            filters: {superseded_at: null}
+            provenance_columns: [source_file, precio_uf]
+            conversion: {reference_column: uf_dia, from_unit: CLP, to_unit: UF, temporal_basis: point_in_time}
+        - values: {valuation_basis: market}
+          source:
+            kind: table
+            table: raw_valor_cuota_bursatil
+            entity_column: nemotecnico
+            value_column: precio_clp
+            temporal: period_point
+            date_column: fecha
+            provenance_columns: [fuente, precio_uf]
+            conversion: {reference_column: uf_dia, from_unit: CLP, to_unit: UF, temporal_basis: point_in_time}
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period, valuation_basis]
+    status: active
+    related_metrics: [patrimonio_contable_serie, dividend_yield_serie]
+    methodology: unit_value_observation_v1
+    nature: point_in_time
+    allowed_temporal_aggregations: []
+  - key: distribucion_por_cuota_serie
+    display_name: Distribucion por cuota
+    description: >-
+      Monto distribuido POR CUOTA en un evento de pago, distinguiendo dividendo de disminucion
+      de capital. Es un monto por cuota, nunca un monto total del fondo.
+    unit: UF
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions:
+        - name: flow_type
+          values: [dividend, capital_reduction]
+      variants:
+        - values: {flow_type: dividend}
+          source:
+            kind: table
+            table: raw_dividendo
+            entity_column: nemotecnico
+            value_column: monto_uf_cuota
+            temporal: event
+            period_column: periodo
+            date_column: fecha_pago
+            filters: {superseded_at: null, tipo: dividendo}
+            provenance_columns: [source_file, monto_clp_cuota, tipo]
+        - values: {flow_type: capital_reduction}
+          source:
+            kind: table
+            table: raw_dividendo
+            entity_column: nemotecnico
+            value_column: monto_uf_cuota
+            temporal: event
+            period_column: periodo
+            date_column: fecha_pago
+            filters: {superseded_at: null, tipo: disminucion}
+            provenance_columns: [source_file, monto_clp_cuota, tipo]
+    aggregation: sum_compatible_scope
+    allowed_dimensions: [fund, series, period, flow_type]
+    status: active
+    related_metrics: [dividend_yield_serie]
+    methodology: per_unit_distribution_event_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]
+    temporal_completeness: event
+  - key: capital_suscrito_serie
+    display_name: Capital suscrito por serie
+    description: >-
+      Capital suscrito de la serie en UF, en la ultima observacion disponible a la fecha
+      consultada. La observacion conserva su propio periodo: puede ser antigua.
+    unit: UF
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: raw_capital_suscrito
+            entity_column: nemotecnico
+            value_column: capital_suscrito_uf
+            temporal: as_of
+            period_column: periodo
+            date_column: fecha_fin_periodo
+            provenance_columns: [source_file]
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period]
+    status: active
+    related_metrics: [cuotas_en_circulacion_serie, patrimonio_contable_serie]
+    methodology: subscribed_capital_as_of_v1
+    nature: point_in_time
+    allowed_temporal_aggregations: []
+  - key: cuotas_en_circulacion_serie
+    display_name: Cuotas en circulacion por serie
+    description: >-
+      Numero de cuotas en circulacion de la serie en la ultima observacion disponible a la
+      fecha consultada.
+    unit: cuotas
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: raw_cuota_en_circulacion
+            entity_column: nemotecnico
+            value_column: cuotas
+            temporal: as_of
+            period_column: periodo
+            date_column: fecha
+            filters: {superseded_at: null}
+            provenance_columns: [source_file]
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period]
+    status: active
+    related_metrics: [capital_suscrito_serie, patrimonio_contable_serie]
+    methodology: units_outstanding_as_of_v1
+    nature: point_in_time
+    allowed_temporal_aggregations: []
+  - key: patrimonio_contable_serie
+    display_name: Patrimonio contable por serie
+    description: >-
+      Patrimonio contable (valor libro) de la serie en UF, en el cierre contable del periodo.
+    unit: UF
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: v_serie_patrimonio
+            entity_column: nemotecnico
+            value_column: patrimonio_libro_uf
+            temporal: period_point
+            period_column: periodo
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period]
+    status: active
+    related_metrics: [patrimonio_bursatil_serie, valor_cuota_serie]
+    methodology: book_equity_serie_v1
+    nature: point_in_time
+    allowed_temporal_aggregations: []
+  - key: patrimonio_bursatil_serie
+    display_name: Patrimonio bursatil por serie
+    description: >-
+      Patrimonio bursatil (capitalizacion de mercado) de la serie en UF, en la ultima
+      observacion de mercado del periodo.
+    unit: UF
+    entity_grain: series
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: series
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: raw_valor_cuota_bursatil
+            entity_column: nemotecnico
+            value_column: patrimonio_bursatil_uf
+            temporal: period_point
+            date_column: fecha
+            provenance_columns: [fuente]
+    aggregation: non_additive
+    allowed_dimensions: [fund, series, period]
+    status: active
+    related_metrics: [patrimonio_contable_serie]
+    methodology: market_equity_serie_v1
+    nature: point_in_time
+    allowed_temporal_aggregations: []
+  - key: amortizacion_capital_fondo
+    display_name: Amortizacion de capital del fondo
+    description: >-
+      Amortizacion de capital registrada a nivel consolidado del fondo, en UF por mes. Solo
+      cubre periodos hasta el ultimo cierre de deuda observado; el calendario futuro del
+      credito no se reporta como amortizacion ocurrida.
+    unit: UF
+    entity_grain: fund
+    period_grain: month
+    source_kind: canonical
+    access:
+      kind: dimensioned
+      scope: fund_template
+      entity_key_template: CONSOLIDADO_{fund}
+      observed_horizon: {kind: derived_kpi, entity_type: fondo, kpi: deuda_consolidada}
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: raw_amortizacion
+            entity_column: credito_key
+            value_column: capital_uf
+            temporal: period_flow
+            period_column: periodo
+    aggregation: sum_compatible_scope
+    allowed_dimensions: [fund, period]
+    status: active
+    related_metrics: [amortizacion_capital_credito]
+    methodology: consolidated_principal_amortization_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]
+  - key: amortizacion_capital_credito
+    display_name: Amortizacion de capital por credito
+    description: >-
+      Amortizacion de capital por credito individual, en UF por mes, segun el cuadro de pagos
+      de cada credito. No incluye prepagos ni refinanciamientos consolidados y solo cubre
+      periodos hasta el ultimo cierre de deuda observado.
+    unit: UF
+    entity_grain: credit
+    period_grain: month
+    source_kind: breakdown
+    access:
+      kind: dimensioned
+      scope: credit
+      observed_horizon: {kind: derived_kpi, entity_type: fondo, kpi: deuda_consolidada}
+      dimensions: []
+      variants:
+        - values: {}
+          source:
+            kind: table
+            table: raw_amortizacion
+            entity_column: credito_key
+            value_column: capital_uf
+            temporal: period_flow
+            period_column: periodo
+    aggregation: sum_compatible_scope
+    allowed_dimensions: [fund, credit, period]
+    status: active
+    related_metrics: [amortizacion_capital_fondo]
+    methodology: per_credit_principal_amortization_v1
+    nature: flow
+    allowed_temporal_aggregations: [sum]
+    # A facility only has rows for the months it was alive: a credit repaid in
+    # September has no October row because there was nothing to pay, not
+    # because an observation is missing. Treating that as a dense gap would
+    # make every per-credit total of a fund with a repaid facility fail
+    # closed. The consolidated fund metric above stays `dense` on purpose --
+    # there a missing month really would be a hole in the series.
+    temporal_completeness: event

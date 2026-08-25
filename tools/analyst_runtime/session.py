@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from tools.analyst_runtime.actions import (
-    ActionRegistry, AnalyticsAccountQueryAction, AnalyticsBreakdownAssetAction, AnalyticsLookupAssetAction,
-    AnalyticsLookupFundAction, ListAssetsAction, RunSqlAction, SchemaSearchAction,
+    ActionRegistry, AnalyticsAccountQueryAction, AnalyticsBreakdownAssetAction, AnalyticsDimensionalLookupAction,
+    AnalyticsLookupAssetAction, AnalyticsLookupFundAction, ListAssetsAction, RunSqlAction, SchemaSearchAction,
     ResolveEntityAction,
 )
 from tools.analyst_runtime.analyst_loop import AnalystLoop
@@ -577,6 +577,7 @@ class OpenAIResponsesAnalystSessionFactory:
             AnalyticsLookupFundAction(self.knowledge_db_path),
             AnalyticsLookupAssetAction(self.knowledge_db_path),
             AnalyticsBreakdownAssetAction(self.knowledge_db_path),
+            AnalyticsDimensionalLookupAction(self.knowledge_db_path),
             AnalyticsAccountQueryAction(self.knowledge_db_path),
             ListAssetsAction(self.knowledge_db_path),
         ])

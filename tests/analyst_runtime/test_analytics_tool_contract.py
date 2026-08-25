@@ -30,6 +30,9 @@ def test_catalog_derives_capability_metric_keys_from_semantic_metadata():
         "fund_lookup": ("ingresos_mensual_fondo", "ltv_fondo", "noi_mensual_fondo", "vacancia_fisica_pct_segmentada_fondo", "vacancia_pct_fondo"),
         "asset_lookup": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo", "vacancia_fisica_pct_segmentada_activo"),
         "asset_breakdown": ("ltv_activo", "m2_vacantes", "noi_mensual_activo", "vacancia_fisica_pct_activo", "vacancia_fisica_pct_segmentada_activo"),
+        "dimensional_lookup": ("amortizacion_capital_credito", "amortizacion_capital_fondo", "capital_suscrito_serie",
+                               "cuotas_en_circulacion_serie", "distribucion_por_cuota_serie", "dividend_yield_serie",
+                               "patrimonio_bursatil_serie", "patrimonio_contable_serie", "tir_serie", "valor_cuota_serie"),
     }
 
 
@@ -182,5 +185,5 @@ def test_alpha_factory_exposes_only_capabilities_and_run_sql():
 
     assert set(registry._by_name) == {
         "run_sql", "schema_search", "analytics_lookup_fund", "analytics_lookup_asset", "analytics_breakdown_asset", "analytics_account_query",
-        "resolve_entity", "list_assets",
+        "resolve_entity", "list_assets", "analytics_lookup_dimensional",
     }

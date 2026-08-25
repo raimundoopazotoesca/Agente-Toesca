@@ -20,7 +20,8 @@ from typing import Any
 
 from tools.analytics.formatting import render_derived_value
 
-SUPPORTED_OPERATIONS = frozenset({"difference", "percent_change", "percentage_point_difference", "ratio", "comparison"})
+SUPPORTED_OPERATIONS = frozenset({"difference", "percent_change", "percentage_point_difference", "ratio",
+                                  "comparison", "discount_premium"})
 
 _PERCENT_UNITS = frozenset({"%", "pct_0_100"})
 
@@ -71,6 +72,25 @@ def compute_derived_claim(claim_id: str, operation: str, lhs_fact: dict[str, Any
         if rhs_value == 0:
             raise DerivedClaimError("ratio with a zero denominator is undefined")
         value, unit = lhs_value / rhs_value, "ratio"
+    elif operation == "discount_premium":
+        # Market value against its reference (book) value: (rhs/lhs - 1)*100.
+        # Two temporal-alignment rules are enforced HERE rather than left to
+        # the narrative, because "a qué descuento transa" is meaningless if
+        # the two sides are observed at unrelated moments:
+        #   * both operands must describe the same entity, and
+        #   * both must be observed in the same period.
+        # A daily market quote compared against an arbitrary older book close
+        # is exactly the comparison the audit warned about; with no safe
+        # convention to bridge a quarter-end book value to a later month, the
+        # claim fails closed and the answer has to ask for a period where both
+        # exist instead of inventing an alignment.
+        if lhs_fact.get("entity_id") != rhs_fact.get("entity_id"):
+            raise DerivedClaimError("discount_premium requires both observations on the same entity")
+        if lhs_fact.get("period") != rhs_fact.get("period"):
+            raise DerivedClaimError("discount_premium requires both observations in the same period")
+        if lhs_value == 0:
+            raise DerivedClaimError("discount_premium against a zero reference is undefined")
+        value, unit = (rhs_value - lhs_value) / lhs_value * 100.0, "discount_premium"
     elif operation == "comparison":
         # A qualitative greater/less/equal relation, computed the same way as
         # difference (raw value - raw value), never authored by the model: the

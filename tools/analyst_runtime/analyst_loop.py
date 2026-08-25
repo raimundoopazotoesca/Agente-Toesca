@@ -134,9 +134,10 @@ class AnalystLoop:
                 tool_calls_log.append(ToolCall(name=tr.name, args=tr.arguments, ok=result.ok, trace=result.trace))
                 if result.control and result.control.get("kind") in {"clarification_required", "semantic_rejection"}:
                     kind = str(result.control["kind"])
-                    if kind == "semantic_rejection" and not _is_explicit_user_aggregation(
-                        message, result.control.get("requested_aggregation")
-                    ):
+                    if (kind == "semantic_rejection"
+                            and result.control.get("code") == "invalid_aggregation"
+                            and not _is_explicit_user_aggregation(
+                                message, result.control.get("requested_aggregation"))):
                         # The USER never asked for this aggregation -- the
                         # planner picked it on its own while answering an open
                         # question. Surfacing the internal semantic rejection
@@ -261,7 +262,76 @@ def _is_explicit_user_aggregation(user_message: str, requested_aggregation: obje
     return any(verb in lowered for verb in verbs)
 
 
+# Human wording for the semantic dimensions a governed metric can be split by.
+# It maps a contract identifier to the words a Chilean analyst actually uses;
+# it is NOT a per-metric rule and adds no new metric knowledge -- an unlisted
+# dimension or value simply falls back to its own identifier.
+_DIMENSION_QUESTIONS = {
+    "valuation_basis": "la base de valoración",
+    "return_basis": "la base de la rentabilidad",
+    "return_window": "la ventana",
+    "flow_type": "el tipo de distribución",
+}
+_DIMENSION_VALUE_WORDS = {
+    "market": "bursátil", "book": "contable", "since_inception": "desde inicio",
+    "trailing_12m": "últimos 12 meses (U12M)", "ytd": "año corrido (YTD)",
+    "dividend": "dividendo", "capital_reduction": "disminución de capital",
+}
+
+
+def _dimension_clarification_text(control: dict[str, object]) -> str:
+    """Ask back for exactly the dimensions that are still open.
+
+    A good clarification IS a successful answer when the question genuinely
+    does not identify one metric: "¿Cuál es la TIR de TRI?" cannot be answered
+    without choosing a basis and a window, and choosing one silently would be
+    worse than asking.
+    """
+    missing = control.get("missing_dimensions")
+    parts: list[str] = []
+    for item in missing if isinstance(missing, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("dimension"))
+        values = [_DIMENSION_VALUE_WORDS.get(str(value), str(value))
+                  for value in item.get("allowed_values") or []]
+        label = _DIMENSION_QUESTIONS.get(name, name.replace("_", " "))
+        parts.append(f"{label} ({' o '.join(values)})" if values else label)
+    if not parts:
+        return "Necesito una precisión más para identificar el indicador exacto que buscas."
+    return f"Para responder necesito que precises {' y '.join(parts)}."
+
+
+def _dimension_value_rejection_text(control: dict[str, object]) -> str:
+    values = [_DIMENSION_VALUE_WORDS.get(str(value), str(value))
+              for value in control.get("allowed_values") or []]
+    label = _DIMENSION_QUESTIONS.get(str(control.get("dimension")), str(control.get("dimension")))
+    if values:
+        return f"No tengo esa variante para {label}; las disponibles son: {', '.join(values)}."
+    return f"No tengo esa variante para {label}."
+
+
+def _unavailable_combination_text(control: dict[str, object]) -> str:
+    combinations = control.get("available_combinations")
+    rendered = []
+    for item in combinations if isinstance(combinations, list) else []:
+        if isinstance(item, dict):
+            rendered.append(" + ".join(_DIMENSION_VALUE_WORDS.get(str(value), str(value))
+                                       for value in item.values()))
+    if rendered:
+        return ("Esa combinación no está calculada para este indicador. "
+                f"Las combinaciones disponibles son: {'; '.join(rendered)}.")
+    return "Esa combinación no está disponible para este indicador."
+
+
 def _semantic_rejection_text(control: dict[str, object]) -> str:
+    code = control.get("code")
+    if code == "dimension_required":
+        return _dimension_clarification_text(control)
+    if code == "unknown_dimension_value":
+        return _dimension_value_rejection_text(control)
+    if code == "unavailable_dimension_combination":
+        return _unavailable_combination_text(control)
     requested = str(control.get("requested_aggregation", "esa operación"))
     requested = {"sum": "sumar", "avg": "promediar", "last": "tomar el último valor"}.get(requested, requested)
     metric = str(control.get("metric_id", "esta métrica")).replace("_", " ")
