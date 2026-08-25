@@ -28,6 +28,7 @@ from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, Ope
 from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
 from tools.analyst_runtime.synthesis_schema import SYNTHESIS_ENVELOPE_SCHEMA
 from tools.analytics.humanize import entity_display_name, format_period, format_period_as_of, format_period_range
+from tools.analytics.monetary import requested_monetary_unit
 
 INTERACTIVE_EVIDENCE_INSTRUCTION = """Responde en español, distingue datos verificados de inferencias y usa la
 herramienta SQL sólo para consultas de lectura cuando necesites evidencia."""
@@ -216,8 +217,13 @@ class OpenAIResponsesAnalystSession:
         self._presenter = presenter
         self._db_path = db_path
         self._durable_evidence = list(durable_evidence or [])
+        self._active_monetary_unit: str | None = None
 
     def ask(self, text: str) -> AnalystSessionResult:
+        explicit_monetary_unit = requested_monetary_unit(text)
+        if explicit_monetary_unit is not None:
+            self._active_monetary_unit = explicit_monetary_unit
+        requested_unit = explicit_monetary_unit or self._active_monetary_unit
         investigation = self._loop.investigate(text, history=self._history)
         evidence = self._durable_evidence + [result.evidence for item in investigation.round_trajectory for result in item.tool_results
                     if result.evidence is not None]
@@ -260,7 +266,8 @@ class OpenAIResponsesAnalystSession:
             # the loop. Such a result has no model-produced synthesis envelope
             # and must never be forced through the structured-output parser.
             if result.turn.raw.get("termination_reason") not in {"clarification_required", "semantic_rejection"}:
-                validation = validate_and_render(result.turn.raw.get("structured_output") or {}, canonical, governed, self._db_path)
+                validation = validate_and_render(result.turn.raw.get("structured_output") or {}, canonical, governed, self._db_path,
+                                                 requested_unit)
                 result.turn.text = validation.content
                 result.turn.raw.update(validation.trace)
         else:
@@ -298,7 +305,8 @@ class OpenAIResponsesAnalystSession:
                         # second table could come from, rather than trying to
                         # detect/strip one after the fact.
                         else self._present(turn.text, text, () if has_tables else
-                                            _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path)))
+                                            _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path,
+                                                            requested_unit)))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
         # Tables are deterministic Markdown rendered by coverage_guard and
         # appended here, AFTER presentation -- never passed through
@@ -355,7 +363,7 @@ def _display_period(period_value: str, aggregation: str | None) -> str:
 
 
 def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
-                     db_path: Path | None = None) -> tuple[AllowedClaim, ...]:
+                     db_path: Path | None = None, requested_unit: str | None = None) -> tuple[AllowedClaim, ...]:
     by_evidence_id = {item.evidence_id: item for item in evidence}
     source_claims = envelope.get("canonical_metric_claims", [])
     if not isinstance(source_claims, list):
@@ -390,6 +398,8 @@ def _allowed_claims(envelope: dict[str, Any], evidence: list[ToolEvidence],
             # having to translate a raw key or YYYY-MM code itself.
             entity_display=entity_display_name(fact["entity_id"], db_path),
             period_display=_display_period(period_value, aggregation),
+            requested_monetary_unit=requested_unit,
+            presentation_conversion=deepcopy(fact.get("presentation_conversion")),
         ))
 
     # Derived (arithmetic) claims re-bind operands by claim_id against the

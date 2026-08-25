@@ -47,7 +47,7 @@ def test_catalog_exposes_display_unit_and_new_units():
     assert catalog.metrics["ltv_activo"].unit == "ratio_0_1"
     assert catalog.metrics["ltv_activo"].display_unit == "percent"
     assert catalog.metrics["ltv_fondo"].display_unit == "percent"
-    assert catalog.metrics["noi_mensual_activo"].unit == "clp"
+    assert catalog.metrics["noi_mensual_activo"].unit == "UF"
     assert catalog.metrics["noi_mensual_activo"].display_unit is None
     assert catalog.metrics["vacancia_pct_fondo"].display_unit is None
 

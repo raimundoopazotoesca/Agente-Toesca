@@ -129,8 +129,8 @@ metrics:
     allowed_temporal_aggregations: []
   - key: noi_mensual_activo
     display_name: NOI mensual por activo
-    description: Resultado operacional neto mensual a nivel activo en pesos chilenos.
-    unit: clp
+    description: Resultado operacional neto mensual a nivel activo en UF.
+    unit: UF
     entity_grain: asset
     period_grain: month
     source_kind: canonical

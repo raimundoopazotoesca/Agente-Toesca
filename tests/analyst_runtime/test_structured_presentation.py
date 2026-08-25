@@ -86,3 +86,11 @@ def test_free_prose_can_differ_while_fact_stays_deterministic():
     first = render_segments({"segments": [{"type": "text", "text": "A: "}, {"type": "claim_ref", "claim_id": "c1"}]}, (CLAIM,))
     second = render_segments({"segments": [{"type": "text", "text": "B: "}, {"type": "claim_ref", "claim_id": "c1"}]}, (CLAIM,))
     assert first.endswith("1.234 UF") and second.endswith("1.234 UF")
+
+
+def test_explicit_clp_override_survives_presentation_claim_rendering():
+    claim = AllowedClaim("c1", "e1", "tax", "Torre A", 2.0, "UF", "2025-01",
+                         requested_monetary_unit="CLP",
+                         presentation_conversion={"from_unit": "UF", "to_unit": "CLP", "temporal_basis": "point_in_time",
+                                                  "reference_value": 35000.0, "source": "raw_uf_diaria", "reference_date": "2025-01-31"})
+    assert render_segments({"segments": [{"type": "claim_ref", "claim_id": "c1"}]}, (claim,)) == "70.000 CLP"

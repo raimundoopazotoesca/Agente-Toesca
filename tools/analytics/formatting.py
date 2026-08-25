@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from tools.analytics.catalog import load_metric_catalog
+from tools.analytics.monetary import present_monetary_fact
 
 # Human suffix per internal unit code. The internal code itself must never
 # reach a user.
@@ -24,18 +25,25 @@ _UNIT_SUFFIX = {"pct_0_100": "%", "%": "%", "m2": " m²", "clp": " CLP", "ratio_
 # is already expressed in its display scale and must render unrounded.
 _UNIT_PRECISION = {"UF": 0, "clp": 0, "m2": 1, "pct_0_100": 2, "%": 2}
 
+_UNIT_SUFFIX["CLP"] = _UNIT_SUFFIX["clp"]
+_UNIT_PRECISION["CLP"] = _UNIT_PRECISION["clp"]
+
 # Scale transforms keyed by (unit, display_unit). Value -> (factor, suffix).
 _DISPLAY_TRANSFORMS = {("ratio_0_1", "percent"): (100.0, "%")}
 
 
-def render_metric_value(metric_key: Any, value: Any, unit: Any) -> str:
+def render_metric_value(metric_key: Any, value: Any, unit: Any, fact: dict[str, Any] | None = None,
+                        requested_unit: str | None = None) -> str:
     """Render one metric value for a human reader.
 
     Unknown metric keys fall back to the legacy raw concatenation so test
     fixtures and any legacy caller keep their exact previous output.
     """
     metric = _metric(metric_key)
-    effective_unit = metric.unit if metric is not None else unit
+    effective_unit = unit if unit is not None else (metric.unit if metric is not None else unit)
+    monetary = present_monetary_fact(fact or {"value": value, "unit": effective_unit}, requested_unit)
+    if monetary is not None:
+        effective_unit, value = monetary.unit, monetary.value
     display_unit = metric.display_unit if metric is not None else None
     transform = _DISPLAY_TRANSFORMS.get((effective_unit, display_unit))
     if transform is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -83,8 +91,8 @@ def render_derived_value(operation: str, value: float, unit: str) -> str:
     raise ValueError(f"unknown derived operation: {operation}")
 
 
-def render_fact(fact: dict[str, Any]) -> str:
-    return render_metric_value(fact.get("metric_key"), fact.get("value"), fact.get("unit"))
+def render_fact(fact: dict[str, Any], requested_unit: str | None = None) -> str:
+    return render_metric_value(fact.get("metric_key"), fact.get("value"), fact.get("unit"), fact, requested_unit)
 
 
 def render_named_fact(fact: dict[str, Any]) -> str:

@@ -83,7 +83,8 @@ class CoverageValidation:
 
 
 def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolEvidence],
-                          governed_evidence: list[ToolEvidence], db_path: Path | None = None) -> CoverageValidation:
+                          governed_evidence: list[ToolEvidence], db_path: Path | None = None,
+                          requested_monetary_unit: str | None = None) -> CoverageValidation:
     canonical_by_id = {item.evidence_id: item for item in canonical_evidence}
     if len(canonical_by_id) != len(canonical_evidence):
         return _fail(canonical_evidence, governed_evidence, "duplicate_canonical_evidence_id", db_path)
@@ -248,9 +249,9 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             # validated above -- provenance is checked against the raw text.
             _append_fragment(rendered, humanize_text(text, db_path))
         elif kind == "canonical_metric_ref" and fragment.get("claim_id") in bound_canonical:
-            _append_fragment(rendered, render_fact(bound_canonical[fragment["claim_id"]]))
+            _append_fragment(rendered, render_fact(bound_canonical[fragment["claim_id"]], requested_monetary_unit))
         elif kind == "governed_dataset_ref" and fragment.get("claim_id") in bound_governed:
-            _append_fragment(rendered, _render_governed(bound_governed[fragment["claim_id"]], db_path))
+            _append_fragment(rendered, _render_governed(bound_governed[fragment["claim_id"]], db_path, requested_monetary_unit))
         elif kind == "derived_metric_ref" and fragment.get("claim_id") in bound_derived:
             _append_fragment(rendered, render_derived_claim(bound_derived[fragment["claim_id"]]))
         else:
@@ -261,7 +262,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             canonical_claims=bound_canonical, governed_coverage=governed_coverage,
             result="fail", provenance="fail", reason="entity_provenance_violation"))
 
-    tables, table_fail_reason = _build_tables(table_claims, bound_canonical, bound_derived, db_path)
+    tables, table_fail_reason = _build_tables(table_claims, bound_canonical, bound_derived, db_path, requested_monetary_unit)
     if table_fail_reason is not None:
         return _fail(canonical_evidence, governed_evidence, table_fail_reason, db_path)
 
@@ -305,12 +306,14 @@ def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:
     return ""
 
 
-def _render_governed(bound: dict[str, Any], db_path: Path | None = None) -> str:
-    listing = ", ".join(_render_entity_fact(fact, db_path) for fact in bound["facts"])
+def _render_governed(bound: dict[str, Any], db_path: Path | None = None,
+                     requested_monetary_unit: str | None = None) -> str:
+    listing = ", ".join(_render_entity_fact(fact, db_path, requested_monetary_unit) for fact in bound["facts"])
     return _coverage_prefix(bound["coverage"], len(bound["facts"])) + listing
 
 
-def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None) -> str:
+def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None,
+                        requested_monetary_unit: str | None = None) -> str:
     """A governed fact without a metric (an entity enumeration) has no value
     to render -- only its identity, shown with its human display name where
     the entity catalog has one (falls back to the raw key otherwise)."""
@@ -323,7 +326,7 @@ def _render_entity_fact(fact: dict[str, Any], db_path: Path | None = None) -> st
         if name and name != fact.get("entity_id") and name != display:
             return f"{display} ({name})"
         return str(display)
-    return f"{display}: {render_fact(fact)}"
+    return f"{display}: {render_fact(fact, requested_monetary_unit)}"
 
 
 # Operations that render as a comparable numeric/derived value and can sit in
@@ -380,14 +383,15 @@ def _row_header_label(row_dim: str, row_keys: list[Any], db_path: Path | None) -
 
 
 def _build_tables(table_claims: list[Any], bound_canonical: dict[str, dict[str, Any]],
-                   bound_derived: dict[str, DerivedClaim], db_path: Path | None) -> tuple[list[str] | None, str | None]:
+                   bound_derived: dict[str, DerivedClaim], db_path: Path | None,
+                   requested_monetary_unit: str | None = None) -> tuple[list[str] | None, str | None]:
     tables: list[str] = []
     seen_ids: set[str] = set()
     for claim in table_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in seen_ids:
             return None, "invalid_table_claim"
         seen_ids.add(claim["claim_id"])
-        rendered = _render_table(claim, bound_canonical, bound_derived, db_path)
+        rendered = _render_table(claim, bound_canonical, bound_derived, db_path, requested_monetary_unit)
         if rendered is None:
             return None, "invalid_table_claim"
         if rendered not in tables:
@@ -401,7 +405,8 @@ def _build_tables(table_claims: list[Any], bound_canonical: dict[str, dict[str, 
 
 
 def _render_table(claim: dict[str, Any], bound_canonical: dict[str, dict[str, Any]],
-                   bound_derived: dict[str, DerivedClaim], db_path: Path | None) -> str | None:
+                   bound_derived: dict[str, DerivedClaim], db_path: Path | None,
+                   requested_monetary_unit: str | None = None) -> str | None:
     cell_ids = claim.get("cell_claim_ids")
     if not isinstance(cell_ids, list) or not cell_ids:
         return None
@@ -486,7 +491,7 @@ def _render_table(claim: dict[str, Any], bound_canonical: dict[str, dict[str, An
     lines = ["| " + _row_header_label(row_dim, row_keys, db_path) + " | " + " | ".join(col_headers) + " |",
              "|" + "---|" * (1 + len(col_headers))]
     for row_key in row_keys:
-        cells = [render_fact(grid[row_key][col_key]) if col_key in grid[row_key] else "Sin dato"
+        cells = [render_fact(grid[row_key][col_key], requested_monetary_unit) if col_key in grid[row_key] else "Sin dato"
                  for col_key in col_keys]
         if derived_by_row:
             derived = derived_by_row.get(row_key)

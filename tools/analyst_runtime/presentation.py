@@ -68,13 +68,18 @@ class AllowedClaim:
     # without touching the raw key / YYYY-MM code.
     entity_display: str | None = None
     period_display: str | None = None
+    requested_monetary_unit: str | None = None
+    presentation_conversion: dict[str, object] | None = None
 
 
 def render_claim(claim: AllowedClaim) -> str:
     if claim.metric_key.startswith("derived:"):
         operation = claim.metric_key.removeprefix("derived:")
         return render_derived_claim(DerivedClaim(claim.claim_id, operation, claim.value, claim.unit, claim.lineage))
-    catalog_value = render_metric_value(claim.metric_key, claim.value, claim.unit)
+    catalog_value = render_metric_value(claim.metric_key, claim.value, claim.unit,
+                                        {"value": claim.value, "unit": claim.unit,
+                                         "presentation_conversion": claim.presentation_conversion},
+                                        claim.requested_monetary_unit)
     if catalog_value == f"{claim.value}{claim.unit}":
         value = f"{claim.value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         rendered_value = f"{value} {claim.unit}" if claim.unit else value

@@ -199,6 +199,26 @@ def test_no_table_claims_produces_no_tables(catalog_db):
     assert result.tables == ()
 
 
+def test_table_uses_the_same_global_uf_policy_as_prose(catalog_db):
+    facts = {
+        "c1": {"metric_key": "tax", "value": 70000.0, "unit": "CLP", "entity_id": "PT", "period": "2025-01",
+               "presentation_conversion": {"from_unit": "CLP", "to_unit": "UF", "temporal_basis": "point_in_time",
+                                           "reference_value": 35000.0, "source": "raw_uf_diaria", "reference_date": "2025-01-31"}},
+        "c2": {"metric_key": "tax", "value": 105000.0, "unit": "CLP", "entity_id": "TRI", "period": "2025-01",
+               "presentation_conversion": {"from_unit": "CLP", "to_unit": "UF", "temporal_basis": "point_in_time",
+                                           "reference_value": 35000.0, "source": "raw_uf_diaria", "reference_date": "2025-01-31"}},
+    }
+    evidence = [ToolEvidence("e1", "canonical_metric", facts=(facts["c1"],)),
+                ToolEvidence("e2", "canonical_metric", facts=(facts["c2"],))]
+    envelope = {"fragments": [], "canonical_metric_claims": [_claim("c1", "e1", facts["c1"]), _claim("c2", "e2", facts["c2"])],
+                "governed_dataset_claims": [], "derived_metric_claims": [],
+                "table_claims": [{"claim_id": "t1", "cell_claim_ids": ["c1", "c2"], "order_by": None}]}
+
+    result = validate_and_render(envelope, evidence, [], catalog_db)
+
+    assert result.valid and "2 UF" in result.tables[0] and "3 UF" in result.tables[0]
+
+
 def test_two_table_claims_citing_the_same_facts_render_once_not_twice(catalog_db):
     """A real QA run (CASE8: 'pon en una tabla...') produced the model citing
     the same two facts via two separate table_claims entries. Since rendering
