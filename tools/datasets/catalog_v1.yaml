@@ -30,4 +30,23 @@ datasets:
       is_current: {type: boolean, values: [0, 1]}
     semantic_fields: [occupancy_status, unit_category, unit_category_source, unit_identity_quality, is_current]
     provenance_fields: [source_file, source_sheet, source_row, file_hash, ingest_run_id]
+    field_types:
+      dataset_key: text
+      semantic_version: text
+      activo_key: text
+      periodo: text
+      unidad: text
+      unit_identity_quality: text
+      arrendatario: text
+      m2: number
+      renta_uf: number
+      occupancy_status: text
+      unit_category: text
+      unit_category_source: text
+      is_current: boolean
+    measures:
+      gla_m2: {field: m2, unit: m2, allowed_aggregations: [sum, avg]}
+      unit_count: {field: unidad, unit: rows, allowed_aggregations: [count, distinct_count]}
+      tenant_count: {field: arrendatario, unit: tenants, allowed_aggregations: [distinct_count]}
+      rent_rate_uf_m2: {field: renta_uf, unit: UF/m2, allowed_aggregations: [avg]}
     status: active

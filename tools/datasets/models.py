@@ -18,6 +18,8 @@ class DatasetDefinition:
     field_value_domains: dict[str, dict[str, object]]
     semantic_fields: tuple[str, ...]
     provenance_fields: tuple[str, ...]
+    field_types: dict[str, str]
+    measures: dict[str, dict[str, object]]
     status: str
 
     def schema_metadata(self) -> dict[str, object]:
@@ -36,6 +38,8 @@ class DatasetDefinition:
             },
             "semantic_fields": list(self.semantic_fields),
             "provenance_fields": list(self.provenance_fields),
+            "field_types": self.field_types,
+            "measures": self.measures,
             "status": self.status,
         }
 

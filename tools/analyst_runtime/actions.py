@@ -25,6 +25,9 @@ from typing import ClassVar, Protocol
 
 from tools.analyst_runtime.transport import ToolEvidence, ToolRequest, ToolResult, ToolSpec
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
+from tools.datasets.executor import (DatasetFilter, DatasetMeasure, DatasetQueryError,
+                                     GovernedDatasetExecutor, GovernedDatasetQuery)
+from tools.datasets.catalog import load_dataset_catalog
 from tools.analytics.capabilities import capability_metric_keys, metric_period_bounds
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.account_concepts import AccountConceptCatalog, AccountQuery, AccountQueryError, AccountQueryExecutor
@@ -716,6 +719,42 @@ class AnalyticsDimensionalLookupAction(_AnalyticsCapabilityAction):
             aggregation=_optional_string(arguments, "aggregation"),
             dimensions=dimensions, selector=series or credit,
         ), scope
+
+
+@dataclass
+class AnalyticsDatasetQueryAction:
+    """Single governed capability for composable catalog-defined datasets."""
+    db_path: Path
+    name: str = "analytics_query_dataset"
+
+    def tool_spec(self) -> ToolSpec:
+        catalog = load_dataset_catalog()
+        return ToolSpec(self.name, "Consulta analítica gobernada y composable sobre datasets declarados. No acepta SQL ni columnas libres; filtros, dimensiones, medidas y agregaciones se validan contra el catálogo.", {
+            "type": "object", "additionalProperties": False, "properties": {
+                "dataset": {"type": "string", "enum": sorted(catalog.datasets)},
+                "filters": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {"field": {"type": "string"}, "op": {"type": "string", "enum": ["eq", "in", "lt", "lte", "gt", "gte", "between"]}, "value": {}, "value_end": {}}, "required": ["field", "op", "value", "value_end"]}},
+                "group_by": {"type": "array", "items": {"type": "string"}},
+                "measures": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": False, "properties": {"measure": {"type": "string"}, "aggregation": {"type": "string", "enum": ["sum", "count", "distinct_count", "avg"]}}, "required": ["measure", "aggregation"]}},
+                "order_by": {"type": ["string", "null"]}, "descending": {"type": "boolean"}, "limit": {"type": ["integer", "null"], "minimum": 1}, "share_of_total": {"type": "boolean"},
+            }, "required": ["dataset", "filters", "group_by", "measures", "order_by", "descending", "limit", "share_of_total"]})
+
+    def execute(self, request: ToolRequest) -> ToolResult:
+        try:
+            args = request.arguments
+            query = GovernedDatasetQuery(str(args["dataset"]), tuple(DatasetFilter(str(x["field"]), str(x["op"]), x["value"], x.get("value_end")) for x in args["filters"]), tuple(str(x) for x in args["group_by"]), tuple(DatasetMeasure(str(x["measure"]), str(x["aggregation"])) for x in args["measures"]), args.get("order_by"), bool(args["descending"]), args.get("limit"), bool(args["share_of_total"]))
+            result = GovernedDatasetExecutor(self.db_path).execute(query)
+            facts = []
+            for row in result.rows:
+                dimensions = {key: row[key] for key in result.contract["group_by"]}
+                for measure in result.contract["measures"]:
+                    name = measure["measure"]
+                    facts.append({"metric_key": name, "value": row[name], "unit": load_dataset_catalog().datasets[query.dataset].measures[name]["unit"], "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
+                    if "share_of_total" in row: facts.append({"metric_key": "share_of_total", "value": row["share_of_total"], "unit": "%", "entity_id": dimensions.get("activo_key", query.dataset), "period": dimensions.get("periodo"), "dimensions": dimensions})
+            payload = {"evidence_id": request.call_id, "rows": result.rows, "coverage": result.coverage, "contract": result.contract}
+            evidence = ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "dataset"}, {}, result.contract, {"tables": [result.contract["source"]]}, result.coverage, tuple(facts)) if facts else None
+            return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "coverage": result.coverage}, evidence=evidence)
+        except (KeyError, TypeError, ValueError, DatasetQueryError) as exc:
+            return ToolResult(request.call_id, False, json.dumps({"error_type": "semantic_query_error", "error": str(exc)}, ensure_ascii=False), {"tool_name": self.name, "error": str(exc)})
 
 
 @dataclass

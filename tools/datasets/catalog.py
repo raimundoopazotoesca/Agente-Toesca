@@ -20,7 +20,7 @@ class DatasetCatalogValidationError(ValueError):
 
 
 def _dataset(raw: Any) -> DatasetDefinition:
-    if not isinstance(raw, dict) or set(raw) != _REQUIRED:
+    if not isinstance(raw, dict) or not _REQUIRED <= set(raw) or not set(raw) <= (_REQUIRED | {"field_types", "measures"}):
         raise DatasetCatalogValidationError("malformed dataset definition")
     sequence_fields = ("dimensions", "fields", "semantic_fields", "provenance_fields")
     if any(not isinstance(raw[name], list) or not all(isinstance(value, str) for value in raw[name]) for name in sequence_fields):
@@ -50,6 +50,17 @@ def _dataset(raw: Any) -> DatasetDefinition:
         else:
             raise DatasetCatalogValidationError("unsupported value domain type")
         normalized_domains[field] = {"type": kind, "values": tuple(values)}
+    field_types = {field: raw.get("field_types", {}).get(field, "text") for field in raw["fields"]}
+    if not isinstance(field_types, dict) or set(field_types) != set(raw["fields"]) or any(value not in {"text", "number", "date", "boolean"} for value in field_types.values()):
+        raise DatasetCatalogValidationError("malformed dataset field types")
+    measures = raw.get("measures", {})
+    if not isinstance(measures, dict):
+        raise DatasetCatalogValidationError("malformed dataset measures")
+    for key, measure in measures.items():
+        if not isinstance(key, str) or not isinstance(measure, dict) or set(measure) != {"field", "unit", "allowed_aggregations"}:
+            raise DatasetCatalogValidationError("malformed dataset measure")
+        if measure["field"] not in raw["fields"] or not isinstance(measure["unit"], str) or not isinstance(measure["allowed_aggregations"], list) or not set(measure["allowed_aggregations"]) <= {"sum", "count", "distinct_count", "avg"}:
+            raise DatasetCatalogValidationError("invalid dataset measure contract")
     if raw["status"] != "active" or raw["grain"] != "rent_roll_row":
         raise DatasetCatalogValidationError("unsupported dataset status or grain")
     return DatasetDefinition(
@@ -60,6 +71,7 @@ def _dataset(raw: Any) -> DatasetDefinition:
         dimensions=tuple(raw["dimensions"]), fields=tuple(raw["fields"]),
         field_descriptions=dict(field_descriptions), field_value_domains=normalized_domains,
         semantic_fields=tuple(raw["semantic_fields"]), provenance_fields=tuple(raw["provenance_fields"]),
+        field_types=dict(field_types), measures={key: dict(value) for key, value in measures.items()},
         status=raw["status"],
     )
 
