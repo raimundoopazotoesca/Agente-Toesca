@@ -165,7 +165,11 @@ def _tokens(value: str) -> tuple[str, ...]:
     normalized = unicodedata.normalize("NFKD", value.casefold())
     normalized = "".join(char for char in normalized if not unicodedata.combining(char))
     normalized = re.sub(r"[_\-\s]+", " ", normalized)
-    return tuple(_singular(token) for token in re.split(r"[^\w]+", normalized) if token)
+    return tuple(
+        _singular(token)
+        for token in re.split(r"[^\w]+", normalized)
+        if len(token) > 1
+    )
 
 
 def _singular(token: str) -> str:
