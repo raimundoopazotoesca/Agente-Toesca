@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Literal
 
 from tools.analytics.catalog import load_metric_catalog
-from tools.analytics.models import Aggregation, DerivedKpiAccess, EntityReference, EntityType, SemanticQuery, ViewMetricAccess
+from tools.analytics.models import (
+    Aggregation, DerivedKpiAccess, EntityReference, EntityType, FallbackAccess, RollupRatioViewAccess,
+    SemanticQuery, ViewMetricAccess,
+)
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 
 
@@ -89,14 +92,12 @@ class AnalyticsExecutor:
             raise SemanticQueryError("grouping must match metric entity grain")
         if request.order_by not in (None, "value_desc", "value_asc") or (request.limit is not None and request.limit < 1):
             raise SemanticQueryError("invalid order or limit")
-        if isinstance(metric.access, DerivedKpiAccess):
-            sql, params, entity_type = self._derived_sql(metric.access, request)
-        elif isinstance(metric.access, ViewMetricAccess):
-            sql, params, entity_type = self._view_sql(metric.access, request)
+        if isinstance(metric.access, FallbackAccess):
+            records, entity_type = self._fallback_records(metric.access, request)
         else:
-            raise SemanticQueryError("unsupported access strategy")
-        with self._sandbox.connect() as connection:
-            records = connection.execute(sql, params).fetchall()
+            sql, params, entity_type = self._access_sql(metric.access, request)
+            with self._sandbox.connect() as connection:
+                records = connection.execute(sql, params).fetchall()
         rows = tuple(AnalyticsRow(metric.key, record[0], entity_type, record[1], record[2], metric.unit,
                                   metric.source_kind, {"formula": record[3], "ingest_run_id": record[4]}) for record in records)
         if query.temporal_aggregation is not None:
@@ -128,6 +129,74 @@ class AnalyticsExecutor:
                 provenance=lineage))
         return tuple(aggregated)
 
+
+    def _access_sql(self, access, request: AnalyticsQueryRequest):
+        if isinstance(access, DerivedKpiAccess):
+            return self._derived_sql(access, request)
+        if isinstance(access, ViewMetricAccess):
+            return self._view_sql(access, request)
+        raise SemanticQueryError("unsupported access strategy")
+
+    def _fallback_records(self, access: FallbackAccess, request: AnalyticsQueryRequest):
+        """Primary source wins for any (entity, period) it covers. The
+        fallback is only consulted for cells the primary source is silent
+        on — never merged or averaged with a primary value for the same
+        cell, so precedence stays deterministic."""
+        primary_sql, primary_params, entity_type = self._access_sql(access.primary, request)
+        with self._sandbox.connect() as connection:
+            primary_records = connection.execute(primary_sql, primary_params).fetchall()
+        covered = {(record[0], record[1]) for record in primary_records}
+        records = list(primary_records)
+        if isinstance(access.fallback, RollupRatioViewAccess):
+            for fund in request.funds or ():
+                if fund not in access.fallback.views:
+                    continue
+                fb_sql, fb_params = self._rollup_sql(access.fallback, fund, request)
+                with self._sandbox.connect() as connection:
+                    fb_records = connection.execute(fb_sql, fb_params).fetchall()
+                for record in fb_records:
+                    key = (record[0], record[1])
+                    if key not in covered:
+                        records.append(record)
+                        covered.add(key)
+        records.sort(key=lambda record: (record[1], record[0]))
+        return records, entity_type
+
+    def _rollup_sql(self, access: RollupRatioViewAccess, fund: str, request: AnalyticsQueryRequest):
+        view = access.views[fund]
+        exclude_clause = ""
+        params: list[object] = []
+        if access.exclude_column:
+            exclude_clause = f" AND ({access.exclude_column} IS NULL OR {access.exclude_column} != ?)"
+            params.append(access.exclude_value)
+        formula = f"rollup_ratio:{view}:sum({access.numerator_column})/sum({access.denominator_column})"
+        # Only sum rows where both sides of the ratio are present for the same
+        # observation — a numerator-only or denominator-only row is not a valid
+        # component pair and would silently skew the ratio of sums.
+        pair_clause = f"{access.numerator_column} IS NOT NULL AND {access.denominator_column} IS NOT NULL"
+        source = view
+        if access.dedupe_columns and access.precedence_column and access.precedence_order:
+            partition = ", ".join(["periodo", *access.dedupe_columns])
+            precedence_case = " ".join(
+                f"WHEN {access.precedence_column}=? THEN {rank}" for rank, _ in enumerate(access.precedence_order)
+            )
+            source = (
+                f"(SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition} "
+                f"ORDER BY (CASE {precedence_case} ELSE 999 END)) AS rn FROM {view})"
+            )
+            precedence_params = list(access.precedence_order)
+        else:
+            precedence_params = []
+        rn_filter = " AND rn = 1" if precedence_params else ""
+        sql = (
+            f"SELECT ? AS entidad_key, periodo, "
+            f"SUM({access.numerator_column}) * 100.0 / SUM({access.denominator_column}) AS valor, "
+            f"'{formula}' AS formula, NULL AS ingest_run_id "
+            f"FROM {source} WHERE periodo BETWEEN ? AND ?{exclude_clause} AND {pair_clause}{rn_filter} "
+            f"GROUP BY periodo HAVING SUM({access.denominator_column}) > 0 ORDER BY periodo"
+        )
+        params = [fund, *precedence_params, request.period, request.period_end or request.period, *params]
+        return sql, tuple(params)
 
     def _derived_sql(self, access: DerivedKpiAccess, request: AnalyticsQueryRequest):
         if access.entity_type != "fondo":

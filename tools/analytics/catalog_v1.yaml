@@ -7,7 +7,21 @@ metrics:
     entity_grain: fund
     period_grain: month
     source_kind: canonical
-    access: {kind: derived_kpi, entity_type: fondo, kpi: vacancia_pct}
+    access:
+      kind: fallback_chain
+      primary: {kind: derived_kpi, entity_type: fondo, kpi: vacancia_pct}
+      fallback:
+        kind: rollup_ratio_view
+        views:
+          PT: v_vacancia_pt_consolidado_tipo
+          Apo: v_vacancia_apoquindo_consolidado_tipo
+        numerator_column: m2_vacantes
+        denominator_column: m2_gla
+        exclude_column: tipo_unidad
+        exclude_value: Estacionamiento
+        dedupe_columns: [tipo_unidad]
+        precedence_column: fuente
+        precedence_order: [rent_roll, manual]
     aggregation: non_additive
     allowed_dimensions: [fund, period]
     status: active

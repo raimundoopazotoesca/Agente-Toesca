@@ -20,7 +20,9 @@ def test_catalog_has_distinct_economic_identities():
     assert fund.aggregation == "non_additive"
     assert vacant_area.aggregation == "sum_compatible_scope"
     assert set(fund.related_metrics) == {"vacancia_fisica_pct_activo", "m2_vacantes"}
-    assert fund.access.kind == "derived_kpi"
+    assert fund.access.kind == "fallback_chain"
+    assert fund.access.primary.kind == "derived_kpi"
+    assert fund.access.fallback.kind == "rollup_ratio_view"
     assert physical.access.kind == "view_metric"
     assert fund.key != physical.key
 
@@ -34,7 +36,16 @@ def test_catalog_is_contract_only_without_values_or_entity_lists():
     assert "'tri'" not in serialized_text
     assert "'mall curicó'" not in serialized_text
     assert serialized["metrics"]["vacancia_pct_fondo"]["access"] == {
-        "kind": "derived_kpi", "entity_type": "fondo", "kpi": "vacancia_pct"
+        "kind": "fallback_chain",
+        "primary": {"kind": "derived_kpi", "entity_type": "fondo", "kpi": "vacancia_pct"},
+        "fallback": {
+            "kind": "rollup_ratio_view",
+            "views": {"PT": "v_vacancia_pt_consolidado_tipo", "Apo": "v_vacancia_apoquindo_consolidado_tipo"},
+            "numerator_column": "m2_vacantes", "denominator_column": "m2_gla",
+            "exclude_column": "tipo_unidad", "exclude_value": "Estacionamiento",
+            "dedupe_columns": ("tipo_unidad",), "precedence_column": "fuente",
+            "precedence_order": ("rent_roll", "manual"),
+        },
     }
 
 

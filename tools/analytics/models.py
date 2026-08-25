@@ -63,7 +63,7 @@ class EntityDefinition:
 
 @dataclass(frozen=True)
 class AccessStrategy:
-    kind: Literal["derived_kpi", "view_metric"]
+    kind: Literal["derived_kpi", "view_metric", "rollup_ratio_view", "fallback_chain"]
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,52 @@ class ViewMetricAccess(AccessStrategy):
         object.__setattr__(self, "kind", "view_metric")
         object.__setattr__(self, "view", view)
         object.__setattr__(self, "value_column", value_column)
+
+
+@dataclass(frozen=True)
+class RollupRatioViewAccess(AccessStrategy):
+    """Fund-level ratio computed as SUM(numerator)/SUM(denominator) over a
+    per-fund governed view, keyed deterministically by fund via `views`
+    (no per-fund code branching). Used as a fallback source when a fund
+    has no materialized row in the primary source for a period."""
+
+    views: dict
+    numerator_column: str
+    denominator_column: str
+    exclude_column: str | None
+    exclude_value: str | None
+    dedupe_columns: tuple
+    precedence_column: str | None
+    precedence_order: tuple
+
+    def __init__(self, views: dict, numerator_column: str, denominator_column: str,
+                 exclude_column: str | None = None, exclude_value: str | None = None,
+                 dedupe_columns: tuple = (), precedence_column: str | None = None,
+                 precedence_order: tuple = ()):
+        object.__setattr__(self, "kind", "rollup_ratio_view")
+        object.__setattr__(self, "views", dict(views))
+        object.__setattr__(self, "numerator_column", numerator_column)
+        object.__setattr__(self, "denominator_column", denominator_column)
+        object.__setattr__(self, "exclude_column", exclude_column)
+        object.__setattr__(self, "exclude_value", exclude_value)
+        object.__setattr__(self, "dedupe_columns", tuple(dedupe_columns))
+        object.__setattr__(self, "precedence_column", precedence_column)
+        object.__setattr__(self, "precedence_order", tuple(precedence_order))
+
+
+@dataclass(frozen=True)
+class FallbackAccess(AccessStrategy):
+    """Tries `primary` first; for any (entity, period) it does not cover,
+    tries `fallback`. Deterministic precedence — primary always wins when
+    it has a row, never averaged or merged with fallback for the same cell."""
+
+    primary: AccessStrategy
+    fallback: AccessStrategy
+
+    def __init__(self, primary: AccessStrategy, fallback: AccessStrategy):
+        object.__setattr__(self, "kind", "fallback_chain")
+        object.__setattr__(self, "primary", primary)
+        object.__setattr__(self, "fallback", fallback)
 
 
 @dataclass(frozen=True)

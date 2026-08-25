@@ -5,7 +5,10 @@ from typing import Any
 
 import yaml
 
-from tools.analytics.models import Aggregation, DerivedKpiAccess, MetricCatalog, MetricDefinition, MetricNature, ViewMetricAccess
+from tools.analytics.models import (
+    AccessStrategy, Aggregation, DerivedKpiAccess, FallbackAccess, MetricCatalog, MetricDefinition,
+    MetricNature, RollupRatioViewAccess, ViewMetricAccess,
+)
 
 
 CATALOG_PATH = Path(__file__).with_name("catalog_v1.yaml")
@@ -36,7 +39,7 @@ def _invalid(message: str) -> CatalogValidationError:
     return CatalogValidationError(message)
 
 
-def _access(raw: Any) -> DerivedKpiAccess | ViewMetricAccess:
+def _access(raw: Any) -> AccessStrategy:
     if not isinstance(raw, dict):
         raise _invalid("malformed access strategy")
     kind = raw.get("kind")
@@ -44,6 +47,27 @@ def _access(raw: Any) -> DerivedKpiAccess | ViewMetricAccess:
         return DerivedKpiAccess(entity_type=str(raw["entity_type"]), kpi=str(raw["kpi"]))
     if kind == "view_metric" and set(raw) == {"kind", "view", "value_column"}:
         return ViewMetricAccess(view=str(raw["view"]), value_column=str(raw["value_column"]))
+    if kind == "rollup_ratio_view" and set(raw) <= {
+        "kind", "views", "numerator_column", "denominator_column", "exclude_column", "exclude_value",
+        "dedupe_columns", "precedence_column", "precedence_order",
+    } and {"kind", "views", "numerator_column", "denominator_column"} <= set(raw):
+        views = raw["views"]
+        if not isinstance(views, dict) or not views or not all(isinstance(k, str) and isinstance(v, str) for k, v in views.items()):
+            raise _invalid("malformed access strategy: rollup views must be a non-empty fund_key->view map")
+        dedupe_columns = raw.get("dedupe_columns", [])
+        precedence_order = raw.get("precedence_order", [])
+        if not isinstance(dedupe_columns, list) or not isinstance(precedence_order, list):
+            raise _invalid("malformed access strategy: dedupe_columns/precedence_order must be lists")
+        return RollupRatioViewAccess(
+            views=views, numerator_column=str(raw["numerator_column"]), denominator_column=str(raw["denominator_column"]),
+            exclude_column=(str(raw["exclude_column"]) if raw.get("exclude_column") is not None else None),
+            exclude_value=(str(raw["exclude_value"]) if raw.get("exclude_value") is not None else None),
+            dedupe_columns=tuple(str(item) for item in dedupe_columns),
+            precedence_column=(str(raw["precedence_column"]) if raw.get("precedence_column") is not None else None),
+            precedence_order=tuple(str(item) for item in precedence_order),
+        )
+    if kind == "fallback_chain" and set(raw) == {"kind", "primary", "fallback"}:
+        return FallbackAccess(primary=_access(raw["primary"]), fallback=_access(raw["fallback"]))
     raise _invalid("malformed access strategy")
 
 
