@@ -60,6 +60,15 @@ _SYNTHESIS_INSTRUCTION = (
     "material o dato que no hayas podido verificar."
 )
 
+_TOOLLESS_TERMINAL_SYNTHESIS_INSTRUCTION = (
+    "El modelo ya dio una respuesta terminal sin usar herramientas. Esta es tu ultima intervencion "
+    "y no tienes herramientas disponibles. Devuelve la respuesta final usando el contrato de salida. "
+    "Si la solicitud y la respuesta son conversacion normal sin afirmaciones factuales de negocio, "
+    "preserva su sentido y tono natural; no la reemplaces con una advertencia de falta de evidencia. "
+    "Una solicitud factual o analitica sigue requiriendo evidencia gobernada: no repitas ni inventes "
+    "afirmaciones factuales que no puedan quedar correctamente vinculadas en el contrato."
+)
+
 _CHART_BLOCK = re.compile(r"```chart\s*\n(.*?)```", re.DOTALL)
 
 
@@ -224,7 +233,10 @@ class AnalystLoop:
         """
         if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
             return self._legacy_finalize(investigation)
-        message = f"{_SYNTHESIS_INSTRUCTION}\n\n{synthesis_context}" if synthesis_context else _SYNTHESIS_INSTRUCTION
+        base_instruction = (_TOOLLESS_TERMINAL_SYNTHESIS_INSTRUCTION
+                            if investigation.final_text and not investigation.tool_calls
+                            else _SYNTHESIS_INSTRUCTION)
+        message = f"{base_instruction}\n\n{synthesis_context}" if synthesis_context else base_instruction
         request = ModelRequest(self.system_prompt, investigation.round_trajectory, message, [], output_contract)
         llm_started = time.monotonic()
         response = self.transport.complete(request)

@@ -111,6 +111,22 @@ def test_alpha_voice_is_instructions_not_conversation_input(tmp_path):
     assert ALPHA_PRODUCT_VOICE not in json.dumps(request["input"], ensure_ascii=False)
 
 
+def test_authenticated_identity_reaches_runtime_instructions_only(tmp_path):
+    client = _FakeClient()
+    factory = OpenAIResponsesAnalystSessionFactory(
+        _knowledge_db(tmp_path / "knowledge.db"), client_factory=lambda: client
+    )
+
+    factory.create(object(), [], runtime_context={
+        "authenticated_user": {"display_name": "Gregorio de la Jara", "username": "gregorio", "role": "user"},
+    }).ask("Hola")
+
+    request = client.responses.calls[0]
+    assert "display_name=Gregorio de la Jara" in request["instructions"]
+    assert "username=gregorio" in request["instructions"]
+    assert "Gregorio de la Jara" not in json.dumps(request["input"], ensure_ascii=False)
+
+
 def test_alpha_toolless_turn_with_unbound_quantity_fails_closed(tmp_path):
     """A toolless turn (no new tool call this turn) is NOT exempt from
     fact-integrity guarantees: it now always makes a second, no-tools model
@@ -154,7 +170,10 @@ def test_alpha_purely_conversational_toolless_turn_stays_usable(tmp_path):
     assert result.text == draft
     assert result.presentation_applied is False
     assert result.presentation_integrity_status == "not_applicable"
+    assert result.durable_memory is None
     assert len(client.responses.calls) == 2
+    finalization_input = client.responses.calls[1]["input"][-1]["content"]
+    assert "no la reemplaces con una advertencia de falta de evidencia" in finalization_input
 
 
 def test_alpha_reformulates_the_interactive_evidence_instruction_only():

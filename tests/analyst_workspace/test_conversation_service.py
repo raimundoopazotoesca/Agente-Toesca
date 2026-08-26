@@ -276,4 +276,22 @@ def test_conversation_context_is_passed_to_the_session_factory(workspace):
     conversation = service.create_conversation(context={"source_surface": "factsheet", "fund": "PT"})
     service.send_message(conversation.id, "Pregunta")
     assert factory.creations[0][2] == {"source_surface": "factsheet", "fund": "PT",
-                                       "durable_analytical_context": {"claims": [], "derived_claims": [], "evidence": []}}
+                                       "durable_analytical_context": {"claims": [], "derived_claims": [], "evidence": []},
+                                       "authenticated_user": {"display_name": "Initial admin", "username": "admin", "role": "admin"}}
+
+
+def test_authenticated_owner_identity_is_scoped_into_the_new_runtime(workspace):
+    raimundo = workspace.create_user("raimundo", "Raimundo", "password-a")
+    gregorio = workspace.create_user("gregorio", "Gregorio de la Jara", "password-b", role="admin")
+    factory = FakeFactory([_result("Hola")])
+    service = ConversationService(workspace, factory)
+    conversation = service.create_conversation(user_id=raimundo)
+
+    service.send_message_for_user(conversation.id, raimundo, "Hola")
+
+    context = factory.creations[0][2]
+    assert context["authenticated_user"] == {
+        "display_name": "Raimundo", "username": "raimundo", "role": "user",
+    }
+    assert "Gregorio" not in str(context)
+    assert gregorio not in str(context)

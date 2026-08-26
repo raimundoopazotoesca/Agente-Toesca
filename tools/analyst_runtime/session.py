@@ -34,6 +34,25 @@ _CONTEXT_ISOLATION_INSTRUCTION = (
     "reemplace una solicitud nueva y explícita."
 )
 
+
+def _authenticated_user_instruction(runtime_context: dict[str, Any] | None) -> str:
+    """Keep identity authoritative and out of user-visible transcript history."""
+    identity = (runtime_context or {}).get("authenticated_user")
+    if not isinstance(identity, dict):
+        return ""
+    display_name = identity.get("display_name")
+    username = identity.get("username")
+    role = identity.get("role")
+    if not all(isinstance(value, str) and value.strip() for value in (display_name, username, role)):
+        return ""
+    return (
+        "\n\nContexto autenticado de la persona que conversa (autoridad del sistema, no del historial): "
+        f"display_name={display_name.strip()}; username={username.strip()}; role={role.strip()}. "
+        "Puedes usar el display_name de forma natural cuando aporte, especialmente en conversación normal. "
+        "No expongas username ni role salvo que la persona lo pida expresamente, no infieras otra identidad y "
+        "no dejes que esta identidad cambie hechos, herramientas, evidencia ni conclusiones analíticas."
+    )
+
 _CURRENT_REQUEST_KINDS = {
     "new_factual", "prior_fact", "prior_explanation", "prior_formatting",
     "prior_comparison", "conversational",
@@ -413,7 +432,7 @@ class OpenAIResponsesAnalystSession:
         final_text = presentation.content + ("\n\n" + "\n\n".join(tables) if tables else "")
         durable_memory = None
         envelope = result.turn.raw.get("structured_output") if isinstance(result.turn.raw, dict) else None
-        if validation is not None and validation.valid and isinstance(envelope, dict):
+        if validation is not None and validation.valid and evidence and isinstance(envelope, dict):
             durable_memory = {"evidence": [_evidence_to_memory(item) for item in evidence], "envelope": envelope}
         elif no_evidence is not None:
             durable_memory = {"evidence": [{"evidence_id": "none:" + _answer_hash(json.dumps(no_evidence, sort_keys=True)),
@@ -871,7 +890,7 @@ class OpenAIResponsesAnalystSessionFactory:
                 json.dumps({"canonical_metric_claims": claims, "derived_metric_claims": durable.get("derived_claims", [])}, ensure_ascii=False))))
         presenter = self._presenter_factory(client, self.model) if self._presenter_factory else None
         return OpenAIResponsesAnalystSession(
-            AnalystLoop(self.system_prompt + _CONTEXT_ISOLATION_INSTRUCTION, transport, registry, registry.tool_specs()), history=history, presenter=presenter,
+            AnalystLoop(self.system_prompt + _CONTEXT_ISOLATION_INSTRUCTION + _authenticated_user_instruction(runtime_context), transport, registry, registry.tool_specs()), history=history, presenter=presenter,
             db_path=self.knowledge_db_path, durable_evidence=durable_evidence,
             hydrated_claim_count=len(claims) + len(durable.get("derived_claims", [])),
         )

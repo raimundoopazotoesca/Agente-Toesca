@@ -273,6 +273,15 @@ class WorkspaceStore:
             raise AuthenticationError("invalid credentials")
         return row
 
+    def get_authenticated_user_context(self, user_id: str) -> dict[str, str]:
+        """Return the minimal trusted identity context safe for the runtime."""
+        conn = self._connect()
+        try:
+            row = self._require_user(conn, user_id)
+            return {key: str(row[key]) for key in ("display_name", "username", "role")}
+        finally:
+            conn.close()
+
     def create_session(self, user_id: str, token: str, expires_at: str) -> None:
         conn = self._connect()
         try:

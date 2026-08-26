@@ -77,6 +77,8 @@ class ConversationService:
             # Scope is checked from the conversation owner before this fetch;
             # the store has no global user-facing claim lookup.
             if conversation.owner_user_id:
+                runtime_context["authenticated_user"] = self.store.get_authenticated_user_context(
+                    conversation.owner_user_id)
                 hydration_started = time.monotonic()
                 runtime_context["durable_analytical_context"] = self.store.load_durable_context_for_user(
                     conversation_id, conversation.owner_user_id)
