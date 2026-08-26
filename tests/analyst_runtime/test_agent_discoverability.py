@@ -256,8 +256,12 @@ def test_a_nonexistent_evidence_id_still_fails_closed_with_the_inventory_present
 
 def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the_synthesis_round():
     """Golden 7: the surfacing mechanism itself. Turn 2's history must carry
-    turn 1's real governed call (entity + metric + period) and must NOT carry
-    the reserved synthesis instruction, which claims there are no tools."""
+    turn 1's real governed fact (entity + metric + period) through the
+    normalized evidence it retains -- NOT through a replayed raw tool_request
+    (that channel is the cross-turn recency-bias root cause and is closed at
+    the turn boundary, see session.py's ``_stripped_for_cross_turn_history``)
+    -- and must NOT carry the reserved synthesis instruction, which claims
+    there are no tools."""
     turn_one = [
         ModelResponse("", [ToolRequest("call_ltv", "analytics_lookup_asset",
                                        {"metric": "ltv_activo", "assets": ["Apo3001"],
@@ -290,11 +294,15 @@ def test_followup_turn_keeps_the_resolved_entity_metric_and_period_and_drops_the
     session.ask("¿Y el mes anterior?")
 
     followup_history = transport.requests[-1].history
-    calls = [request for item in followup_history for request in item.tool_requests]
-    assert any(call.name == "analytics_lookup_asset"
-               and call.arguments["assets"] == ["Apo3001"]
-               and call.arguments["metric"] == "ltv_activo"
-               and call.arguments["period"] == "2026-06" for call in calls)
+    facts = [fact for item in followup_history for result in item.tool_results
+             if result.evidence is not None for fact in result.evidence.facts]
+    assert any(fact.get("entity_id") == "Apo3001" and fact.get("metric_key") == "ltv_activo"
+               and fact.get("period") == "2026-06" for fact in facts)
+    # The raw call itself -- name, call_id, arguments -- is investigation
+    # scratch, not conversational memory: it must NOT survive the turn
+    # boundary (that replay is exactly the cross-turn recency-bias root
+    # cause this fix closes).
+    assert not any(item.tool_requests for item in followup_history)
     assert not any(_SYNTHESIS_INSTRUCTION in (item.text or "") for item in followup_history)
     # The user still sees the rendered answer, not the envelope JSON.
     assert any(item.role == "assistant" and "fragments" not in (item.text or "")

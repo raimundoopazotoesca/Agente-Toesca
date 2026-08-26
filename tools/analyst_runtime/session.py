@@ -257,17 +257,26 @@ class OpenAIResponsesTransport:
         for item in history:
             if item.role == "user":
                 rendered.append({"role": "user", "content": item.text or ""})
-            else:
-                if item.raw:
-                    rendered.extend(item.raw)
-                else:
-                    # Restart reconstruction has only visible transcript text;
-                    # native sessions have opaque provider output in ``raw``.
-                    rendered.append({"role": "assistant", "content": item.text or ""})
+            elif item.raw:
+                # Opaque provider output survives ONLY for an item still part
+                # of the in-progress investigation (see analyst_loop.py). A
+                # completed turn's items have ``raw`` stripped by
+                # ``_stripped_for_cross_turn_history`` before being retained,
+                # so this branch never fires for historical tool traces.
+                rendered.extend(item.raw)
                 rendered.extend(
                     {"type": "function_call_output", "call_id": result.call_id, "output": result.content}
                     for result in item.tool_results
                 )
+            else:
+                # Restart reconstruction and stripped cross-turn history both
+                # have only visible transcript text; any ``tool_results`` kept
+                # alongside them are for evidence lookup only (see
+                # ``_evidence_for_current_answer``) and must NOT be echoed as
+                # ``function_call_output`` without their originating
+                # ``function_call`` -- that would send the provider an
+                # orphaned tool result it never asked for.
+                rendered.append({"role": "assistant", "content": item.text or ""})
         return rendered
 
 
@@ -669,6 +678,33 @@ def _investigation_for_current_synthesis(investigation: Any, retained_history_le
     return investigation
 
 
+def _stripped_for_cross_turn_history(item: TranscriptItem) -> TranscriptItem:
+    """Drop provider wire trace at a completed turn boundary.
+
+    Raw traces are investigation state, not conversational memory: a turn's
+    ``function_call``/``function_call_output`` items, ``call_id``s and
+    invocation trace exist so the SAME investigation can chain tool rounds
+    (see analyst_loop.py's ``investigate``). Once a turn ends, replaying that
+    trace into the NEXT turn's planner input has no conversational purpose --
+    it only biases the next turn's first tool choice toward whatever domain
+    the last turn happened to use (the recency-bias root cause this closes).
+
+    What must survive for legitimate follow-ups is the semantic outcome, not
+    the mechanism: each ``ToolResult.evidence`` (a normalized, already-bound
+    fact) is kept so evidence pooling (``ask()``'s ``historical_evidence``,
+    ``_evidence_for_current_answer``) keeps working; the wire-only fields
+    (``content``, ``trace``, ``call_id``) that only ever fed
+    ``function_call_output`` rendering are cleared alongside ``raw`` so
+    ``_render_history`` cannot echo them either.
+    """
+    if item.role != "assistant":
+        return item
+    return replace(
+        item, raw=None, tool_requests=[],
+        tool_results=[replace(result, call_id="", content="", trace={}) for result in item.tool_results],
+    )
+
+
 def _retained_history(investigation: Any, answer_text: str, retained_history_length: int,
                        user_text: str, turn_failed: bool) -> list[TranscriptItem]:
     """Cross-turn retention policy (AnalystLoop deliberately leaves it to the
@@ -702,16 +738,20 @@ def _retained_history(investigation: Any, answer_text: str, retained_history_len
         history = list(investigation.round_trajectory[:retained_history_length])
         history.append(TranscriptItem(role="user", text=user_text))
         history.append(TranscriptItem(role="assistant", text=answer_text))
-        return history[-12:]
+        return [_stripped_for_cross_turn_history(item) for item in history[-12:]]
     history = list(investigation.round_trajectory)
-    if investigation.termination_reason == "model_terminal":
-        # The trajectory already ends with the model's own answer.
-        return history[-12:]
-    history.append(TranscriptItem(role="assistant", text=answer_text))
+    if investigation.termination_reason != "model_terminal":
+        # The trajectory already ends with the model's own answer when
+        # ``model_terminal``; otherwise append the rendered synthesis text.
+        history.append(TranscriptItem(role="assistant", text=answer_text))
     # Durable evidence is persisted separately.  Bound transient provider
     # replay so old clarification/tool trajectories cannot outrank a new,
     # self-contained user request after a long topic-switching conversation.
-    return history[-12:]
+    # Every item -- including ones already retained (and already stripped)
+    # from a prior turn -- passes through the cross-turn strip again here;
+    # for those it is a no-op, and for this turn's own items it is what
+    # removes their raw provider trace before they become history.
+    return [_stripped_for_cross_turn_history(item) for item in history[-12:]]
 
 
 def _clarification_presentation(content: str) -> PresentationResult:
