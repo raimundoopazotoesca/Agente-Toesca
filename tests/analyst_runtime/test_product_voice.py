@@ -118,11 +118,12 @@ def test_authenticated_identity_reaches_runtime_instructions_only(tmp_path):
     )
 
     factory.create(object(), [], runtime_context={
-        "authenticated_user": {"display_name": "Gregorio de la Jara", "username": "gregorio", "role": "user"},
+        "authenticated_user": {"display_name": "Gregorio de la Jara", "short_name": "Gregorio", "username": "gregorio", "role": "user"},
     }).ask("Hola")
 
     request = client.responses.calls[0]
-    assert "display_name=Gregorio de la Jara" in request["instructions"]
+    assert "short_name=Gregorio" in request["instructions"]
+    assert "Gregorio de la Jara" not in request["instructions"]
     assert "username=gregorio" in request["instructions"]
     assert "Gregorio de la Jara" not in json.dumps(request["input"], ensure_ascii=False)
 

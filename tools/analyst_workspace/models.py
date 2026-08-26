@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 
+def preferred_name(display_name: str) -> str:
+    """Return the natural short name derived from an authoritative display name."""
+    return " ".join(display_name.split()).split(" ", 1)[0]
+
+
 @dataclass(frozen=True)
 class Conversation:
     id: str

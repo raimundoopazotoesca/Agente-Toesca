@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message
+from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message, preferred_name
 
 SCHEMA_VERSION = 7
 DEFAULT_TITLE = "Nueva conversación"
@@ -321,7 +321,10 @@ class WorkspaceStore:
         conn = self._connect()
         try:
             row = self._require_user(conn, user_id)
-            return {key: str(row[key]) for key in ("display_name", "username", "role")}
+            return {
+                **{key: str(row[key]) for key in ("display_name", "username", "role")},
+                "short_name": preferred_name(str(row["display_name"])),
+            }
         finally:
             conn.close()
 

@@ -460,7 +460,8 @@ def analyst_login():
     token = secrets.token_urlsafe(32)
     expires = datetime.now(UTC) + timedelta(days=int(app.config["ANALYST_SESSION_DAYS"]))
     _workspace_store().create_session(user["id"], token, expires.isoformat().replace("+00:00", "Z"))
-    response = jsonify({"username": user["username"], "display_name": user["display_name"]})
+    from tools.analyst_workspace.models import preferred_name
+    response = jsonify({"username": user["username"], "display_name": user["display_name"], "short_name": preferred_name(user["display_name"])})
     response.set_cookie(ANALYST_SESSION_COOKIE, token, httponly=True, samesite="Lax", secure=bool(app.config["ANALYST_COOKIE_SECURE"]), path="/", expires=expires)
     return response
 
@@ -479,7 +480,8 @@ def analyst_logout():
 def analyst_me():
     user = _principal()
     if user is None: return jsonify({"error": "authentication_required"}), 401
-    return jsonify({"username": user["username"], "display_name": user["display_name"], "role": user["role"]})
+    from tools.analyst_workspace.models import preferred_name
+    return jsonify({"username": user["username"], "display_name": user["display_name"], "short_name": preferred_name(user["display_name"]), "role": user["role"]})
 
 
 @app.get("/analyst_workspace.js")

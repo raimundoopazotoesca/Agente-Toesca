@@ -277,7 +277,7 @@ def test_conversation_context_is_passed_to_the_session_factory(workspace):
     service.send_message(conversation.id, "Pregunta")
     assert factory.creations[0][2] == {"source_surface": "factsheet", "fund": "PT",
                                        "durable_analytical_context": {"claims": [], "derived_claims": [], "evidence": []},
-                                       "authenticated_user": {"display_name": "Initial admin", "username": "admin", "role": "admin"}}
+                                       "authenticated_user": {"display_name": "Initial admin", "short_name": "Initial", "username": "admin", "role": "admin"}}
 
 
 def test_authenticated_owner_identity_is_scoped_into_the_new_runtime(workspace):
@@ -291,7 +291,7 @@ def test_authenticated_owner_identity_is_scoped_into_the_new_runtime(workspace):
 
     context = factory.creations[0][2]
     assert context["authenticated_user"] == {
-        "display_name": "Raimundo", "username": "raimundo", "role": "user",
+        "display_name": "Raimundo", "short_name": "Raimundo", "username": "raimundo", "role": "user",
     }
     assert "Gregorio" not in str(context)
     assert gregorio not in str(context)

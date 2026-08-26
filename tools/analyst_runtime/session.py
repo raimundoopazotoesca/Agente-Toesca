@@ -41,14 +41,15 @@ def _authenticated_user_instruction(runtime_context: dict[str, Any] | None) -> s
     if not isinstance(identity, dict):
         return ""
     display_name = identity.get("display_name")
+    short_name = identity.get("short_name")
     username = identity.get("username")
     role = identity.get("role")
-    if not all(isinstance(value, str) and value.strip() for value in (display_name, username, role)):
+    if not all(isinstance(value, str) and value.strip() for value in (display_name, short_name, username, role)):
         return ""
     return (
         "\n\nContexto autenticado de la persona que conversa (autoridad del sistema, no del historial): "
-        f"display_name={display_name.strip()}; username={username.strip()}; role={role.strip()}. "
-        "Puedes usar el display_name de forma natural cuando aporte, especialmente en conversación normal. "
+        f"short_name={short_name.strip()}; username={username.strip()}; role={role.strip()}. "
+        "Puedes usar el short_name de forma natural cuando aporte, especialmente en conversación normal. "
         "No expongas username ni role salvo que la persona lo pida expresamente, no infieras otra identidad y "
         "no dejes que esta identidad cambie hechos, herramientas, evidencia ni conclusiones analíticas."
     )

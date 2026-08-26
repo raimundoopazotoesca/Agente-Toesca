@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from scripts import ingesta_server
 from tools.analyst_runtime.session import AnalystSessionResult
 from tools.analyst_workspace.conversation_service import ConversationService
+from tools.analyst_workspace.models import preferred_name
 from tools.analyst_workspace.store import WorkspaceStore
 
 
@@ -65,3 +66,9 @@ def test_migration_backfills_existing_conversations_and_keeps_no_null_owner(tmp_
         assert conn.execute("SELECT COUNT(*) FROM conversation WHERE owner_user_id IS NULL").fetchone()[0] == 0
         assert conn.execute("SELECT owner_user_id FROM conversation WHERE id=?", (conversation.id,)).fetchone()[0]
     finally: conn.close()
+
+
+def test_preferred_name_uses_the_first_natural_name_from_authoritative_display_name():
+    assert preferred_name("Raimundo Opazo") == "Raimundo"
+    assert preferred_name("Gregorio de la Jara") == "Gregorio"
+    assert preferred_name("Marcos Quiroga") == "Marcos"

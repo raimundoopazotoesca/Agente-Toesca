@@ -31,8 +31,9 @@ def _server(monkeypatch, tmp_path):
     workspace_path = tmp_path / "workspace.db"
     store = WorkspaceStore(workspace_path)
     store.initialize()
-    store.create_user("raimundo", "Raimundo", "password")
-    store.create_user("gregorio", "Gregorio", "password")
+    store.create_user("raimundo", "Raimundo Opazo", "password")
+    store.create_user("gregorio", "Gregorio de la Jara", "password")
+    store.create_user("marcos", "Marcos Quiroga", "password")
 
     monkeypatch.setitem(ingesta_server.app.config, "TESTING", False)
     monkeypatch.setitem(
@@ -120,4 +121,9 @@ def test_logout_clears_selection_before_another_user_logs_in(monkeypatch, tmp_pa
         assert page.locator(".home-state").is_visible()
         assert not page.locator("#error-banner.show").is_visible()
         assert page.evaluate("localStorage.getItem('toesca_asistente_conversation_id')") is None
+
+        page.get_by_role("button", name="Salir").click()
+        page.wait_for_url(f"{base_url}/login")
+        _login(page, base_url, "marcos")
+        page.get_by_role("heading", name="Hola, Marcos").wait_for(state="visible")
         browser.close()

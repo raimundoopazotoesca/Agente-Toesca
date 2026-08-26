@@ -481,7 +481,7 @@
     renderHome();
     try {
       const [principal, loadedConversations] = await Promise.all([getCurrentUser(), listConversations()]);
-      displayName = typeof principal.display_name === "string" ? principal.display_name.trim() : "";
+      displayName = typeof principal.short_name === "string" ? principal.short_name.trim() : "";
       conversations = loadedConversations;
     } catch (_err) {
       showError("No se pudo conectar con el servidor del Asistente.");
