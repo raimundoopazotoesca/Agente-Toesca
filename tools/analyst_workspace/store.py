@@ -17,12 +17,23 @@ from uuid import uuid4
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from tools.analyst_workspace.models import Conversation, Feedback, Message
+from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 DEFAULT_TITLE = "Nueva conversación"
 _ROLES = {"user", "assistant"}
 _RATINGS = {"up", "down"}
+_REPORT_STATUSES = {"new", "reviewing", "resolved", "dismissed"}
+# Only these keys from message.metadata_json are safe/expected to be copied into a
+# feedback report's technical_context. Never widen this by just spreading the dict --
+# new metadata fields must be reviewed before they can leave the workspace DB this way.
+_SAFE_TECHNICAL_CONTEXT_KEYS = (
+    "provider", "model", "latency_ms", "model_calls", "action_count", "sql_count",
+    "tool_calls", "token_usage", "turn_metrics", "termination_reason",
+    "presentation_applied", "presentation_provider", "presentation_model",
+    "presentation_latency_ms", "presentation_integrity_status",
+    "original_answer_hash", "presented_answer_hash",
+)
 
 
 class WorkspaceStoreError(Exception):
@@ -35,6 +46,10 @@ class ConversationNotFoundError(WorkspaceStoreError):
 
 class MessageNotFoundError(WorkspaceStoreError):
     """Raised when a message id cannot be found."""
+
+
+class FeedbackReportNotFoundError(WorkspaceStoreError):
+    """Raised when a feedback report id cannot be found."""
 
 
 class ValidationError(WorkspaceStoreError):
@@ -183,6 +198,34 @@ class WorkspaceStore:
                     SET title_origin = CASE WHEN title IN ('Nueva conversación', 'Nuevo chat') THEN 'default' ELSE 'manual' END;
                     """)
                     conn.execute("PRAGMA user_version = 6")
+                    version = 6
+                if version < 7:
+                    conn.executescript("""
+                    CREATE TABLE feedback_report (
+                        id TEXT PRIMARY KEY,
+                        reporter_user_id TEXT NOT NULL REFERENCES user(id),
+                        reporter_display_name TEXT NOT NULL,
+                        conversation_id TEXT NOT NULL REFERENCES conversation(id),
+                        anchor_message_id TEXT NOT NULL REFERENCES message(id),
+                        comment TEXT NOT NULL,
+                        conversation_snapshot_json TEXT NOT NULL,
+                        technical_context_json TEXT,
+                        status TEXT NOT NULL DEFAULT 'new'
+                            CHECK(status IN ('new', 'reviewing', 'resolved', 'dismissed')),
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX idx_feedback_report_created ON feedback_report(created_at DESC, id DESC);
+                    CREATE INDEX idx_feedback_report_reporter ON feedback_report(reporter_user_id);
+                    CREATE INDEX idx_feedback_report_status ON feedback_report(status);
+                    CREATE TABLE user_capability (
+                        user_id TEXT NOT NULL REFERENCES user(id),
+                        capability TEXT NOT NULL,
+                        granted_at TEXT NOT NULL,
+                        PRIMARY KEY (user_id, capability)
+                    );
+                    """)
+                    conn.execute("PRAGMA user_version = 7")
         finally:
             conn.close()
 
@@ -356,6 +399,163 @@ class WorkspaceStore:
         finally: conn.close()
         if row is None: raise MessageNotFoundError("message not found")
         return self.set_feedback(message_id, rating, note)
+
+    def create_feedback_report_for_user(
+        self, reporter_user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
+        release_revision: str | None = None,
+    ) -> FeedbackReport:
+        """Snapshot the visible conversation up to ``anchor_message_id`` and store a report.
+
+        This is the sole write path for "Reportar problema". Everything here is
+        derived from server-side/authenticated state -- the caller only supplies
+        conversation_id, anchor_message_id, and comment. Ownership of the
+        conversation and membership of the anchor message in that conversation
+        are both re-checked here, not assumed from the caller.
+        """
+        if not isinstance(comment, str) or not comment.strip():
+            raise ValidationError("comment is required")
+        conn = self._connect()
+        try:
+            with conn:
+                reporter = self._require_user(conn, reporter_user_id)
+                conversation = conn.execute(
+                    "SELECT id FROM conversation WHERE id=? AND owner_user_id=?",
+                    (conversation_id, reporter_user_id),
+                ).fetchone()
+                if conversation is None:
+                    raise ConversationNotFoundError("conversation not found")
+                anchor = conn.execute(
+                    "SELECT * FROM message WHERE id=? AND conversation_id=?",
+                    (anchor_message_id, conversation_id),
+                ).fetchone()
+                if anchor is None:
+                    raise MessageNotFoundError("message not found")
+                if anchor["role"] != "assistant":
+                    raise ValidationError("feedback can only be reported on an assistant response")
+                rows = conn.execute(
+                    "SELECT id, role, content, created_at FROM message WHERE conversation_id=? "
+                    "ORDER BY created_at ASC, id ASC",
+                    (conversation_id,),
+                ).fetchall()
+                snapshot: list[dict[str, Any]] = []
+                for row in rows:
+                    snapshot.append({
+                        "message_id": row["id"], "role": row["role"],
+                        "content": row["content"], "created_at": row["created_at"],
+                    })
+                    if row["id"] == anchor_message_id:
+                        break
+                metadata = _deserialize_object(anchor["metadata_json"]) or {}
+                technical_context = {
+                    key: metadata[key] for key in _SAFE_TECHNICAL_CONTEXT_KEYS if key in metadata
+                }
+                if release_revision:
+                    technical_context["release_revision"] = release_revision
+                now, report_id = _utc_now(), str(uuid4())
+                conn.execute(
+                    """INSERT INTO feedback_report
+                    (id, reporter_user_id, reporter_display_name, conversation_id, anchor_message_id, comment,
+                     conversation_snapshot_json, technical_context_json, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)""",
+                    (report_id, reporter_user_id, reporter["display_name"], conversation_id, anchor_message_id,
+                     comment.strip(), json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
+                     json.dumps(technical_context, ensure_ascii=False, separators=(",", ":")) if technical_context else None,
+                     now, now),
+                )
+        finally:
+            conn.close()
+        return self.get_feedback_report(report_id)
+
+    def list_feedback_reports(self, status: str | None = None, reporter_user_id: str | None = None) -> list[FeedbackReport]:
+        if status is not None and status not in _REPORT_STATUSES:
+            raise ValidationError("invalid status filter")
+        sql = "SELECT * FROM feedback_report WHERE 1=1"
+        params: list[Any] = []
+        if status:
+            sql += " AND status = ?"
+            params.append(status)
+        if reporter_user_id:
+            sql += " AND reporter_user_id = ?"
+            params.append(reporter_user_id)
+        sql += " ORDER BY created_at DESC, id DESC"
+        conn = self._connect()
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+        return [_feedback_report_from_row(row) for row in rows]
+
+    def get_feedback_report(self, report_id: str) -> FeedbackReport:
+        conn = self._connect()
+        try:
+            row = conn.execute("SELECT * FROM feedback_report WHERE id = ?", (report_id,)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise FeedbackReportNotFoundError(f"feedback report not found: {report_id}")
+        return _feedback_report_from_row(row)
+
+    def update_feedback_report_status(self, report_id: str, status: str) -> FeedbackReport:
+        if status not in _REPORT_STATUSES:
+            raise ValidationError("status must be one of: " + ", ".join(sorted(_REPORT_STATUSES)))
+        conn = self._connect()
+        try:
+            with conn:
+                cursor = conn.execute(
+                    "UPDATE feedback_report SET status=?, updated_at=? WHERE id=?",
+                    (status, _utc_now(), report_id),
+                )
+                if cursor.rowcount == 0:
+                    raise FeedbackReportNotFoundError(f"feedback report not found: {report_id}")
+                row = conn.execute("SELECT * FROM feedback_report WHERE id = ?", (report_id,)).fetchone()
+        finally:
+            conn.close()
+        return _feedback_report_from_row(row)
+
+    def grant_capability(self, user_id: str, capability: str) -> None:
+        if not isinstance(capability, str) or not capability.strip():
+            raise ValidationError("capability is required")
+        conn = self._connect()
+        try:
+            with conn:
+                self._require_user(conn, user_id)
+                conn.execute(
+                    "INSERT INTO user_capability (user_id, capability, granted_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(user_id, capability) DO NOTHING",
+                    (user_id, capability.strip(), _utc_now()),
+                )
+        finally:
+            conn.close()
+
+    def revoke_capability(self, user_id: str, capability: str) -> None:
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "DELETE FROM user_capability WHERE user_id=? AND capability=?", (user_id, capability)
+                )
+        finally:
+            conn.close()
+
+    def user_has_capability(self, user_id: str, capability: str) -> bool:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM user_capability WHERE user_id=? AND capability=?", (user_id, capability)
+            ).fetchone()
+        finally:
+            conn.close()
+        return row is not None
+
+    def get_user_id_by_username(self, username: str) -> str:
+        conn = self._connect()
+        try:
+            row = conn.execute("SELECT id FROM user WHERE username=?", (username.strip().lower(),)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise ValidationError("user does not exist")
+        return row["id"]
 
     def list_conversations(self, include_archived: bool = False) -> list[Conversation]:
         sql = "SELECT * FROM conversation"
@@ -661,6 +861,14 @@ def _message_from_row(row: sqlite3.Row) -> Message:
 
 def _feedback_from_row(row: sqlite3.Row) -> Feedback:
     return Feedback(row["id"], row["message_id"], row["rating"], row["note"], row["created_at"])
+
+
+def _feedback_report_from_row(row: sqlite3.Row) -> FeedbackReport:
+    return FeedbackReport(
+        row["id"], row["reporter_user_id"], row["reporter_display_name"], row["conversation_id"],
+        row["anchor_message_id"], row["comment"], json.loads(row["conversation_snapshot_json"]),
+        _deserialize_object(row["technical_context_json"]), row["status"], row["created_at"], row["updated_at"],
+    )
 
 
 def _deserialize_object(value: str | None) -> dict[str, Any] | None:

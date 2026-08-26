@@ -14,6 +14,7 @@ from openai import OpenAIError
 from tools.analyst_workspace.conversation_service import ConversationServiceError
 from tools.analyst_workspace.store import (
     ConversationNotFoundError,
+    FeedbackReportNotFoundError,
     MessageNotFoundError,
     ValidationError,
     WorkspaceStoreError,
@@ -32,6 +33,13 @@ class ConversationServiceProtocol(Protocol):
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
     def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Any: ...
     def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Any: ...
+    def report_feedback_for_user(
+        self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
+        release_revision: str | None = None,
+    ) -> Any: ...
+    def list_feedback_reports(self, status: str | None = None, reporter_user_id: str | None = None) -> list[Any]: ...
+    def get_feedback_report(self, report_id: str) -> Any: ...
+    def update_feedback_report_status(self, report_id: str, status: str) -> Any: ...
 
 
 class AnalystApiError(Exception):
@@ -47,6 +55,10 @@ class AnalystValidationError(AnalystApiError):
 
 
 class AnalystServiceUnavailableError(AnalystApiError):
+    pass
+
+
+class AnalystForbiddenError(AnalystApiError):
     pass
 
 
@@ -84,11 +96,32 @@ class ConversationApiAdapter:
     def set_feedback(self, message_id: str, user_id: str, rating: str, note: str | None) -> dict[str, Any]:
         return _feedback(self._call(self._service.set_feedback_for_user, message_id, user_id, rating, note))
 
+    def submit_feedback_report(
+        self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
+        release_revision: str | None = None,
+    ) -> dict[str, Any]:
+        return _feedback_report(self._call(
+            self._service.report_feedback_for_user, user_id, conversation_id, anchor_message_id, comment,
+            release_revision=release_revision,
+        ))
+
+    def list_feedback_reports(self, *, status: str | None, reporter_user_id: str | None) -> list[dict[str, Any]]:
+        return [
+            _feedback_report_summary(item)
+            for item in self._call(self._service.list_feedback_reports, status=status, reporter_user_id=reporter_user_id)
+        ]
+
+    def get_feedback_report(self, report_id: str) -> dict[str, Any]:
+        return _feedback_report(self._call(self._service.get_feedback_report, report_id))
+
+    def update_feedback_report_status(self, report_id: str, status: str) -> dict[str, Any]:
+        return _feedback_report(self._call(self._service.update_feedback_report_status, report_id, status))
+
     @staticmethod
     def _call(method: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         try:
             return method(*args, **kwargs)
-        except (ConversationNotFoundError, MessageNotFoundError) as exc:
+        except (ConversationNotFoundError, MessageNotFoundError, FeedbackReportNotFoundError) as exc:
             raise AnalystNotFoundError from exc
         except (ValidationError, ConversationServiceError) as exc:
             raise AnalystValidationError from exc
@@ -125,3 +158,22 @@ def _message(value: Any) -> dict[str, Any]:
 
 def _feedback(value: Any) -> dict[str, Any]:
     return {name: _field(value, name) for name in ("rating", "note")}
+
+
+def _feedback_report(value: Any) -> dict[str, Any]:
+    return {
+        name: _field(value, name)
+        for name in (
+            "id", "reporter_user_id", "reporter_display_name", "conversation_id", "anchor_message_id",
+            "comment", "conversation_snapshot", "technical_context", "status", "created_at", "updated_at",
+        )
+    }
+
+
+def _feedback_report_summary(value: Any) -> dict[str, Any]:
+    comment = _field(value, "comment")
+    preview = comment if len(comment) <= 140 else comment[:140] + "…"
+    return {
+        name: _field(value, name)
+        for name in ("id", "reporter_user_id", "reporter_display_name", "status", "created_at", "updated_at")
+    } | {"comment_preview": preview}

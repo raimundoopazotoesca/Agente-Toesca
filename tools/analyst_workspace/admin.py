@@ -29,18 +29,33 @@ def main() -> int:
     reset.add_argument("username")
     reset.add_argument("--password-stdin", action="store_true")
 
+    grant = subparsers.add_parser("grant-capability")
+    grant.add_argument("username")
+    grant.add_argument("capability")
+
+    revoke = subparsers.add_parser("revoke-capability")
+    revoke.add_argument("username")
+    revoke.add_argument("capability")
+
     args = parser.parse_args()
-    password = input() if args.password_stdin else getpass.getpass("Password: ")
     workspace = WorkspaceStore(Path(__file__).resolve().parents[2] / "memory" / "analyst_workspace.db")
     workspace.initialize()
     try:
-        if args.command == "create-user":
-            if args.role == "admin":
-                workspace.set_initial_admin_password(args.username, password, args.display_name)
+        if args.command in {"create-user", "reset-password"}:
+            password = input() if args.password_stdin else getpass.getpass("Password: ")
+            if args.command == "create-user":
+                if args.role == "admin":
+                    workspace.set_initial_admin_password(args.username, password, args.display_name)
+                else:
+                    workspace.create_user(args.username, args.display_name, password, args.role)
             else:
-                workspace.create_user(args.username, args.display_name, password, args.role)
+                workspace.reset_user_password(args.username, password)
         else:
-            workspace.reset_user_password(args.username, password)
+            user_id = workspace.get_user_id_by_username(args.username)
+            if args.command == "grant-capability":
+                workspace.grant_capability(user_id, args.capability)
+            else:
+                workspace.revoke_capability(user_id, args.capability)
     except ValidationError as exc:
         parser.error(str(exc))
     return 0

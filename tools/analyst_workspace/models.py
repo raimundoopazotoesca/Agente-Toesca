@@ -34,3 +34,18 @@ class Feedback:
     rating: str
     note: str | None
     created_at: str
+
+
+@dataclass(frozen=True)
+class FeedbackReport:
+    id: str
+    reporter_user_id: str
+    reporter_display_name: str
+    conversation_id: str
+    anchor_message_id: str
+    comment: str
+    conversation_snapshot: list[dict[str, Any]]
+    technical_context: dict[str, Any] | None
+    status: str
+    created_at: str
+    updated_at: str

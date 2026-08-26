@@ -10,7 +10,7 @@ import time
 from typing import Any
 
 from tools.analyst_runtime.session import AnalystSession, AnalystSessionFactory, AnalystSessionResult
-from tools.analyst_workspace.models import Conversation, Feedback, Message
+from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message
 from tools.analyst_workspace.store import DEFAULT_TITLE, WorkspaceStore
 from tools.analyst_workspace.title_generator import LightweightTitleGenerator, TitleGenerator, is_substantive_text
 
@@ -121,6 +121,24 @@ class ConversationService:
 
     def get_feedback(self, message_id: str) -> Feedback | None:
         return self.store.get_feedback(message_id)
+
+    def report_feedback_for_user(
+        self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
+        release_revision: str | None = None,
+    ) -> FeedbackReport:
+        """Out-of-band product action: no LLM call, no tool call, no new turn."""
+        return self.store.create_feedback_report_for_user(
+            user_id, conversation_id, anchor_message_id, comment, release_revision=release_revision
+        )
+
+    def list_feedback_reports(self, status: str | None = None, reporter_user_id: str | None = None) -> list[FeedbackReport]:
+        return self.store.list_feedback_reports(status=status, reporter_user_id=reporter_user_id)
+
+    def get_feedback_report(self, report_id: str) -> FeedbackReport:
+        return self.store.get_feedback_report(report_id)
+
+    def update_feedback_report_status(self, report_id: str, status: str) -> FeedbackReport:
+        return self.store.update_feedback_report_status(report_id, status)
 
 
 def runtime_result_to_metadata(result: AnalystSessionResult, latency_ms: float, hydration_latency_ms: float = 0.0) -> dict[str, Any]:

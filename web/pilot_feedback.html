@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toesca Analyst — Reportes del piloto</title>
+<style>
+  :root{--ink:#0f172a;--ink-soft:#334155;--muted:#64748b;--muted-soft:#94a3b8;
+    --border:#e6e9ef;--bg:#f7f8fa;--surface:#fff;--radius:10px;
+    --shadow:0 10px 30px rgba(15,23,42,.08)}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--ink)}
+  header{padding:18px 28px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:14px}
+  header h1{font-size:16px;margin:0}
+  header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:13px}
+  main{max-width:1000px;margin:0 auto;padding:22px 28px}
+  .filters{display:flex;gap:10px;margin-bottom:16px}
+  .filters select{padding:7px 10px;border-radius:8px;border:1px solid var(--border);font:inherit;background:var(--surface)}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow)}
+  th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid var(--border)}
+  th{background:var(--bg);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--bg)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .badge-new{background:#fef2f2;color:#b91c1c}
+  .badge-reviewing{background:#fffbeb;color:#b45309}
+  .badge-resolved{background:#f0fdf4;color:#15803d}
+  .badge-dismissed{background:#f1f5f9;color:#64748b}
+  .empty,.loading{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;z-index:50}
+  .overlay.hidden{display:none}
+  .panel{width:min(680px,100%);background:var(--surface);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:24px 26px 28px}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+  .panel-head h2{margin:0;font-size:16px}
+  .panel-close{border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
+  .section{margin-bottom:18px}
+  .section h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
+  .meta-row{font-size:13px;color:var(--ink-soft);margin:2px 0}
+  .comment-box{background:var(--bg);border-radius:8px;padding:12px 14px;font-size:13.5px;
+    white-space:pre-wrap;color:var(--ink)}
+  .transcript{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+  .t-msg{margin:0 0 12px;font-size:13px;line-height:1.5}
+  .t-msg:last-child{margin-bottom:0}
+  .t-msg .who{font-weight:600;color:var(--ink);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;margin-bottom:2px}
+  .t-msg.user .who{color:var(--muted)}
+  .t-msg .body{white-space:pre-wrap;color:var(--ink-soft)}
+  .tech-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px 16px;font-size:12.5px}
+  .tech-grid div span{display:block;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.03em}
+  .status-row{display:flex;align-items:center;gap:10px}
+  .status-row select{padding:7px 10px;border-radius:8px;border:1px solid var(--border);font:inherit}
+  .err{color:#b91c1c;font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Reportes del piloto</h1>
+    <a href="/analyst">← Volver al Asistente</a>
+  </header>
+  <main>
+    <div class="filters">
+      <select id="status-filter">
+        <option value="">Todos los estados</option>
+        <option value="new">Nuevo</option>
+        <option value="reviewing">En revisión</option>
+        <option value="resolved">Resuelto</option>
+        <option value="dismissed">Descartado</option>
+      </select>
+    </div>
+    <div id="list-wrap">
+      <div class="loading">Cargando…</div>
+    </div>
+  </main>
+
+  <div class="overlay hidden" id="detail-overlay">
+    <div class="panel" id="detail-panel"></div>
+  </div>
+
+<script>
+(function () {
+  const STATUS_LABEL = { new: "Nuevo", reviewing: "En revisión", resolved: "Resuelto", dismissed: "Descartado" };
+
+  async function api(path, init) {
+    const response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...(init && init.headers) } });
+    if (response.status === 401) { location.assign("/login"); throw new Error("unauthenticated"); }
+    if (response.status === 403) { document.body.innerHTML = "<p style='padding:28px'>No autorizado.</p>"; throw new Error("forbidden"); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "request_failed");
+    return data;
+  }
+
+  const listWrap = document.getElementById("list-wrap");
+  const statusFilter = document.getElementById("status-filter");
+  const overlay = document.getElementById("detail-overlay");
+  const panel = document.getElementById("detail-panel");
+
+  function fmtDate(iso) {
+    if (!iso) return "";
+    try { return new Date(iso).toLocaleString("es-CL"); } catch (_e) { return iso; }
+  }
+
+  function badge(status) {
+    return `<span class="badge badge-${status}">${STATUS_LABEL[status] || status}</span>`;
+  }
+
+  async function loadList() {
+    listWrap.innerHTML = '<div class="loading">Cargando…</div>';
+    const status = statusFilter.value;
+    try {
+      const data = await api("/api/analyst/feedback_reports" + (status ? `?status=${encodeURIComponent(status)}` : ""));
+      renderList(data.reports || []);
+    } catch (err) {
+      if (err.message !== "unauthenticated" && err.message !== "forbidden") {
+        listWrap.innerHTML = '<div class="empty err">No se pudieron cargar los reportes.</div>';
+      }
+    }
+  }
+
+  function renderList(reports) {
+    if (!reports.length) {
+      listWrap.innerHTML = '<div class="empty">Sin reportes todavía.</div>';
+      return;
+    }
+    const rows = reports.map((r) => `
+      <tr data-id="${r.id}">
+        <td>${badge(r.status)}</td>
+        <td>${escapeHtml(r.reporter_display_name)}</td>
+        <td>${fmtDate(r.created_at)}</td>
+        <td>${escapeHtml(r.comment_preview)}</td>
+      </tr>`).join("");
+    listWrap.innerHTML = `<table>
+      <thead><tr><th>Estado</th><th>Reportado por</th><th>Fecha</th><th>Comentario</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+    listWrap.querySelectorAll("tbody tr").forEach((row) => {
+      row.addEventListener("click", () => openDetail(row.dataset.id));
+    });
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text || "";
+    return div.innerHTML;
+  }
+
+  function techRow(label, value) {
+    if (value === undefined || value === null || value === "") return "";
+    const display = typeof value === "object" ? JSON.stringify(value) : String(value);
+    return `<div><span>${label}</span>${escapeHtml(display)}</div>`;
+  }
+
+  async function openDetail(id) {
+    overlay.classList.remove("hidden");
+    panel.innerHTML = '<div class="loading">Cargando…</div>';
+    try {
+      const report = await api(`/api/analyst/feedback_reports/${encodeURIComponent(id)}`);
+      renderDetail(report);
+    } catch (_err) {
+      panel.innerHTML = '<div class="err">No se pudo cargar el reporte.</div>';
+    }
+  }
+
+  function renderDetail(report) {
+    const tech = report.technical_context || {};
+    const tm = tech.turn_metrics || {};
+    const toolNames = Array.isArray(tech.tool_calls) ? tech.tool_calls.map((t) => t.name).join(", ") : "";
+    const transcript = (report.conversation_snapshot || []).map((m) => `
+      <div class="t-msg ${m.role}">
+        <div class="who">${m.role === "assistant" ? "Toesca Analyst" : "Usuario"}</div>
+        <div class="body">${escapeHtml(m.content)}</div>
+      </div>`).join("");
+
+    panel.innerHTML = `
+      <div class="panel-head">
+        <h2>Reporte</h2>
+        <button class="panel-close" type="button" id="close-detail">×</button>
+      </div>
+      <div class="section">
+        <div class="meta-row"><strong>Reportero:</strong> ${escapeHtml(report.reporter_display_name)}</div>
+        <div class="meta-row"><strong>Fecha:</strong> ${fmtDate(report.created_at)}</div>
+        <div class="meta-row"><strong>Conversación:</strong> ${escapeHtml(report.conversation_id)}</div>
+        <div class="status-row" style="margin-top:8px">
+          <strong>Estado:</strong>
+          <select id="status-select">
+            ${Object.keys(STATUS_LABEL).map((s) => `<option value="${s}" ${s === report.status ? "selected" : ""}>${STATUS_LABEL[s]}</option>`).join("")}
+          </select>
+          <span id="status-saved" style="font-size:12px;color:#16a34a;display:none">Guardado</span>
+        </div>
+      </div>
+      <div class="section">
+        <h3>Comentario</h3>
+        <div class="comment-box">${escapeHtml(report.comment)}</div>
+      </div>
+      <div class="section">
+        <h3>Conversación al momento del reporte</h3>
+        <div class="transcript">${transcript || '<div class="t-msg">(sin mensajes)</div>'}</div>
+      </div>
+      <div class="section">
+        <h3>Contexto técnico</h3>
+        <div class="tech-grid">
+          ${techRow("Proveedor", tech.provider)}
+          ${techRow("Modelo", tech.model)}
+          ${techRow("Latencia total (ms)", tech.latency_ms)}
+          ${techRow("Rondas LLM", tm.llm_rounds)}
+          ${techRow("Latencia LLM (ms)", tm.llm_latency_ms)}
+          ${techRow("Llamadas a tools", tech.action_count)}
+          ${techRow("Herramientas", toolNames)}
+          ${techRow("Consultas SQL", tech.sql_count)}
+          ${techRow("Evidencia reutilizada", tm.reused_evidence_count)}
+          ${techRow("Evidencia nueva", tm.fresh_evidence_count)}
+          ${techRow("Integridad de presentación", tech.presentation_integrity_status)}
+          ${techRow("Revisión", tech.release_revision)}
+        </div>
+      </div>`;
+
+    document.getElementById("close-detail").addEventListener("click", closeDetail);
+    document.getElementById("status-select").addEventListener("change", async (e) => {
+      const newStatus = e.target.value;
+      try {
+        await api(`/api/analyst/feedback_reports/${encodeURIComponent(report.id)}`, {
+          method: "PATCH", body: JSON.stringify({ status: newStatus }),
+        });
+        const saved = document.getElementById("status-saved");
+        saved.style.display = "inline";
+        setTimeout(() => { saved.style.display = "none"; }, 1800);
+        loadList();
+      } catch (_err) {
+        e.target.value = report.status;
+      }
+    });
+  }
+
+  function closeDetail() {
+    overlay.classList.add("hidden");
+    panel.innerHTML = "";
+  }
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeDetail(); });
+
+  statusFilter.addEventListener("change", loadList);
+  loadList();
+})();
+</script>
+</body>
+</html>
