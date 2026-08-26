@@ -81,6 +81,23 @@ def test_visible_product_name_is_consistent_on_login_and_home(monkeypatch, tmp_p
         browser.close()
 
 
+def test_successful_login_shows_the_toesca_transition_before_home(monkeypatch, tmp_path):
+    with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_default_timeout(3_000)
+        page.goto(f"{base_url}/login")
+        page.locator("#username").fill("raimundo")
+        page.locator("#password").fill("password")
+        page.get_by_role("button", name="Entrar").click()
+
+        assert page.locator("#toesca-login-loader").is_visible()
+        assert page.get_by_role("status", name="Cargando Toesca Real Estate AI Analyst").is_visible()
+        page.wait_for_url(f"{base_url}/analyst", timeout=3_000)
+        page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
+        browser.close()
+
+
 def test_stale_selection_on_login_recovers_to_personalized_home(monkeypatch, tmp_path):
     with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -91,8 +108,8 @@ def test_stale_selection_on_login_recovers_to_personalized_home(monkeypatch, tmp
 
         _login(page, base_url, "raimundo")
 
+        page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
         assert page.locator(".home-state").is_visible()
-        assert page.get_by_role("heading", name="Hola, Raimundo").is_visible()
         assert not page.locator("#error-banner.show").is_visible()
         assert page.url == f"{base_url}/analyst"
         assert page.evaluate("localStorage.getItem('toesca_asistente_conversation_id')") is None
