@@ -745,11 +745,20 @@ class AnalyticsDatasetQueryAction:
             query = GovernedDatasetQuery(str(args["dataset"]), tuple(DatasetFilter(str(x["field"]), str(x["op"]), x["value"], x.get("value_end")) for x in args["filters"]), tuple(str(x) for x in args["group_by"]), tuple(DatasetMeasure(str(x["measure"]), str(x["aggregation"])) for x in args["measures"]), args.get("order_by"), bool(args["descending"]), args.get("limit"), bool(args["share_of_total"]), args.get("row_axis"), args.get("column_axis"))
             result = GovernedDatasetExecutor(self.db_path).execute(query)
             facts = []
+            asset_eq_filters = [item for item in query.filters if item.field == "activo_key" and item.op == "eq"]
             for row in result.rows:
                 dimensions = {key: row[key] for key in result.contract["group_by"] if key in row}
-                entity_id = (str(dimensions["activo_key"]) if "activo_key" in dimensions else
-                             str(next(iter(dimensions.values()))) if len(dimensions) == 1 else
-                             json.dumps(dimensions, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+                # "periodo" is a temporal axis, not an entity dimension -- it
+                # is already carried on its own `period` fact field below.
+                # Grouping SOLELY by it (a time series) has no entity
+                # dimension at all; the subject of the row is whatever this
+                # query is scoped to (its own `activo_key` eq filter), never
+                # the period value itself.
+                entity_dimensions = {key: value for key, value in dimensions.items() if key != "periodo"}
+                entity_id = (str(entity_dimensions["activo_key"]) if "activo_key" in entity_dimensions else
+                             str(next(iter(entity_dimensions.values()))) if len(entity_dimensions) == 1 else
+                             json.dumps(entity_dimensions, ensure_ascii=False, sort_keys=True, separators=(",", ":")) if entity_dimensions else
+                             str(asset_eq_filters[0].value) if asset_eq_filters else query.dataset)
                 for measure in result.contract["measures"]:
                     name = measure["measure"]
                     if name not in row:

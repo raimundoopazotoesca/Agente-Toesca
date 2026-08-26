@@ -317,6 +317,51 @@ def test_scripted_schema_search_then_run_sql_uses_governed_rent_roll_dataset(tmp
     assert sum(row["gla_m2"] for row in rows) == pytest.approx(1656.6)
 
 
+def test_period_only_grouping_uses_the_scoped_asset_as_entity_id_not_the_period(tmp_path: Path, monkeypatch):
+    """Governed dataset synthesis variance P0: grouping SOLELY by a temporal
+    dimension ("periodo") is a time series over the query's scoped asset --
+    not an enumeration of "periodo values as entities". Before this fix, the
+    executor treated the sole grouped dimension's value as entity_id
+    unconditionally, so a period-only grouping produced entity_id="2026-06"
+    (the period, duplicated into both the period AND entity_id fields) while
+    the model correctly and reasonably cited the actual scoped asset
+    ("Apo3001") as the claim's entity -- an unfixable mismatch downstream in
+    coverage_guard, since the real fact never had "Apo3001" as its identity
+    at all. The scoped asset from the activo_key filter must be entity_id."""
+    from tools.datasets.executor import DatasetFilter, DatasetMeasure, GovernedDatasetExecutor, GovernedDatasetQuery
+
+    conn = _semantic_copy(tmp_path, monkeypatch)
+    db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
+    conn.close()
+
+    query = GovernedDatasetQuery(
+        dataset="rent_roll",
+        filters=(DatasetFilter("activo_key", "eq", "Apo3001"), DatasetFilter("is_current", "eq", 1)),
+        group_by=("periodo",),
+        measures=(DatasetMeasure("gla_m2", "sum"),),
+    )
+    result = GovernedDatasetExecutor(db_path).execute(query)
+
+    from tools.analyst_runtime.actions import AnalyticsDatasetQueryAction
+    from tools.analyst_runtime.transport import ToolRequest
+    import json as _json
+
+    request = ToolRequest("call-1", "analytics_query_dataset", {
+        "dataset": "rent_roll", "filters": [{"field": "activo_key", "op": "eq", "value": "Apo3001", "value_end": None},
+                                              {"field": "is_current", "op": "eq", "value": 1, "value_end": None}],
+        "group_by": ["periodo"], "measures": [{"measure": "gla_m2", "aggregation": "sum"}],
+        "order_by": None, "descending": False, "limit": None, "share_of_total": False,
+        "row_axis": None, "column_axis": None,
+    })
+    tool_result = AnalyticsDatasetQueryAction(db_path).execute(request)
+    assert tool_result.ok
+    facts = tool_result.evidence.facts
+    assert facts, "expected at least one grouped row"
+    for fact in facts:
+        assert fact["entity_id"] == "Apo3001"
+        assert fact["period"] == "2026-06"
+
+
 def test_scripted_m3_uses_visible_canonical_value_domain(tmp_path: Path, monkeypatch):
     conn = _semantic_copy(tmp_path, monkeypatch)
     db_path = Path(conn.execute("PRAGMA database_list").fetchone()[2])
