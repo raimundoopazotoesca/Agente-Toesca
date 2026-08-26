@@ -49,6 +49,9 @@
 
   .error{color:#b91c1c;font-size:12.5px;min-height:18px;margin-top:12px;text-align:center}
 
+  .pilot-disclosure{margin-top:18px;max-width:340px;color:var(--muted-soft);font-size:11px;
+    line-height:1.5;text-align:center}
+
   /* ── Post-login transition (historical choreography) ──
      Only ever created after the server confirms authentication. */
   #toesca-login-loader{position:fixed;inset:0;background:#0a0a0a;z-index:99999;
@@ -88,6 +91,7 @@
         <div class="error" id="error"></div>
       </form>
     </div>
+    <p class="pilot-disclosure">Durante este piloto, las conversaciones pueden ser revisadas para evaluar y mejorar el producto.</p>
   </div>
   <script>
     const form = document.getElementById('login');

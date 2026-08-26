@@ -39,6 +39,21 @@ class Feedback:
     rating: str
     note: str | None
     created_at: str
+    user_id: str | None = None
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
+class ProductUpdate:
+    id: str
+    title: str
+    body: str
+    cta_label: str | None
+    cta_config: dict[str, Any] | None
+    published_at: str | None
+    active: bool
+    created_at: str
+    updated_at: str
 
 
 @dataclass(frozen=True)

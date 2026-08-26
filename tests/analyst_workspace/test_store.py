@@ -30,7 +30,8 @@ def test_initialize_creates_versioned_schema(tmp_path):
         assert {"conversation", "message", "feedback", "user", "user_session"} <= tables
         assert {"analytical_turn", "fact_claim", "evidence_snapshot", "claim_dependency", "analytical_turn_evidence"} <= tables
         assert {"feedback_report", "user_capability"} <= tables
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert {"product_update", "product_update_seen"} <= tables
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 9
     finally:
         conn.close()
 
@@ -135,7 +136,7 @@ def test_foreign_keys_prevent_orphan_rows(store):
         conn.rollback()
         message = store.append_message(conversation.id, "assistant", "Respuesta")
         with pytest.raises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO feedback VALUES ('orphan', 'missing', 'up', NULL, 't')")
+            conn.execute("INSERT INTO feedback VALUES ('orphan', 'missing', NULL, 'up', NULL, 't', 't')")
         conn.rollback()
     finally:
         conn.close()

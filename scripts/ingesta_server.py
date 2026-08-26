@@ -58,6 +58,7 @@ from tools import db_chat  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
 from scripts import recompute_derived_kpis  # noqa: E402
 from tools import analyst_api  # noqa: E402
+from tools.analyst_workspace.store import WorkspaceStoreError  # noqa: E402
 
 
 def _rebuild_factsheet() -> None:
@@ -302,7 +303,7 @@ def _add_cors_headers(response):
     origin = request.headers.get("Origin", "")
     if origin in _CORS_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = f"Content-Type, {TOKEN_HEADER}"
     response.headers["Vary"] = "Origin"
     return response
@@ -437,6 +438,16 @@ def serve_pilot_feedback():
     if not _workspace_store().user_has_capability(principal["id"], "feedback_reviewer"):
         return Response("No autorizado.", status=403)
     return send_from_directory(WEB_DIR, "pilot_feedback.html")
+
+
+@app.get("/pilot-control")
+def serve_pilot_control():
+    principal = _principal()
+    if principal is None:
+        return redirect("/login")
+    if not _workspace_store().user_has_capability(principal["id"], "pilot_observer"):
+        return Response("No autorizado.", status=403)
+    return send_from_directory(WEB_DIR, "pilot_control.html")
 
 
 @app.get("/login")
@@ -583,6 +594,35 @@ def _analyst_adapter() -> analyst_api.ConversationApiAdapter:
 
 def _analyst_user_id() -> str:
     return request.analyst_user["id"]
+
+
+@app.get("/api/analyst/product_updates")
+def analyst_list_product_updates():
+    """Published+active Novedades entries for the authenticated user, newest
+    first, annotated with this user's own seen state. Pure workspace-store
+    read: no LLM call, no tool call, no analytical session."""
+    updates = _workspace_store().list_product_updates_for_user(_analyst_user_id())
+    return jsonify({"product_updates": updates})
+
+
+@app.get("/api/analyst/product_updates/unseen_count")
+def analyst_product_updates_unseen_count():
+    count = _workspace_store().count_unseen_product_updates_for_user(_analyst_user_id())
+    return jsonify({"count": count})
+
+
+@app.post("/api/analyst/product_updates/<update_id>/seen")
+def analyst_mark_product_update_seen(update_id: str):
+    """Marks the update seen for the SESSION-derived user only -- the request
+    body is never consulted for a user id, matching every other
+    ``/api/analyst/*`` write in this file."""
+    from tools.analyst_workspace.store import ProductUpdateNotFoundError
+
+    try:
+        _workspace_store().mark_product_update_seen_for_user(update_id, _analyst_user_id())
+        return jsonify({"ok": True})
+    except ProductUpdateNotFoundError:
+        return _analyst_error("not_found", 404)
 
 
 @app.get("/api/analyst/conversations")
@@ -763,6 +803,11 @@ def analyst_update_feedback_report(report_id: str):
 
 @app.post("/api/analyst/messages/<message_id>/feedback")
 def analyst_set_feedback(message_id: str):
+    """Thumbs up/down (v1). Pure product action, separate from "Reportar
+    problema": server-authoritative rating, no LLM/tool/knowledge-DB call,
+    no new conversation message. `note` is accepted for forward
+    compatibility but the current UI never sends one -- the rating itself
+    is the whole signal."""
     try:
         body = _analyst_body()
         rating, note = body.get("rating"), body.get("note")
@@ -778,6 +823,142 @@ def analyst_set_feedback(message_id: str):
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.delete("/api/analyst/messages/<message_id>/feedback")
+def analyst_clear_feedback(message_id: str):
+    """Clear the caller's own rating. Idempotent: clearing an already-absent
+    rating still returns 200, it does not error."""
+    try:
+        _analyst_adapter().clear_feedback(message_id, _analyst_user_id())
+        return jsonify({"ok": True})
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/conversations/<conversation_id>/feedback")
+def analyst_list_conversation_feedback(conversation_id: str):
+    """Current ratings for every rated assistant message in one of the
+    caller's own conversations -- used to hydrate the thumbs UI on load,
+    without a page refresh, without leaking another user's ratings."""
+    try:
+        feedback = _analyst_adapter().list_conversation_feedback(conversation_id, _analyst_user_id())
+        return jsonify({"feedback": feedback})
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/feedback_summary")
+def analyst_feedback_summary():
+    """Smallest useful reviewer read surface for thumbs feedback: aggregate
+    counts plus a short recent list. Reuses the existing feedback_reviewer
+    capability -- no new role, no dashboard."""
+    if not _is_feedback_reviewer():
+        return _analyst_error("forbidden", 403)
+    try:
+        adapter = _analyst_adapter()
+        summary = adapter.get_feedback_summary()
+        summary["recent"] = adapter.list_recent_feedback(limit=20)
+        return jsonify(summary)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+# -- Pilot Control Center (v1) -----------------------------------------------
+#
+# Read-only observer surface for understanding pilot usage. Gated by the
+# `pilot_observer` capability (same generic user_capability mechanism that
+# gates /pilot-feedback with `feedback_reviewer`). Never bypasses the normal
+# owner-scoped /api/analyst/conversations/* routes above -- those are
+# untouched. All data here is derived from existing tables; no new schema.
+
+def _is_pilot_observer() -> bool:
+    return _workspace_store().user_has_capability(_analyst_user_id(), "pilot_observer")
+
+
+@app.get("/api/analyst/pilot_control/overview")
+def pilot_control_overview():
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        return jsonify(_workspace_store().pilot_overview())
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/pilot_control/users")
+def pilot_control_users():
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        return jsonify({"users": _workspace_store().list_pilot_users()})
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/pilot_control/users/<user_id>")
+def pilot_control_user_detail(user_id: str):
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        detail = _workspace_store().get_pilot_user_detail(user_id)
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+    if detail is None:
+        return _analyst_error("not_found", 404)
+    return jsonify(detail)
+
+
+@app.get("/api/analyst/pilot_control/conversations")
+def pilot_control_conversations():
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        user_id = request.args.get("user_id") or None
+        since = request.args.get("since") or None
+        search = request.args.get("q") or None
+        limit = int(request.args.get("limit", 50))
+        offset = int(request.args.get("offset", 0))
+        conversations = _workspace_store().list_pilot_conversations(
+            user_id=user_id, since=since, search=search, limit=limit, offset=offset,
+        )
+        return jsonify({"conversations": conversations})
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/pilot_control/conversations/<conversation_id>")
+def pilot_control_conversation_detail(conversation_id: str):
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        detail = _workspace_store().get_pilot_conversation_detail(conversation_id)
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+    if detail is None:
+        return _analyst_error("not_found", 404)
+    return jsonify(detail)
+
+
+@app.get("/api/analyst/pilot_control/questions")
+def pilot_control_latest_questions():
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        limit = int(request.args.get("limit", 50))
+        return jsonify({"questions": _workspace_store().list_latest_pilot_questions(limit=limit)})
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except WorkspaceStoreError:
         return _analyst_error("service_unavailable", 503)
 
 

@@ -33,6 +33,11 @@ class ConversationServiceProtocol(Protocol):
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
     def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Any: ...
     def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Any: ...
+    def clear_feedback_for_user(self, message_id: str, user_id: str) -> None: ...
+    def get_feedback_for_user(self, message_id: str, user_id: str) -> Any: ...
+    def list_feedback_for_conversation_for_user(self, conversation_id: str, user_id: str) -> dict[str, str]: ...
+    def get_feedback_summary(self) -> dict[str, Any]: ...
+    def list_recent_feedback(self, limit: int = 20) -> list[dict[str, Any]]: ...
     def report_feedback_for_user(
         self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
         release_revision: str | None = None,
@@ -95,6 +100,22 @@ class ConversationApiAdapter:
 
     def set_feedback(self, message_id: str, user_id: str, rating: str, note: str | None) -> dict[str, Any]:
         return _feedback(self._call(self._service.set_feedback_for_user, message_id, user_id, rating, note))
+
+    def clear_feedback(self, message_id: str, user_id: str) -> None:
+        self._call(self._service.clear_feedback_for_user, message_id, user_id)
+
+    def get_feedback(self, message_id: str, user_id: str) -> dict[str, Any] | None:
+        result = self._call(self._service.get_feedback_for_user, message_id, user_id)
+        return _feedback(result) if result is not None else None
+
+    def list_conversation_feedback(self, conversation_id: str, user_id: str) -> dict[str, Any]:
+        return self._call(self._service.list_feedback_for_conversation_for_user, conversation_id, user_id)
+
+    def get_feedback_summary(self) -> dict[str, Any]:
+        return self._call(self._service.get_feedback_summary)
+
+    def list_recent_feedback(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self._call(self._service.list_recent_feedback, limit=limit)
 
     def submit_feedback_report(
         self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,

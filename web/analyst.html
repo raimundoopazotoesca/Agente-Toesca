@@ -39,6 +39,15 @@
     gap:8px;letter-spacing:.1px;transition:background .12s ease,border-color .12s ease}
   .new-chat-btn:hover{background:var(--sidebar-bg-hover);border-color:rgba(255,255,255,.16)}
   .new-chat-btn .plus{font-size:14px;line-height:1;color:var(--sidebar-text-dim)}
+  .nav-item{margin:0 14px 10px;padding:8px 11px;border-radius:var(--radius-sm);
+    border:1px solid transparent;background:transparent;color:var(--sidebar-text);
+    font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;
+    gap:8px;letter-spacing:.1px;transition:background .12s ease}
+  .nav-item:hover{background:var(--sidebar-bg-hover)}
+  .nav-item.active{background:var(--sidebar-active);color:#fff}
+  .nav-item .unread-dot{width:6px;height:6px;border-radius:50%;background:#f0b429;
+    margin-left:auto;flex:0 0 auto;display:none}
+  .nav-item .unread-dot.show{display:block}
   .conv-section-label{padding:4px 18px 6px;font-size:10px;font-weight:600;letter-spacing:.5px;
     text-transform:uppercase;color:var(--sidebar-text-dim)}
   .conv-list{flex:1;overflow-y:auto;padding:0 8px 12px}
@@ -140,12 +149,24 @@
   .turn-error{color:#b91c1c;font-size:13px;background:#fef2f2;border:1px solid #fecaca;
     border-radius:var(--radius-sm);padding:9px 13px}
 
-  .turn-actions{display:flex}
+  .turn-actions{display:flex;align-items:center;gap:10px}
   .report-btn{background:none;border:1px solid transparent;color:var(--muted-soft);
     font-size:11px;padding:2px 7px;border-radius:6px;cursor:pointer;display:inline-flex;
     align-items:center;gap:4px;transition:background .12s ease,color .12s ease,border-color .12s ease}
   .report-btn:hover{background:var(--bg);color:var(--muted);border-color:var(--border)}
   .report-btn[disabled]{color:#16a34a;cursor:default;background:none;border-color:transparent}
+
+  .feedback-widget{display:flex;align-items:center;gap:2px}
+  .feedback-btn{background:none;border:1px solid transparent;color:var(--muted-soft);
+    font-size:12px;line-height:1;width:24px;height:24px;padding:0;border-radius:6px;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;opacity:.5;
+    transition:background .12s ease,border-color .12s ease,opacity .12s ease}
+  .feedback-btn:hover{background:var(--bg);border-color:var(--border);opacity:1}
+  .feedback-btn:focus-visible{outline:2px solid #7c9cf7;outline-offset:2px;opacity:1}
+  .feedback-btn.selected{opacity:1}
+  .feedback-btn[data-rating="up"].selected{background:#f0fdf4;border-color:#bbf0cc}
+  .feedback-btn[data-rating="down"].selected{background:#fef2f2;border-color:#fbd0d0}
+  .feedback-btn[disabled]{cursor:default}
 
   .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.4);display:flex;
     align-items:center;justify-content:center;z-index:100}
@@ -191,6 +212,26 @@
     border-bottom:1px solid #fecaca;display:none}
   .banner.show{display:block}
 
+  /* ── Novedades ── */
+  .novedades-wrap{max-width:640px;margin:0 auto;padding:32px 24px 40px;display:flex;
+    flex-direction:column;gap:14px}
+  .novedades-empty{color:var(--muted);font-size:13.5px;padding:24px 0;text-align:center}
+  .novedades-card{border:1px solid var(--border);border-radius:var(--radius-lg);
+    padding:16px 18px;background:var(--surface);box-shadow:var(--shadow-sm)}
+  .novedades-card-title{font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:6px}
+  .novedades-card-body{font-size:13.5px;line-height:1.6;color:var(--ink-soft);white-space:pre-wrap}
+  .novedades-card-date{font-size:10.5px;color:var(--muted-soft);margin-top:10px}
+  .novedades-cta-btn{margin-top:12px;background:var(--ink);color:#fff;border:none;
+    border-radius:var(--radius-sm);padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer}
+  .novedades-cta-btn:hover{opacity:.9}
+
+  .home-discovery-card{margin:22px auto 0;max-width:390px;border:1px solid var(--border);
+    border-radius:var(--radius-md);padding:9px 13px;font-size:11.5px;color:var(--muted);
+    background:var(--surface);cursor:pointer;display:flex;align-items:center;gap:7px;
+    transition:border-color .12s ease}
+  .home-discovery-card:hover{border-color:var(--muted-soft)}
+  .home-discovery-card .dot{width:6px;height:6px;border-radius:50%;background:#f0b429;flex:0 0 auto}
+
   ::-webkit-scrollbar{width:9px;height:9px}
   ::-webkit-scrollbar-thumb{background:#d7dce3;border-radius:5px;border:2px solid var(--surface)}
   .sidebar ::-webkit-scrollbar-thumb{background:#2a3348;border:2px solid var(--sidebar-bg)}
@@ -213,6 +254,10 @@
       </div>
       <button class="new-chat-btn" id="new-chat-btn" type="button">
         <span class="plus">+</span> Nueva conversación
+      </button>
+      <button class="nav-item" id="novedades-nav-btn" type="button">
+        Novedades
+        <span class="unread-dot" id="novedades-unread-dot"></span>
       </button>
       <div class="conv-section-label">Historial</div>
       <div class="conv-list" id="conv-list"></div>

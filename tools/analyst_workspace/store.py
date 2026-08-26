@@ -10,16 +10,17 @@ import hashlib
 import os
 import sqlite3
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message, preferred_name
+from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message, ProductUpdate, preferred_name
+from tools.analyst_workspace.percentile import average, nearest_rank_percentile
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 9
 DEFAULT_TITLE = "Nueva conversación"
 _ROLES = {"user", "assistant"}
 _RATINGS = {"up", "down"}
@@ -58,6 +59,10 @@ class ValidationError(WorkspaceStoreError):
 
 class AuthenticationError(WorkspaceStoreError):
     """Raised when a local account cannot authenticate."""
+
+
+class ProductUpdateNotFoundError(WorkspaceStoreError):
+    """Raised when a product update id cannot be found."""
 
 
 class WorkspaceStore:
@@ -226,6 +231,59 @@ class WorkspaceStore:
                     );
                     """)
                     conn.execute("PRAGMA user_version = 7")
+                    version = 7
+                if version < 8:
+                    # Additive: message-level thumbs feedback (v1). The existing `feedback`
+                    # table already enforces UNIQUE(message_id) -- one row per message -- and
+                    # every message belongs to exactly one conversation with exactly one
+                    # owner, so that constraint already implies one current rating per
+                    # user/message. `user_id` is added for explicit audit/reviewer
+                    # attribution, not to relax or replace that invariant.
+                    conn.executescript("""
+                    ALTER TABLE feedback ADD COLUMN user_id TEXT REFERENCES user(id);
+                    ALTER TABLE feedback ADD COLUMN updated_at TEXT;
+                    """)
+                    conn.execute(
+                        """UPDATE feedback SET
+                            user_id = (
+                                SELECT c.owner_user_id FROM message m
+                                JOIN conversation c ON c.id = m.conversation_id
+                                WHERE m.id = feedback.message_id
+                            ),
+                            updated_at = created_at
+                        WHERE user_id IS NULL"""
+                    )
+                    conn.executescript("""
+                    CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
+                    CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at DESC, id DESC);
+                    """)
+                    conn.execute("PRAGMA user_version = 8")
+                    version = 8
+                if version < 9:
+                    conn.executescript("""
+                    CREATE TABLE product_update (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        body TEXT NOT NULL,
+                        cta_label TEXT,
+                        cta_config_json TEXT,
+                        published_at TEXT,
+                        active INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE product_update_seen (
+                        user_id TEXT NOT NULL REFERENCES user(id),
+                        product_update_id TEXT NOT NULL REFERENCES product_update(id),
+                        seen_at TEXT NOT NULL,
+                        PRIMARY KEY (user_id, product_update_id)
+                    );
+                    CREATE INDEX idx_product_update_visible
+                        ON product_update(active, published_at DESC, id DESC);
+                    CREATE INDEX idx_product_update_seen_user
+                        ON product_update_seen(user_id);
+                    """)
+                    conn.execute("PRAGMA user_version = 9")
         finally:
             conn.close()
 
@@ -396,12 +454,105 @@ class WorkspaceStore:
         return self.unarchive_conversation(conversation_id)
 
     def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Feedback:
+        """Set (create or replace) the caller's current rating on their own assistant message.
+
+        This is the sole write path for thumbs feedback. Ownership of the
+        conversation and the assistant-role of the message are re-checked
+        here from authenticated state -- the caller only supplies
+        message_id, rating (and an unused optional note). No LLM call, no
+        tool call, no SQL against the knowledge DB, no new conversation
+        message, no Durable Context mutation.
+        """
+        return self.set_feedback(message_id, rating, note, user_id=user_id, _scope_owner_id=user_id)
+
+    def clear_feedback_for_user(self, message_id: str, user_id: str) -> None:
+        """Remove the caller's current rating, if any. Idempotent: a repeat
+        call when no rating exists is a safe no-op, not an error."""
         conn = self._connect()
         try:
-            row = conn.execute("SELECT m.id FROM message m JOIN conversation c ON c.id=m.conversation_id WHERE m.id=? AND c.owner_user_id=?", (message_id, user_id)).fetchone()
-        finally: conn.close()
-        if row is None: raise MessageNotFoundError("message not found")
-        return self.set_feedback(message_id, rating, note)
+            with conn:
+                self._require_owned_assistant_message(conn, message_id, user_id)
+                conn.execute("DELETE FROM feedback WHERE message_id = ? AND user_id = ?", (message_id, user_id))
+        finally:
+            conn.close()
+
+    def get_feedback_for_user(self, message_id: str, user_id: str) -> Feedback | None:
+        conn = self._connect()
+        try:
+            self._require_owned_assistant_message(conn, message_id, user_id)
+            row = conn.execute(
+                "SELECT * FROM feedback WHERE message_id = ? AND user_id = ?", (message_id, user_id)
+            ).fetchone()
+        finally:
+            conn.close()
+        return _feedback_from_row(row) if row is not None else None
+
+    def list_feedback_for_conversation(self, conversation_id: str, user_id: str) -> dict[str, str]:
+        """Return {message_id: rating} for the caller's own current ratings in
+        one conversation -- used to hydrate the UI on load/reload."""
+        conn = self._connect()
+        try:
+            self._get_conversation_scoped_conn(conn, conversation_id, user_id)
+            rows = conn.execute(
+                """SELECT f.message_id, f.rating FROM feedback f
+                JOIN message m ON m.id = f.message_id
+                WHERE m.conversation_id = ? AND f.user_id = ?""",
+                (conversation_id, user_id),
+            ).fetchall()
+        finally:
+            conn.close()
+        return {row["message_id"]: row["rating"] for row in rows}
+
+    def get_feedback_summary(self) -> dict[str, Any]:
+        """Smallest useful reviewer read surface: counts only, no dashboard."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """SELECT
+                    SUM(CASE WHEN rating='up' THEN 1 ELSE 0 END) AS up_count,
+                    SUM(CASE WHEN rating='down' THEN 1 ELSE 0 END) AS down_count,
+                    COUNT(*) AS total
+                FROM feedback"""
+            ).fetchone()
+        finally:
+            conn.close()
+        up_count, down_count, total = row["up_count"] or 0, row["down_count"] or 0, row["total"] or 0
+        return {
+            "up_count": up_count,
+            "down_count": down_count,
+            "total_rated": total,
+            "positive_rate": (up_count / total) if total else None,
+        }
+
+    def list_recent_feedback(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Smallest useful reviewer read surface: a short recent list, no analytics."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """SELECT f.message_id, f.rating, f.created_at, f.updated_at, f.user_id,
+                    m.conversation_id, m.content AS assistant_content, u.display_name
+                FROM feedback f
+                JOIN message m ON m.id = f.message_id
+                LEFT JOIN user u ON u.id = f.user_id
+                ORDER BY f.updated_at DESC, f.created_at DESC, f.message_id DESC
+                LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            {
+                "message_id": row["message_id"],
+                "conversation_id": row["conversation_id"],
+                "rating": row["rating"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "user_id": row["user_id"],
+                "user_display_name": row["display_name"],
+                "assistant_content_preview": (row["assistant_content"] or "")[:140],
+            }
+            for row in rows
+        ]
 
     def create_feedback_report_for_user(
         self, reporter_user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
@@ -514,6 +665,112 @@ class WorkspaceStore:
         finally:
             conn.close()
         return _feedback_report_from_row(row)
+
+    # ── Product updates ("Novedades") ──────────────────────────────────────
+    # Pure product-discovery data: no analytical runtime, no LLM/tool calls,
+    # no ties to conversations or evidence. Publishing is store/CLI-only --
+    # there is no in-product write path for title/body/cta/publish state.
+
+    def create_product_update(
+        self, title: str, body: str, *, cta_label: str | None = None,
+        cta_config: dict[str, Any] | None = None, publish: bool = False,
+    ) -> ProductUpdate:
+        if not isinstance(title, str) or not title.strip():
+            raise ValidationError("title is required")
+        if not isinstance(body, str) or not body.strip():
+            raise ValidationError("body is required")
+        if cta_label is not None and (not isinstance(cta_label, str) or not cta_label.strip()):
+            raise ValidationError("cta_label must be a non-blank string or None")
+        serialized_cta = _serialize_object(cta_config, "cta_config")
+        now, update_id = _utc_now(), str(uuid4())
+        published_at = now if publish else None
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO product_update (id, title, body, cta_label, cta_config_json, published_at, active, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
+                    (update_id, title.strip(), body.strip(), cta_label.strip() if cta_label else None,
+                     serialized_cta, published_at, now, now),
+                )
+        finally:
+            conn.close()
+        return self.get_product_update(update_id)
+
+    def get_product_update(self, update_id: str) -> ProductUpdate:
+        conn = self._connect()
+        try:
+            row = conn.execute("SELECT * FROM product_update WHERE id=?", (update_id,)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise ProductUpdateNotFoundError(f"product update not found: {update_id}")
+        return _product_update_from_row(row)
+
+    def deactivate_product_update(self, update_id: str) -> ProductUpdate:
+        conn = self._connect()
+        try:
+            with conn:
+                cursor = conn.execute(
+                    "UPDATE product_update SET active=0, updated_at=? WHERE id=?", (_utc_now(), update_id)
+                )
+                if cursor.rowcount == 0:
+                    raise ProductUpdateNotFoundError(f"product update not found: {update_id}")
+        finally:
+            conn.close()
+        return self.get_product_update(update_id)
+
+    def list_product_updates_for_user(self, user_id: str) -> list[dict[str, Any]]:
+        """Published+active updates, newest first, annotated with this user's seen state."""
+        now = _utc_now()
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """SELECT pu.*, pus.seen_at AS user_seen_at
+                FROM product_update pu
+                LEFT JOIN product_update_seen pus
+                    ON pus.product_update_id = pu.id AND pus.user_id = ?
+                WHERE pu.active = 1 AND pu.published_at IS NOT NULL AND pu.published_at <= ?
+                ORDER BY pu.published_at DESC, pu.id DESC""",
+                (user_id, now),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [_product_update_view(row) for row in rows]
+
+    def count_unseen_product_updates_for_user(self, user_id: str) -> int:
+        now = _utc_now()
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """SELECT COUNT(*) AS n
+                FROM product_update pu
+                LEFT JOIN product_update_seen pus
+                    ON pus.product_update_id = pu.id AND pus.user_id = ?
+                WHERE pu.active = 1 AND pu.published_at IS NOT NULL AND pu.published_at <= ?
+                    AND pus.seen_at IS NULL""",
+                (user_id, now),
+            ).fetchone()
+        finally:
+            conn.close()
+        return int(row["n"])
+
+    def mark_product_update_seen_for_user(self, update_id: str, user_id: str) -> None:
+        """Idempotent: marking the same update seen twice by the same user is a no-op."""
+        conn = self._connect()
+        try:
+            with conn:
+                self._require_user(conn, user_id)
+                exists = conn.execute("SELECT 1 FROM product_update WHERE id=?", (update_id,)).fetchone()
+                if exists is None:
+                    raise ProductUpdateNotFoundError(f"product update not found: {update_id}")
+                conn.execute(
+                    "INSERT INTO product_update_seen (user_id, product_update_id, seen_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(user_id, product_update_id) DO NOTHING",
+                    (user_id, update_id, _utc_now()),
+                )
+        finally:
+            conn.close()
 
     def grant_capability(self, user_id: str, capability: str) -> None:
         if not isinstance(capability, str) or not capability.strip():
@@ -717,7 +974,10 @@ class WorkspaceStore:
             conn.close()
         return [_message_from_row(row) for row in rows]
 
-    def set_feedback(self, message_id: str, rating: str, note: str | None = None) -> Feedback:
+    def set_feedback(
+        self, message_id: str, rating: str, note: str | None = None, *,
+        user_id: str | None = None, _scope_owner_id: str | None = None,
+    ) -> Feedback:
         if rating not in _RATINGS:
             raise ValidationError("rating must be 'up' or 'down'")
         if note is not None and not isinstance(note, str):
@@ -725,17 +985,21 @@ class WorkspaceStore:
         conn = self._connect()
         try:
             with conn:
-                message = self._require_message(conn, message_id)
-                if message["role"] != "assistant":
-                    raise ValidationError("feedback is only supported for assistant messages")
+                if _scope_owner_id is not None:
+                    self._require_owned_assistant_message(conn, message_id, _scope_owner_id)
+                else:
+                    message = self._require_message(conn, message_id)
+                    if message["role"] != "assistant":
+                        raise ValidationError("feedback is only supported for assistant messages")
                 existing = conn.execute("SELECT id FROM feedback WHERE message_id = ?", (message_id,)).fetchone()
                 feedback_id = existing["id"] if existing else str(uuid4())
                 now = _utc_now()
                 conn.execute(
-                    """INSERT INTO feedback (id, message_id, rating, note, created_at) VALUES (?, ?, ?, ?, ?)
+                    """INSERT INTO feedback (id, message_id, user_id, rating, note, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(message_id) DO UPDATE SET rating = excluded.rating, note = excluded.note,
-                    created_at = excluded.created_at""",
-                    (feedback_id, message_id, rating, note, now),
+                    user_id = excluded.user_id, created_at = excluded.created_at, updated_at = excluded.updated_at""",
+                    (feedback_id, message_id, user_id, rating, note, now, now),
                 )
                 row = conn.execute("SELECT * FROM feedback WHERE message_id = ?", (message_id,)).fetchone()
         finally:
@@ -750,6 +1014,406 @@ class WorkspaceStore:
         finally:
             conn.close()
         return _feedback_from_row(row) if row is not None else None
+
+    # -- Pilot Control Center (v1) -- read-only observer queries -----------
+    #
+    # Everything below is derived entirely from existing tables (user,
+    # conversation, message, feedback_report). No new schema. All queries
+    # are plain SELECTs -- pilot scale is tiny so no aggregation infra is
+    # needed. Never expose password_hash, session tokens, or raw
+    # sql_queries text from message.metadata_json -- see
+    # `_safe_turn_diagnostics` which applies the same allowlist used for
+    # feedback_report.technical_context (_SAFE_TECHNICAL_CONTEXT_KEYS).
+
+    def pilot_overview(self) -> dict[str, Any]:
+        """Aggregate usage/quality snapshot for the Pilot Control Center."""
+        now = _utc_now()
+        today_start = _utc_day_start(now)
+        window_7d_start = _utc_offset(now, days=-7)
+        conn = self._connect()
+        try:
+            total_users = conn.execute("SELECT COUNT(*) AS n FROM user").fetchone()["n"]
+            active_today = conn.execute(
+                """SELECT COUNT(DISTINCT c.owner_user_id) AS n FROM message m
+                   JOIN conversation c ON c.id = m.conversation_id
+                   WHERE m.role='user' AND m.created_at >= ?""",
+                (today_start,),
+            ).fetchone()["n"]
+            active_7d = conn.execute(
+                """SELECT COUNT(DISTINCT c.owner_user_id) AS n FROM message m
+                   JOIN conversation c ON c.id = m.conversation_id
+                   WHERE m.role='user' AND m.created_at >= ?""",
+                (window_7d_start,),
+            ).fetchone()["n"]
+            conversations_today = conn.execute(
+                """SELECT COUNT(DISTINCT m.conversation_id) AS n FROM message m
+                   WHERE m.created_at >= ?""",
+                (today_start,),
+            ).fetchone()["n"]
+            conversations_7d = conn.execute(
+                """SELECT COUNT(DISTINCT m.conversation_id) AS n FROM message m
+                   WHERE m.created_at >= ?""",
+                (window_7d_start,),
+            ).fetchone()["n"]
+            user_msgs_today = conn.execute(
+                "SELECT COUNT(*) AS n FROM message WHERE role='user' AND created_at >= ?", (today_start,)
+            ).fetchone()["n"]
+            user_msgs_7d = conn.execute(
+                "SELECT COUNT(*) AS n FROM message WHERE role='user' AND created_at >= ?", (window_7d_start,)
+            ).fetchone()["n"]
+            assistant_msgs_today = conn.execute(
+                "SELECT COUNT(*) AS n FROM message WHERE role='assistant' AND created_at >= ?", (today_start,)
+            ).fetchone()["n"]
+            assistant_msgs_7d = conn.execute(
+                "SELECT COUNT(*) AS n FROM message WHERE role='assistant' AND created_at >= ?", (window_7d_start,)
+            ).fetchone()["n"]
+            reports_new = conn.execute("SELECT COUNT(*) AS n FROM feedback_report WHERE status='new'").fetchone()["n"]
+            reports_total = conn.execute("SELECT COUNT(*) AS n FROM feedback_report").fetchone()["n"]
+            latency_rows = conn.execute(
+                "SELECT metadata_json FROM message WHERE role='assistant' AND metadata_json IS NOT NULL"
+            ).fetchall()
+            rating_counts = _rating_counts_overview(conn)
+        finally:
+            conn.close()
+        latencies = _extract_latencies(latency_rows)
+        return {
+            "total_users": total_users,
+            "active_users_today": active_today,
+            "active_users_7d": active_7d,
+            "conversations_today": conversations_today,
+            "conversations_7d": conversations_7d,
+            "user_messages_today": user_msgs_today,
+            "user_messages_7d": user_msgs_7d,
+            "assistant_responses_today": assistant_msgs_today,
+            "assistant_responses_7d": assistant_msgs_7d,
+            "reports_new": reports_new,
+            "reports_total": reports_total,
+            "latency_ms": _latency_summary(latencies),
+            "rating_counts": rating_counts,
+            "generated_at": now,
+        }
+
+    def list_pilot_users(self) -> list[dict[str, Any]]:
+        """Per-user usage metrics for the Users view. Never returns password_hash/sessions."""
+        conn = self._connect()
+        try:
+            users = conn.execute(
+                "SELECT id, username, display_name, role, is_active, created_at FROM user ORDER BY created_at ASC"
+            ).fetchall()
+            convo_counts = {r["owner_user_id"]: r["n"] for r in conn.execute(
+                "SELECT owner_user_id, COUNT(*) AS n FROM conversation GROUP BY owner_user_id"
+            ).fetchall()}
+            msg_counts = conn.execute(
+                """SELECT c.owner_user_id AS owner_user_id, m.role AS role, COUNT(*) AS n
+                   FROM message m JOIN conversation c ON c.id = m.conversation_id
+                   GROUP BY c.owner_user_id, m.role"""
+            ).fetchall()
+            last_activity = {r["owner_user_id"]: r["last_at"] for r in conn.execute(
+                """SELECT c.owner_user_id AS owner_user_id, MAX(m.created_at) AS last_at
+                   FROM message m JOIN conversation c ON c.id = m.conversation_id
+                   WHERE m.role='user' GROUP BY c.owner_user_id"""
+            ).fetchall()}
+            report_counts = {r["reporter_user_id"]: r["n"] for r in conn.execute(
+                "SELECT reporter_user_id, COUNT(*) AS n FROM feedback_report GROUP BY reporter_user_id"
+            ).fetchall()}
+            latency_by_owner: dict[str, list[dict[str, Any]]] = {}
+            for row in conn.execute(
+                """SELECT c.owner_user_id AS owner_user_id, m.metadata_json AS metadata_json
+                   FROM message m JOIN conversation c ON c.id = m.conversation_id
+                   WHERE m.role='assistant' AND m.metadata_json IS NOT NULL"""
+            ).fetchall():
+                latency_by_owner.setdefault(row["owner_user_id"], []).append(row)
+            rating_by_owner = _rating_summary_by_owner(conn)
+        finally:
+            conn.close()
+        user_msg_by_owner: dict[str, int] = {}
+        assistant_msg_by_owner: dict[str, int] = {}
+        for row in msg_counts:
+            target = user_msg_by_owner if row["role"] == "user" else assistant_msg_by_owner
+            target[row["owner_user_id"]] = row["n"]
+        result = []
+        for u in users:
+            uid = u["id"]
+            latencies = _extract_latencies(latency_by_owner.get(uid, []))
+            result.append({
+                "id": uid,
+                "username": u["username"],
+                "display_name": u["display_name"],
+                "role": u["role"],
+                "is_active": bool(u["is_active"]),
+                "created_at": u["created_at"],
+                "last_activity": last_activity.get(uid),
+                "conversation_count": convo_counts.get(uid, 0),
+                "user_message_count": user_msg_by_owner.get(uid, 0),
+                "assistant_response_count": assistant_msg_by_owner.get(uid, 0),
+                "report_count": report_counts.get(uid, 0),
+                "latency_ms": _latency_summary(latencies),
+                "rating_summary": rating_by_owner.get(uid),
+            })
+        return result
+
+    def get_pilot_user_detail(self, user_id: str, *, recent_conversations_limit: int = 20) -> dict[str, Any] | None:
+        """Summary + recent conversations for one pilot user (Users -> detail drill-down)."""
+        conn = self._connect()
+        try:
+            user_row = conn.execute(
+                "SELECT id, username, display_name, role, is_active, created_at FROM user WHERE id=?", (user_id,)
+            ).fetchone()
+            if user_row is None:
+                return None
+            conversations = conn.execute(
+                """SELECT id, title, created_at, updated_at, archived_at
+                   FROM conversation WHERE owner_user_id=?
+                   ORDER BY updated_at DESC, created_at DESC, id DESC LIMIT ?""",
+                (user_id, recent_conversations_limit),
+            ).fetchall()
+            conv_ids = [c["id"] for c in conversations]
+            msg_counts_by_conv: dict[str, dict[str, int]] = {}
+            latency_by_conv: dict[str, list[dict[str, Any]]] = {}
+            if conv_ids:
+                placeholders = ",".join("?" for _ in conv_ids)
+                for row in conn.execute(
+                    f"""SELECT conversation_id, role, COUNT(*) AS n FROM message
+                        WHERE conversation_id IN ({placeholders}) GROUP BY conversation_id, role""",
+                    conv_ids,
+                ).fetchall():
+                    msg_counts_by_conv.setdefault(row["conversation_id"], {})[row["role"]] = row["n"]
+                for row in conn.execute(
+                    f"""SELECT conversation_id, metadata_json FROM message
+                        WHERE conversation_id IN ({placeholders}) AND role='assistant'
+                        AND metadata_json IS NOT NULL""",
+                    conv_ids,
+                ).fetchall():
+                    latency_by_conv.setdefault(row["conversation_id"], []).append(row)
+            report_counts_by_conv = {}
+            if conv_ids:
+                placeholders = ",".join("?" for _ in conv_ids)
+                report_counts_by_conv = {r["conversation_id"]: r["n"] for r in conn.execute(
+                    f"""SELECT conversation_id, COUNT(*) AS n FROM feedback_report
+                        WHERE conversation_id IN ({placeholders}) GROUP BY conversation_id""",
+                    conv_ids,
+                ).fetchall()}
+            last_activity_row = conn.execute(
+                """SELECT MAX(m.created_at) AS last_at FROM message m JOIN conversation c ON c.id=m.conversation_id
+                   WHERE c.owner_user_id=? AND m.role='user'""",
+                (user_id,),
+            ).fetchone()
+            report_total = conn.execute(
+                "SELECT COUNT(*) AS n FROM feedback_report WHERE reporter_user_id=?", (user_id,)
+            ).fetchone()["n"]
+            all_latencies: list[dict[str, Any]] = []
+            for rows in latency_by_conv.values():
+                all_latencies.extend(rows)
+            rating_by_conv = _rating_summary_by_conversation(conn, conv_ids)
+            user_rating_summary = _rating_summary_by_owner(conn).get(user_id)
+        finally:
+            conn.close()
+        conv_list = []
+        for c in conversations:
+            counts = msg_counts_by_conv.get(c["id"], {})
+            conv_list.append({
+                "id": c["id"],
+                "title": c["title"],
+                "created_at": c["created_at"],
+                "updated_at": c["updated_at"],
+                "archived": c["archived_at"] is not None,
+                "user_message_count": counts.get("user", 0),
+                "assistant_message_count": counts.get("assistant", 0),
+                "report_count": report_counts_by_conv.get(c["id"], 0),
+                "latency_ms": _latency_summary(_extract_latencies(latency_by_conv.get(c["id"], []))),
+                "rating_summary": rating_by_conv.get(c["id"]),
+            })
+        return {
+            "id": user_row["id"],
+            "username": user_row["username"],
+            "display_name": user_row["display_name"],
+            "role": user_row["role"],
+            "is_active": bool(user_row["is_active"]),
+            "created_at": user_row["created_at"],
+            "last_activity": last_activity_row["last_at"] if last_activity_row else None,
+            "report_count": report_total,
+            "latency_ms": _latency_summary(_extract_latencies(all_latencies)),
+            "recent_conversations": conv_list,
+            "rating_summary": user_rating_summary,
+        }
+
+    def list_pilot_conversations(
+        self,
+        *,
+        user_id: str | None = None,
+        since: str | None = None,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Global conversation browser (across all owners) for the Control Center.
+
+        `since` is an ISO timestamp lower bound compared against `updated_at`.
+        `search` is a case-insensitive substring match against the title.
+        """
+        clauses = ["1=1"]
+        params: list[Any] = []
+        if user_id:
+            clauses.append("c.owner_user_id = ?")
+            params.append(user_id)
+        if since:
+            clauses.append("c.updated_at >= ?")
+            params.append(since)
+        if search:
+            clauses.append("LOWER(c.title) LIKE ?")
+            params.append(f"%{search.strip().lower()}%")
+        where = " AND ".join(clauses)
+        limit = max(1, min(int(limit), 200))
+        offset = max(0, int(offset))
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                f"""SELECT c.id, c.title, c.created_at, c.updated_at, c.archived_at,
+                           c.owner_user_id, u.display_name, u.username
+                    FROM conversation c JOIN user u ON u.id = c.owner_user_id
+                    WHERE {where}
+                    ORDER BY c.updated_at DESC, c.created_at DESC, c.id DESC
+                    LIMIT ? OFFSET ?""",
+                (*params, limit, offset),
+            ).fetchall()
+            conv_ids = [r["id"] for r in rows]
+            msg_counts_by_conv: dict[str, dict[str, int]] = {}
+            latency_by_conv: dict[str, list[dict[str, Any]]] = {}
+            report_counts_by_conv: dict[str, int] = {}
+            if conv_ids:
+                placeholders = ",".join("?" for _ in conv_ids)
+                for row in conn.execute(
+                    f"""SELECT conversation_id, role, COUNT(*) AS n FROM message
+                        WHERE conversation_id IN ({placeholders}) GROUP BY conversation_id, role""",
+                    conv_ids,
+                ).fetchall():
+                    msg_counts_by_conv.setdefault(row["conversation_id"], {})[row["role"]] = row["n"]
+                for row in conn.execute(
+                    f"""SELECT conversation_id, metadata_json FROM message
+                        WHERE conversation_id IN ({placeholders}) AND role='assistant'
+                        AND metadata_json IS NOT NULL""",
+                    conv_ids,
+                ).fetchall():
+                    latency_by_conv.setdefault(row["conversation_id"], []).append(row)
+                report_counts_by_conv = {r["conversation_id"]: r["n"] for r in conn.execute(
+                    f"""SELECT conversation_id, COUNT(*) AS n FROM feedback_report
+                        WHERE conversation_id IN ({placeholders}) GROUP BY conversation_id""",
+                    conv_ids,
+                ).fetchall()}
+            rating_by_conv = _rating_summary_by_conversation(conn, conv_ids)
+        finally:
+            conn.close()
+        result = []
+        for r in rows:
+            counts = msg_counts_by_conv.get(r["id"], {})
+            result.append({
+                "id": r["id"],
+                "title": r["title"],
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+                "archived": r["archived_at"] is not None,
+                "owner_user_id": r["owner_user_id"],
+                "owner_display_name": r["display_name"],
+                "owner_username": r["username"],
+                "user_message_count": counts.get("user", 0),
+                "assistant_message_count": counts.get("assistant", 0),
+                "report_count": report_counts_by_conv.get(r["id"], 0),
+                "latency_ms": _latency_summary(_extract_latencies(latency_by_conv.get(r["id"], []))),
+                "rating_summary": rating_by_conv.get(r["id"]),
+            })
+        return result
+
+    def get_pilot_conversation_detail(self, conversation_id: str) -> dict[str, Any] | None:
+        """Read-only conversation viewer for the Control Center: transcript + safe diagnostics."""
+        conn = self._connect()
+        try:
+            conv = conn.execute(
+                """SELECT c.id, c.title, c.created_at, c.updated_at, c.archived_at,
+                          c.owner_user_id, u.display_name, u.username
+                   FROM conversation c JOIN user u ON u.id = c.owner_user_id WHERE c.id=?""",
+                (conversation_id,),
+            ).fetchone()
+            if conv is None:
+                return None
+            messages = conn.execute(
+                "SELECT id, role, content, created_at, metadata_json FROM message WHERE conversation_id=? "
+                "ORDER BY created_at ASC, id ASC",
+                (conversation_id,),
+            ).fetchall()
+            reports = conn.execute(
+                """SELECT id, anchor_message_id, comment, status, created_at, updated_at, reporter_display_name
+                   FROM feedback_report WHERE conversation_id=? ORDER BY created_at ASC""",
+                (conversation_id,),
+            ).fetchall()
+            message_ratings = _message_ratings_for_conversation(conn, conversation_id)
+            rating_summary = _rating_summary_by_conversation(conn, [conversation_id]).get(conversation_id)
+        finally:
+            conn.close()
+        reports_by_anchor: dict[str, list[dict[str, Any]]] = {}
+        for r in reports:
+            reports_by_anchor.setdefault(r["anchor_message_id"], []).append({
+                "id": r["id"],
+                "status": r["status"],
+                "comment": r["comment"],
+                "reporter_display_name": r["reporter_display_name"],
+                "created_at": r["created_at"],
+                "updated_at": r["updated_at"],
+            })
+        message_list = []
+        for m in messages:
+            entry = {
+                "id": m["id"],
+                "role": m["role"],
+                "content": m["content"],
+                "created_at": m["created_at"],
+                "reports": reports_by_anchor.get(m["id"], []),
+            }
+            if m["role"] == "assistant":
+                entry["diagnostics"] = _safe_turn_diagnostics(m["metadata_json"])
+                entry["rating"] = message_ratings.get(m["id"])
+            message_list.append(entry)
+        return {
+            "id": conv["id"],
+            "title": conv["title"],
+            "created_at": conv["created_at"],
+            "updated_at": conv["updated_at"],
+            "archived": conv["archived_at"] is not None,
+            "owner_user_id": conv["owner_user_id"],
+            "owner_display_name": conv["display_name"],
+            "owner_username": conv["username"],
+            "messages": message_list,
+            "rating_summary": rating_summary,
+        }
+
+    def list_latest_pilot_questions(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Recent USER messages across all pilot users, newest first (Latest Questions feed)."""
+        limit = max(1, min(int(limit), 200))
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """SELECT m.id AS message_id, m.content, m.created_at, m.conversation_id,
+                          c.title AS conversation_title, c.owner_user_id, u.display_name, u.username
+                   FROM message m
+                   JOIN conversation c ON c.id = m.conversation_id
+                   JOIN user u ON u.id = c.owner_user_id
+                   WHERE m.role='user'
+                   ORDER BY m.created_at DESC, m.id DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [{
+            "message_id": r["message_id"],
+            "content": r["content"],
+            "created_at": r["created_at"],
+            "conversation_id": r["conversation_id"],
+            "conversation_title": r["conversation_title"],
+            "owner_user_id": r["owner_user_id"],
+            "owner_display_name": r["display_name"],
+            "owner_username": r["username"],
+        } for r in rows]
+
 
     def _update_conversation(self, conversation_id: str, assignment: str, values: tuple[Any, ...]) -> Conversation:
         conn = self._connect()
@@ -807,6 +1471,31 @@ class WorkspaceStore:
         if row is None: raise ConversationNotFoundError("conversation not found")
         return _conversation_from_row(row)
 
+    @staticmethod
+    def _get_conversation_scoped_conn(conn: sqlite3.Connection, conversation_id: str, user_id: str) -> sqlite3.Row:
+        row = conn.execute(
+            "SELECT * FROM conversation WHERE id=? AND owner_user_id=?", (conversation_id, user_id)
+        ).fetchone()
+        if row is None:
+            raise ConversationNotFoundError("conversation not found")
+        return row
+
+    @staticmethod
+    def _require_owned_assistant_message(conn: sqlite3.Connection, message_id: str, user_id: str) -> sqlite3.Row:
+        """Fail safely (404) for a foreign/nonexistent message and (400) for a
+        user-authored one -- never trusting the client's conversation/message
+        pairing, always re-deriving ownership from the message's own conversation."""
+        row = conn.execute(
+            """SELECT m.* FROM message m JOIN conversation c ON c.id = m.conversation_id
+            WHERE m.id = ? AND c.owner_user_id = ?""",
+            (message_id, user_id),
+        ).fetchone()
+        if row is None:
+            raise MessageNotFoundError("message not found")
+        if row["role"] != "assistant":
+            raise ValidationError("feedback is only supported for assistant messages")
+        return row
+
     def _open_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -863,7 +1552,12 @@ def _message_from_row(row: sqlite3.Row) -> Message:
 
 
 def _feedback_from_row(row: sqlite3.Row) -> Feedback:
-    return Feedback(row["id"], row["message_id"], row["rating"], row["note"], row["created_at"])
+    keys = row.keys()
+    return Feedback(
+        row["id"], row["message_id"], row["rating"], row["note"], row["created_at"],
+        row["user_id"] if "user_id" in keys else None,
+        row["updated_at"] if "updated_at" in keys else None,
+    )
 
 
 def _feedback_report_from_row(row: sqlite3.Row) -> FeedbackReport:
@@ -878,5 +1572,167 @@ def _deserialize_object(value: str | None) -> dict[str, Any] | None:
     return json.loads(value) if value is not None else None
 
 
+def _product_update_from_row(row: sqlite3.Row) -> ProductUpdate:
+    return ProductUpdate(
+        row["id"], row["title"], row["body"], row["cta_label"],
+        _deserialize_object(row["cta_config_json"]), row["published_at"], bool(row["active"]),
+        row["created_at"], row["updated_at"],
+    )
+
+
+def _product_update_view(row: sqlite3.Row) -> dict[str, Any]:
+    """Shape a joined product_update + per-user seen row for the API/UI.
+
+    Deliberately excludes internal fields (``active``) -- only
+    published+active rows reach this helper's caller in the first place.
+    """
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "body": row["body"],
+        "cta_label": row["cta_label"],
+        "cta_config": _deserialize_object(row["cta_config_json"]),
+        "published_at": row["published_at"],
+        "created_at": row["created_at"],
+        "seen": row["user_seen_at"] is not None,
+        "seen_at": row["user_seen_at"],
+    }
+
+
 def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _utc_day_start(now_iso: str) -> str:
+    """Start of the UTC calendar day containing ``now_iso`` (same string format as _utc_now)."""
+    date_part = now_iso.split("T", 1)[0]
+    return f"{date_part}T00:00:00.000000Z"
+
+
+def _utc_offset(now_iso: str, *, days: int) -> str:
+    """``now_iso`` shifted by ``days`` (can be negative), same string format as _utc_now."""
+    dt = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+    shifted = dt + timedelta(days=days)
+    return shifted.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _extract_latencies(metadata_rows: list[sqlite3.Row]) -> list[float]:
+    """Pull ``latency_ms`` out of each row's metadata_json, skipping missing/invalid values.
+
+    Rows without telemetry are excluded from the sample entirely -- never treated as zero.
+    """
+    values: list[float] = []
+    for row in metadata_rows:
+        raw = row["metadata_json"] if "metadata_json" in row.keys() else None
+        if not raw:
+            continue
+        try:
+            metadata = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        latency = metadata.get("latency_ms") if isinstance(metadata, dict) else None
+        if isinstance(latency, (int, float)) and not isinstance(latency, bool):
+            values.append(float(latency))
+    return values
+
+
+def _latency_summary(latencies: list[float]) -> dict[str, Any]:
+    return {
+        "sample_size": len(latencies),
+        "avg_ms": average(latencies),
+        "p50_ms": nearest_rank_percentile(latencies, 50),
+        "p90_ms": nearest_rank_percentile(latencies, 90),
+    }
+
+
+def _safe_turn_diagnostics(metadata_json: str | None) -> dict[str, Any] | None:
+    """Return only the allowlisted, non-sensitive fields from an assistant message's metadata.
+
+    Reuses `_SAFE_TECHNICAL_CONTEXT_KEYS` -- the same allowlist that already governs what
+    leaves the workspace DB via feedback_report.technical_context. Deliberately excludes
+    `sql_queries` (raw SQL text) and anything not on that list; system/developer prompt
+    content is never present in message metadata in the first place.
+    """
+    metadata = _deserialize_object(metadata_json)
+    if not metadata:
+        return None
+    return {key: metadata[key] for key in _SAFE_TECHNICAL_CONTEXT_KEYS if key in metadata}
+
+
+# -- Pilot Control Center (v1) rating integration ----------------------------
+#
+# Generic aggregation over the (now integrated) Message Feedback `feedback`
+# table. Deliberately minimal: counts + positive rate only, no charts/
+# time-series. Fills the `rating_counts`/`rating_summary` seams that the
+# original Control Center branch left as `None` placeholders.
+
+def _rating_bucket(up: int, down: int) -> dict[str, Any]:
+    total = up + down
+    return {
+        "total_rated": total,
+        "up": up,
+        "down": down,
+        "positive_rate": (up / total) if total else None,
+    }
+
+
+def _rating_counts_overview(conn: sqlite3.Connection) -> dict[str, Any]:
+    row = conn.execute(
+        """SELECT
+            SUM(CASE WHEN rating='up' THEN 1 ELSE 0 END) AS up_count,
+            SUM(CASE WHEN rating='down' THEN 1 ELSE 0 END) AS down_count
+        FROM feedback"""
+    ).fetchone()
+    return _rating_bucket(row["up_count"] or 0, row["down_count"] or 0)
+
+
+def _rating_summary_by_owner(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    """Rating summary per conversation owner (pilot user), keyed by user id."""
+    rows = conn.execute(
+        """SELECT c.owner_user_id AS owner_user_id, f.rating AS rating, COUNT(*) AS n
+        FROM feedback f
+        JOIN message m ON m.id = f.message_id
+        JOIN conversation c ON c.id = m.conversation_id
+        GROUP BY c.owner_user_id, f.rating"""
+    ).fetchall()
+    by_owner: dict[str, dict[str, int]] = {}
+    for row in rows:
+        by_owner.setdefault(row["owner_user_id"], {})[row["rating"]] = row["n"]
+    return {
+        owner_id: _rating_bucket(counts.get("up", 0), counts.get("down", 0))
+        for owner_id, counts in by_owner.items()
+    }
+
+
+def _rating_summary_by_conversation(
+    conn: sqlite3.Connection, conversation_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    if not conversation_ids:
+        return {}
+    placeholders = ",".join("?" for _ in conversation_ids)
+    rows = conn.execute(
+        f"""SELECT m.conversation_id AS conversation_id, f.rating AS rating, COUNT(*) AS n
+        FROM feedback f JOIN message m ON m.id = f.message_id
+        WHERE m.conversation_id IN ({placeholders})
+        GROUP BY m.conversation_id, f.rating""",
+        conversation_ids,
+    ).fetchall()
+    by_conv: dict[str, dict[str, int]] = {}
+    for row in rows:
+        by_conv.setdefault(row["conversation_id"], {})[row["rating"]] = row["n"]
+    return {
+        conv_id: _rating_bucket(counts.get("up", 0), counts.get("down", 0))
+        for conv_id, counts in by_conv.items()
+    }
+
+
+def _message_ratings_for_conversation(conn: sqlite3.Connection, conversation_id: str) -> dict[str, str]:
+    """{message_id: rating} for every rated message in one conversation, regardless of rater
+    (the Control Center is a cross-user observer view, unlike the owner-scoped analyst API)."""
+    rows = conn.execute(
+        """SELECT f.message_id, f.rating FROM feedback f
+        JOIN message m ON m.id = f.message_id
+        WHERE m.conversation_id = ?""",
+        (conversation_id,),
+    ).fetchall()
+    return {row["message_id"]: row["rating"] for row in rows}

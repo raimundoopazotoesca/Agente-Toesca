@@ -32,6 +32,12 @@
   .badge-dismissed{background:#f1f5f9;color:#64748b}
   .empty,.loading{padding:28px;text-align:center;color:var(--muted);font-size:13px}
 
+  .feedback-summary{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .fb-stat{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:10px 16px;min-width:110px}
+  .fb-stat .n{font-size:18px;font-weight:700;color:var(--ink)}
+  .fb-stat .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+
   .overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;
     align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;z-index:50}
   .overlay.hidden{display:none}
@@ -65,6 +71,7 @@
     <a href="/analyst">← Volver al Asistente</a>
   </header>
   <main>
+    <div class="feedback-summary" id="feedback-summary"></div>
     <div class="filters">
       <select id="status-filter">
         <option value="">Todos los estados</option>
@@ -243,8 +250,28 @@
   }
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeDetail(); });
 
+  // ── Thumbs feedback summary (v1) ──
+  // Smallest useful reviewer read surface: aggregate counts only, no
+  // charts/time-series/leaderboards. Kept separate from the report list.
+  async function loadFeedbackSummary() {
+    const el = document.getElementById("feedback-summary");
+    try {
+      const data = await api("/api/analyst/feedback_summary");
+      const positive = data.positive_rate === null || data.positive_rate === undefined
+        ? "—" : `${Math.round(data.positive_rate * 100)}%`;
+      el.innerHTML = `
+        <div class="fb-stat"><div class="n">${data.total_rated}</div><div class="l">Respuestas calificadas</div></div>
+        <div class="fb-stat"><div class="n">👍 ${data.up_count}</div><div class="l">Positivas</div></div>
+        <div class="fb-stat"><div class="n">👎 ${data.down_count}</div><div class="l">Negativas</div></div>
+        <div class="fb-stat"><div class="n">${positive}</div><div class="l">Tasa positiva</div></div>`;
+    } catch (_err) {
+      el.innerHTML = "";
+    }
+  }
+
   statusFilter.addEventListener("change", loadList);
   loadList();
+  loadFeedbackSummary();
 })();
 </script>
 </body>

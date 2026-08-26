@@ -45,6 +45,16 @@
   const submitFeedbackReport = (conversationId, anchorMessageId, comment) => api("/api/analyst/feedback_reports", {
     method: "POST", body: JSON.stringify({ conversation_id: conversationId, anchor_message_id: anchorMessageId, comment }),
   });
+  const listConversationFeedback = (id) => api(`/api/analyst/conversations/${encodeURIComponent(id)}/feedback`).then((d) => d.feedback || {});
+  const setMessageFeedback = (messageId, rating) => api(`/api/analyst/messages/${encodeURIComponent(messageId)}/feedback`, {
+    method: "POST", body: JSON.stringify({ rating }),
+  });
+  const clearMessageFeedback = (messageId) => api(`/api/analyst/messages/${encodeURIComponent(messageId)}/feedback`, {
+    method: "DELETE",
+  });
+  const listProductUpdates = () => api("/api/analyst/product_updates").then((d) => d.product_updates);
+  const getUnseenProductUpdateCount = () => api("/api/analyst/product_updates/unseen_count").then((d) => d.count);
+  const markProductUpdateSeen = (id) => api(`/api/analyst/product_updates/${encodeURIComponent(id)}/seen`, { method: "POST" });
 
   // ── DOM ──
   const sidebar = document.getElementById("sidebar");
@@ -58,6 +68,9 @@
   const composerSend = document.getElementById("composer-send");
   const errorBanner = document.getElementById("error-banner");
   const scrollArea = document.getElementById("scroll-area");
+  const composerEl = document.querySelector(".composer");
+  const novedadesNavBtn = document.getElementById("novedades-nav-btn");
+  const novedadesUnreadDot = document.getElementById("novedades-unread-dot");
   document.getElementById("logout-btn").addEventListener("click", async () => {
     clearActivePointer();
     await fetch("/api/auth/logout", { method: "POST" });
@@ -123,6 +136,120 @@
   let displayName = "";
   let pending = false;
   let openMenuId = null;
+  let viewingNovedades = false;
+  let unseenProductUpdateCount = 0;
+
+  // ── Novedades ("what's new") ──
+  // Pure product-discovery feed: no LLM call, no tool call, no analytical
+  // session -- see /api/analyst/product_updates* in scripts/ingesta_server.py.
+  function setComposerVisible(visible) {
+    composerEl.style.display = visible ? "" : "none";
+  }
+
+  function updateUnreadDot(count) {
+    unseenProductUpdateCount = count;
+    novedadesUnreadDot.classList.toggle("show", count > 0);
+    renderHomeDiscoveryCard();
+  }
+
+  function handleProductUpdateCta(update) {
+    const cta = update.cta_config;
+    if (!cta || typeof cta !== "object") return;
+    if (cta.type === "route" && typeof cta.value === "string") {
+      location.assign(cta.value);
+      return;
+    }
+    if (cta.type === "chat_prompt" && typeof cta.value === "string" && cta.value.trim()) {
+      // Routes through the exact same composer/send path a typed prompt uses --
+      // no separate handler for update-card prompts.
+      viewingNovedades = false;
+      novedadesNavBtn.classList.remove("active");
+      setComposerVisible(true);
+      activeId = null;
+      clearActivePointer();
+      navigateTo(null);
+      renderSidebar();
+      renderHome();
+      composerInput.value = cta.value.trim();
+      send();
+    }
+  }
+
+  function renderNovedadesList(updates) {
+    conversationEl.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.className = "novedades-wrap";
+    if (!updates.length) {
+      const empty = document.createElement("div");
+      empty.className = "novedades-empty";
+      empty.textContent = "No hay novedades por ahora.";
+      wrap.appendChild(empty);
+    } else {
+      updates.forEach((u) => {
+        const card = document.createElement("div");
+        card.className = "novedades-card";
+        const title = document.createElement("div");
+        title.className = "novedades-card-title";
+        title.textContent = u.title;
+        const body = document.createElement("div");
+        body.className = "novedades-card-body";
+        body.textContent = u.body;
+        const date = document.createElement("div");
+        date.className = "novedades-card-date";
+        date.textContent = fmtDate(u.published_at);
+        card.append(title, body);
+        if (u.cta_label) {
+          const cta = document.createElement("button");
+          cta.type = "button";
+          cta.className = "novedades-cta-btn";
+          cta.textContent = u.cta_label;
+          cta.addEventListener("click", () => handleProductUpdateCta(u));
+          card.appendChild(cta);
+        }
+        card.appendChild(date);
+        wrap.appendChild(card);
+      });
+    }
+    conversationEl.appendChild(wrap);
+  }
+
+  async function openNovedades() {
+    clearError();
+    openMenuId = null;
+    viewingNovedades = true;
+    novedadesNavBtn.classList.add("active");
+    setComposerVisible(false);
+    navigateTo(null, { replace: true });
+    renderSidebar();
+    chatTitle.textContent = "Novedades";
+    chatSub.textContent = "Nuevas capacidades del Analyst";
+    conversationEl.innerHTML = "";
+    try {
+      const updates = await listProductUpdates();
+      renderNovedadesList(updates);
+      const unseen = updates.filter((u) => !u.seen).map((u) => u.id);
+      if (unseen.length) {
+        await Promise.all(unseen.map((id) => markProductUpdateSeen(id).catch(() => {})));
+      }
+      updateUnreadDot(0);
+    } catch (_err) {
+      showError("No se pudieron cargar las novedades.");
+    }
+  }
+  novedadesNavBtn.addEventListener("click", openNovedades);
+
+  function renderHomeDiscoveryCard() {
+    const existing = document.querySelector(".home-discovery-card");
+    if (existing) existing.remove();
+    if (viewingNovedades || unseenProductUpdateCount <= 0) return;
+    const homeState = document.querySelector(".home-state");
+    if (!homeState) return;
+    const card = document.createElement("div");
+    card.className = "home-discovery-card";
+    card.innerHTML = `<span class="dot"></span> Nuevo · ${unseenProductUpdateCount} novedad${unseenProductUpdateCount === 1 ? "" : "es"}`;
+    card.addEventListener("click", openNovedades);
+    homeState.appendChild(card);
+  }
 
   collapseBtn.addEventListener("click", () => sidebar.classList.toggle("collapsed"));
 
@@ -290,10 +417,75 @@
     conversationEl.appendChild(wrap);
     chatTitle.textContent = "Toesca Real Estate AI Analyst";
     chatSub.textContent = "Nueva conversación";
+    renderHomeDiscoveryCard();
     if (focusComposer) composerInput.focus();
   }
 
-  function addTurn(role, html, messageId) {
+  // ── Thumbs feedback (up/down) ──
+  // Fast, low-friction quality signal on assistant responses. Deliberately
+  // separate from "Reportar problema": no reason picker, no forced comment,
+  // no LLM/tool call -- just a rating the server persists per user/message.
+  let feedbackPending = new Set();
+
+  function buildFeedbackWidget(messageId, initialRating) {
+    const wrap = document.createElement("div");
+    wrap.className = "feedback-widget";
+    let current = initialRating || null;
+
+    function makeBtn(rating, label, glyph) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "feedback-btn";
+      btn.dataset.rating = rating;
+      btn.setAttribute("aria-label", label);
+      btn.textContent = glyph;
+      return btn;
+    }
+
+    const upBtn = makeBtn("up", "Marcar respuesta como útil", "👍");
+    const downBtn = makeBtn("down", "Marcar respuesta como no útil", "👎");
+
+    function render() {
+      upBtn.classList.toggle("selected", current === "up");
+      upBtn.setAttribute("aria-pressed", String(current === "up"));
+      downBtn.classList.toggle("selected", current === "down");
+      downBtn.setAttribute("aria-pressed", String(current === "down"));
+    }
+    render();
+
+    async function toggle(rating, btn) {
+      if (feedbackPending.has(messageId)) return;
+      const previous = current;
+      const next = current === rating ? null : rating;
+      feedbackPending.add(messageId);
+      upBtn.disabled = true;
+      downBtn.disabled = true;
+      current = next;
+      render();
+      try {
+        if (next === null) {
+          await clearMessageFeedback(messageId);
+        } else {
+          await setMessageFeedback(messageId, next);
+        }
+      } catch (_err) {
+        current = previous;
+        render();
+        showToast("No se pudo guardar tu calificación. Intenta nuevamente.");
+      } finally {
+        feedbackPending.delete(messageId);
+        upBtn.disabled = false;
+        downBtn.disabled = false;
+      }
+    }
+
+    upBtn.addEventListener("click", () => toggle("up", upBtn));
+    downBtn.addEventListener("click", () => toggle("down", downBtn));
+    wrap.append(upBtn, downBtn);
+    return wrap;
+  }
+
+  function addTurn(role, html, messageId, feedbackRating) {
     const turn = document.createElement("div");
     turn.className = "turn " + role;
     if (role === "assistant") {
@@ -302,6 +494,7 @@
       if (messageId) {
         const actions = document.createElement("div");
         actions.className = "turn-actions";
+        actions.appendChild(buildFeedbackWidget(messageId, feedbackRating));
         const reportBtn = document.createElement("button");
         reportBtn.type = "button";
         reportBtn.className = "report-btn";
@@ -320,10 +513,11 @@
     return turn;
   }
 
-  function renderMessages(messages) {
+  function renderMessages(messages, feedbackByMessageId) {
     conversationEl.innerHTML = "";
+    const feedback = feedbackByMessageId || {};
     messages.forEach((m) => {
-      if (m.role === "assistant") addTurn("assistant", mdToHtml(m.content || ""), m.id);
+      if (m.role === "assistant") addTurn("assistant", mdToHtml(m.content || ""), m.id, feedback[m.id]);
       else if (m.role === "user") addTurn("user", escapeHtml(m.content || ""), m.id);
     });
     scrollArea.scrollTop = scrollArea.scrollHeight;
@@ -367,17 +561,27 @@
     });
   }
 
+  function leaveNovedadesView() {
+    if (!viewingNovedades) return;
+    viewingNovedades = false;
+    novedadesNavBtn.classList.remove("active");
+    setComposerVisible(true);
+  }
+
   async function selectConversation(id, { pushHistory = true } = {}) {
     clearError();
+    leaveNovedadesView();
     activeId = id;
     if (pushHistory) navigateTo(id);
     renderSidebar();
     conversationEl.innerHTML = "";
     try {
-      const [conv, messages] = await Promise.all([getConversation(id), listMessages(id)]);
+      const [conv, messages, feedback] = await Promise.all([
+        getConversation(id), listMessages(id), listConversationFeedback(id).catch(() => ({})),
+      ]);
       chatTitle.textContent = conv.title || "Nueva conversación";
       chatSub.textContent = `Actualizado ${fmtDate(conv.updated_at)}`;
-      renderMessages(messages);
+      renderMessages(messages, feedback);
       composerInput.focus();
     } catch (err) {
       if (err.status === 404) {
@@ -396,6 +600,7 @@
 
   async function startNewChat() {
     clearError();
+    leaveNovedadesView();
     activeId = null;
     clearActivePointer();
     navigateTo(null);
@@ -466,6 +671,7 @@
   });
 
   window.addEventListener("popstate", () => {
+    leaveNovedadesView();
     const id = pathConversationId();
     if (id) selectConversation(id, { pushHistory: false });
     else { activeId = null; clearActivePointer(); renderHome(); renderSidebar(); }
@@ -489,6 +695,7 @@
     }
     renderHome({ focusComposer: true });
     renderSidebar();
+    getUnseenProductUpdateCount().then(updateUnreadDot).catch(() => {});
 
     const urlId = pathConversationId();
     if (urlId) {

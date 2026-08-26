@@ -122,6 +122,21 @@ class ConversationService:
     def get_feedback(self, message_id: str) -> Feedback | None:
         return self.store.get_feedback(message_id)
 
+    def clear_feedback_for_user(self, message_id: str, user_id: str) -> None:
+        self.store.clear_feedback_for_user(message_id, user_id)
+
+    def get_feedback_for_user(self, message_id: str, user_id: str) -> Feedback | None:
+        return self.store.get_feedback_for_user(message_id, user_id)
+
+    def list_feedback_for_conversation_for_user(self, conversation_id: str, user_id: str) -> dict[str, str]:
+        return self.store.list_feedback_for_conversation(conversation_id, user_id)
+
+    def get_feedback_summary(self) -> dict[str, Any]:
+        return self.store.get_feedback_summary()
+
+    def list_recent_feedback(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self.store.list_recent_feedback(limit=limit)
+
     def report_feedback_for_user(
         self, user_id: str, conversation_id: str, anchor_message_id: str, comment: str,
         release_revision: str | None = None,

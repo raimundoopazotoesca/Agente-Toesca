@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toesca Real Estate AI Analyst — Pilot Control Center</title>
+<style>
+  :root{--ink:#0f172a;--ink-soft:#334155;--muted:#64748b;--muted-soft:#94a3b8;
+    --border:#e6e9ef;--bg:#f7f8fa;--surface:#fff;--radius:10px;
+    --shadow:0 10px 30px rgba(15,23,42,.08);--accent:#2563eb}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--ink)}
+  header{padding:18px 28px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:14px}
+  header h1{font-size:16px;margin:0}
+  header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:13px}
+  nav.tabs{display:flex;gap:4px;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--border)}
+  nav.tabs button{border:0;background:none;padding:12px 14px;font:inherit;font-size:13px;
+    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  nav.tabs button.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  main{max-width:1180px;margin:0 auto;padding:22px 28px}
+  .view{display:none}
+  .view.active{display:block}
+
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:22px}
+  .kpi{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+  .kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+  .kpi .value{font-size:22px;font-weight:600;color:var(--ink)}
+  .kpi .sub{font-size:11.5px;color:var(--muted-soft);margin-top:2px}
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    margin:26px 0 10px}
+  .section-title:first-child{margin-top:0}
+
+  .filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .filters select,.filters input{padding:7px 10px;border-radius:8px;border:1px solid var(--border);
+    font:inherit;background:var(--surface)}
+  .filters input[type=search]{min-width:220px}
+
+  table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow)}
+  th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid var(--border)}
+  th{background:var(--bg);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--bg)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  th.num{text-align:right}
+  .muted{color:var(--muted)}
+  .report-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:5px}
+  .empty,.loading{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+  .err{color:#b91c1c;font-size:13px}
+
+  .overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;
+    align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;z-index:50}
+  .overlay.hidden{display:none}
+  .panel{width:min(720px,100%);background:var(--surface);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:24px 26px 28px}
+  .panel.wide{width:min(1040px,100%)}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+  .panel-head h2{margin:0;font-size:16px}
+  .panel-close{border:0;background:none;font-size:20px;cursor:pointer;color:var(--muted)}
+  .section{margin-bottom:18px}
+  .section h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
+  .meta-row{font-size:13px;color:var(--ink-soft);margin:2px 0}
+
+  .conv-split{display:grid;grid-template-columns:1.6fr 1fr;gap:0}
+  @media (max-width:900px){.conv-split{grid-template-columns:1fr}}
+  .transcript-col{border-right:1px solid var(--border);padding-right:20px}
+  @media (max-width:900px){.transcript-col{border-right:0;padding-right:0}}
+  .diag-col{padding-left:20px}
+  @media (max-width:900px){.diag-col{padding-left:0;margin-top:18px;border-top:1px solid var(--border);padding-top:16px}}
+  .transcript{max-height:520px;overflow-y:auto}
+  .t-msg{margin:0 0 16px;font-size:13px;line-height:1.5}
+  .t-msg:last-child{margin-bottom:0}
+  .t-msg .who{font-weight:600;color:var(--ink);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;margin-bottom:2px;display:flex;align-items:center;gap:6px}
+  .t-msg.user .who{color:var(--muted)}
+  .t-msg .body{white-space:pre-wrap;color:var(--ink-soft)}
+  .t-msg .when{font-size:10.5px;color:var(--muted-soft);font-weight:400;text-transform:none;letter-spacing:0}
+  .diag-block{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px}
+  .diag-block summary{cursor:pointer;font-weight:600;color:var(--ink-soft);list-style:none}
+  .diag-block summary::-webkit-details-marker{display:none}
+  .tech-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 14px;
+    font-size:12px;margin-top:8px}
+  .tech-grid div span{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+  .report-note{background:#fef2f2;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#991b1b}
+  .report-note a{color:#991b1b}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Pilot Control Center</h1>
+    <a href="/pilot-feedback">Reportes del piloto →</a>
+  </header>
+  <nav class="tabs">
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="users">Usuarios</button>
+    <button data-view="conversations">Conversaciones</button>
+    <button data-view="questions">Últimas preguntas</button>
+  </nav>
+  <main>
+    <section id="view-overview" class="view active">
+      <div class="section-title">Uso</div>
+      <div class="kpi-grid" id="kpi-usage"></div>
+      <div class="section-title">Calidad y performance</div>
+      <div class="kpi-grid" id="kpi-quality"></div>
+    </section>
+
+    <section id="view-users" class="view">
+      <div id="users-wrap"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <section id="view-conversations" class="view">
+      <div class="filters">
+        <input type="search" id="conv-search" placeholder="Buscar por título…">
+        <select id="conv-period">
+          <option value="">Todo el historial</option>
+          <option value="1">Hoy</option>
+          <option value="7">Últimos 7 días</option>
+          <option value="30">Últimos 30 días</option>
+        </select>
+      </div>
+      <div id="conv-wrap"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <section id="view-questions" class="view">
+      <div id="questions-wrap"><div class="loading">Cargando…</div></div>
+    </section>
+  </main>
+
+  <div class="overlay hidden" id="detail-overlay">
+    <div class="panel" id="detail-panel"></div>
+  </div>
+
+<script>
+(function () {
+  async function api(path) {
+    const response = await fetch(path, { headers: { "Content-Type": "application/json" } });
+    if (response.status === 401) { location.assign("/login"); throw new Error("unauthenticated"); }
+    if (response.status === 403) { document.body.innerHTML = "<p style='padding:28px'>No autorizado.</p>"; throw new Error("forbidden"); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "request_failed");
+    return data;
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text == null ? "" : String(text);
+    return div.innerHTML;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("es-CL"); } catch (_e) { return iso; }
+  }
+
+  function fmtNum(n) {
+    return n == null ? "—" : new Intl.NumberFormat("es-CL").format(n);
+  }
+
+  function fmtMs(n) {
+    if (n === null || n === undefined) return "—";
+    return `${Math.round(n).toLocaleString("es-CL")} ms`;
+  }
+
+  function latencyCell(latency) {
+    if (!latency || !latency.sample_size) return '<span class="muted">sin datos</span>';
+    return `${fmtMs(latency.avg_ms)} <span class="muted">(p50 ${fmtMs(latency.p50_ms)} · p90 ${fmtMs(latency.p90_ms)} · n=${latency.sample_size})</span>`;
+  }
+
+  function fmtPct(rate) {
+    return rate === null || rate === undefined ? "—" : `${Math.round(rate * 100)}%`;
+  }
+
+  function ratingCell(summary) {
+    if (!summary || !summary.total_rated) return '<span class="muted">sin calificar</span>';
+    return `👍 ${fmtNum(summary.up)} · 👎 ${fmtNum(summary.down)} <span class="muted">(${fmtPct(summary.positive_rate)} positivo)</span>`;
+  }
+
+  // ---- Tabs -------------------------------------------------------------
+  const tabButtons = document.querySelectorAll("nav.tabs button");
+  const views = { overview: loadOverview, users: loadUsers, conversations: loadConversations, questions: loadQuestions };
+  const loaded = {};
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabButtons.forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${btn.dataset.view}`));
+      if (!loaded[btn.dataset.view]) { loaded[btn.dataset.view] = true; views[btn.dataset.view](); }
+    });
+  });
+
+  // ---- Overview -----------------------------------------------------------
+  async function loadOverview() {
+    try {
+      const o = await api("/api/analyst/pilot_control/overview");
+      const usage = document.getElementById("kpi-usage");
+      usage.innerHTML = [
+        kpi("Usuarios del piloto", fmtNum(o.total_users)),
+        kpi("Activos hoy", fmtNum(o.active_users_today)),
+        kpi("Activos últimos 7 días", fmtNum(o.active_users_7d)),
+        kpi("Conversaciones hoy", fmtNum(o.conversations_today)),
+        kpi("Conversaciones 7 días", fmtNum(o.conversations_7d)),
+        kpi("Preguntas hoy", fmtNum(o.user_messages_today)),
+        kpi("Preguntas 7 días", fmtNum(o.user_messages_7d)),
+        kpi("Respuestas hoy", fmtNum(o.assistant_responses_today)),
+        kpi("Respuestas 7 días", fmtNum(o.assistant_responses_7d)),
+      ].join("");
+      const quality = document.getElementById("kpi-quality");
+      const lat = o.latency_ms || {};
+      const rc = o.rating_counts || {};
+      quality.innerHTML = [
+        kpi("Reportes nuevos", fmtNum(o.reports_new), o.reports_total != null ? `${fmtNum(o.reports_total)} en total` : ""),
+        kpi("Latencia promedio", fmtMs(lat.avg_ms), lat.sample_size ? `n=${fmtNum(lat.sample_size)}` : "sin datos"),
+        kpi("Latencia p50", fmtMs(lat.p50_ms)),
+        kpi("Latencia p90", fmtMs(lat.p90_ms)),
+        kpi("Respuestas calificadas", fmtNum(rc.total_rated), rc.total_rated ? `👍 ${fmtNum(rc.up)} · 👎 ${fmtNum(rc.down)}` : "sin datos"),
+        kpi("% positivo", fmtPct(rc.positive_rate)),
+      ].join("");
+    } catch (err) {
+      if (err.message !== "unauthenticated" && err.message !== "forbidden") {
+        document.getElementById("kpi-usage").innerHTML = '<div class="empty err">No se pudo cargar el overview.</div>';
+      }
+    }
+  }
+
+  function kpi(label, value, sub) {
+    return `<div class="kpi"><div class="label">${escapeHtml(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ""}</div>`;
+  }
+
+  // ---- Users --------------------------------------------------------------
+  async function loadUsers() {
+    const wrap = document.getElementById("users-wrap");
+    wrap.innerHTML = '<div class="loading">Cargando…</div>';
+    try {
+      const data = await api("/api/analyst/pilot_control/users");
+      renderUsers(data.users || []);
+    } catch (err) {
+      if (err.message !== "unauthenticated" && err.message !== "forbidden") {
+        wrap.innerHTML = '<div class="empty err">No se pudieron cargar los usuarios.</div>';
+      }
+    }
+  }
+
+  function renderUsers(users) {
+    const wrap = document.getElementById("users-wrap");
+    if (!users.length) { wrap.innerHTML = '<div class="empty">Sin usuarios.</div>'; return; }
+    const rows = users.map((u) => `
+      <tr data-id="${escapeHtml(u.id)}">
+        <td>${escapeHtml(u.display_name)}<div class="muted" style="font-size:11.5px">${escapeHtml(u.username)}</div></td>
+        <td>${fmtDate(u.last_activity)}</td>
+        <td class="num">${fmtNum(u.conversation_count)}</td>
+        <td class="num">${fmtNum(u.user_message_count)}</td>
+        <td class="num">${fmtNum(u.assistant_response_count)}</td>
+        <td class="num">${u.report_count ? `<span class="report-dot"></span>` : ""}${fmtNum(u.report_count)}</td>
+        <td>${latencyCell(u.latency_ms)}</td>
+        <td>${ratingCell(u.rating_summary)}</td>
+      </tr>`).join("");
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Usuario</th><th>Última actividad</th><th class="num">Conversaciones</th>
+        <th class="num">Preguntas</th><th class="num">Respuestas</th><th class="num">Reportes</th><th>Latencia</th><th>Calificaciones</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    wrap.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", () => openUserDetail(row.dataset.id)));
+  }
+
+  async function openUserDetail(userId) {
+    const overlay = document.getElementById("detail-overlay");
+    const panel = document.getElementById("detail-panel");
+    panel.className = "panel";
+    overlay.classList.remove("hidden");
+    panel.innerHTML = '<div class="loading">Cargando…</div>';
+    try {
+      const u = await api(`/api/analyst/pilot_control/users/${encodeURIComponent(userId)}`);
+      const convRows = (u.recent_conversations || []).map((c) => `
+        <tr data-id="${escapeHtml(c.id)}">
+          <td>${escapeHtml(c.title)}</td>
+          <td>${fmtDate(c.updated_at)}</td>
+          <td class="num">${fmtNum(c.user_message_count)}/${fmtNum(c.assistant_message_count)}</td>
+          <td class="num">${c.report_count ? `<span class="report-dot"></span>` : ""}${fmtNum(c.report_count)}</td>
+        </tr>`).join("");
+      panel.innerHTML = `
+        <div class="panel-head"><h2>${escapeHtml(u.display_name)}</h2>
+          <button class="panel-close" type="button" id="close-detail">×</button></div>
+        <div class="section">
+          <div class="meta-row"><strong>Usuario:</strong> ${escapeHtml(u.username)}</div>
+          <div class="meta-row"><strong>Última actividad:</strong> ${fmtDate(u.last_activity)}</div>
+          <div class="meta-row"><strong>Reportes:</strong> ${fmtNum(u.report_count)}</div>
+          <div class="meta-row"><strong>Latencia:</strong> ${latencyCell(u.latency_ms)}</div>
+          <div class="meta-row"><strong>Calificaciones:</strong> ${ratingCell(u.rating_summary)}</div>
+        </div>
+        <div class="section">
+          <h3>Conversaciones recientes</h3>
+          ${convRows ? `<table><thead><tr><th>Título</th><th>Última actividad</th><th class="num">Msgs (U/A)</th><th class="num">Reportes</th></tr></thead>
+            <tbody>${convRows}</tbody></table>` : '<div class="empty">Sin conversaciones.</div>'}
+        </div>`;
+      document.getElementById("close-detail").addEventListener("click", closeDetail);
+      panel.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", () => openConversationDetail(row.dataset.id)));
+    } catch (_err) {
+      panel.innerHTML = '<div class="err">No se pudo cargar el usuario.</div>';
+    }
+  }
+
+  // ---- Conversations --------------------------------------------------------
+  const convSearch = document.getElementById("conv-search");
+  const convPeriod = document.getElementById("conv-period");
+  let convDebounce = null;
+  convSearch.addEventListener("input", () => { clearTimeout(convDebounce); convDebounce = setTimeout(loadConversations, 250); });
+  convPeriod.addEventListener("change", loadConversations);
+
+  async function loadConversations() {
+    const wrap = document.getElementById("conv-wrap");
+    wrap.innerHTML = '<div class="loading">Cargando…</div>';
+    const params = new URLSearchParams();
+    if (convSearch.value.trim()) params.set("q", convSearch.value.trim());
+    const days = convPeriod.value;
+    if (days) {
+      const since = new Date(Date.now() - Number(days) * 86400000).toISOString();
+      params.set("since", since);
+    }
+    try {
+      const data = await api(`/api/analyst/pilot_control/conversations?${params.toString()}`);
+      renderConversations(data.conversations || []);
+    } catch (err) {
+      if (err.message !== "unauthenticated" && err.message !== "forbidden") {
+        wrap.innerHTML = '<div class="empty err">No se pudieron cargar las conversaciones.</div>';
+      }
+    }
+  }
+
+  function renderConversations(conversations) {
+    const wrap = document.getElementById("conv-wrap");
+    if (!conversations.length) { wrap.innerHTML = '<div class="empty">Sin conversaciones.</div>'; return; }
+    const rows = conversations.map((c) => `
+      <tr data-id="${escapeHtml(c.id)}">
+        <td>${escapeHtml(c.owner_display_name)}</td>
+        <td>${escapeHtml(c.title)}</td>
+        <td>${fmtDate(c.updated_at)}</td>
+        <td class="num">${fmtNum(c.user_message_count)}</td>
+        <td class="num">${fmtNum(c.assistant_message_count)}</td>
+        <td class="num">${c.report_count ? `<span class="report-dot"></span>` : ""}${fmtNum(c.report_count)}</td>
+        <td>${latencyCell(c.latency_ms)}</td>
+        <td>${ratingCell(c.rating_summary)}</td>
+      </tr>`).join("");
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Usuario</th><th>Título</th><th>Última actividad</th>
+        <th class="num">Preguntas</th><th class="num">Respuestas</th><th class="num">Reportes</th><th>Latencia</th><th>Calificaciones</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    wrap.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", () => openConversationDetail(row.dataset.id)));
+  }
+
+  // ---- Latest questions ----------------------------------------------------
+  async function loadQuestions() {
+    const wrap = document.getElementById("questions-wrap");
+    wrap.innerHTML = '<div class="loading">Cargando…</div>';
+    try {
+      const data = await api("/api/analyst/pilot_control/questions");
+      renderQuestions(data.questions || []);
+    } catch (err) {
+      if (err.message !== "unauthenticated" && err.message !== "forbidden") {
+        wrap.innerHTML = '<div class="empty err">No se pudieron cargar las preguntas.</div>';
+      }
+    }
+  }
+
+  function renderQuestions(questions) {
+    const wrap = document.getElementById("questions-wrap");
+    if (!questions.length) { wrap.innerHTML = '<div class="empty">Sin preguntas todavía.</div>'; return; }
+    const rows = questions.map((q) => `
+      <tr data-conv="${escapeHtml(q.conversation_id)}" data-msg="${escapeHtml(q.message_id)}">
+        <td>${fmtDate(q.created_at)}</td>
+        <td>${escapeHtml(q.owner_display_name)}</td>
+        <td>${escapeHtml(q.content)}</td>
+        <td class="muted">${escapeHtml(q.conversation_title)}</td>
+      </tr>`).join("");
+    wrap.innerHTML = `<table>
+      <thead><tr><th>Fecha</th><th>Usuario</th><th>Pregunta</th><th>Conversación</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+    wrap.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", () => openConversationDetail(row.dataset.conv, row.dataset.msg)));
+  }
+
+  // ---- Conversation detail (shared drill-down) -----------------------------
+  async function openConversationDetail(conversationId, focusMessageId) {
+    const overlay = document.getElementById("detail-overlay");
+    const panel = document.getElementById("detail-panel");
+    panel.className = "panel wide";
+    overlay.classList.remove("hidden");
+    panel.innerHTML = '<div class="loading">Cargando…</div>';
+    try {
+      const c = await api(`/api/analyst/pilot_control/conversations/${encodeURIComponent(conversationId)}`);
+      renderConversationDetail(c, focusMessageId);
+    } catch (_err) {
+      panel.innerHTML = '<div class="err">No se pudo cargar la conversación.</div>';
+    }
+  }
+
+  function renderConversationDetail(c, focusMessageId) {
+    const panel = document.getElementById("detail-panel");
+    const messages = c.messages || [];
+    const transcript = messages.map((m) => `
+      <div class="t-msg ${m.role}" id="msg-${escapeHtml(m.id)}" style="${m.id === focusMessageId ? 'outline:2px solid #2563eb;border-radius:6px;padding:6px' : ''}">
+        <div class="who">${m.role === "assistant" ? "Toesca Real Estate AI Analyst" : "Usuario"}
+          ${m.role === "assistant" && m.rating ? `<span>${m.rating === "up" ? "👍" : "👎"}</span>` : ""}
+          <span class="when">${fmtDate(m.created_at)}</span></div>
+        <div class="body">${escapeHtml(m.content)}</div>
+        ${(m.reports || []).map((r) => `<div class="report-note">Reportado por ${escapeHtml(r.reporter_display_name)} · estado: ${escapeHtml(r.status)}
+          <br>"${escapeHtml(r.comment)}" — <a href="/pilot-feedback" target="_blank">ver en Reportes del piloto</a></div>`).join("")}
+      </div>`).join("");
+
+    const diagBlocks = messages.filter((m) => m.role === "assistant").map((m) => diagBlock(m)).join("");
+
+    panel.innerHTML = `
+      <div class="panel-head">
+        <h2>${escapeHtml(c.title)}</h2>
+        <button class="panel-close" type="button" id="close-detail">×</button>
+      </div>
+      <div class="meta-row"><strong>Usuario:</strong> ${escapeHtml(c.owner_display_name)} (${escapeHtml(c.owner_username)})</div>
+      <div class="meta-row"><strong>Creada:</strong> ${fmtDate(c.created_at)} · <strong>Última actividad:</strong> ${fmtDate(c.updated_at)}</div>
+      <div class="meta-row" style="margin-bottom:16px"><strong>Calificaciones:</strong> ${ratingCell(c.rating_summary)}</div>
+      <div class="conv-split">
+        <div class="transcript-col">
+          <h3>Transcripción</h3>
+          <div class="transcript">${transcript || '<div class="t-msg">(sin mensajes)</div>'}</div>
+        </div>
+        <div class="diag-col">
+          <h3>Diagnóstico técnico</h3>
+          ${diagBlocks || '<div class="empty">Sin respuestas del asistente.</div>'}
+        </div>
+      </div>`;
+    document.getElementById("close-detail").addEventListener("click", closeDetail);
+    if (focusMessageId) {
+      const el = panel.querySelector(`#msg-${CSS.escape(focusMessageId)}`);
+      if (el) setTimeout(() => el.scrollIntoView({ block: "center" }), 30);
+    }
+  }
+
+  function diagBlock(m) {
+    const d = m.diagnostics;
+    if (!d) return `<details class="diag-block"><summary>${fmtDate(m.created_at)} — sin telemetría</summary></details>`;
+    const tm = d.turn_metrics || {};
+    const toolNames = Array.isArray(d.tool_calls) ? d.tool_calls.map((t) => t.name).join(", ") : "";
+    const rows = [
+      techRow("Proveedor", d.provider), techRow("Modelo", d.model),
+      techRow("Latencia total", d.latency_ms != null ? fmtMs(d.latency_ms) : null),
+      techRow("Rondas LLM", tm.llm_rounds), techRow("Latencia LLM", tm.llm_latency_ms != null ? fmtMs(tm.llm_latency_ms) : null),
+      techRow("Tools", d.action_count), techRow("Nombres de tools", toolNames),
+      techRow("Consultas SQL", d.sql_count),
+      techRow("Evidencia nueva", tm.fresh_evidence_count), techRow("Evidencia reutilizada", tm.reused_evidence_count),
+      techRow("Integridad presentación", d.presentation_integrity_status),
+      techRow("Motivo de término", d.termination_reason),
+    ].join("");
+    const ratingSuffix = m.rating ? ` · ${m.rating === "up" ? "👍" : "👎"}` : "";
+    return `<details class="diag-block"><summary>${fmtDate(m.created_at)} · ${fmtMs(d.latency_ms)}${ratingSuffix}</summary>
+      <div class="tech-grid">${rows}</div></details>`;
+  }
+
+  function techRow(label, value) {
+    if (value === undefined || value === null || value === "") return "";
+    return `<div><span>${escapeHtml(label)}</span>${escapeHtml(value)}</div>`;
+  }
+
+  function closeDetail() {
+    document.getElementById("detail-overlay").classList.add("hidden");
+    document.getElementById("detail-panel").innerHTML = "";
+  }
+  document.getElementById("detail-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "detail-overlay") closeDetail();
+  });
+
+  loadOverview();
+  loaded.overview = true;
+})();
+</script>
+</body>
+</html>
