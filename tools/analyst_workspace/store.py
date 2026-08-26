@@ -236,6 +236,33 @@ class WorkspaceStore:
                 return row["id"]
         finally: conn.close()
 
+    def reset_user_password(self, username: str, new_password: str) -> str:
+        """Administrative password rotation for an EXISTING account.
+
+        Not an authenticated self-service endpoint -- no HTTP route calls
+        this (see admin.py). Replaces password_hash only: username,
+        display_name, role, is_active, conversation ownership and durable
+        context ownership are all untouched. Existing sessions for this
+        user are revoked in the same transaction, so a credential rotated
+        away from (e.g. because it leaked) cannot keep an old session
+        alive.
+        """
+        if not isinstance(new_password, str) or len(new_password) < 8:
+            raise ValidationError("password must contain at least 8 characters")
+        conn = self._connect()
+        try:
+            with conn:
+                row = conn.execute("SELECT id FROM user WHERE username=?", (username.strip().lower(),)).fetchone()
+                if row is None:
+                    raise ValidationError("user does not exist")
+                conn.execute("UPDATE user SET password_hash=?, updated_at=? WHERE id=?",
+                             (generate_password_hash(new_password), _utc_now(), row["id"]))
+                conn.execute("UPDATE user_session SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
+                             (_utc_now(), row["id"]))
+                return row["id"]
+        finally:
+            conn.close()
+
     def authenticate(self, username: str, password: str) -> sqlite3.Row:
         conn = self._connect()
         try:
