@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import os
+import time
 from threading import Thread
 
 import pytest
@@ -63,7 +64,8 @@ def _login(page, base_url: str, username: str) -> None:
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
     page.get_by_role("button", name="Entrar").click()
-    page.wait_for_url(f"{base_url}/analyst")
+    # El login exitoso corre la transición Toesca (~1.4s) antes de navegar.
+    page.wait_for_url(f"{base_url}/analyst", timeout=5_000)
 
 
 def test_visible_product_name_is_consistent_on_login_and_home(monkeypatch, tmp_path):
@@ -91,10 +93,36 @@ def test_successful_login_shows_the_toesca_transition_before_home(monkeypatch, t
         page.locator("#password").fill("password")
         page.get_by_role("button", name="Entrar").click()
 
-        assert page.locator("#toesca-login-loader").is_visible()
-        assert page.get_by_role("status", name="Cargando Toesca Real Estate AI Analyst").is_visible()
+        page.get_by_role("status", name="Cargando Toesca Real Estate AI Analyst").wait_for(state="visible")
         page.wait_for_url(f"{base_url}/analyst", timeout=3_000)
         page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
+        browser.close()
+
+
+def test_delayed_wrong_password_never_shows_the_toesca_loader(monkeypatch, tmp_path):
+    with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_default_timeout(3_000)
+
+        def delayed_401(route):
+            time.sleep(0.4)
+            route.fulfill(status=401, content_type="application/json", body='{"error": "invalid_credentials"}')
+
+        page.route("**/api/auth/login", delayed_401)
+        page.goto(f"{base_url}/login")
+        page.locator("#username").fill("raimundo")
+        page.locator("#password").fill("wrongpass")
+        page.get_by_role("button", name="Entrar").click()
+
+        # While the (slow) auth request is still unresolved, the loader must not exist.
+        page.wait_for_timeout(150)
+        assert page.locator("#toesca-login-loader").count() == 0
+
+        # After the request resolves as a 401, the loader must still never have appeared.
+        page.wait_for_selector("text=Usuario o contraseña inválidos.")
+        assert page.locator("#toesca-login-loader").count() == 0
+        assert page.url == f"{base_url}/login"
         browser.close()
 
 
