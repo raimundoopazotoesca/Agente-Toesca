@@ -160,8 +160,24 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         if evidence_universe_kind is not None and claim.get("universe_kind") != evidence_universe_kind:
             return _fail(canonical_evidence, governed_evidence, "universe_mismatch", db_path)
         claim_entity_ids = claim.get("entity_ids")
-        if not isinstance(claim_entity_ids, list) or not claim_entity_ids:
+        if not isinstance(claim_entity_ids, list):
             return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
+        if not claim_entity_ids:
+            # A confirmed-empty governed dataset result (the query executed
+            # successfully and its own coverage reports zero matching rows,
+            # e.g. "what units are vacant" for an asset with none) is itself
+            # a real, evidence-backed fact worth citing -- there is nothing
+            # to fail closed against here. Any OTHER empty entity_ids claim
+            # (the evidence's own coverage does not confirm zero rows) is
+            # still rejected: the model may not assert "nothing found"
+            # against evidence that never established that.
+            if (item.coverage or {}).get("status") != "none":
+                return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
+            coverage = item.coverage or {"status": "none", "eligible_count": None, "observed_count": 0}
+            bound_governed[claim["claim_id"]] = {"facts": [], "scope": item.scope, "coverage": coverage}
+            governed_coverage.append({**coverage, "scope": item.scope, "universe_kind": coverage.get("universe_kind")})
+            selected_from_governed.pop(item.evidence_id, None)
+            continue
         # Select facts by (entity, period), never by entity alone: evidence
         # may hold several periods for the same entity (a `period_range`
         # series). Indexing by entity alone would silently collapse those and
@@ -352,8 +368,13 @@ def _coverage_prefix(coverage: dict[str, Any], fact_count: int) -> str:
     return ""
 
 
+_CONFIRMED_EMPTY_TEXT = "No se encontraron registros que cumplan los criterios consultados."
+
+
 def _render_governed(bound: dict[str, Any], db_path: Path | None = None,
                      requested_monetary_unit: str | None = None) -> str:
+    if not bound["facts"]:
+        return _CONFIRMED_EMPTY_TEXT
     listing = ", ".join(_render_entity_fact(fact, db_path, requested_monetary_unit) for fact in bound["facts"])
     return _coverage_prefix(bound["coverage"], len(bound["facts"])) + listing
 

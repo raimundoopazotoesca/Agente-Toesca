@@ -321,6 +321,36 @@ def test_governed_claim_with_null_metric_key_renders_identity_only_over_multi_me
     assert "Torre A" in result.content and "Boulevard" in result.content
 
 
+def test_governed_claim_with_confirmed_empty_coverage_renders_a_deterministic_no_results_message(catalog_db):
+    """Governed dataset synthesis variance P0 (fourth divergence): a query
+    that executed successfully and whose OWN coverage confirms zero
+    matching rows (e.g. "what units are vacant" for an asset with none) is
+    itself a real, evidence-backed fact. The schema requires entity_ids to
+    be a list, and the model's only honest way to cite "confirmed empty" is
+    entity_ids=[] -- that must not be rejected as invalid_claim when the
+    referenced evidence's own coverage.status is "none"."""
+    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "none", "eligible_count": 0, "observed_count": 0}, facts=())
+    envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "d", "metric_key": None,
+                                              "entity_ids": [], "period": None, "universe_kind": None}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert result.valid
+    assert "No se encontraron registros" in result.content
+
+
+def test_governed_claim_with_empty_entity_ids_still_fails_when_coverage_is_not_confirmed_empty(catalog_db):
+    """An empty entity_ids claim must still fail closed when the evidence's
+    own coverage does NOT confirm zero rows -- the model may not assert
+    "nothing found" against evidence that never established that."""
+    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "complete", "eligible_count": 2, "observed_count": 2},
+                             facts=({"metric_key": "gla_m2", "value": 1.0, "unit": "m2", "entity_id": "Torre A", "period": None},))
+    envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "d", "metric_key": None,
+                                              "entity_ids": [], "period": None, "universe_kind": None}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert not result.valid
+
+
 def test_governed_dataset_ref_with_unknown_claim_id_fails(catalog_db):
     evidence = _governed_evidence(_rows("Torre A"), {"status": "complete", "eligible_count": 1, "observed_count": 1})
     envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "missing"}], "canonical_metric_claims": [],
