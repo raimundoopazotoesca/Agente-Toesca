@@ -167,14 +167,44 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         # series). Indexing by entity alone would silently collapse those and
         # could bind a claim to the wrong period. Missing period => the
         # entity_ids subset check below fails => fail-closed.
-        candidates = [fact for fact in item.facts if fact.get("period") == claim.get("period")]
-        fact_by_entity = {fact.get("entity_id"): fact for fact in candidates}
-        if len(fact_by_entity) != len(candidates):
-            return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
+        period_matches = [fact for fact in item.facts if fact.get("period") == claim.get("period")]
+        claim_metric_key = claim.get("metric_key")
+        if claim_metric_key is not None:
+            candidates = [fact for fact in period_matches if fact.get("metric_key") == claim_metric_key]
+            fact_by_entity = {fact.get("entity_id"): fact for fact in candidates}
+            if len(fact_by_entity) != len(candidates):
+                return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
+        else:
+            # The schema documents null metric_key as valid for "a pure
+            # entity enumeration" (synthesis_schema.py), and the model also
+            # legitimately emits it for a metric-bearing ranking (e.g. "top 5
+            # tenants by GLA") where the metric is implicit in the cited
+            # rows -- as well as for a multi-measure breakdown (e.g.
+            # "vencimientos por año", several measures per group), where a
+            # governed_dataset query action fans out ONE fact per (entity,
+            # measure) at the SAME period (see AnalyticsDatasetQueryAction).
+            # Indexing that fan-out by entity_id alone looks like duplicate/
+            # ambiguous rows even though every entity is unambiguous.
+            distinct_metrics = {fact.get("metric_key") for fact in period_matches}
+            if len(distinct_metrics) == 1:
+                # Unambiguous: infer it, mirroring evidence_inventory.py's
+                # ``_facts_metric`` single-metric inference.
+                claim_metric_key = next(iter(distinct_metrics))
+                fact_by_entity = {fact.get("entity_id"): fact for fact in period_matches}
+                if len(fact_by_entity) != len(period_matches):
+                    return _fail(canonical_evidence, governed_evidence, "ambiguous_fact_binding", db_path)
+            else:
+                # Genuinely multi-metric: the claim does not name one, so
+                # render identity only -- never guess which of several
+                # equally valid measures to surface for a pure enumeration.
+                fact_by_entity = {
+                    entity_id: {"entity_id": entity_id, "metric_key": None, "value": None, "period": claim.get("period")}
+                    for entity_id in {fact.get("entity_id") for fact in period_matches}
+                }
         if not set(claim_entity_ids) <= set(fact_by_entity):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         facts = [fact_by_entity[eid] for eid in claim_entity_ids]
-        if any(fact.get("metric_key") != claim.get("metric_key") for fact in facts):
+        if claim_metric_key is not None and any(fact.get("metric_key") != claim_metric_key for fact in facts):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
         coverage = item.coverage or {"status": "unknown", "eligible_count": None, "observed_count": len(item.facts)}
         bound_governed[claim["claim_id"]] = {"facts": facts, "scope": item.scope, "coverage": coverage}

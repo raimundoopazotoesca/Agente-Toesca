@@ -264,6 +264,63 @@ def test_governed_claim_entity_not_present_in_evidence_fails(catalog_db):
     assert not result.valid
 
 
+def test_governed_claim_with_null_metric_key_infers_the_single_evidence_metric(catalog_db):
+    """Cold-start P0: the schema itself documents null metric_key/period as
+    valid for "a pure entity enumeration" (see synthesis_schema.py's
+    governed_dataset_claims description), and the model legitimately emits it
+    for a metric-bearing ranking too (e.g. "top 5 tenants by GLA"). When the
+    cited facts carry exactly ONE distinct metric_key, that is unambiguous and
+    must bind -- not fail closed as a metric mismatch."""
+    evidence = _governed_evidence(_rows("Torre A", "Boulevard"), {"status": "complete", "eligible_count": 2, "observed_count": 2})
+    envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "g1", "metric_key": None,
+                                              "entity_ids": ["Torre A", "Boulevard"], "period": "2026-06", "universe_kind": "fund_assets"}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert result.valid
+    assert "Torre A" in result.content and "Boulevard" in result.content
+
+
+def test_governed_claim_with_null_metric_key_stays_fail_closed_on_genuine_duplicate_rows(catalog_db):
+    """The null-metric_key inference must NOT paper over real ambiguity: if
+    the SAME entity has two conflicting facts for the SAME metric and period
+    (a genuine duplicate-row data problem, not multi-measure fan-out), this
+    must still fail closed exactly as before."""
+    duplicate_facts = (
+        {"metric_key": "gla_m2", "value": 10.0, "unit": "m2", "entity_id": "Torre A", "period": "2026-06"},
+        {"metric_key": "gla_m2", "value": 15.0, "unit": "m2", "entity_id": "Torre A", "period": "2026-06"},
+        {"metric_key": "gla_m2", "value": 20.0, "unit": "m2", "entity_id": "Boulevard", "period": "2026-06"},
+    )
+    evidence = _governed_evidence(duplicate_facts, {"status": "complete", "eligible_count": 2, "observed_count": 3})
+    envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "g1", "metric_key": None,
+                                              "entity_ids": ["Torre A", "Boulevard"], "period": "2026-06", "universe_kind": "fund_assets"}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert not result.valid
+
+
+def test_governed_claim_with_null_metric_key_renders_identity_only_over_multi_measure_evidence(catalog_db):
+    """Cold-start P0 (second divergence): a governed_dataset_grouping query
+    with several measures (e.g. gla_m2 + unit_count, or a measure plus
+    share_of_total) fans out MULTIPLE facts per entity_id -- one per measure
+    -- at the SAME period. A null-metric_key claim (the schema's own "pure
+    entity enumeration" shape) must not be rejected as ambiguous just
+    because the underlying evidence happens to carry more than one measure;
+    it must render the entity identities only, picking no specific measure."""
+    multi_measure_facts = (
+        {"metric_key": "gla_m2", "value": 100.0, "unit": "m2", "entity_id": "Torre A", "period": None},
+        {"metric_key": "unit_count", "value": 3, "unit": "rows", "entity_id": "Torre A", "period": None},
+        {"metric_key": "gla_m2", "value": 50.0, "unit": "m2", "entity_id": "Boulevard", "period": None},
+        {"metric_key": "unit_count", "value": 2, "unit": "rows", "entity_id": "Boulevard", "period": None},
+    )
+    evidence = _governed_evidence(multi_measure_facts, {"status": "complete", "eligible_count": 2, "observed_count": 2})
+    envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
+                "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "g1", "metric_key": None,
+                                              "entity_ids": ["Torre A", "Boulevard"], "period": None, "universe_kind": "fund_assets"}]}
+    result = validate_and_render(envelope, [], [evidence], catalog_db)
+    assert result.valid
+    assert "Torre A" in result.content and "Boulevard" in result.content
+
+
 def test_governed_dataset_ref_with_unknown_claim_id_fails(catalog_db):
     evidence = _governed_evidence(_rows("Torre A"), {"status": "complete", "eligible_count": 1, "observed_count": 1})
     envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "missing"}], "canonical_metric_claims": [],
