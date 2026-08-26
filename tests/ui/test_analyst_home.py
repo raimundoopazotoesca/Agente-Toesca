@@ -66,6 +66,21 @@ def _login(page, base_url: str, username: str) -> None:
     page.wait_for_url(f"{base_url}/analyst")
 
 
+def test_visible_product_name_is_consistent_on_login_and_home(monkeypatch, tmp_path):
+    with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_default_timeout(2_000)
+        page.goto(f"{base_url}/login")
+        assert page.title() == "Toesca Real Estate AI Analyst"
+        assert page.get_by_role("heading", name="Toesca Real Estate AI Analyst").is_visible()
+
+        _login(page, base_url, "raimundo")
+        assert page.title() == "Toesca Real Estate AI Analyst"
+        assert page.get_by_text("Toesca Real Estate AI Analyst", exact=True).count() >= 2
+        browser.close()
+
+
 def test_stale_selection_on_login_recovers_to_personalized_home(monkeypatch, tmp_path):
     with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)

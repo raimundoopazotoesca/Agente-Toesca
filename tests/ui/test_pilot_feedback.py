@@ -78,6 +78,7 @@ def test_pilot_feedback_ui_submits_immutable_report_and_reviewer_updates_status(
         reviewer.set_default_timeout(3_000)
         _login(reviewer, base_url, "reviewer")
         reviewer.goto(f"{base_url}/pilot-feedback")
+        assert reviewer.title() == "Toesca Real Estate AI Analyst — Reportes del piloto"
         reviewer.get_by_text("La respuesta necesita más detalle.").wait_for(state="visible")
         reviewer.get_by_text("La respuesta necesita más detalle.").click()
         reviewer.get_by_text("Conversación al momento del reporte").wait_for(state="visible")

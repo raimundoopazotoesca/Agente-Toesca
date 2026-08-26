@@ -281,14 +281,14 @@
     logoPlate.appendChild(logo);
     const kicker = document.createElement("p");
     kicker.className = "home-kicker";
-    kicker.textContent = "Toesca Analyst";
+    kicker.textContent = "Toesca Real Estate AI Analyst";
     const heading = document.createElement("h1");
     heading.textContent = displayName ? `Hola, ${displayName}` : "Hola";
     const copy = document.createElement("p");
     copy.textContent = "¿Qué quieres analizar hoy?";
     wrap.append(logoPlate, kicker, heading, copy);
     conversationEl.appendChild(wrap);
-    chatTitle.textContent = "Toesca Analyst";
+    chatTitle.textContent = "Toesca Real Estate AI Analyst";
     chatSub.textContent = "Nueva conversación";
     if (focusComposer) composerInput.focus();
   }
@@ -297,7 +297,7 @@
     const turn = document.createElement("div");
     turn.className = "turn " + role;
     if (role === "assistant") {
-      turn.innerHTML = `<div class="turn-label"><span class="mark-sm">t.</span> Toesca Analyst</div>
+      turn.innerHTML = `<div class="turn-label"><span class="mark-sm">t.</span> Toesca Real Estate AI Analyst</div>
         <div class="prose">${html}</div>`;
       if (messageId) {
         const actions = document.createElement("div");

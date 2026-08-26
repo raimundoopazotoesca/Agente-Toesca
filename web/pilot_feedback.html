@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Toesca Analyst — Reportes del piloto</title>
+<title>Toesca Real Estate AI Analyst — Reportes del piloto</title>
 <style>
   :root{--ink:#0f172a;--ink-soft:#334155;--muted:#64748b;--muted-soft:#94a3b8;
     --border:#e6e9ef;--bg:#f7f8fa;--surface:#fff;--radius:10px;
@@ -173,7 +173,7 @@
     const toolNames = Array.isArray(tech.tool_calls) ? tech.tool_calls.map((t) => t.name).join(", ") : "";
     const transcript = (report.conversation_snapshot || []).map((m) => `
       <div class="t-msg ${m.role}">
-        <div class="who">${m.role === "assistant" ? "Toesca Analyst" : "Usuario"}</div>
+        <div class="who">${m.role === "assistant" ? "Toesca Real Estate AI Analyst" : "Usuario"}</div>
         <div class="body">${escapeHtml(m.content)}</div>
       </div>`).join("");
 
