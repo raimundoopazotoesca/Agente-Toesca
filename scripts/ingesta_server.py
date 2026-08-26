@@ -459,6 +459,11 @@ def serve_analyst_workspace_js():
     return resp
 
 
+@app.get("/assets/<path:filename>")
+def serve_analyst_asset(filename: str):
+    return send_from_directory(ROOT / "assets", filename)
+
+
 @app.post("/api/chat")
 def api_chat():
     body = request.get_json(force=True, silent=True) or {}

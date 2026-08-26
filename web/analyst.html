@@ -81,13 +81,17 @@
   .scroll-area{flex:1;overflow-y:auto;background:var(--surface)}
   .conversation{max-width:720px;margin:0 auto;padding:32px 24px 16px;display:flex;
     flex-direction:column;gap:26px;min-height:100%}
-  .empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    color:var(--muted);text-align:center;gap:7px}
-  .empty-state .mark{width:44px;height:44px;border-radius:9px;background:#111;
-    border:1px solid #222;color:#e8e3dc;display:flex;align-items:center;justify-content:center;
-    font-family:Georgia,"Times New Roman",serif;font-size:20px;margin-bottom:6px}
-  .empty-state h2{font-size:15.5px;color:var(--ink);margin:0;font-weight:600}
-  .empty-state p{font-size:12.5px;max-width:340px;margin:0;color:var(--muted);line-height:1.55}
+  .home-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--muted);text-align:center;padding:48px 0 62px;animation:home-enter .5s ease-out both}
+  .home-logo-plate{width:96px;height:96px;border-radius:16px;background:var(--sidebar-bg);display:grid;
+    place-items:center;box-shadow:0 14px 28px rgba(15,23,42,.12);margin-bottom:25px}
+  .home-logo{display:block;width:68px;height:auto}
+  .home-state h1{font-size:25px;line-height:1.2;letter-spacing:-.45px;color:var(--ink);margin:0 0 8px;font-weight:600}
+  .home-state p{font-size:14px;max-width:390px;margin:0;color:var(--muted);line-height:1.55}
+  .home-state .home-kicker{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted-soft);
+    margin:0 0 13px;font-weight:600}
+  @keyframes home-enter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+  @media (prefers-reduced-motion: reduce){.home-state{animation:none}}
 
   .turn{display:flex;flex-direction:column;gap:7px}
   .turn.user{align-items:flex-end}

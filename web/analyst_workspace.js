@@ -29,6 +29,7 @@
   }
 
   const listConversations = () => api("/api/analyst/conversations").then((d) => d.conversations);
+  const getCurrentUser = () => api("/api/auth/me");
   const createConversation = () => api("/api/analyst/conversations", { method: "POST", body: JSON.stringify({}) });
   const getConversation = (id) => api(`/api/analyst/conversations/${encodeURIComponent(id)}`);
   const listMessages = (id) => api(`/api/analyst/conversations/${encodeURIComponent(id)}/messages`).then((d) => d.messages);
@@ -55,12 +56,14 @@
   const errorBanner = document.getElementById("error-banner");
   const scrollArea = document.getElementById("scroll-area");
   document.getElementById("logout-btn").addEventListener("click", async () => {
+    clearActivePointer();
     await fetch("/api/auth/logout", { method: "POST" });
     location.assign("/login");
   });
 
   let conversations = [];
   let activeId = null;
+  let displayName = "";
   let pending = false;
   let openMenuId = null;
 
@@ -74,11 +77,10 @@
     errorBanner.classList.remove("show");
   }
 
-  function setActivePointer(id) {
-    if (!id) return;
+  function clearActivePointer() {
     try {
-      sessionStorage.setItem(CONVERSATION_ID_KEY, id);
-      localStorage.setItem(CONVERSATION_ID_KEY, id);
+      sessionStorage.removeItem(CONVERSATION_ID_KEY);
+      localStorage.removeItem(CONVERSATION_ID_KEY);
     } catch (_e) { /* storage may be unavailable in some contexts */ }
   }
 
@@ -156,7 +158,7 @@
             if (activeId === conv.id) {
               activeId = null;
               navigateTo(null, { replace: true });
-              renderEmptyConversation();
+              renderHome();
             }
             renderSidebar();
           } catch (_err) {
@@ -209,17 +211,29 @@
     if (openMenuId !== null) { openMenuId = null; renderSidebar(); }
   });
 
-  function renderEmptyConversation() {
+  function renderHome({ focusComposer = false } = {}) {
     conversationEl.innerHTML = "";
     const wrap = document.createElement("div");
-    wrap.className = "empty-state";
-    wrap.innerHTML = `
-      <div class="mark">t.</div>
-      <h2>Toesca Analyst</h2>
-      <p>Crea un chat nuevo o selecciona uno del historial para continuar trabajando.</p>`;
+    wrap.className = "home-state";
+    const logoPlate = document.createElement("div");
+    logoPlate.className = "home-logo-plate";
+    const logo = document.createElement("img");
+    logo.className = "home-logo";
+    logo.src = "/assets/toesca_logo_white.png";
+    logo.alt = "Toesca";
+    logoPlate.appendChild(logo);
+    const kicker = document.createElement("p");
+    kicker.className = "home-kicker";
+    kicker.textContent = "Toesca Analyst";
+    const heading = document.createElement("h1");
+    heading.textContent = displayName ? `Hola, ${displayName}` : "Hola";
+    const copy = document.createElement("p");
+    copy.textContent = "¿Qué quieres analizar hoy?";
+    wrap.append(logoPlate, kicker, heading, copy);
     conversationEl.appendChild(wrap);
     chatTitle.textContent = "Toesca Analyst";
-    chatSub.textContent = "Selecciona o crea un chat";
+    chatSub.textContent = "Nueva conversación";
+    if (focusComposer) composerInput.focus();
   }
 
   function addTurn(role, html) {
@@ -287,7 +301,6 @@
   async function selectConversation(id, { pushHistory = true } = {}) {
     clearError();
     activeId = id;
-    setActivePointer(id);
     if (pushHistory) navigateTo(id);
     renderSidebar();
     conversationEl.innerHTML = "";
@@ -301,9 +314,10 @@
       if (err.status === 404) {
         conversations = conversations.filter((c) => c.id !== id);
         activeId = null;
+        clearActivePointer();
         navigateTo(null, { replace: true });
         renderSidebar();
-        renderEmptyConversation();
+        renderHome();
         showError("Esa conversación ya no existe.");
       } else {
         showError("No se pudo cargar la conversación. Intenta nuevamente.");
@@ -313,29 +327,36 @@
 
   async function startNewChat() {
     clearError();
-    try {
-      const conv = await createConversation();
-      conversations.push(conv);
-      renderSidebar();
-      await selectConversation(conv.id);
-    } catch (_err) {
-      showError("No se pudo crear un chat nuevo.");
-    }
+    activeId = null;
+    clearActivePointer();
+    navigateTo(null);
+    renderSidebar();
+    renderHome({ focusComposer: true });
   }
   newChatBtn.addEventListener("click", startNewChat);
 
   async function send() {
-    if (pending || !activeId) return;
+    if (pending) return;
     const text = composerInput.value.trim();
     if (!text) return;
-    composerInput.value = "";
-    composerInput.style.height = "24px";
     composerSend.disabled = true;
     pending = true;
-
-    addTurn("user", escapeHtml(text));
-    const typing = addTyping();
+    let typing = null;
     try {
+      if (!activeId) {
+        const conversation = await createConversation();
+        conversations.push(conversation);
+        activeId = conversation.id;
+        navigateTo(activeId);
+        renderSidebar();
+        conversationEl.innerHTML = "";
+        chatTitle.textContent = conversation.title || "Nueva conversación";
+        chatSub.textContent = "Nueva conversación";
+      }
+      composerInput.value = "";
+      composerInput.style.height = "24px";
+      addTurn("user", escapeHtml(text));
+      typing = addTyping();
       const message = await sendMessage(activeId, text);
       typing.remove();
       const content = message.content || "(sin respuesta)";
@@ -351,7 +372,7 @@
       const conv = conversations.find((c) => c.id === activeId);
       if (conv) { conv.updated_at = message.created_at; renderSidebar(); }
     } catch (_err) {
-      typing.remove();
+      if (typing) typing.remove();
       const errRow = document.createElement("div");
       errRow.className = "turn-error";
       errRow.textContent = "No se pudo obtener una respuesta. Intenta nuevamente.";
@@ -378,7 +399,7 @@
   window.addEventListener("popstate", () => {
     const id = pathConversationId();
     if (id) selectConversation(id, { pushHistory: false });
-    else { activeId = null; renderEmptyConversation(); renderSidebar(); }
+    else { activeId = null; clearActivePointer(); renderHome(); renderSidebar(); }
   });
 
   function pathConversationId() {
@@ -386,36 +407,23 @@
     return match ? decodeURIComponent(match[1]) : null;
   }
 
-  function storedPointer() {
-    try {
-      return sessionStorage.getItem(CONVERSATION_ID_KEY) || localStorage.getItem(CONVERSATION_ID_KEY);
-    } catch (_e) {
-      return null;
-    }
-  }
-
   async function init() {
-    renderEmptyConversation();
+    clearActivePointer();
+    renderHome();
     try {
-      conversations = await listConversations();
+      const [principal, loadedConversations] = await Promise.all([getCurrentUser(), listConversations()]);
+      displayName = typeof principal.display_name === "string" ? principal.display_name.trim() : "";
+      conversations = loadedConversations;
     } catch (_err) {
       showError("No se pudo conectar con el servidor del Asistente.");
       conversations = [];
     }
+    renderHome({ focusComposer: true });
     renderSidebar();
 
     const urlId = pathConversationId();
-    const targetId = urlId || storedPointer();
-    if (targetId && conversations.some((c) => c.id === targetId)) {
-      await selectConversation(targetId, { pushHistory: !urlId });
-    } else if (targetId) {
-      // Not in the (unarchived) list yet, or came from a URL/pointer to a
-      // conversation this list call didn't include — try loading it directly.
-      try {
-        await selectConversation(targetId, { pushHistory: !urlId });
-      } catch (_e) {
-        navigateTo(null, { replace: true });
-      }
+    if (urlId) {
+      await selectConversation(urlId, { pushHistory: false });
     } else {
       navigateTo(null, { replace: true });
     }
