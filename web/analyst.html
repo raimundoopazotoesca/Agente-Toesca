@@ -140,6 +140,38 @@
   .turn-error{color:#b91c1c;font-size:13px;background:#fef2f2;border:1px solid #fecaca;
     border-radius:var(--radius-sm);padding:9px 13px}
 
+  .turn-actions{display:flex}
+  .report-btn{background:none;border:1px solid transparent;color:var(--muted-soft);
+    font-size:11px;padding:2px 7px;border-radius:6px;cursor:pointer;display:inline-flex;
+    align-items:center;gap:4px;transition:background .12s ease,color .12s ease,border-color .12s ease}
+  .report-btn:hover{background:var(--bg);color:var(--muted);border-color:var(--border)}
+  .report-btn[disabled]{color:#16a34a;cursor:default;background:none;border-color:transparent}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.4);display:flex;
+    align-items:center;justify-content:center;z-index:100}
+  .modal-overlay.hidden{display:none}
+  .modal-box{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);
+    width:min(440px,92vw);padding:20px 22px}
+  .modal-box h3{margin:0 0 4px;font-size:15px;color:var(--ink)}
+  .modal-box .modal-help{font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5}
+  .modal-box textarea{width:100%;min-height:96px;resize:vertical;font-family:inherit;
+    font-size:13.5px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);
+    outline:none;color:var(--ink)}
+  .modal-box textarea:focus{border-color:#b7c0cf}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+  .modal-actions button{border-radius:var(--radius-sm);padding:8px 14px;font-size:12.5px;
+    font-weight:600;cursor:pointer}
+  .modal-cancel{background:none;border:1px solid var(--border);color:var(--ink-soft)}
+  .modal-submit{background:var(--ink);border:1px solid var(--ink);color:#fff}
+  .modal-submit:disabled{opacity:.5;cursor:not-allowed}
+  .modal-error{color:#b91c1c;font-size:11.5px;margin-top:8px;display:none}
+  .modal-error.show{display:block}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;font-size:12.5px;padding:9px 16px;border-radius:var(--radius-sm);
+    box-shadow:var(--shadow-md);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:110}
+  .toast.show{opacity:1}
+
   .composer{flex:0 0 auto;background:var(--surface);padding:14px 20px 20px}
   .composer-inner{max-width:720px;margin:0 auto;display:flex;gap:9px;align-items:flex-end;
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
@@ -207,6 +239,19 @@
       </div>
     </main>
   </div>
+  <div class="modal-overlay hidden" id="report-modal">
+    <div class="modal-box">
+      <h3>Reportar problema</h3>
+      <p class="modal-help">¿Qué salió mal? Cuéntanos brevemente qué esperabas o qué viste incorrecto.</p>
+      <textarea id="report-comment" placeholder="Ej: esperaba que comparara los dos activos, pero sólo habló de uno."></textarea>
+      <div class="modal-error" id="report-modal-error">No se pudo enviar el reporte. Intenta nuevamente.</div>
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="report-cancel-btn">Cancelar</button>
+        <button type="button" class="modal-submit" id="report-submit-btn">Enviar reporte</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
   <script src="/analyst_workspace.js" defer></script>
 </body>
 </html>

@@ -203,6 +203,29 @@ _TOKEN_PLACEHOLDER = "__INGESTA_TOKEN__"
 # por sesión y se imprime al arrancar.
 API_TOKEN = os.environ.get("INGESTA_TOKEN") or secrets.token_urlsafe(32)
 
+
+def _compute_release_revision() -> str | None:
+    """Small stable startup-level revision tag -- computed once at import time,
+    never per-request, so feedback reports never spawn a git subprocess."""
+    override = os.environ.get("ANALYST_RELEASE_REVISION")
+    if override and override.strip():
+        return override.strip()
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+RELEASE_REVISION = _compute_release_revision()
+
 # Orígenes permitidos para CORS. No se refleja un Origin arbitrario y "null"
 # (factsheet abierto como file://) ya no se acepta: abrir el factsheet desde
 # http://127.0.0.1:8765/factsheet (o la IP de la red local) lo deja con el
@@ -404,6 +427,16 @@ def serve_analyst_workspace_chat(conversation_id: str):
     if _principal() is None:
         return redirect("/login")
     return _serve_html_con_token(WEB_DIR, "analyst.html")
+
+
+@app.get("/pilot-feedback")
+def serve_pilot_feedback():
+    principal = _principal()
+    if principal is None:
+        return redirect("/login")
+    if not _workspace_store().user_has_capability(principal["id"], "feedback_reviewer"):
+        return Response("No autorizado.", status=403)
+    return send_from_directory(WEB_DIR, "pilot_feedback.html")
 
 
 @app.get("/login")
@@ -638,6 +671,88 @@ def analyst_send_message(conversation_id: str):
             "code": "service_validation",
             "message": "Request was rejected by analyst service",
         }])
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+def _is_feedback_reviewer() -> bool:
+    return _workspace_store().user_has_capability(_analyst_user_id(), "feedback_reviewer")
+
+
+@app.post("/api/analyst/feedback_reports")
+def analyst_submit_feedback_report():
+    """Pure product action: comment + ids the client owns. The server loads the
+    authoritative conversation/message and builds the immutable snapshot -- no
+    tool call, no SQL against the knowledge DB, no LLM call, no new turn."""
+    try:
+        body = _analyst_body()
+        conversation_id, anchor_message_id, comment = (
+            body.get("conversation_id"), body.get("anchor_message_id"), body.get("comment"),
+        )
+        if not isinstance(conversation_id, str) or not conversation_id.strip():
+            raise ValueError("conversation_id must be a non-blank string")
+        if not isinstance(anchor_message_id, str) or not anchor_message_id.strip():
+            raise ValueError("anchor_message_id must be a non-blank string")
+        if not isinstance(comment, str) or not comment.strip():
+            raise ValueError("comment must be a non-blank string")
+        report = _analyst_adapter().submit_feedback_report(
+            _analyst_user_id(), conversation_id.strip(), anchor_message_id.strip(), comment.strip(),
+            release_revision=RELEASE_REVISION,
+        )
+        return jsonify(report), 201
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/feedback_reports")
+def analyst_list_feedback_reports():
+    if not _is_feedback_reviewer():
+        return _analyst_error("forbidden", 403)
+    try:
+        status = request.args.get("status") or None
+        reporter_user_id = request.args.get("reporter_user_id") or None
+        reports = _analyst_adapter().list_feedback_reports(status=status, reporter_user_id=reporter_user_id)
+        return jsonify({"reports": reports})
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.get("/api/analyst/feedback_reports/<report_id>")
+def analyst_get_feedback_report(report_id: str):
+    if not _is_feedback_reviewer():
+        return _analyst_error("forbidden", 403)
+    try:
+        return jsonify(_analyst_adapter().get_feedback_report(report_id))
+    except analyst_api.AnalystNotFoundError:
+        return _analyst_error("not_found", 404)
+    except analyst_api.AnalystServiceUnavailableError:
+        return _analyst_error("service_unavailable", 503)
+
+
+@app.patch("/api/analyst/feedback_reports/<report_id>")
+def analyst_update_feedback_report(report_id: str):
+    if not _is_feedback_reviewer():
+        return _analyst_error("forbidden", 403)
+    try:
+        body = _analyst_body()
+        status = body.get("status")
+        if status not in {"new", "reviewing", "resolved", "dismissed"}:
+            raise ValueError("status must be one of: new, reviewing, resolved, dismissed")
+        return jsonify(_analyst_adapter().update_feedback_report_status(report_id, status))
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+    except analyst_api.AnalystValidationError:
+        return _analyst_error("validation_error", 400)
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
     except analyst_api.AnalystServiceUnavailableError:

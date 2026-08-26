@@ -42,6 +42,9 @@
   const archiveConversation = (id) => api(`/api/analyst/conversations/${encodeURIComponent(id)}`, {
     method: "PATCH", body: JSON.stringify({ archived: true }),
   });
+  const submitFeedbackReport = (conversationId, anchorMessageId, comment) => api("/api/analyst/feedback_reports", {
+    method: "POST", body: JSON.stringify({ conversation_id: conversationId, anchor_message_id: anchorMessageId, comment }),
+  });
 
   // ── DOM ──
   const sidebar = document.getElementById("sidebar");
@@ -59,6 +62,60 @@
     clearActivePointer();
     await fetch("/api/auth/logout", { method: "POST" });
     location.assign("/login");
+  });
+
+  // ── Reportar problema ──
+  const reportModal = document.getElementById("report-modal");
+  const reportComment = document.getElementById("report-comment");
+  const reportModalError = document.getElementById("report-modal-error");
+  const reportCancelBtn = document.getElementById("report-cancel-btn");
+  const reportSubmitBtn = document.getElementById("report-submit-btn");
+  const toastEl = document.getElementById("toast");
+  let reportTargetMessageId = null;
+  let reportPending = false;
+  let toastTimer = null;
+
+  function showToast(message) {
+    toastEl.textContent = message;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+  }
+
+  function openReportModal(messageId) {
+    reportTargetMessageId = messageId;
+    reportComment.value = "";
+    reportModalError.classList.remove("show");
+    reportModal.classList.remove("hidden");
+    reportComment.focus();
+  }
+
+  function closeReportModal() {
+    reportModal.classList.add("hidden");
+    reportTargetMessageId = null;
+  }
+
+  reportCancelBtn.addEventListener("click", closeReportModal);
+  reportModal.addEventListener("click", (e) => {
+    if (e.target === reportModal) closeReportModal();
+  });
+
+  reportSubmitBtn.addEventListener("click", async () => {
+    const comment = reportComment.value.trim();
+    if (!comment || !reportTargetMessageId || !activeId || reportPending) return;
+    reportPending = true;
+    reportSubmitBtn.disabled = true;
+    reportModalError.classList.remove("show");
+    try {
+      await submitFeedbackReport(activeId, reportTargetMessageId, comment);
+      closeReportModal();
+      showToast("Reporte enviado. Gracias.");
+    } catch (_err) {
+      reportModalError.classList.add("show");
+    } finally {
+      reportPending = false;
+      reportSubmitBtn.disabled = false;
+    }
   });
 
   let conversations = [];
@@ -236,16 +293,28 @@
     if (focusComposer) composerInput.focus();
   }
 
-  function addTurn(role, html) {
+  function addTurn(role, html, messageId) {
     const turn = document.createElement("div");
     turn.className = "turn " + role;
     if (role === "assistant") {
       turn.innerHTML = `<div class="turn-label"><span class="mark-sm">t.</span> Toesca Analyst</div>
         <div class="prose">${html}</div>`;
+      if (messageId) {
+        const actions = document.createElement("div");
+        actions.className = "turn-actions";
+        const reportBtn = document.createElement("button");
+        reportBtn.type = "button";
+        reportBtn.className = "report-btn";
+        reportBtn.textContent = "Reportar problema";
+        reportBtn.addEventListener("click", () => openReportModal(messageId));
+        actions.appendChild(reportBtn);
+        turn.appendChild(actions);
+      }
     } else {
       turn.innerHTML = `<div class="user-bubble"></div>`;
       turn.querySelector(".user-bubble").innerHTML = html;
     }
+    if (messageId) turn.dataset.messageId = messageId;
     conversationEl.appendChild(turn);
     scrollArea.scrollTop = scrollArea.scrollHeight;
     return turn;
@@ -254,8 +323,8 @@
   function renderMessages(messages) {
     conversationEl.innerHTML = "";
     messages.forEach((m) => {
-      if (m.role === "assistant") addTurn("assistant", mdToHtml(m.content || ""));
-      else if (m.role === "user") addTurn("user", escapeHtml(m.content || ""));
+      if (m.role === "assistant") addTurn("assistant", mdToHtml(m.content || ""), m.id);
+      else if (m.role === "user") addTurn("user", escapeHtml(m.content || ""), m.id);
     });
     scrollArea.scrollTop = scrollArea.scrollHeight;
   }
@@ -361,9 +430,9 @@
       typing.remove();
       const content = message.content || "(sin respuesta)";
       if (hasComplexMarkdown(content)) {
-        addTurn("assistant", mdToHtml(content));
+        addTurn("assistant", mdToHtml(content), message.id);
       } else {
-        const turn = addTurn("assistant", "");
+        const turn = addTurn("assistant", "", message.id);
         const proseEl = turn.querySelector(".prose");
         await typePlainText(proseEl, content);
         proseEl.innerHTML = mdToHtml(content);
