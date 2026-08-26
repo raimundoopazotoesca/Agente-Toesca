@@ -8,7 +8,10 @@ import pytest
 
 from tools.analyst_runtime.coverage_guard import validate_and_render
 from tools.analyst_runtime.analyst_loop import AnalystLoop
-from tools.analyst_runtime.session import OpenAIResponsesAnalystSession, _TerminalEvidenceValidator, _materialize_governed_dataset_claims
+from tools.analyst_runtime.session import (
+    OpenAIResponsesAnalystSession, _TerminalEvidenceValidator,
+    _materialize_canonical_claims_from_governed_evidence, _materialize_governed_dataset_claims,
+)
 from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest, ToolResult
 
 
@@ -114,6 +117,49 @@ def test_dataset_claim_identity_is_materialized_from_evidence_not_provider_field
     claim = _materialize_governed_dataset_claims(envelope, [evidence])["governed_dataset_claims"][0]
 
     assert claim == {"claim_id": "g", "evidence_id": "d", "metric_key": "gla_m2", "entity_ids": ["Tenant A", "Tenant B"], "period": None, "universe_kind": "grouped"}
+
+
+def test_canonical_claim_citing_a_governed_dataset_row_is_materialized_from_the_fact():
+    """P0: a canonical_metric_claims entry that promotes ONE row of a
+    governed_dataset grouping (e.g. to feed a table cell) must not be
+    rejected merely because the model restated a field -- here `period` --
+    that a `group_by` grouping never carries (real fact period is None,
+    the model wrote the query's requested filter period instead). The
+    entity_id alone unambiguously locates the real fact; period/metric_key/
+    value/unit are then taken FROM it, exactly like
+    _materialize_governed_dataset_claims already does for
+    governed_dataset_claims."""
+    evidence = ToolEvidence("d", "governed_dataset", facts=(
+        {"metric_key": "gla_m2", "value": 766.3, "unit": "m2", "entity_id": "Notaría", "period": None},
+        {"metric_key": "gla_m2", "value": 473.3, "unit": "m2", "entity_id": "Tucapel", "period": None},
+    ))
+    envelope = {"canonical_metric_claims": [
+        {"claim_id": "c1", "evidence_id": "d", "metric_key": "gla_m2", "value": 766.3, "unit": "m2",
+         "entity_id": "Notaría", "period": "2026-06"},
+    ]}
+
+    claim = _materialize_canonical_claims_from_governed_evidence(envelope, [evidence])["canonical_metric_claims"][0]
+
+    assert claim["period"] is None
+    assert claim["value"] == 766.3 and claim["metric_key"] == "gla_m2" and claim["entity_id"] == "Notaría"
+
+
+def test_canonical_claim_citing_an_unknown_entity_is_left_untouched_and_still_fails_closed():
+    """An entity_id absent from the evidence must not be silently accepted:
+    the claim is left as-is (not materialized), so coverage_guard's own
+    binding still rejects it exactly as before -- this never manufactures a
+    fact that doesn't exist."""
+    evidence = ToolEvidence("d", "governed_dataset", facts=(
+        {"metric_key": "gla_m2", "value": 766.3, "unit": "m2", "entity_id": "Notaría", "period": None},
+    ))
+    envelope = {"canonical_metric_claims": [
+        {"claim_id": "c1", "evidence_id": "d", "metric_key": "gla_m2", "value": 999.0, "unit": "m2",
+         "entity_id": "Nonexistent Tenant", "period": "2026-06"},
+    ]}
+
+    claim = _materialize_canonical_claims_from_governed_evidence(envelope, [evidence])["canonical_metric_claims"][0]
+
+    assert claim["entity_id"] == "Nonexistent Tenant" and claim["value"] == 999.0
 
 
 def _turn(kind: str, envelope, turn_id: int):

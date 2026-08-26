@@ -354,6 +354,7 @@ class OpenAIResponsesAnalystSession:
                 envelope = _materialize_governed_dataset_claims(
                     result.turn.raw.get("structured_output") or {}, governed,
                 )
+                envelope = _materialize_canonical_claims_from_governed_evidence(envelope, governed)
                 result.turn.raw["structured_output"] = envelope
                 validation = validate_and_render(envelope, canonical, governed, self._db_path,
                                                  requested_unit)
@@ -661,6 +662,57 @@ def _materialize_governed_dataset_claims(envelope: dict[str, Any], evidence: lis
                     "entity_ids": [str(fact.get("entity_id")) for fact in facts],
                     "period": period, "universe_kind": coverage.get("universe_kind")})
     materialized["governed_dataset_claims"] = out
+    return materialized
+
+
+def _materialize_canonical_claims_from_governed_evidence(envelope: dict[str, Any], evidence: list[ToolEvidence]) -> dict[str, Any]:
+    """Make a canonical claim's identity evidence-owned when it cites ONE
+    row inside a governed_dataset grouping (e.g. to promote a ranked/
+    grouped row into a table cell).
+
+    Once the entity that row belongs to is located, metric_key/period/
+    value/unit are already fully determined by the evidence -- restating
+    them is redundant, and a plain restatement slip (the observed failure:
+    citing the query's requested filter period instead of a `group_by`
+    aggregate's real, often-null, period) must not turn a real, evidence-
+    backed row into a full coverage_guard rejection. This mirrors
+    _materialize_governed_dataset_claims's treatment of
+    governed_dataset_claims, applied to the sibling path where a single
+    governed_dataset row is cited as a canonical_metric_claims entry.
+
+    A claim whose (entity_id[, metric_key][, space_type]) does not locate
+    EXACTLY one fact is left untouched, so coverage_guard's own binding
+    still fails it closed exactly as before -- this never manufactures a
+    fact that doesn't exist, and never resolves a genuine ambiguity on the
+    model's behalf.
+    """
+    if not isinstance(envelope, dict):
+        return envelope
+    by_id = {item.evidence_id: item for item in evidence if item.evidence_class == "governed_dataset"}
+    materialized = deepcopy(envelope)
+    claims = materialized.get("canonical_metric_claims")
+    if not isinstance(claims, list):
+        return materialized
+    out = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            out.append(claim); continue
+        item = by_id.get(claim.get("evidence_id"))
+        if item is None:
+            out.append(claim); continue
+        matches = [fact for fact in item.facts
+                   if fact.get("entity_id") == claim.get("entity_id")
+                   and fact.get("space_type") == claim.get("space_type")]
+        if claim.get("metric_key") is not None:
+            matches = [fact for fact in matches if fact.get("metric_key") == claim.get("metric_key")]
+        elif len({fact.get("metric_key") for fact in matches}) > 1:
+            matches = []
+        if len(matches) != 1:
+            out.append(claim); continue
+        fact = matches[0]
+        out.append({**claim, "metric_key": fact.get("metric_key"), "period": fact.get("period"),
+                    "value": fact.get("value"), "unit": fact.get("unit")})
+    materialized["canonical_metric_claims"] = out
     return materialized
 
 
