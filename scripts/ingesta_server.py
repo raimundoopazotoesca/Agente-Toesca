@@ -58,6 +58,8 @@ from tools import db_chat  # noqa: E402
 from scripts import build_factsheet  # noqa: E402
 from scripts import recompute_derived_kpis  # noqa: E402
 from tools import analyst_api  # noqa: E402
+from tools.analyst_workspace import export_markdown  # noqa: E402
+from tools.analyst_workspace.store import ValidationError as WorkspaceValidationError  # noqa: E402
 from tools.analyst_workspace.store import WorkspaceStoreError  # noqa: E402
 
 
@@ -871,6 +873,54 @@ def analyst_feedback_summary():
         return _analyst_error("service_unavailable", 503)
 
 
+def _markdown_attachment(markdown_text: str, filename: str) -> Response:
+    response = Response(markdown_text, content_type="text/markdown; charset=utf-8")
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@app.get("/api/analyst/feedback_reports/export.md")
+def analyst_export_feedback_reports_md():
+    """One markdown file with every (optionally status-filtered) feedback
+    report: reporter/status metadata, the exact comment, the IMMUTABLE
+    conversation_snapshot taken at report time (never reconstructed from
+    live conversation state), the CURRENT live rating of the reported
+    response (allowed to differ from snapshot time), and safe technical
+    diagnostics via the same allowlist already used by feedback_report
+    itself. Reads only the workspace store -- no LLM/tool call, no
+    knowledge-DB query, matching every other /api/analyst/* route in this
+    file."""
+    if not _is_feedback_reviewer():
+        return _analyst_error("forbidden", 403)
+    try:
+        status = request.args.get("status") or None
+        store = _workspace_store()
+        reports = store.list_feedback_reports(status=status)
+        enriched = []
+        for report in reports:
+            live = store.get_feedback(report.anchor_message_id)
+            enriched.append({
+                "id": report.id,
+                "reporter_user_id": report.reporter_user_id,
+                "reporter_display_name": report.reporter_display_name,
+                "conversation_id": report.conversation_id,
+                "anchor_message_id": report.anchor_message_id,
+                "comment": report.comment,
+                "conversation_snapshot": report.conversation_snapshot,
+                "technical_context": report.technical_context,
+                "status": report.status,
+                "created_at": report.created_at,
+                "updated_at": report.updated_at,
+                "live_rating": live.rating if live is not None else None,
+            })
+        markdown_text = export_markdown.build_feedback_reports_export(enriched)
+        return _markdown_attachment(markdown_text, export_markdown.feedback_export_filename())
+    except WorkspaceValidationError:
+        return _analyst_error("validation_error", 400)
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+
+
 # -- Pilot Control Center (v1) -----------------------------------------------
 #
 # Read-only observer surface for understanding pilot usage. Gated by the
@@ -958,6 +1008,60 @@ def pilot_control_latest_questions():
         return jsonify({"questions": _workspace_store().list_latest_pilot_questions(limit=limit)})
     except ValueError:
         return _analyst_error("validation_error", 400)
+    except WorkspaceStoreError:
+        return _analyst_error("service_unavailable", 503)
+
+
+MAX_CONVERSATION_EXPORT_IDS = 100
+
+
+@app.post("/api/analyst/pilot_control/conversations/export.md")
+def pilot_control_export_conversations_md():
+    """One markdown file concatenating every selected conversation: full
+    verbatim transcript, per-assistant-message rating/report status, and
+    safe diagnostics -- resolved entirely server-side from the ids the
+    client sent (never trusting client-supplied text/ratings/diagnostics).
+    Rejects the whole batch (no partial export) if any id is nonexistent or
+    if the batch exceeds MAX_CONVERSATION_EXPORT_IDS. Reads only the
+    workspace store -- no LLM/tool call, no knowledge-DB query."""
+    if not _is_pilot_observer():
+        return _analyst_error("forbidden", 403)
+    try:
+        body = _analyst_body()
+        raw_ids = body.get("conversation_ids")
+        if not isinstance(raw_ids, list) or not raw_ids or not all(
+            isinstance(cid, str) and cid.strip() for cid in raw_ids
+        ):
+            raise ValueError("conversation_ids must be a non-empty array of non-blank strings")
+        conversation_ids = list(dict.fromkeys(cid.strip() for cid in raw_ids))
+    except ValueError:
+        return _analyst_error("validation_error", 400)
+
+    if len(conversation_ids) > MAX_CONVERSATION_EXPORT_IDS:
+        return _analyst_error(
+            "too_many_conversation_ids", 413,
+            details=[{
+                "field": "conversation_ids", "code": "limit_exceeded",
+                "message": f"at most {MAX_CONVERSATION_EXPORT_IDS} conversation_ids per batch",
+            }],
+        )
+
+    try:
+        store = _workspace_store()
+        details, missing = [], []
+        for conversation_id in conversation_ids:
+            detail = store.get_pilot_conversation_detail(conversation_id)
+            if detail is None:
+                missing.append(conversation_id)
+            else:
+                details.append(detail)
+        if missing:
+            return _analyst_error(
+                "conversation_not_found", 400,
+                details=[{"field": "conversation_ids", "code": "not_found", "message": cid} for cid in missing],
+            )
+        markdown_text = export_markdown.build_conversations_export(details)
+        return _markdown_attachment(markdown_text, export_markdown.conversations_export_filename())
     except WorkspaceStoreError:
         return _analyst_error("service_unavailable", 503)
 

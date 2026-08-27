@@ -32,10 +32,17 @@
     margin:26px 0 10px}
   .section-title:first-child{margin-top:0}
 
-  .filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
   .filters select,.filters input{padding:7px 10px;border-radius:8px;border:1px solid var(--border);
     font:inherit;background:var(--surface)}
   .filters input[type=search]{min-width:220px}
+  .filters button{padding:7px 12px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface);font:inherit;font-size:13px;cursor:pointer;color:var(--ink-soft)}
+  .filters button:hover{background:var(--bg)}
+  .filters button:disabled{opacity:.5;cursor:not-allowed}
+  .selection-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .selection-count{font-size:12.5px;color:var(--muted);margin-left:auto}
+  td.checkcol,th.checkcol{width:30px}
 
   table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);
     overflow:hidden;box-shadow:var(--shadow)}
@@ -120,6 +127,12 @@
           <option value="7">Últimos 7 días</option>
           <option value="30">Últimos 30 días</option>
         </select>
+      </div>
+      <div class="selection-bar">
+        <button type="button" id="conv-select-page">Seleccionar página</button>
+        <button type="button" id="conv-clear-selection">Limpiar selección</button>
+        <button type="button" id="conv-export-btn" disabled>Descargar seleccionadas (.md)</button>
+        <span class="selection-count" id="conv-selection-count">0 seleccionadas</span>
       </div>
       <div id="conv-wrap"><div class="loading">Cargando…</div></div>
     </section>
@@ -303,9 +316,68 @@
   // ---- Conversations --------------------------------------------------------
   const convSearch = document.getElementById("conv-search");
   const convPeriod = document.getElementById("conv-period");
+  const convSelectPageBtn = document.getElementById("conv-select-page");
+  const convClearSelectionBtn = document.getElementById("conv-clear-selection");
+  const convExportBtn = document.getElementById("conv-export-btn");
+  const convSelectionCount = document.getElementById("conv-selection-count");
   let convDebounce = null;
+  let currentPageConvIds = [];
+  const selectedConvIds = new Set();
   convSearch.addEventListener("input", () => { clearTimeout(convDebounce); convDebounce = setTimeout(loadConversations, 250); });
   convPeriod.addEventListener("change", loadConversations);
+
+  function updateSelectionUI() {
+    convSelectionCount.textContent = `${selectedConvIds.size} seleccionadas`;
+    convExportBtn.disabled = selectedConvIds.size === 0;
+    document.querySelectorAll("#conv-wrap .conv-check").forEach((cb) => {
+      cb.checked = selectedConvIds.has(cb.dataset.id);
+    });
+  }
+
+  convSelectPageBtn.addEventListener("click", () => {
+    currentPageConvIds.forEach((id) => selectedConvIds.add(id));
+    updateSelectionUI();
+  });
+
+  convClearSelectionBtn.addEventListener("click", () => {
+    selectedConvIds.clear();
+    updateSelectionUI();
+  });
+
+  convExportBtn.addEventListener("click", async () => {
+    if (selectedConvIds.size === 0) return;
+    convExportBtn.disabled = true;
+    const originalLabel = convExportBtn.textContent;
+    convExportBtn.textContent = "Generando…";
+    try {
+      const response = await fetch("/api/analyst/pilot_control/conversations/export.md", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_ids: Array.from(selectedConvIds) }),
+      });
+      if (response.status === 401) { location.assign("/login"); return; }
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        alert(`No se pudo generar la descarga: ${data.error || response.status}`);
+        return;
+      }
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match ? match[1] : "toesca_pilot_conversations.md";
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } finally {
+      convExportBtn.textContent = originalLabel;
+      convExportBtn.disabled = selectedConvIds.size === 0;
+    }
+  });
 
   async function loadConversations() {
     const wrap = document.getElementById("conv-wrap");
@@ -329,9 +401,11 @@
 
   function renderConversations(conversations) {
     const wrap = document.getElementById("conv-wrap");
-    if (!conversations.length) { wrap.innerHTML = '<div class="empty">Sin conversaciones.</div>'; return; }
+    currentPageConvIds = conversations.map((c) => c.id);
+    if (!conversations.length) { wrap.innerHTML = '<div class="empty">Sin conversaciones.</div>'; updateSelectionUI(); return; }
     const rows = conversations.map((c) => `
       <tr data-id="${escapeHtml(c.id)}">
+        <td class="checkcol"><input type="checkbox" class="conv-check" data-id="${escapeHtml(c.id)}" ${selectedConvIds.has(c.id) ? "checked" : ""}></td>
         <td>${escapeHtml(c.owner_display_name)}</td>
         <td>${escapeHtml(c.title)}</td>
         <td>${fmtDate(c.updated_at)}</td>
@@ -342,10 +416,19 @@
         <td>${ratingCell(c.rating_summary)}</td>
       </tr>`).join("");
     wrap.innerHTML = `<table>
-      <thead><tr><th>Usuario</th><th>Título</th><th>Última actividad</th>
+      <thead><tr><th class="checkcol"></th><th>Usuario</th><th>Título</th><th>Última actividad</th>
         <th class="num">Preguntas</th><th class="num">Respuestas</th><th class="num">Reportes</th><th>Latencia</th><th>Calificaciones</th></tr></thead>
       <tbody>${rows}</tbody></table>`;
-    wrap.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", () => openConversationDetail(row.dataset.id)));
+    wrap.querySelectorAll("tbody tr").forEach((row) => row.addEventListener("click", (e) => {
+      if (e.target.classList.contains("conv-check")) return;
+      openConversationDetail(row.dataset.id);
+    }));
+    wrap.querySelectorAll(".conv-check").forEach((cb) => cb.addEventListener("change", (e) => {
+      e.stopPropagation();
+      if (cb.checked) selectedConvIds.add(cb.dataset.id); else selectedConvIds.delete(cb.dataset.id);
+      updateSelectionUI();
+    }));
+    updateSelectionUI();
   }
 
   // ---- Latest questions ----------------------------------------------------

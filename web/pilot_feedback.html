@@ -16,8 +16,11 @@
   header h1{font-size:16px;margin:0}
   header a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:13px}
   main{max-width:1000px;margin:0 auto;padding:22px 28px}
-  .filters{display:flex;gap:10px;margin-bottom:16px}
+  .filters{display:flex;gap:10px;margin-bottom:16px;align-items:center}
   .filters select{padding:7px 10px;border-radius:8px;border:1px solid var(--border);font:inherit;background:var(--surface)}
+  .filters button{margin-left:auto;padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface);font:inherit;font-size:13px;cursor:pointer;color:var(--ink-soft)}
+  .filters button:hover{background:var(--bg)}
   table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);
     overflow:hidden;box-shadow:var(--shadow)}
   th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid var(--border)}
@@ -80,6 +83,7 @@
         <option value="resolved">Resuelto</option>
         <option value="dismissed">Descartado</option>
       </select>
+      <button type="button" id="export-md-btn">Descargar reportes (.md)</button>
     </div>
     <div id="list-wrap">
       <div class="loading">Cargando…</div>
@@ -268,6 +272,13 @@
       el.innerHTML = "";
     }
   }
+
+  // ── Markdown export ──
+  document.getElementById("export-md-btn").addEventListener("click", () => {
+    const status = statusFilter.value;
+    const url = "/api/analyst/feedback_reports/export.md" + (status ? `?status=${encodeURIComponent(status)}` : "");
+    window.location.assign(url);
+  });
 
   statusFilter.addEventListener("change", loadList);
   loadList();
