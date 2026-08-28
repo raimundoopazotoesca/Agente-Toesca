@@ -340,6 +340,38 @@ def _con_archivo_legible(fn, *args, **kwargs):
         ) from exc
 
 
+# ── JLL v2 ──────────────────────────────────────────────────────────────────
+# El formato nuevo trae varios periodos en un mismo archivo, asi que el periodo
+# deja de ser un input del usuario: lo declara el contenido. Las rutas se
+# mantienen y se ramifica por formato detectado, para no romper la UI ni los
+# tests que ya existen.
+
+def _jll_v2_tmp(file_bytes: bytes, filename: str):
+    """Escribe el upload a un temporal y devuelve su ruta de LECTURA.
+
+    El nombre de este temporal (`jll_v2_<random>.xlsx`) nunca debe llegar a
+    la DB: se pasa `source_name=file.filename` aparte para que el linaje
+    conserve el nombre real del archivo que subio el usuario.
+    """
+    import tempfile
+    sufijo = Path(filename).suffix or ".xlsx"
+    fd, ruta = tempfile.mkstemp(suffix=sufijo, prefix="jll_v2_")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(file_bytes)
+    return ruta
+
+
+def _es_jll_v2(file_bytes: bytes, filename: str) -> tuple[bool, str | None]:
+    """(es_v2, ruta_temporal). La ruta se devuelve para reusar el temporal."""
+    from tools.jll_planilla_tools import es_formato_v2
+    ruta = _jll_v2_tmp(file_bytes, filename)
+    try:
+        return es_formato_v2(ruta), ruta
+    except Exception:
+        os.unlink(ruta)
+        return False, None
+
+
 @app.errorhandler(Exception)
 def _api_error_json(exc):
     """El front espera JSON; sin esto un fallo inesperado devuelve HTML de Flask."""
@@ -1214,9 +1246,50 @@ def api_rentroll_validate():
     periodo = request.form.get("periodo", "")
     if file is None or not file.filename:
         return jsonify({"ok": False, "errors": ["Sube el archivo .xlsx del Rent Roll."], "warnings": []})
+    file_bytes = file.read()
+
+    es_v2, ruta = _es_jll_v2(file_bytes, file.filename)
+    if es_v2:
+        from tools.db import ingest_jll_planilla as jll_v2
+        try:
+            informe = jll_v2.validate(
+                ruta, str(ROOT / "memory" / "agente_toesca_v2.db"),
+                source_name=file.filename,
+            )
+        finally:
+            os.unlink(ruta)
+        errores, avisos = [], []
+        if informe["motivo_bloqueo"]:
+            errores.append(informe["motivo_bloqueo"])
+        for tipo, n in sorted(informe["anomalias"]["por_tipo"].items()):
+            destino = errores if tipo in jll_v2.ANOMALIAS_BLOQUEANTES else avisos
+            destino.append(f"{n} filas con anomalía '{tipo}'")
+        for c in informe["conflictos_semantica"]:
+            errores.append(
+                f"{c['activo_key']} {c['periodo']}: ya hay renta con semántica "
+                f"{', '.join(c['semanticas_vivas'])}; convertir el período antes de ingestar"
+            )
+        if informe["mapeo_er"]["unmapped"]:
+            avisos.append(
+                f"{informe['mapeo_er']['unmapped']} movimientos sin cuenta de ER "
+                f"({len(informe['mapeo_er']['rubros_sin_mapping'])} rubros); "
+                "se guardan en crudo como 'unmapped'"
+            )
+        return jsonify({
+            "ok": informe["puede_commitear"],
+            "formato": "jll_v2",
+            "errors": errores,
+            "warnings": avisos,
+            "periodos": informe["periodos"],
+            "filas_por_hoja": informe["filas_por_hoja"],
+            "reemplazara": informe["reemplazara"],
+            "anomalias": informe["anomalias"],
+        })
+    if ruta:
+        os.unlink(ruta)
+
     if not periodo:
         return jsonify({"ok": False, "errors": ["Falta el período (YYYY-MM)."], "warnings": []})
-    file_bytes = file.read()
     try:
         result = _con_archivo_legible(rr_core.validate, file_bytes, file.filename, periodo)
     except ValueError as exc:
@@ -1230,9 +1303,31 @@ def api_rentroll_commit():
     periodo = request.form.get("periodo", "")
     if file is None or not file.filename:
         return jsonify({"ok": False, "error": "Sube el archivo .xlsx del Rent Roll."}), 400
+    file_bytes = file.read()
+
+    es_v2, ruta = _es_jll_v2(file_bytes, file.filename)
+    if es_v2:
+        from tools.db import ingest_jll_planilla as jll_v2
+        aceptar = request.form.get("aceptar_anomalias") == "1"
+        try:
+            summary = jll_v2.commit(
+                ruta, str(ROOT / "memory" / "agente_toesca_v2.db"),
+                aceptar_anomalias=aceptar,
+                source_name=file.filename,
+            )
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        finally:
+            os.unlink(ruta)
+        if summary["status"] != "ok":
+            return jsonify({"ok": False, "formato": "jll_v2", **summary}), 400
+        _rebuild_factsheet()
+        return jsonify({"ok": True, "formato": "jll_v2", **summary})
+    if ruta:
+        os.unlink(ruta)
+
     if not periodo:
         return jsonify({"ok": False, "error": "Falta el período (YYYY-MM)."}), 400
-    file_bytes = file.read()
     try:
         summary = rr_core.commit(file_bytes, file.filename, periodo)
     except ValueError as exc:

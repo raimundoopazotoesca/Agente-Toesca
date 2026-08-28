@@ -288,3 +288,102 @@ def test_apo_2020_12_total_activo_cuadra(con):
     ).fetchall())
     assert len(partes) == 2, "cada subtotal debe quedar con una sola fila vigente"
     assert sum(partes.values()) == fila[0]["monto_clp"]
+
+
+# ── Pipeline JLL v2 (migraciones 085–088) ────────────────────────────────────
+#
+# Se saltan mientras la DB productiva no tenga las migraciones aplicadas: la
+# reingesta está bloqueada por el gate de producción y estos objetos aún no
+# existen ahí. En sandbox y en las DBs temporales de la suite sí corren.
+
+def _tiene_columna(con, tabla: str, columna: str) -> bool:
+    return any(
+        r["name"] == columna
+        for r in con.execute(f"PRAGMA table_info({tabla})").fetchall()
+    )
+
+
+def _tiene_tabla(con, tabla: str) -> bool:
+    return con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabla,)
+    ).fetchone() is not None
+
+
+def test_semantica_de_renta_no_mezclada(con):
+    """Ningún (activo, periodo) puede tener filas vivas con dos semánticas.
+
+    Sostiene el contrato de la migración 085: mientras un período conviva con
+    `renta_uf` como tasa y como total, cualquier suma aguas abajo es basura.
+    """
+    if not _tiene_columna(con, "raw_rent_roll_line", "renta_semantica"):
+        pytest.skip("migración 085 no aplicada en esta DB")
+    mezclados = con.execute(
+        """SELECT activo_key, periodo, COUNT(DISTINCT renta_semantica) n
+             FROM raw_rent_roll_line
+            WHERE superseded_at IS NULL
+            GROUP BY activo_key, periodo
+           HAVING n > 1"""
+    ).fetchall()
+    assert not mezclados, (
+        "períodos con semántica de renta mezclada: "
+        f"{[(r['activo_key'], r['periodo']) for r in mezclados]}"
+    )
+
+
+def test_reglas_internas_sin_vigencias_solapadas(con):
+    """Dos versiones de la misma regla no pueden estar vigentes a la vez.
+
+    Si se solapan, el ER derivado deja de ser reproducible: cuál versión ganó
+    pasa a depender del orden de lectura.
+    """
+    if not _tiene_tabla(con, "dim_er_regla_interna"):
+        pytest.skip("migración 087 no aplicada en esta DB")
+    solapadas = con.execute(
+        """SELECT a.activo_key, a.cuenta_codigo, a.version, b.version
+             FROM dim_er_regla_interna a
+             JOIN dim_er_regla_interna b
+               ON a.activo_key = b.activo_key
+              AND a.cuenta_codigo = b.cuenta_codigo
+              AND a.id < b.id
+            WHERE COALESCE(a.vigente_desde, '0000-00') <= COALESCE(b.vigente_hasta, '9999-99')
+              AND COALESCE(b.vigente_desde, '0000-00') <= COALESCE(a.vigente_hasta, '9999-99')"""
+    ).fetchall()
+    assert not solapadas, f"reglas con vigencias solapadas: {[tuple(r) for r in solapadas]}"
+
+
+def test_lineage_completo_en_er_derivado(con):
+    """Toda fila de ER derivada resuelve su origen.
+
+    `origen='jll_v2'` exige al menos una fila puente (no expresable como CHECK
+    en SQLite, por eso vive acá); `origen='regla_interna'` exige su regla.
+    """
+    if not _tiene_columna(con, "raw_er_activo_line", "origen"):
+        pytest.skip("migración 088 no aplicada en esta DB")
+
+    sin_puente = con.execute(
+        """SELECT COUNT(*) FROM raw_er_activo_line e
+            WHERE e.origen = 'jll_v2'
+              AND NOT EXISTS (SELECT 1 FROM raw_er_movimiento_lineage l
+                               WHERE l.er_line_id = e.id)"""
+    ).fetchone()[0]
+    assert sin_puente == 0, f"{sin_puente} filas jll_v2 sin lineage a movimientos"
+
+    sin_regla = con.execute(
+        """SELECT COUNT(*) FROM raw_er_activo_line e
+            LEFT JOIN dim_er_regla_interna r ON r.id = e.origen_regla_id
+            WHERE e.origen = 'regla_interna' AND r.id IS NULL"""
+    ).fetchone()[0]
+    assert sin_regla == 0, f"{sin_regla} filas regla_interna sin regla resoluble"
+
+
+def test_filas_jll_v2_declaran_procedencia(con):
+    """El formato v2 nunca escribe sin fuente. El histórico legacy sí puede
+    tenerla en NULL: su procedencia no siempre es derivable, y asignarle un
+    proveedor por default sería inventarla."""
+    if not _tiene_columna(con, "raw_rent_roll_line", "fuente_formato"):
+        pytest.skip("migración 085 no aplicada en esta DB")
+    huerfanas = con.execute(
+        """SELECT COUNT(*) FROM raw_rent_roll_line
+            WHERE fuente_formato = 'jll_v2' AND fuente_proveedor IS NULL"""
+    ).fetchone()[0]
+    assert huerfanas == 0

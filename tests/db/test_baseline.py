@@ -10,6 +10,8 @@ hacía fallar toda ingesta con `cuenta_codigo`).
 from __future__ import annotations
 
 import os
+import shutil
+from pathlib import Path
 
 import pytest
 
@@ -115,7 +117,34 @@ def test_seeds_de_dimensiones_presentes(db_nueva):
 def test_esquema_identico_al_de_produccion(db_nueva):
     """El invariante central de F0.2. Si falla tras agregar una migración,
     regenera el baseline: python scripts/regenerar_baseline.py"""
-    prod = _inventario(str(DEFAULT_DB_PATH))
+    # Cuando producción está detrás de la cabeza de migraciones (trabajo
+    # aprobado en sandbox con la aplicación a producción bloqueada por un gate),
+    # comparar directamente daría un falso positivo: los objetos "de más" en una
+    # DB nueva son justamente los que el gate aún no autoriza a crear.
+    #
+    # Saltarse el test perdería la señal más valiosa. En vez de eso se verifica
+    # el UPGRADE PATH: se copia producción a un temporal, se le aplican las
+    # migraciones pendientes y se compara ESE resultado contra una DB nueva en
+    # la cabeza. Si ambos convergen, las migraciones nuevas llevan producción
+    # exactamente al esquema esperado. Producción nunca se toca.
+    from tools.db.connection import _discover_migrations, apply_migrations, current_version
+
+    head = max(version for version, _ in _discover_migrations())
+    en_prod = current_version(str(DEFAULT_DB_PATH))
+
+    ruta_prod = str(DEFAULT_DB_PATH)
+    if en_prod < head:
+        copia = str(Path(db_nueva).parent / "prod_upgradeada.db")
+        shutil.copy2(DEFAULT_DB_PATH, copia)
+        aplicadas = apply_migrations(copia)
+        assert aplicadas == list(range(en_prod + 1, head + 1)), (
+            f"el upgrade path aplicó {aplicadas}, se esperaba "
+            f"{list(range(en_prod + 1, head + 1))}"
+        )
+        assert current_version(copia) == head
+        ruta_prod = copia
+
+    prod = _inventario(ruta_prod)
     nueva = _inventario(db_nueva)
 
     solo_prod = sorted(set(prod) - set(nueva))

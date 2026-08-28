@@ -639,6 +639,9 @@
     <div class="row">
       <label class="muted" for="rr-periodo">Período del Rent Roll:</label>
       <input type="month" id="rr-periodo">
+      <span class="muted" id="rr-periodo-hint" style="font-size:12px">
+        (la planilla nueva de JLL trae varios meses: el período lo declara el archivo)
+      </span>
       <label class="muted" for="rr-proveedor">Proveedor:</label>
       <select id="rr-proveedor">
         <option value="jll">JLL (PT, Apo, Apo3001)</option>
@@ -658,6 +661,8 @@
       <span id="rr-validate-status" class="muted"></span>
     </div>
   </div>
+
+  <div id="rr-v2-resumen" class="step preview hidden"></div>
 
   <div id="rr-preview" class="step preview hidden">
     <div class="badges" id="rr-badges"></div>
@@ -1863,6 +1868,8 @@ let rrSelectedFile = null;
 let rrLastValidationOk = false;
 let rrLastValidatedFile = null;
 let rrLastValidatedPeriodo = null;
+// Formato detectado por el backend en la última validación ('jll_v2' | 'clasico').
+let rrLastFormato = null;
 let rrCasosRarosPendientes = 0;
 
 const now = new Date();
@@ -2136,9 +2143,34 @@ function renderRrPreview(data) {
   updateRrConfirmState();
 }
 
+// La planilla JLL v2 trae varios períodos y cuatro hojas, así que el resumen
+// clásico (un período, un conteo) no la describe. Esto se muestra encima de la
+// previsualización habitual.
+function renderRrV2Resumen(data) {
+  const cont = document.getElementById('rr-v2-resumen');
+  if (!cont) return;
+  const hojas = Object.entries(data.filas_por_hoja || {})
+    .map(([h, n]) => `<li>${h}: <strong>${n}</strong> filas</li>`).join('');
+  const periodos = (data.periodos || []);
+  const reemplazos = (data.reemplazara || []);
+  const listaReemplazo = reemplazos.length
+    ? `<p class="msg warn">Reemplazará datos ya cargados en: ${
+        reemplazos.map(r => `${r.hoja} · ${r.activo_key} ${r.periodo}`).join(', ')}</p>`
+    : '<p class="muted">No hay datos previos que reemplazar.</p>';
+  cont.innerHTML = `
+    <div class="badges"><span class="badge">Formato JLL v2</span>
+      <span class="badge">${periodos.length} períodos</span>
+      <span class="badge">${periodos[0] || '—'} → ${periodos[periodos.length - 1] || '—'}</span></div>
+    <ul>${hojas}</ul>
+    ${listaReemplazo}`;
+  cont.classList.remove('hidden');
+}
+
 btnRrValidate.addEventListener('click', async () => {
   if (!rrSelectedFile) { rrValidateStatus.textContent = 'Selecciona un archivo primero.'; return; }
-  if (!rrPeriodo.value) { rrValidateStatus.textContent = 'Selecciona el período.'; return; }
+  // El período ya no se exige aquí: la planilla JLL v2 lo declara en su
+  // contenido y trae varios meses. El backend detecta el formato y sigue
+  // pidiéndolo para el formato clásico.
   setStatus(rrValidateStatus, 'Validando y preparando previsualización...', 'loading');
   btnRrValidate.disabled = true;
   btnRrConfirm.disabled = true;
@@ -2150,6 +2182,8 @@ btnRrValidate.addEventListener('click', async () => {
     const data = await res.json();
     rrLastValidatedFile = rrSelectedFile;
     rrLastValidatedPeriodo = rrPeriodo.value;
+    rrLastFormato = data.formato || 'clasico';
+    if (data.formato === 'jll_v2') renderRrV2Resumen(data);
     renderRrPreview(data);
     setStatus(rrValidateStatus, data.ok ? 'Previsualización lista.' : 'Revisa los errores de la previsualización.', data.ok ? 'success' : 'error');
   } catch (e) {
@@ -2160,7 +2194,8 @@ btnRrValidate.addEventListener('click', async () => {
 });
 
 btnRrConfirm.addEventListener('click', async () => {
-  if (!rrLastValidationOk || rrLastValidatedFile !== rrSelectedFile || rrLastValidatedPeriodo !== rrPeriodo.value) {
+  const periodoCambio = rrLastFormato === 'jll_v2' ? false : rrLastValidatedPeriodo !== rrPeriodo.value;
+  if (!rrLastValidationOk || rrLastValidatedFile !== rrSelectedFile || periodoCambio) {
     rrIngestStatus.textContent = 'El archivo o período cambió desde la última validación — vuelve a validar.';
     return;
   }
@@ -2173,12 +2208,20 @@ btnRrConfirm.addEventListener('click', async () => {
   try {
     const fd = new FormData();
     fd.append('file', rrLastValidatedFile);
-    fd.append('periodo', rrLastValidatedPeriodo);
+    if (rrLastFormato !== 'jll_v2') fd.append('periodo', rrLastValidatedPeriodo);
     const res = await fetch('/api/rentroll/commit', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'error desconocido');
     if (data.status === 'skipped_duplicate') {
       setStatus(rrIngestStatus, 'Este archivo ya había sido ingestado antes — no se creó nada nuevo.', 'warn');
+    } else if (data.formato === 'jll_v2') {
+      const total = Object.values(data.insertadas || {}).reduce((a, b) => a + b, 0);
+      const hojas = Object.entries(data.insertadas || {})
+        .map(([h, n]) => `${h}: ${n}`).join(' · ');
+      setStatus(rrIngestStatus,
+        `Listo: ${total} filas en ${data.periodos.length} períodos (${hojas}). ` +
+        `${data.superseded} filas reemplazadas. Run #${data.ingest_run_id}.`,
+        'success');
     } else {
       setStatus(rrIngestStatus,
         `Listo: ${data.rows_inserted} filas insertadas para ${data.activos.join(', ')} (run #${data.run_id}).`,
