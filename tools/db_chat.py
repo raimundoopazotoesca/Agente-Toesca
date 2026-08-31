@@ -16,6 +16,8 @@ o GEMINI_API_KEY segun corresponda.
 from __future__ import annotations
 
 import json
+import contextvars
+import time
 import re
 import sqlite3
 from pathlib import Path
@@ -124,6 +126,25 @@ def _mensaje_error_llm(exc: Exception) -> str:
     )
 
 
+_TELEMETRY = contextvars.ContextVar("db_chat_telemetry", default=None)
+
+
+def _usage_value(obj, *names):
+    for name in names:
+        value = getattr(obj, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def _record_attempt(cfg, response=None, error=None, latency_ms=None):
+    attempts = _TELEMETRY.get()
+    if attempts is None:
+        return
+    usage = getattr(response, "usage", None)
+    attempts.append({"provider": cfg.get("name"), "model": cfg.get("model"), "input_tokens": _usage_value(usage, "prompt_tokens", "input_tokens"), "output_tokens": _usage_value(usage, "completion_tokens", "output_tokens"), "reasoning_tokens": _usage_value(getattr(usage, "completion_tokens_details", None), "reasoning_tokens"), "cached_tokens": _usage_value(getattr(usage, "prompt_tokens_details", None), "cached_tokens"), "latency_ms": latency_ms, "outcome": "error" if error else "success", "error": str(error) if error else None})
+
+
 def _chat_completion_with_fallback(messages: list, **kwargs):
     """Intenta cada provider disponible en orden; si uno da rate limit/quota,
     prueba el siguiente. Devuelve (response, provider_cfg). Lanza la ultima
@@ -131,10 +152,13 @@ def _chat_completion_with_fallback(messages: list, **kwargs):
     last_exc = None
     for cfg in _provider_chain():
         client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+        started = time.monotonic()
         try:
             resp = client.chat.completions.create(model=cfg["model"], messages=messages, **kwargs)
+            _record_attempt(cfg, response=resp, latency_ms=(time.monotonic() - started) * 1000)
             return resp, cfg
         except Exception as exc:  # noqa: BLE001
+            _record_attempt(cfg, error=exc, latency_ms=(time.monotonic() - started) * 1000)
             last_exc = exc
             if _RATE_LIMIT_RE.search(str(exc)):
                 continue  # probar siguiente provider
@@ -838,7 +862,7 @@ def _extract_metric_from_sql(sql: str | None) -> str | None:
     return None
 
 
-def answer(question: str, history: list[dict] | None = None, session_id: str = "default") -> dict:
+def _answer_impl(question: str, history: list[dict] | None = None, session_id: str = "default") -> dict:
     """Responde una pregunta libre contra la DB.
 
     Devuelve dict con:
@@ -1069,4 +1093,17 @@ def answer(question: str, history: list[dict] | None = None, session_id: str = "
     # reflected in the SQL that ran, which is more reliable than the LLM guess.
     update_state(session_id, last_metric=metric_name or get_state(session_id)["last_metric"])
 
+    return result
+
+
+def answer(question: str, history: list[dict] | None = None, session_id: str = "default") -> dict:
+    attempts = []
+    token = _TELEMETRY.set(attempts)
+    try:
+        result = _answer_impl(question, history, session_id)
+    finally:
+        _TELEMETRY.reset(token)
+    fields = ("input_tokens", "output_tokens", "reasoning_tokens", "cached_tokens")
+    aggregate = {field: (None if not attempts or any(a[field] is None for a in attempts) else sum(a[field] for a in attempts)) for field in fields}
+    result["usage"] = {"calls": len(attempts), **aggregate, "llm_latency_ms": sum(a["latency_ms"] for a in attempts), "attempts": attempts}
     return result

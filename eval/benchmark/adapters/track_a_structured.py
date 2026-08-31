@@ -60,7 +60,10 @@ class _TrackASession:
             usage=Usage(
                 provider=result.get("provider"),
                 model=result.get("provider"),
-                calls=1,
+                calls=result.get("usage", {}).get("calls", 0),
+                input_tokens=result.get("usage", {}).get("input_tokens"), output_tokens=result.get("usage", {}).get("output_tokens"),
+                reasoning_tokens=result.get("usage", {}).get("reasoning_tokens"), cached_tokens=result.get("usage", {}).get("cached_tokens"),
+                llm_latency_ms=result.get("usage", {}).get("llm_latency_ms"),
                 latency_ms=elapsed_ms,
             ),
             queries=list(self.sandbox.log.statements),
