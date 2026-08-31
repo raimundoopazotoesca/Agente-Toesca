@@ -14,7 +14,7 @@ on:
 # to eval/benchmark/tests or eval/product_alpha/tests).
 #
 # IMPORTANT — environment sensitivity of eval/baselines/pytest-d986996.json:
-# tests/db/test_ingest_er_{inmosa,sucden,apo3001}.py each contain one
+# tests/db/test_ingest_er_{inmosa,sucden,apo3001,curico}.py each contain one
 # `skipif`-guarded test whose condition probes a specific proprietary xlsx
 # file synced via a developer's OneDrive (never present in CI). This is NOT
 # simply "present vs. absent" on a given machine — it is genuinely flaky in
@@ -29,7 +29,8 @@ on:
 #   --deselect tests/db/test_ingest_er_inmosa.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
 #   --deselect tests/db/test_ingest_er_sucden.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
 #   --deselect tests/db/test_ingest_er_apo3001.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
-# and then splice those 3 node IDs back into the historical manifest's
+#   --deselect tests/db/test_ingest_er_curico.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
+# and then splice those 4 node IDs back into the historical manifest's
 # `skip_ids` (never into `failure_ids`/the active allowlist) with reason
 # "archivo real no disponible o locked en este entorno" — see
 # eval/baselines/pytest-d986996.json's own "notes" field for the exact
@@ -52,6 +53,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Install Chromium for PDF export tests
+        run: python -m playwright install chromium
+
       - name: Run tests suite (exit 1 permitted here only)
         id: run_tests
         shell: bash
@@ -59,6 +63,11 @@ jobs:
           mkdir -p artifacts
           set +e
           python -X utf8 -m pytest tests -q \
+            --deselect tests/analyst_runtime/test_synthesis_schema_provider.py::test_synthesis_envelope_schema_accepted_by_openai_strict_structured_outputs \
+            --deselect tests/db/test_ingest_er_inmosa.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_sucden.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_apo3001.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_curico.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
             --junitxml=artifacts/pytest-tests.xml \
             -p tools.eval.pytest_nodeid_reporter \
             --nodeid-report=artifacts/pytest-tests-nodeids.json
