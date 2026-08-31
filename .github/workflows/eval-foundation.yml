@@ -2,7 +2,9 @@ name: Eval Foundation
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/alpha-v0.1
 
 # PR checks here must make no system-under-test or judge calls: this
 # workflow only runs pytest (deterministic, in-process) against the three
