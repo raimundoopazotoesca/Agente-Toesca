@@ -27,6 +27,7 @@ from eval.benchmark.graders.ground_truth import resolve_ground_truth
 from eval.benchmark.snapshot import SnapshotSandbox
 from eval.round_b.incremental import IncrementalStore
 from eval.benchmark.snapshot import load_lock
+from eval.benchmark.adapters.provider_factory import CANDIDATES, provider_config_for_track
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "eval/round_b/mini_dev_v1.yaml"
@@ -201,7 +202,6 @@ def committed_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "fireworks": ("FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1"), "openai": ("OPENAI_API_KEY", None), "anthropic": ("ANTHROPIC_API_KEY", None)}
 
 
 def classify_execution_error(exc: Exception) -> str:
@@ -346,14 +346,9 @@ class FullDevRoundBRunner(RoundBRunner):
 
 
 def live_adapter_factory(provider: str, model: str, profile):
-    key_name, base_url = CANDIDATES[provider]
-    if provider == "dashscope":
-        base_url = os.environ.get("DASHSCOPE_BASE_URL")
-    if not os.environ.get(key_name) or (not base_url and provider not in {"openai", "anthropic"}):
-        raise RuntimeError("credential_missing")
-    config = {"api_key": os.environ[key_name], "model": model}
-    if base_url:
-        config["base_url"] = base_url
+    track = "track_b_anthropic" if provider == "anthropic" else "track_b_openai_responses" if provider == "openai" else "track_b_frontier"
+    config = provider_config_for_track(track, None if track != "track_b_frontier" else provider, model)
+    config.pop("provider")
     if provider == "anthropic":
         return TrackBAnthropic(provider=config)
     if provider == "openai":
