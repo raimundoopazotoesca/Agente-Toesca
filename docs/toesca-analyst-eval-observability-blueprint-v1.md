@@ -18,18 +18,18 @@ Separately, there is at least one component (F5 — ignored correction) that is 
 
 **This blueprint does not throw any of the existing work away.** Sections E–N below explicitly reuse `SnapshotSandbox`, `sqlite_guard.make_authorizer`, the gate/dimension split, the holdout isolation pattern, and the rubric-calibration discipline already present. The redesign is about *wiring, taxonomy, and governance* — making the existing pieces trustworthy and connected — not about rebuilding the scoring engine.
 
-**EVAL FOUNDATION VERDICT: NOT READY TO GUIDE A2**
+**EVAL FOUNDATION VERDICT: READY TO GUIDE A2 DESIGN — NOT READY TO GATE A2 IMPLEMENTATION**
 
-It is close. The blocking gaps, in priority order, are:
+The scoring design, taxonomy, and existing infrastructure (Sections D–N) are sound enough today to inform how A2 should be architected — they tell you what to measure and why. They are not yet sound enough to serve as a release gate on an actual A2 implementation, because the measurement pipeline itself has unresolved wiring gaps, in priority order:
 
 1. No CI / scheduled execution of any of the eval suites (Section M).
-2. Track B is not reachable from the one wired runner, so A2 architecture decisions cannot be evidence-based yet (Section P, step 0).
+2. Track B is not reachable from the one wired runner, so a reproducible Track A vs. Track B comparison does not exist yet — the pilot evidence that does exist is directional, not gating (Section P, step 0).
 3. F5 is dead in the runner despite having cases (Section B/C).
 4. No LLM-judge policy document exists — judge model pinning, disagreement handling, and permitted-vs-forbidden-use boundaries are implicit in code comments, not governed (Section I).
 5. No failure taxonomy connects a bad answer to an owning component deterministically — today "wrong number" could mean six different upstream causes with no forced classification step (Section D).
 6. No production→eval feedback loop exists; `eval/alpha_eval_v1` and the holdout report are one-shot, hand-graded snapshots, not renewable pipelines (Section J, K).
 
-Section P gives the sequencing to close these before A2 architecture work should be treated as evaluation-driven rather than vibes-driven.
+Section P gives the sequencing to close these. Until they're closed, use this blueprint to shape A2's design decisions, but do not treat any current eval number as a hard implementation gate.
 
 ---
 
@@ -110,7 +110,13 @@ None of this constitutes an LLM-behavior/conversational eval. It verifies that c
 
 ### B.8 The "21 preexisting failures" the task brief references
 
-Not found as a distinct artifact anywhere in the repository — no xfail list, no known-failures report, no `21` grepped in any failure-tracking context. The only structurally meaningful "21" in this codebase is the 21-case holdout set (14 TAE + 7 TCE). This blueprint treats that as the most likely referent but flags explicitly that it could not be verified from repo state alone, and does not attempt to reconstruct or fix whatever the 21 failures actually are — per the task's own constraint.
+Correction to the original audit: these are **not** the 21 holdout cases — that reading has been ruled out. Per the user's externally-verified baseline, a full test run at commit `d986996` produced:
+
+```
+21 failed, 1342 passed, 6 skipped, 1 xfailed, in 957.59s
+```
+
+No artifact reproducing this figure (a report file, a CI log, an xfail list) exists inside the audited worktree — this is **an external run result, not something persisted anywhere in the repository at the time of the audit.** That gap is itself a finding: a known-bad baseline that a human had to run and remember by hand is exactly the kind of state that CI should be capturing automatically (Section M), and its absence from the repo is consistent with Gap C.1 (no CI) rather than contradicting it. This blueprint does not attempt to identify, reproduce, or fix which 21 tests these are — that is explicitly out of scope (Section Q) — but Step 0 (Section P) should include persisting this baseline (e.g. as a committed `known_failures` manifest or an initial xfail/skip marker set) so it stops being tribal knowledge.
 
 ---
 
@@ -119,7 +125,7 @@ Not found as a distinct artifact anywhere in the repository — no xfail list, n
 Ranked by how directly they block "evaluation-driven" A2/A3/A4 development, not by effort to fix.
 
 1. **No CI at all.** Zero `.github/workflows`, no Makefile eval target. Every suite above is a manual incantation. This is the single largest gap — nothing here can catch a regression unless a human remembers to run it, and "remembering to run the benchmark" does not scale past the person who wrote it.
-2. **The wired path measures the wrong thing for A2 decisions.** `runner.py` only drives Track A. Any argument for or against a multi-agent, frontier-simple, or hybrid A2 architecture needs Track A vs. Track B evidence, and today that evidence exists only as hand-run, non-reproduced pilot results in `FINDINGS.md`.
+2. **The wired path only produces evidence for one side of the A2 question.** `runner.py` only drives Track A. A Track A vs. Track B comparison is not itself an architecture-selection mechanism — it is one input, alongside cost, latency, and maintainability, into an A2 decision that remains a human/architectural call. Today even that one input is missing a reproducible form: it exists only as hand-run, non-reproduced pilot results in `FINDINGS.md`.
 3. **F5 is a documented illusion of coverage.** Cases exist (`tce-entitycorrection-001`, `tce-entityswap-001`), the gate function exists and is presumably unit-tested in isolation, but the runner never passes `correction_context`, so the correction-handling failure mode this gate exists to catch cannot currently surface in a benchmark run. This exact pattern — "we wrote the eval, it doesn't actually fire" — is the highest-risk failure mode for the whole blueprint and needs a structural safeguard (Section C recommendation: a gate/dimension "liveness" check that asserts every gate/dim exercised by at least one case actually fires a non-`None` verdict at least once across the dev set; run this as its own CI check).
 4. **No judge governance.** The judge is well-built (bounded retries, no silent fallback, versioned) but there is no written policy for: when judge output may override a human, what to do on repeated disagreement, how model version pinning is enforced across runs, or what variance is acceptable turn-over-turn for the same input. Section H closes this.
 5. **No taxonomy connecting failure → owner → eval.** A wrong number today could stem from wrong entity resolution, wrong period resolution, wrong SQL, a stale semantic mapping, or a synthesis error — and nothing in the current stack forces a run to classify which one happened. Section D closes this.
@@ -168,8 +174,8 @@ Every real production failure must be assigned exactly one primary class (the ea
 | Completeness | **Deterministic** — checks all `required_facts` for the case appear in the answer | All parts of a multi-part question are addressed | Benchmark `completeness` dim |
 | Entity correctness | **Deterministic** — string/ID match against expected entity set | The fund/asset/company the answer is about matches what was asked | Benchmark gate F2 + `conversational_quality` entity-matching |
 | Period correctness | **Deterministic** — resolved period matches expected period, with an explicit "declared substitution" carve-out for legitimately ambiguous cases | The month/quarter/year in the answer matches what was asked or explicitly declared as a substitution | Benchmark gate C3 |
-| Unit correctness | **Deterministic, currently missing as a standalone check** — folded implicitly into factual correctness today | CLP vs UF vs % vs per-m² is not confused (this is exactly the `renta_uf` class of bug) | **Gap** — recommend promoting to its own deterministic dimension, since it is cheap to check (unit token match near the numeric claim) and the semantic audit already found a real bug of this shape |
-| Source-policy correctness | **Deterministic** — did the answer use raw EEFF/rent-roll/etc. per project rules (e.g. "no usar el CDG") rather than a forbidden source | New — no existing benchmark dimension names this explicitly, though `feedback_no_usar_cdg` is a hard project rule already enforced informally | **Gap** — should be a first-class dimension given how central this rule is to the project (per CLAUDE.md, "no usar el CDG" is a standing rule, not a preference) |
+| Unit correctness | **Deterministic, currently missing as a standalone check.** Primary signal must come from the Metric/Dataset Contract (A1.5, Section H/I) plus structured tool evidence — the tool call's declared `value_unit`/dataset unit field compared against the unit the answer is required to report, not from scanning prose. A text-near-number regex check is a **secondary synthesis-layer check only** (catches the answer text itself drifting from the unit the structured evidence already established), never the primary signal | The unit the structured tool/dataset evidence declares (CLP vs UF vs % vs per-m²) is the one actually reported, and the answer text doesn't silently relabel it (this is exactly the `renta_uf` class of bug) | **Gap** — depends on Metric/Dataset Contract fields (`value_unit`, display conversion) becoming available in tool evidence per A1.5; until then this can only be checked at the secondary/text level, which should be flagged in results as a lower-confidence signal, not treated as equivalent to a contract-backed check |
+| Source-policy correctness | **Deterministic** — evaluated from structured tool evidence: the canonical source/provenance identifier and precedence policy/version the tool call actually resolved and returned (per A1.5's Source/provenance contract, Section J: provider, source-as-of, precedence policy, `superseded_at`), compared against the project's required precedence (e.g. "no usar el CDG"). SQL table-name inspection is **not required as the primary mechanism** — it is at best a fallback signal for tool paths that don't yet emit structured provenance, and should be phased out as those paths adopt the contract | The source/provenance and precedence-policy version the answer's evidence declares match what policy requires for this metric/entity, not merely "which table happened to get queried" | **Gap** — should be a first-class dimension given how central this rule is to the project (per CLAUDE.md, "no usar el CDG" is a standing rule, not a preference); requires tool evidence to expose provenance/precedence fields structurally, which is exactly what A1.5's Source/provenance contract is meant to provide |
 | Conversational usefulness | **Judge** — inherently a quality-of-communication judgment | Is the answer usable by a non-technical reader without jargon leakage, appropriate brevity | Benchmark `conversational_quality` + `output_usefulness` dims; presentation holdout report covered this manually |
 
 Deterministic-vs-judge boundary rule, stated once and applied consistently: **if the correct value can be resolved by a SQL query against the snapshot, it must be graded deterministically — a judge is never allowed to be the sole arbiter of a fact that has ground truth.** This is already the design principle behind the gate/dimension split (`judge.py`'s own rule: never re-litigate what layers A–C already decided) and should be stated explicitly as policy so future dimension additions don't quietly regress it.
@@ -189,31 +195,36 @@ A correct final answer must not be allowed to mask a wrong component. Each of th
 | Tool arguments | Arguments passed to a correctly-selected tool are correct (not just that the tool was called) | Fully deterministic once tool selection is confirmed correct | **Gap** — currently conflated with tool selection inside the single `tool_correctness` dimension; recommend splitting into two dims so a right-tool/wrong-args case doesn't get the same score as a wrong-tool case |
 | SQL correctness | Generated SQL, when executed, returns the same result set as the case's `ground_truth_refs` SQL (not just that the final number happened to match) | Fully deterministic (result-set diff) | **Gap** — ground truth SQL exists per case, but there's no standalone SQL-correctness component score; today a right-answer-wrong-query case (e.g. right number by coincidence) would pass undetected |
 | Result validation | Given a tool/SQL result, did the agent notice an anomaly it should have (empty set, suspicious zero, sign flip) before using it | Needs both a deterministic anomaly-injection harness and judge review of the agent's reaction | **Gap** — no result-validation component exists in the runtime or the eval today; flagged for A3 |
-| Source precedence | When multiple sources could answer a question, was the project-mandated source used (e.g. raw EEFF over CDG) | Deterministic if tool/query provenance is logged | **Gap** — maps to the SOURCE-POLICY outcome metric in Section E; needs the trace to record which source table a query hit |
+| Source precedence | When multiple sources could answer a question, was the project-mandated source used (e.g. raw EEFF over CDG) | Deterministic once tool evidence carries structured provenance/precedence fields (A1.5 Source/provenance contract: provider, precedence policy/version, `superseded_at`) — SQL table-name inspection is a fallback only, not the target mechanism | **Gap** — maps to the SOURCE-POLICY outcome metric in Section E; needs the trace to record the tool-reported provenance/precedence, not just which table a query happened to hit |
 | Synthesis | Given a correct, complete set of facts, does the final text state them correctly | Deterministic for numeric restatement, judge for phrasing/framing quality | Partially covered by `factual_correctness`/`completeness` outcome dims — should also be checked in isolation by feeding a synthesis-only harness a fixed, known-correct fact set and grading the write-up alone, so synthesis bugs aren't hidden behind an upstream fact error |
 
 ---
 
 ## G. Trajectory evals
 
-Definition of a "valid" trajectory, stated up front per the brief's explicit instruction: **there is no single gold path.** A trajectory is valid if it (a) reaches a correct, complete, properly-sourced answer, (b) does not violate any safety gate, and (c) does not exhibit one of the specific anti-patterns below. Multiple tool orderings, multiple valid SQL formulations, and different numbers of clarifying turns can all be equally valid.
+Definition of a "valid" trajectory, stated up front per the brief's explicit instruction: **there is no single gold path, and none is imposed here.** A trajectory is valid if it (a) reaches a correct, complete, properly-sourced answer, (b) does not violate any safety gate, and (c) does not exhibit one of the specific anti-patterns below. Multiple tool orderings, multiple valid SQL formulations, differing numbers of tool calls, and different numbers of clarifying turns can all be equally valid — deterministic trajectory gates must only fire on unambiguous anti-patterns, never on "this doesn't match a reference path."
 
-Metrics to track, all measurable from the trace schema in Section J without needing a judge for most of them:
+Two rows from the original draft are dropped as a direct result of this amendment: **"unnecessary tool calls," defined as absent-from-final-prose, is removed** — a tool call whose result isn't quoted verbatim in the answer is not evidence of anything; the agent may have used it to check, rule out, or corroborate without needing to cite it, and penalizing that would punish reasonable defensive verification. **"Wrong ordering" against a declared dependency graph is removed** — that is a gold-ordering constraint by another name, and multiple valid orderings can resolve the same question. Anything genuinely wasteful from either of those categories is still caught by the anti-patterns below (repeated identical calls, ignored errors, redundant calls after sufficient evidence already exists) without requiring a canonical path or a citation requirement.
 
-| Signal | How measured | Deterministic? |
+Deterministic trajectory gates, focused strictly on clear anti-patterns, all measurable from the trace schema in Section J without a judge:
+
+| Anti-pattern | Definition | How measured |
 |---|---|---|
-| Unnecessary tool calls | A tool call whose result is never referenced in the final answer or in a subsequent tool call's arguments | Deterministic, given trace |
-| Repeated SQL | Byte-identical (or semantically-identical via normalized AST) query issued more than once in one turn with no state change between calls | Deterministic |
+| Repeated identical action without new state | Same (tool, args) pair invoked again with no intervening change in conversation/entity/period state that would justify re-running it | Deterministic — exact (tool, args, state) match |
 | Loops | Same (tool, args) pair appears 3+ times in one turn | Deterministic |
-| Redundant reasoning rounds | Turn required N model calls where a reference/simplest-known trajectory needed fewer, with no new information gained between rounds | Needs a per-case "expected round budget" (a range, not a single number) — semi-deterministic |
-| Wrong ordering | A tool call depends on information only available from a later tool call (e.g. resolves period before entity when entity resolution changes valid periods) | Deterministic given a declared dependency graph per tool |
-| Failure to react to tool errors | A tool call returns an error/empty result and the very next action ignores it rather than retrying, reformulating, or surfacing the issue | Deterministic (error in trace, no adaptation in next step) |
-| Failure to use validator feedback | Result-validation flags a concern (once RESULT_VALIDATION exists per Section F) and the agent proceeds unchanged | Deterministic once the validator component exists |
-| Premature stopping | Agent returns an answer despite a required fact never having been fetched | Deterministic — cross-check final answer's claims against trace's fetched facts |
-| Excessive clarification | Agent asks for clarification when the question was answerable from context already established this session | Judge-assisted (requires judging "was this genuinely ambiguous") — this is exactly the `clarification_judgment` dimension the benchmark already carries as judge-only |
-| Tool switching quality | When a tool fails or returns nothing, does the next chosen tool represent a sensible alternative, not a random retry | Judge-assisted |
+| Ignored tool error | A tool call returns an error/empty result and the very next action neither retries with different arguments, reformulates, nor surfaces the issue to the user | Deterministic (error in trace, no adaptation in next step) |
+| Ignored validator feedback | Result-validation flags a concern (once RESULT_VALIDATION exists per Section F) and the agent proceeds unchanged | Deterministic once the validator component exists |
+| Premature stopping | Agent returns an answer despite a required fact never having been fetched by any tool call in the trace | Deterministic — cross-check final answer's claims against trace's fetched facts |
+| Redundant calls after sufficient evidence | Additional tool calls made after all facts required to answer the question are already present in the trace, with no new question or ambiguity introduced | Deterministic — compare fetched-facts set against `required_facts` at each step |
 
-Recommendation: implement the fully-deterministic rows (all but the last three) first, as pure trace-analysis functions with no LLM call — high signal, zero marginal cost per run, and immediately reusable across every existing case without new judge calls.
+Judge-assisted signals (not deterministic, and not gating trajectory validity on their own — see Section I for when judge use is appropriate):
+
+| Signal | Why it needs a judge |
+|---|---|
+| Excessive clarification | Requires judging "was this genuinely ambiguous" — this is exactly the `clarification_judgment` dimension the benchmark already carries as judge-only |
+| Tool switching quality | When a tool fails or returns nothing, whether the next chosen tool is a sensible alternative (not a random retry) is a qualitative judgment |
+
+Recommendation: implement the deterministic anti-pattern table first, as pure trace-analysis functions with no LLM call — high signal, zero marginal cost per run, and immediately reusable across every existing case without new judge calls.
 
 ---
 
@@ -280,8 +291,8 @@ resolved_entity        (id + resolution method: explicit | inherited-context | i
 resolved_metric        (id + resolution method)
 resolved_period         (value + resolution method, incl. any quarter-offset rule applied)
 planner_decision        (tool chosen, or "clarify", or "direct answer" — with a short structured reason code, not free-text rationale)
-tool_calls[]             { tool_name, args, result_metadata (row count, empty?, error?), latency_ms }
-sql_statements[]         { text, result_row_count, source_table(s) hit }
+tool_calls[]             { tool_name, args, result_metadata (row count, empty?, error?), latency_ms, provenance (per A1.5: provider, precedence policy/version, source-as-of, value_unit), dataset/metric contract ref }
+sql_statements[]         { text, result_row_count, source_table(s) hit } — secondary/fallback signal only, not the primary provenance source once tool evidence carries structured provenance
 validator_outcome        (pass | flagged: <reason_code> | not_run) — once Section F's result-validation component exists
 retries[]                 { reason, outcome }
 model, provider, judge_model (if applicable)
@@ -315,7 +326,7 @@ real failure (production flag OR benchmark run regression)
 
 **Definition of Done, per change type:**
 
-- **Metric change** (new KPI, formula edit): component eval for metric resolution passes; at least one outcome case exercising that metric passes; `real_estate_finance_expert`-style formula documentation updated if applicable.
+- **Metric change** (new KPI, formula edit): the metric's entry in the A1.5 Metric Contract (`metric_id`, semantic/method version, formula reference, entity grain, `value_unit`, aggregation, temporal contract, valid entities/scopes, precedence/eligibility, lineage expectations, null semantics/invariants — per `docs/toesca-data-foundation-target-contract-v1.md` Section H) is complete and versioned; component eval for metric resolution passes against that contract entry; at least one outcome case exercising that metric passes. This replaces any prior DoD wording tied to ad hoc formula-documentation style (e.g. `real_estate_finance_expert`-style notes) — the Metric Contract is now the single authoritative definition a metric change must satisfy, not a documentation convention.
 - **Tool change** (new tool, changed contract): component evals for both tool_selection and tool_arguments pass for every case referencing that tool; no regression in cases using adjacent tools (contract changes are a common source of silent cross-tool breakage).
 - **Semantic source change** (e.g. a `renta_uf` type fix): the specific SEMANTIC-class regression case exists and passes; a full ingestion test pass (`tests/db`, `tests/datasets`) confirms no downstream numeric drift.
 - **Agent behavior change** (prompt, planning logic, A2 architecture change): full dev-set outcome run (both TAE and TCE) with no regression on any previously-passing case, trajectory-eval anti-pattern counts not worse than baseline, and — specifically for anything touching Track A/B choice — a side-by-side comparison run of both tracks, since that comparison is the whole point of having two adapters.
@@ -345,7 +356,7 @@ The preliminary thresholds are directionally reasonable but under-specified. Eac
 |---|---|
 | factual ≥95% | **Keep, but define denominator as "per-turn, over all dev-set turns with a resolvable numeric claim"** (not all turns — many turns have no numeric claim to be factually wrong about). Grader: deterministic value-in-text match. Needs a confidence-interval caveat: at 79 evaluable turns, a single-run 95% pass rate has wide binomial CI (roughly ±5pp at n=79) — treat 90–100% as a noisy band until the dev set is larger, and do not release-block on a single point estimate without at least 3 runs. **Release blocker: yes**, but interpreted as "lower bound of a 3-run CI ≥ 90%," not a single-run point estimate ≥95%. |
 | grounded ≥95% | Grader is the judge — this threshold inherits all of Section I's variance concerns. **Do not treat this as a hard release blocker until repeated-run judge variance has actually been measured** (currently unmeasured, per Section I). Until then, track it as a monitored metric, not a gate. |
-| source policy ≥98% | **This should be deterministic, not judge-based**, since source provenance is a traceable fact (which table a query hit), not a subjective quality. Once the trace schema captures source table per query (Section K), this becomes fully deterministic and can legitimately be a hard blocker at a high bar — recommend even tighter than 98% (closer to 100%) given how explicit the "no usar el CDG" project rule already is. **Release blocker: yes, deterministic.** |
+| source policy ≥98% | **This should be deterministic, not judge-based**, since source provenance is a traceable fact — the structured provenance/precedence a tool call reports (A1.5 Source/provenance contract), not merely which table a query happened to hit. Once the trace schema captures that structured provenance per tool call (Section K), this becomes fully deterministic and can legitimately be a hard blocker at a high bar — recommend even tighter than 98% (closer to 100%) given how explicit the "no usar el CDG" project rule already is. **Release blocker: yes, deterministic.** |
 | tool correctness ≥95% | Denominator should be "cases with declared `tool_requirements`" — today that's optional per case; recommend making it mandatory for all new dev-set cases going forward so this denominator stops shrinking silently. **Release blocker: yes**, but split per Section F into tool_selection and tool_arguments sub-thresholds rather than one blended number, since a wrong-tool failure and a right-tool-wrong-args failure have very different severities and fixes. |
 | entity/period ≥98% | Both deterministic, both should be measured at the *component* level (Section F), not just via the final-answer gates F2/C3 — a case can pass F2/C3 by accident (right entity mentioned despite wrong entity resolved internally, e.g. via lucky phrasing). **Release blocker: yes, component-level version specifically**, not just the outcome-gate version. |
 | hallucinated critical numeric claims = 0 | Correct as a hard zero-tolerance gate — this is exactly what fatal gates (F1 combined with C1/C2) are for. Keep as absolute; **any single occurrence blocks release**, no CI/sample-size hedging appropriate for a zero-tolerance safety property. |
@@ -371,16 +382,22 @@ The preliminary thresholds are directionally reasonable but under-specified. Eac
 
 This blueprint's job is to make evaluation-driven development possible, not to build A2 itself. The sequence below is what should happen *before and alongside* A2, not a substitute for it.
 
-**Step 0 (blocking, before any A2 architecture decision is made):**
-1. Wire `eval/benchmark/tests`, `eval/product_alpha/tests`, and the holdout-leak test into default CI (cheap, no LLM calls, highest ROI available today).
-2. Fix F5 wiring in `runner.py` (pass real `correction_context` for TCE correction cases) and add the gate/dimension liveness check (Section H) so this class of silent-dead-eval can never recur unnoticed.
-3. Add a CLI path to `runner.py` for Track B adapters, and run a real, reproducible Track A vs Track B comparison on the full dev set (not just the 8-case pilot in `FINDINGS.md`). **A2's architecture direction should be decided from this comparison, not from the anecdotal pilot.**
-4. Populate token/latency fields in the Track A adapter so cost/latency comparisons in step 3 are honest.
+### Eval Foundation Step 0 — minimal implementation package
+
+This is a deliberately narrow, five-item package — wiring and governance only, **no other eval redesign** bundled in. It is the one piece of this blueprint approved to become concrete work before or alongside A2 design:
+
+1. Wire `eval/benchmark/tests`, `eval/product_alpha/tests`, and the holdout-leak test into normal automated checks (cheap, no LLM calls, highest ROI available today).
+2. Wire F5 end-to-end in `runner.py` (pass real `correction_context` for TCE correction cases) and add the gate/dimension liveness check (Section H) so this class of silent-dead-eval can never recur unnoticed.
+3. Expose Track B through the reproducible benchmark runner (a CLI path in `runner.py`), so a real Track A vs Track B comparison on the full dev set becomes possible in place of the 8-case pilot in `FINDINGS.md`. **This comparison is evidence to inform A2's architecture direction, not a binary switch that selects it** — it sits alongside cost, latency, and maintainability considerations this eval stack does not itself weigh, and step 3 only produces the evidence, not the decision.
+4. Populate Track A token/latency usage so cost/latency comparisons enabled by item 3 are honest.
+5. Commit the judge policy (Section I) as an actual reviewed document, not implicit code-comment behavior.
+
+Nothing else — no new dimensions, no taxonomy rollout, no dataset-lifecycle automation — belongs in this package. Those follow in Steps 1–3 below, once this minimal package is in place.
 
 **Step 1 (alongside early A2 work):**
 5. Split `tool_correctness` into `tool_selection`/`tool_arguments` component scores; add standalone `SQL correctness` and `unit correctness` dimensions (Sections E/F).
-6. Stand up the deterministic trajectory-eval functions (Section G's fully-deterministic rows) as pure trace-analysis, run in the nightly gate.
-7. Write the judge policy document (Section I) as an actual committed doc, and run a repeated-run variance measurement before treating any judge-based Reliability Core metric as a hard release blocker.
+6. Stand up the deterministic trajectory-eval functions (Section G's anti-pattern table) as pure trace-analysis, run in the nightly gate.
+7. Run a repeated-run judge variance measurement (per the now-committed Section I policy) before treating any judge-based Reliability Core metric as a hard release blocker.
 
 **Step 2 (A3 — Tools/SQL/Safety):**
 8. Build the RESULT_VALIDATION component (Section F) — this is a genuine gap the current runtime doesn't have at all, and A3 is the natural place to introduce it alongside its own eval.
@@ -396,7 +413,7 @@ This blueprint's job is to make evaluation-driven development possible, not to b
 
 ## Q. Explicit non-goals
 
-- This document does not fix any of the ~21 preexisting failures (whatever they resolve to be) or any bug found during the audit (e.g. the `renta_uf` semantic question, the `questions.yaml` count drift, the `holdout_runs.md` stale header).
+- This document does not fix or identify which specific tests make up the externally-verified `21 failed, 1342 passed, 6 skipped, 1 xfailed` baseline at `d986996` (Section B.8), or any bug found during the audit (e.g. the `renta_uf` semantic question, the `questions.yaml` count drift, the `holdout_runs.md` stale header).
 - No prompts, graders, gate logic, judge implementation, or rubric content were modified.
 - No LLM API calls were made during this audit beyond what the dispatched inventory subagent needed for read-only file inspection (no model was queried, no benchmark run was executed).
 - No DB was modified; no snapshot was re-materialized.
@@ -406,6 +423,6 @@ This blueprint's job is to make evaluation-driven development possible, not to b
 
 ---
 
-**EVAL FOUNDATION VERDICT: NOT READY TO GUIDE A2**
+**EVAL FOUNDATION VERDICT: READY TO GUIDE A2 DESIGN — NOT READY TO GATE A2 IMPLEMENTATION**
 
-Close, and closer than the surface state (no CI, one dead gate) suggests — the underlying scoring design, sandbox safety, and holdout discipline are already sound. What is missing is wiring, not architecture: CI attachment, a real Track A/B comparison, and a written judge policy are the three items standing between "we have good eval components" and "we can honestly say A2 will be built evaluation-driven." Step 0 in Section P is achievable without touching any prompt or runtime code, and should be completed before A2 architecture work is treated as anything more than exploratory.
+The underlying scoring design, taxonomy, sandbox safety, and holdout discipline are sound enough to inform how A2 should be shaped today — this document can be used for that now. What is missing is wiring, not architecture or design substance: CI attachment, a reproducible Track A/B comparison, and a committed judge policy are the three items standing between "we have good eval components to design against" and "we can honestly gate an A2 implementation on these numbers." The Eval Foundation Step 0 package in Section P is achievable without touching any prompt or runtime behavior, and should be completed before any A2 implementation is treated as release-gateable by this eval stack.
