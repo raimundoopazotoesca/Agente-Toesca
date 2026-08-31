@@ -26,6 +26,9 @@ turns:
       - {ref: ltv_apo_2026_06, tolerance_pct: 1.0}
     primary_fact: ltv_apo_2026_06
     expected_entities: {fondo: "Apo"}
+    correction_context:
+      previous_entities: {fondo: "PT"}
+      corrected_entities: {fondo: "Apo"}
     expected_period: {exact: "2026-06"}
     clarification_expected: false
     forbidden_claims:

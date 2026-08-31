@@ -58,7 +58,9 @@ FULL_DEV_HASH_ALGORITHM = "sha256-lf-normalized-v1"
 FULL_DEV_V1_1_LEGACY_BYTE_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
 
 # Current fingerprint, reproducible from any checkout.
-FULL_DEV_V1_1_CANONICAL_SHA = "5c0e6d9b1e57cd2e08ebe535f7ff59fa63c9d4f3a22ae1933eb45df675a0cdb5"
+# Step 0 adds declared F5 correction metadata to two existing dev turns.
+# Case/turn counts and historical byte-level evidence remain unchanged.
+FULL_DEV_V1_1_CANONICAL_SHA = "79b3e78092df96e4978fd72e9b5fe13c30baaca51cc6d81c9b41ec80e60654c2"
 
 
 def _canonical_hash(data: dict[str, Any]) -> str:

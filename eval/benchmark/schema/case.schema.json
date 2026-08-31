@@ -84,6 +84,7 @@
           "description": "Keys: fondo | activo | serie | sociedad. Value is one entity key, or a list of several of the same type for comparisons (e.g. {fondo: [PT, Apo]}) that must all be mentioned."
         },
         "expected_period": {"$ref": "#/definitions/period"},
+        "correction_context": {"$ref": "#/definitions/correction_context"},
         "forbidden_claims": {
           "type": "array",
           "items": {"type": "string"},
@@ -145,6 +146,25 @@
         "from": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
         "to": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
         "exact": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"}
+      }
+    },
+    "correction_context": {
+      "type": "object",
+      "required": ["previous_entities", "corrected_entities"],
+      "additionalProperties": false,
+      "properties": {
+        "previous_entities": {"$ref": "#/definitions/entity_mapping"},
+        "corrected_entities": {"$ref": "#/definitions/entity_mapping"}
+      }
+    },
+    "entity_mapping": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "string"},
+          {"type": "array", "items": {"type": "string"}, "minItems": 1}
+        ]
       }
     },
     "dimension": {

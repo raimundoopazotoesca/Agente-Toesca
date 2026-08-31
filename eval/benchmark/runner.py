@@ -22,9 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from eval.benchmark.adapters.base import BenchmarkAdapter
 from eval.benchmark.adapters.track_a_structured import TrackAStructured
-from eval.benchmark.cases_loader import CASES_DIR, Case, load_cases
+from eval.benchmark.cases_loader import CASES_DIR, Case, correction_context_for_turn, load_cases
 from eval.benchmark.graders.deterministic import score_turn
 from eval.benchmark.graders.ground_truth import resolve_ground_truth
+from eval.benchmark.liveness import assert_liveness
 from eval.benchmark.snapshot import SnapshotSandbox
 
 
@@ -33,11 +34,14 @@ def run_case(adapter: BenchmarkAdapter, case: Case, sandbox: SnapshotSandbox) ->
     session = adapter.new_session(f"bench-{case.id}")
 
     turn_reports = []
-    previous_entities: dict[str, str] = {}
-    for turn_spec in case.turns:
+    for index, turn_spec in enumerate(case.turns):
         turn = session.ask(turn_spec["question"])
-        correction_ctx = None  # wired up once TCE correction cases exist with a marker field
+        correction_ctx = correction_context_for_turn(case, index)
         result = score_turn(turn, turn_spec, resolved, correction_context=correction_ctx)
+        gate_results = {
+            check.gate: check.triggered
+            for check in (result.gate_verdict.checks if result.gate_verdict else [])
+        }
         turn_reports.append(
             {
                 "question": turn_spec["question"],
@@ -45,11 +49,12 @@ def run_case(adapter: BenchmarkAdapter, case: Case, sandbox: SnapshotSandbox) ->
                 "dimension_scores": result.dimension_scores,
                 "unscored": sorted(result.unscored_dimensions),
                 "fatal": result.is_fatal,
+                "correction_context": turn_spec.get("correction_context"),
+                "gate_results": gate_results,
                 "gate_hits": [c.gate for c in (result.gate_verdict.fatal_triggered + result.gate_verdict.ceiling_triggered)] if result.gate_verdict else [],
                 "facts_missing": result.facts_missing,
             }
         )
-        previous_entities = turn_spec.get("expected_entities", previous_entities)
     return turn_reports
 
 
@@ -68,9 +73,12 @@ def main() -> None:
         cases = [c for c in cases if c.id == args.case]
 
     print(f"Track: {adapter.name} | split: {args.split} | {len(cases)} cases")
+    all_turn_reports = []
     for case in cases:
         print(f"\n=== {case.id} ({case.suite}) ===")
-        for i, turn_report in enumerate(run_case(adapter, case, sandbox)):
+        case_reports = run_case(adapter, case, sandbox)
+        all_turn_reports.extend(case_reports)
+        for i, turn_report in enumerate(case_reports):
             print(f"  turn {i}: {turn_report['question']!r}")
             print(f"    fatal={turn_report['fatal']} gates={turn_report['gate_hits']}")
             for dim, score in turn_report["dimension_scores"].items():
@@ -79,6 +87,7 @@ def main() -> None:
                 print(f"    unscored (needs judge): {turn_report['unscored']}")
             if turn_report["facts_missing"]:
                 print(f"    facts missing: {turn_report['facts_missing']}")
+    assert_liveness(all_turn_reports)
 
 
 if __name__ == "__main__":
