@@ -46,13 +46,16 @@ def _rec(nodeid: str, phase: str, outcome: str, wasxfail=None) -> dict:
     return {"nodeid": nodeid, "phase": phase, "outcome": outcome, "wasxfail": wasxfail}
 
 
-def _historical(failure_ids, base_commit=REQUIRED_BASE_COMMIT, skip_ids=None) -> dict:
+def _historical(
+    failure_ids, base_commit=REQUIRED_BASE_COMMIT, skip_ids=None, xfail_ids=None
+) -> dict:
     return {
         "base_commit": base_commit,
         "command": "python -X utf8 -m pytest tests --junitxml=artifacts/pytest-d986996.xml",
         "summary": {"failed": len(failure_ids), "passed": 1341, "skipped": 9, "xfailed": 1},
         "failure_ids": list(failure_ids),
         "skip_ids": skip_ids or [],
+        "xfail_ids": xfail_ids or [],
     }
 
 
@@ -188,8 +191,12 @@ def test_allowed_failure_passes_but_allowlist_unchanged_is_stale_and_blocks():
         ([_rec("known_a", "call", "skipped", wasxfail="regressed")], "xfail"),
         ([_rec("known_a", "setup", "failed")], "error"),
         ([_rec("known_a", "setup", "passed"), _rec("known_a", "teardown", "failed")], "error"),
+        (
+            [_rec("known_a", "call", "passed", wasxfail="unexpected pass")],
+            "xpass",
+        ),
     ],
-    ids=["skip", "xfail", "setup-error", "teardown-error"],
+    ids=["skip", "xfail", "setup-error", "teardown-error", "xpass"],
 )
 def test_allowed_failure_regresses_to_prohibited_state_blocks(regression_records, expected_state):
     # "allowed failure regresses to xfail/skip/error/not-collected": none of
@@ -253,6 +260,104 @@ def test_new_call_failed_id_not_on_allowlist_blocks():
     assert result.exit_code == 1
 
 
+@pytest.mark.parametrize(
+    "new_id_records,expected_state",
+    [
+        ([_rec("brand_new", "setup", "failed")], "error"),
+        (
+            [_rec("brand_new", "setup", "passed"), _rec("brand_new", "teardown", "failed")],
+            "error",
+        ),
+        ([_rec("brand_new", "setup", "skipped")], "skipped"),
+        (
+            [_rec("brand_new", "call", "skipped", wasxfail="expected to fail")],
+            "xfail",
+        ),
+        (
+            [_rec("brand_new", "call", "passed", wasxfail="unexpected pass")],
+            "xpass",
+        ),
+    ],
+    ids=["setup-error", "teardown-error", "skip", "xfail", "xpass"],
+)
+def test_new_non_allowlisted_id_in_non_passing_state_blocks(new_id_records, expected_state):
+    # A brand-new test (not on the allowlist, not in the historical
+    # baseline) that comes back error/skipped/xfail/xpass instead of a
+    # plain "failed" must still block the gate -- e.g. a newly added test
+    # with a broken fixture is just as much a regression as a newly added
+    # failing assertion, and must not slip through silently just because
+    # its outcome isn't literally "failed".
+    historical = _historical([])
+    result = evaluate_run(new_id_records, historical, [], ["brand_new"])
+
+    assert result.new_anomalous_ids == {"brand_new": expected_state}
+    assert result.new_failure_ids == []
+    assert result.exit_code == 1
+
+
+def test_new_anomalous_id_is_distinguishable_from_plain_new_failure_in_output():
+    historical = _historical([])
+    records = [
+        _rec("brand_new_failure", "setup", "passed"),
+        _rec("brand_new_failure", "call", "failed"),
+        _rec("brand_new_skip", "setup", "skipped"),
+    ]
+    result = evaluate_run(records, historical, [], ["brand_new_failure", "brand_new_skip"])
+
+    payload = result.to_dict()
+    assert payload["new_failure_ids"] == ["brand_new_failure"]
+    assert payload["new_anomalous_ids"] == {"brand_new_skip": "skipped"}
+    assert payload["exit_code"] == 1
+
+
+def test_historical_skip_id_absent_from_allowlist_is_not_flagged_as_new():
+    # Regression guard: eval/baselines/pytest-d986996.json records 9 skip
+    # IDs as historical context (never part of the active failure
+    # allowlist -- see the plan's Global constraints). Those IDs are not
+    # "brand-new" just because they're absent from active_allowlist; they
+    # were already documented at baseline time. Only IDs missing from BOTH
+    # the active allowlist AND the historical manifest (failure_ids or
+    # skip_ids) count as new.
+    historical = _historical(
+        ["known_a"],
+        skip_ids=[{"nodeid": "known_skip", "reason": "migracion 085 no aplicada en esta DB"}],
+    )
+    records = [
+        _rec("known_a", "setup", "passed"),
+        _rec("known_a", "call", "failed"),
+        _rec("known_skip", "setup", "skipped"),
+    ]
+    result = evaluate_run(records, historical, ["known_a"], ["known_a", "known_skip"])
+
+    assert result.new_failure_ids == []
+    assert result.new_anomalous_ids == {}
+    assert result.allowed_failure_ids == ["known_a"]
+    assert result.exit_code == 0
+
+
+def test_historical_xfail_id_absent_from_allowlist_is_not_flagged_as_new():
+    # Same regression as above, for the historical xfail_ids bucket: e.g.
+    # tests/db/test_repo_eeff.py::test_insert_idempotente is a permanent,
+    # documented xfail in eval/baselines/pytest-d986996.json's xfail_ids,
+    # never in the active failure allowlist. It must not be misreported as
+    # a brand-new anomalous ID on every single run.
+    historical = _historical(
+        ["known_a"],
+        xfail_ids=[{"nodeid": "known_xfail", "reason": "documented permanent xfail"}],
+    )
+    records = [
+        _rec("known_a", "setup", "passed"),
+        _rec("known_a", "call", "failed"),
+        _rec("known_xfail", "call", "skipped", wasxfail="documented permanent xfail"),
+    ]
+    result = evaluate_run(records, historical, ["known_a"], ["known_a", "known_xfail"])
+
+    assert result.new_failure_ids == []
+    assert result.new_anomalous_ids == {}
+    assert result.allowed_failure_ids == ["known_a"]
+    assert result.exit_code == 0
+
+
 def test_clean_run_with_no_active_allowlist_is_not_blocking():
     historical = _historical([])
     records = [_rec("passing_test", "setup", "passed"), _rec("passing_test", "call", "passed")]
@@ -303,6 +408,60 @@ def test_load_historical_requires_command_and_summary(tmp_path):
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ManifestError, match="command"):
         load_historical(path)
+
+
+def test_load_historical_rejects_non_list_failure_ids(tmp_path):
+    # Previously raised a raw TypeError from _validate_ids iterating over a
+    # non-list; must surface as ManifestError like every other malformed
+    # manifest.
+    payload = _historical([])
+    payload["failure_ids"] = "not-a-list"
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ManifestError):
+        load_historical(path)
+
+
+def test_load_historical_rejects_skip_entry_missing_nodeid(tmp_path):
+    # Previously raised a raw KeyError when a skip_ids dict entry lacked
+    # "nodeid"; must surface as ManifestError like every other malformed
+    # manifest.
+    payload = _historical(["a"])
+    payload["skip_ids"] = [{"reason": "no nodeid here"}]
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ManifestError, match="nodeid"):
+        load_historical(path)
+
+
+def test_load_historical_rejects_non_list_skip_ids(tmp_path):
+    payload = _historical(["a"])
+    payload["skip_ids"] = "not-a-list"
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ManifestError):
+        load_historical(path)
+
+
+def test_load_historical_rejects_xfail_entry_missing_nodeid(tmp_path):
+    payload = _historical(["a"])
+    payload["xfail_ids"] = [{"reason": "no nodeid here"}]
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ManifestError, match="nodeid"):
+        load_historical(path)
+
+
+def test_load_historical_accepts_xfail_ids_round_trip(tmp_path):
+    payload = _historical(
+        ["a"], xfail_ids=[{"nodeid": "known_xfail", "reason": "documented permanent xfail"}]
+    )
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    historical = load_historical(path)
+    assert historical["xfail_ids"] == [
+        {"nodeid": "known_xfail", "reason": "documented permanent xfail"}
+    ]
 
 
 def test_load_allowlist_accepts_list_form(tmp_path):

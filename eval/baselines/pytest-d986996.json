@@ -63,6 +63,12 @@
       "reason": "No hay RR JLL real sincronizado"
     }
   ],
+  "xfail_ids": [
+    {
+      "nodeid": "tests/db/test_repo_eeff.py::test_insert_idempotente",
+      "reason": "Produccion no tiene UNIQUE(file_hash, source_row): el INSERT OR IGNORE de los repos es un no-op y por eso hay duplicados vivos. La restriccion entra tras el saneamiento (ROADMAP F0.4); cuando eso ocurra este test pasara y strict=True obligara a quitar el marcador."
+    }
+  ],
   "summary": {
     "failed": 19,
     "passed": 1341,

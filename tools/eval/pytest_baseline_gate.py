@@ -21,6 +21,17 @@ Global constraints and the Task 1 execution amendments):
 - A `call` phase outcome `"failed"` (and not xfail) for an ID *not* on the
   active allowlist is a brand-new failure -> blocks, regardless of whether
   the total failure count went down elsewhere.
+- Any other non-"passed" state (error, skipped, xfail, xpass, not_run,
+  unknown) for an ID *not* on the active allowlist and *not already
+  documented in the historical baseline* (as either a `failure_ids` or a
+  `skip_ids` entry) is also new and unreviewed -> blocks, reported
+  separately as `new_anomalous_ids` so CI output distinguishes "brand-new
+  plain failure" from "brand-new test that crashed/skipped/xfailed instead
+  of passing". A freshly added test with a broken fixture, for example,
+  must block a PR exactly as loudly as a freshly added failing assertion.
+  (Historical `skip_ids` are excluded from this "brand-new" check on
+  purpose: they're recorded context, not allowlist entries, and would
+  otherwise get permanently misreported as new on every run.)
 - A `call` phase outcome `"failed"` (not xfail) for an ID *on* the active
   allowlist is an allowed, visible, retained failure -> does not block.
 - An active-allowlist ID that now `"passed"` is a *stale* allowlist entry:
@@ -62,7 +73,11 @@ class ManifestError(ValueError):
     """Raised when a baseline/allowlist manifest fails strict validation."""
 
 
-def _validate_ids(ids: Iterable[Any], *, field_name: str) -> list[str]:
+def _validate_ids(ids: Any, *, field_name: str) -> list[str]:
+    if not isinstance(ids, list):
+        raise ManifestError(
+            f"{field_name} must be a JSON array of strings, got {type(ids).__name__}"
+        )
     seen: set[str] = set()
     result: list[str] = []
     for raw in ids:
@@ -75,6 +90,30 @@ def _validate_ids(ids: Iterable[Any], *, field_name: str) -> list[str]:
         seen.add(raw)
         result.append(raw)
     return sorted(result)
+
+
+def _validate_id_entries(entries: Any, *, field_name: str) -> list[Any]:
+    """Validate a `skip_ids`/`xfail_ids`-shaped list: each entry is either a
+    plain node-ID string or a `{"nodeid": ..., "reason": ...}` dict. Returns
+    the entries unchanged (for round-tripping into the loaded manifest) once
+    validated; raises `ManifestError` -- never a bare `KeyError`/`TypeError`
+    -- on any malformed entry.
+    """
+    if not isinstance(entries, list):
+        raise ManifestError(
+            f"historical manifest {field_name!r} must be a JSON array, "
+            f"got {type(entries).__name__}"
+        )
+    flat_ids = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            if "nodeid" not in entry:
+                raise ManifestError(f"{field_name} entry missing 'nodeid': {entry!r}")
+            flat_ids.append(entry["nodeid"])
+        else:
+            flat_ids.append(entry)
+    _validate_ids(flat_ids, field_name=field_name)
+    return entries
 
 
 def load_historical(path: str | Path) -> dict[str, Any]:
@@ -99,12 +138,8 @@ def load_historical(path: str | Path) -> dict[str, Any]:
         raise ManifestError("historical manifest missing 'summary' object")
 
     failure_ids = _validate_ids(data.get("failure_ids", []), field_name="failure_ids")
-
-    skip_entries = data.get("skip_ids", [])
-    skip_ids = [
-        entry["nodeid"] if isinstance(entry, dict) else entry for entry in skip_entries
-    ]
-    _validate_ids(skip_ids, field_name="skip_ids")
+    skip_entries = _validate_id_entries(data.get("skip_ids", []), field_name="skip_ids")
+    xfail_entries = _validate_id_entries(data.get("xfail_ids", []), field_name="xfail_ids")
 
     return {
         "base_commit": base_commit,
@@ -112,6 +147,7 @@ def load_historical(path: str | Path) -> dict[str, Any]:
         "summary": summary,
         "failure_ids": failure_ids,
         "skip_ids": skip_entries,
+        "xfail_ids": xfail_entries,
     }
 
 
@@ -130,6 +166,7 @@ def load_allowlist(path: str | Path) -> list[str]:
 @dataclass
 class BaselineGateResult:
     new_failure_ids: list[str] = field(default_factory=list)
+    new_anomalous_ids: dict[str, str] = field(default_factory=dict)
     allowed_failure_ids: list[str] = field(default_factory=list)
     stale_pass_ids: list[str] = field(default_factory=list)
     prohibited_state_ids: dict[str, str] = field(default_factory=dict)
@@ -142,6 +179,7 @@ class BaselineGateResult:
     def blocking(self) -> bool:
         return bool(
             self.new_failure_ids
+            or self.new_anomalous_ids
             or self.stale_pass_ids
             or self.prohibited_state_ids
             or self.not_collected_ids
@@ -156,6 +194,7 @@ class BaselineGateResult:
     def to_dict(self) -> dict[str, Any]:
         return {
             "new_failure_ids": sorted(self.new_failure_ids),
+            "new_anomalous_ids": dict(sorted(self.new_anomalous_ids.items())),
             "allowed_failure_ids": sorted(self.allowed_failure_ids),
             "stale_pass_ids": sorted(self.stale_pass_ids),
             "prohibited_state_ids": dict(sorted(self.prohibited_state_ids.items())),
@@ -170,8 +209,17 @@ class BaselineGateResult:
 def _classify(phases: dict[str, dict[str, Any]]) -> str:
     """Classify one node ID's overall state from its phase records.
 
-    Returns one of: "passed", "failed", "skipped", "xfail", "error",
-    "not_run".
+    Returns one of: "passed", "failed", "skipped", "xfail", "xpass",
+    "error", "not_run", "unknown".
+
+    "xfail" is a genuine expected failure (xfail marker, test raised, as
+    expected). "xpass" is an *unexpected* pass under an xfail marker --
+    either non-strict (call outcome "passed" + wasxfail) or strict (xfail's
+    own machinery reports it as a "failed" outcome + wasxfail, since strict
+    xfail treats an unexpected pass as a failure). Keeping these distinct
+    matters for gate output: a human reading `prohibited_state_ids` should
+    be able to tell "this expectedly still fails" from "this unexpectedly
+    started passing" without re-running pytest.
     """
     setup = phases.get("setup")
     call = phases.get("call")
@@ -190,11 +238,11 @@ def _classify(phases: dict[str, dict[str, Any]]) -> str:
     outcome = call["outcome"]
     wasxfail = call.get("wasxfail")
     if outcome == "failed":
-        return "xfail" if wasxfail else "failed"
+        return "xpass" if wasxfail else "failed"
     if outcome == "skipped":
         return "xfail" if wasxfail else "skipped"
     if outcome == "passed":
-        return "xfail" if wasxfail else "passed"
+        return "xpass" if wasxfail else "passed"
     return "unknown"
 
 
@@ -226,6 +274,20 @@ def evaluate_run(
     collected_set = set(collected_ids)
     active_set = set(active_allowlist)
     historical_failure_ids = set(historical.get("failure_ids", []))
+    historical_skip_ids = {
+        entry.get("nodeid") if isinstance(entry, dict) else entry
+        for entry in historical.get("skip_ids", [])
+    }
+    historical_xfail_ids = {
+        entry.get("nodeid") if isinstance(entry, dict) else entry
+        for entry in historical.get("xfail_ids", [])
+    }
+    # IDs already documented in the historical baseline (as a failure, a
+    # recorded skip, or a recorded xfail) are not "brand-new" even if
+    # they're absent from the active failure allowlist -- the active
+    # allowlist only ever tracks failures, never the historical
+    # skip_ids/xfail_ids recorded purely as context.
+    historical_known_ids = historical_failure_ids | historical_skip_ids | historical_xfail_ids
 
     for node_id in active_set:
         if node_id not in collected_set:
@@ -244,10 +306,20 @@ def evaluate_run(
             result.resolved_baseline_ids.append(node_id)
 
     for node_id, phases in by_id.items():
-        if node_id in active_set:
+        if node_id in active_set or node_id in historical_known_ids:
             continue
-        if _classify(phases) == "failed":
+        state = _classify(phases)
+        if state == "failed":
             result.new_failure_ids.append(node_id)
+        elif state != "passed":
+            # Not on the allowlist, not in the historical baseline (as
+            # either a failure or a recorded skip), and not clean either:
+            # error/skipped/xfail/xpass/not_run/unknown on a brand-new node
+            # ID is just as unreviewed as a brand-new failure and must
+            # block just as loudly -- e.g. a newly added test with a
+            # broken fixture must not slip through silently just because
+            # its outcome happens to not be literally "failed".
+            result.new_anomalous_ids[node_id] = state
 
     return result
 
