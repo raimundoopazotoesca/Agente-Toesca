@@ -23,9 +23,15 @@ JLL v2 — [technical cutover candidate frozen / external gate pending] parallel
      +
 Eval Foundation Step 0 — [closed / PASS] PR #1 merged into feat/alpha-v0.1
      ↓
-Documentation Reset / Current State Sync             ← this branch, docs/current-state-reset
+Documentation Reset / Current State Sync — [closed / PASS] PR #2 merged
      ↓
-Baseline Debt Triage / Burn-down #1
+Pilot Quality Standard v1 — [closed / PASS] PR #3 merged
+     ↓
+Baseline Debt Triage — [diagnosis complete]
+     ↓
+Current State Checkpoint / Chat Reset — [current operational checkpoint]
+     ↓
+Baseline Debt Burn-down #1
      ↓
 A2 — Agent Architecture
      ↓
@@ -79,31 +85,54 @@ drift.
 
 Owned by Track A, branch `audit/analyst-eval-blueprint-v1`, merged as PR #1 ("eval: make
 analyst evaluation foundation load-bearing") into the protected branch `feat/alpha-v0.1`,
-final HEAD `631987393f240a17d902bf5a61104119c0e3eb98`, final green GitHub Actions run
-`33524409504`. Full gate detail (required checks, the 19-item historical allowlist, and
+protected base HEAD captured for this checkpoint
+`4d0a13075736c9bfd5f7c420c684253a636cd093`. Full gate
+detail (required checks, the 19-item historical allowlist, and
 why the baseline-gated check is not a zero-failure gate) lives in
 `docs/CURRENT_STATE.md`'s Eval & Observability section — not restated here to avoid a
 second copy that can drift. The GitHub ruleset "Toesca protected devel" enforcing these
 checks on `feat/alpha-v0.1` is now active and load-bearing for every subsequent PR,
-including the one that lands this documentation sync.
+including documentation and implementation work after this checkpoint.
 
-### Documentation Reset / Current State Sync (this work)
+### Documentation Reset / Current State Sync — CLOSED / PASS
 
 Establishes `docs/CURRENT_STATE.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` as
 canonical sources and aligns `README.md`/`AGENTS.md`/`CLAUDE.md`/`CODEX.md` to point at
 them instead of duplicating state. See `docs/CURRENT_STATE.md` for exactly what's real
 right now; this roadmap file states what comes next.
 
-This branch was fast-forwarded from `origin/feat/alpha-v0.1` (`c819e87d`) onto
-`d986996ba` specifically so this reset would reflect the JLL v2 pipeline's actual state
-rather than a stale pre-JLL-v2 snapshot — a base-alignment step internal to this work,
-not a separate roadmap block of its own.
+Closed as PR #2. The canonical state documentation now lives on the protected branch;
+it is not an unmerged documentation branch.
 
-### Baseline Debt Triage / Burn-down #1
+### Pilot Quality Standard v1 — CLOSED / PASS
 
-Not yet started. Will consume `docs/CURRENT_STATE.md`'s "Known debt / blockers" section
-as its starting inventory — technical debt, architectural debt, and open business
-decisions are already separated there so this triage doesn't have to re-derive that split.
+Closed as PR #3. The formal standard now exists in
+`docs/pilot/PILOT_QUALITY_STANDARD_V1.md`, with its evaluation matrix in
+`docs/pilot/PILOT_EVAL_MATRIX_V1.md` and task bank in
+`docs/pilot/PILOT_TASK_BANK_V0.md`.
+
+### Baseline Debt Triage — DIAGNOSIS COMPLETE
+
+Diagnosis is complete and ready for implementation; it does not claim the debt is fixed.
+The active historical-failure allowlist has exactly 19 IDs and permits zero new
+regressions. Burn-down #1's approved implementation batch is IDs **3, 4, 5, 18, 19**:
+schema baseline, ingest-status contract, and server-test isolation.
+
+Explicitly deferred: IDs **1/12** (trajectory-test staleness), **2** (source-truth
+verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
+and **13–17** (`db_chat` retirement/transition decision in A2). Among the 19 baseline
+failures, Track D found no evidence of a current semantic/entity defect in the canonical
+Analyst; this is a triage conclusion, not universal proof.
+
+### Current State Checkpoint / Chat Reset — CURRENT
+
+An operational checkpoint, not an architecture phase. Its purpose is to make the
+repository the primary context source before implementation resumes.
+
+### Baseline Debt Burn-down #1
+
+Next implementation batch after the chat reset. It executes the approved IDs 3, 4, 5,
+18, and 19 before A2 begins.
 
 ### A2 — Agent Architecture
 
@@ -189,9 +218,9 @@ Not yet started.
 
 ### Pilot Hardening / Pilot Readiness Gate
 
-Not yet started. Will assess the existing pilot-feedback surface
-(`/pilot-feedback`, `/pilot-control` — see `docs/CURRENT_STATE.md`'s Product table) for
-readiness before any wider rollout; a formal gate, not yet defined.
+The formal Pilot Quality Standard v1 exists. Implementation and readiness evidence remain
+future work: this block will assess the existing pilot-feedback surface (`/pilot-feedback`,
+`/pilot-control` — see `docs/CURRENT_STATE.md`'s Product table) before any wider rollout.
 
 ### External data / Inciti / personalized artifacts / Excel / PPT / etc.
 
