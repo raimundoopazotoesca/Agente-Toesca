@@ -5,9 +5,9 @@ ingesta de datos (rent roll, EEFF, ER, flujos, mercado), una base SQLite como
 fuente única de verdad, un fact sheet HTML generado desde la DB, y un asistente
 conversacional ("Analyst") para consultar el portafolio en lenguaje natural.
 
-Complementa (sin depender de) el **Asistente Virtual Inmobiliario Toesca**
-(`agent.py`), un agente CLI más antiguo para automatizar Outlook, SharePoint y
-Excel.
+El objetivo del proyecto es **reemplazar por completo la planilla CDG**
+(Control de Gestión): sin integraciones ni paridad con ella, la plataforma se
+valida contra las fuentes originales, reglas aprobadas y revisión humana.
 
 ## Componentes
 
@@ -17,13 +17,11 @@ Excel.
 | **Base de datos** (`memory/agente_toesca_v2.db`) | SQLite: fuente única de verdad de todos los fondos/activos | consultada por todo lo demás |
 | **Fact sheet** (`factsheet.html`) | Reporte HTML autocontenido con KPIs por fondo, generado desde la DB | `scripts/build_factsheet.py` |
 | **Analyst** (`tools/analyst*`, `web/analyst.html`) | Chat que responde preguntas del portafolio contra la DB, con feedback y control center para pilotos | vía servidor local |
-| **Asistente CLI** (`agent.py`) | Automatiza Outlook/SharePoint/Excel (planillas CDG, NOI-RCSD, rent roll, factsheets PPTX) | `python -X utf8 agent.py` |
 
 ## Requisitos
 
 - Python 3.11+
-- Windows para el Asistente CLI (usa Outlook vía COM); el servidor local y la
-  DB son multiplataforma
+- Multiplataforma (Windows/Mac)
 
 ## Instalación
 
@@ -37,13 +35,9 @@ cp .env.example .env   # Windows: copy .env.example .env
 Editar `.env` (ver comentarios en `.env.example` para cada variable):
 
 ```env
-GEMINI_API_KEY=...              # solo requerido por agent.py (Asistente CLI)
+GEMINI_API_KEY=...              # usado por el Analyst y por scripts de ingesta que llaman a un LLM
 INGESTA_TOKEN=...               # fijo, o se genera uno por sesión al arrancar
-SHAREPOINT_DIR=...              # OneDrive sincronizado, solo lo usa agent.py
-RENTA_COMERCIAL_DIR=...         # solo lo usa agent.py
 ```
-
-> `pywin32` (Outlook) se instala solo en Windows; en Mac se omite automáticamente.
 
 ## Uso — Plataforma local (ingesta, factsheet, Analyst)
 
@@ -72,23 +66,9 @@ navegador funciona sin configuración extra.
 python -X utf8 -m scripts.build_factsheet
 ```
 
-## Uso — Asistente CLI (Outlook / SharePoint / Excel)
-
-```bash
-python -X utf8 agent.py
-```
-
-Automatiza planillas CDG Rentas Comerciales, hoja NOI-RCSD, validación de rent
-roll, y actualización de fact sheets PPTX (PT/APO/TRI legado). Ver
-`python agent.py --server` para exponerlo como servicio HTTP interno (requiere
-`AGENT_SERVER_API_TOKEN` de al menos 32 caracteres; escucha solo en
-`127.0.0.1` por defecto — no exponer en `0.0.0.0` sin firewall/TLS/control de
-acceso).
-
 ## Arquitectura del código
 
 ```
-agent.py                    # Asistente CLI: loop de conversación, system prompt
 config.py                   # variables de entorno
 scripts/
   ingesta_server.py         # servidor Flask: ingesta + factsheet + Analyst + pilot control
@@ -99,8 +79,6 @@ tools/
   db/                       # conexión, migraciones, ingesta validada por dominio
   analyst/                  # resolución de entidades, ambigüedad, contexto temporal
   analyst_workspace/        # conversaciones, feedback, servicio del chat Analyst
-  registry.py                # tools del Asistente CLI (TOOL_DEFINITIONS, dispatch)
-  email_tools.py, sharepoint_tools.py, excel_tools.py, ...  # tools del Asistente CLI
 web/
   ingesta.html, analyst.html, pilot_control.html, pilot_feedback.html, login.html
 memory/
@@ -125,8 +103,6 @@ pytest
 
 - Todo `/api/*` del servidor local exige `X-Ingesta-Token`
   (`hmac.compare_digest`); CORS restringido a `localhost:8765`.
-- El servidor opcional de `agent.py --server` rechaza arrancar sin
-  `AGENT_SERVER_API_TOKEN` de ≥32 caracteres.
 - `.env` nunca se sube a Git (está en `.gitignore`); cada máquina mantiene el
   suyo con sus propias rutas y tokens.
 
