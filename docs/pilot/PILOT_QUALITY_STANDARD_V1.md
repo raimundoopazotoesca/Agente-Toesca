@@ -512,7 +512,7 @@ The most mature category in the stack **[B]** (blueprint §D).
 | OR-3 | Provider errors, timeouts, and retry exhaustion are captured in the trace with reason codes. | P0 | `HARD_INVARIANT` |
 | OR-4 | Conversation persistence survives a server restart — pilot users must not lose their work. `tools/analyst_workspace/` exists for exactly this **[B]**. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` (operator verifies restart behavior) |
 | OR-5 | A documented rollback: how the pilot is turned off, and who can do it, within one working session. | P0 | `HUMAN_ACCEPTANCE_REQUIRED` |
-| OR-6 | Load-bearing CI exists on protected branch `feat/alpha-v0.1`: required checks are `tests` (baseline-gated), `eval/benchmark/tests` (100% green), and `eval/product_alpha/tests` (100% green). | P1 | `HUMAN_ACCEPTANCE_REQUIRED` — **[C]** the remaining decision is whether passing these required checks is an explicit pilot-readiness evidence condition. See §29 EG-9 and OD-12. |
+| OR-6 | Load-bearing CI exists on protected branch `feat/alpha-v0.1`: required checks are `tests` (baseline-gated), `eval/benchmark/tests` (100% green), and `eval/product_alpha/tests` (100% green). | P1 | `HUMAN_ACCEPTANCE_REQUIRED` — **[C]** passing all three required checks is an explicit Pilot Readiness Gate entry condition. See §29 EG-9. |
 
 ## 22. UX / product reliability
 
@@ -717,7 +717,7 @@ above; nothing here is new.
 | EG-6 | Feedback loop live: flag → trace captured → triage path defined (FB-1..FB-3, FB-5). | Operator walkthrough |
 | EG-7 | Latency/cost baseline measured (§23). | Baseline artifact |
 | EG-8 | JLL/freshness position explicitly chosen (JL-2 **or** JL-3) and true. | Gate manifest state + wiring check |
-| EG-9 | Evidence that the required CI checks pass: `tests` is baseline-gated with zero new regressions against the active 19-item known-failure allowlist, and `eval/benchmark/tests` plus `eval/product_alpha/tests` are 100% green (DR-6). | Required-check output. Whether this evidence is an explicit Pilot Readiness Gate condition remains OD-12 **[C]** |
+| EG-9 | **Pilot entry condition:** evidence that all required CI checks pass: `tests` is baseline-gated with zero new regressions against the active 19-item known-failure allowlist, and `eval/benchmark/tests` plus `eval/product_alpha/tests` are 100% green (DR-6). | Required-check output **[C]** |
 | EG-10 | Operator and users named; §28 in place. | Written sign-off (HB-12) |
 
 ## 30. Stop-the-pilot conditions
@@ -771,7 +771,6 @@ precondition), that is noted at the item and changes nothing about who must deci
 | OD-9 | Mall Curicó ER rows without `cuenta_codigo`: reject, quarantine, or publish as explicitly unclassified **[B]** A1.5 §P.4. | ER/contabilidad business owner | Only if Curicó ER ships |
 | OD-10 | Rent-roll `fecha_corte` convention (JL-4). | JLL relationship owner | Yes, if rent roll ships |
 | OD-11 | Ownership and timing of the eight JLL external-gate items (JL-6). | Named human | Yes, if JL-2 path chosen |
-| OD-12 | Must passing the existing required CI checks be an explicit Pilot Readiness Gate condition/evidence requirement? CI already exists and is load-bearing (OR-6/EG-9) **[C]**. | Eng lead | Decides EG-9's form |
 | OD-13 | Evidence-inspection UX form (EV-3). | Product/design | No (form is P2) |
 | OD-14 | Number of pilot users (OP-2) and pilot duration. | Pilot operator | Yes |
 | OD-15 | Whether deterministic reports are in pilot scope at all (§26 / SW-8). | Product | No — either path is acceptable |
@@ -786,7 +785,7 @@ precondition), that is noted at the item and changes nothing about who must deci
 | Product state: load-bearing CI on `feat/alpha-v0.1`; JLL v2 triple disposition; reports not built; Analyst-first shell approved-not-built; `renta_uf` semantics debt; feedback surfaces shipped; legacy surfaces still present | `docs/CURRENT_STATE.md`, `docs/ROADMAP.md`, `docs/superpowers/plans/2026-08-28-jll-v2-production-readiness.md`, `.worktrees/jll-v2-production-readiness/docs/jll-v2-external-gate-manifest.yaml` | B |
 | Fund/asset key conventions; `Apo3001 ∈ TRI`; `superseded_at` filtering; CDG quarter offsets; "no usar el CDG"; excluded assets; server auth | `CLAUDE.md`, project memory, `docs/matriz-claves-ambiguas-apoquindo.md` | B |
 | Context engineering as design (P10); tools as a product surface and actionable tool errors (P11, TU-4, TU-6); outcome-and-trajectory evaluation (P12); determinism-before-autonomy (P14, §26); judge calibration and judge failure modes (P15, SY-6, SY-7, UC-5, SW-10); retrieval/groundedness/relevance separation (P16, RV-6); plan quality and justified replanning (PQ-1..PQ-4); `span_type` and `app_version` in the trace (§24); repetition judged by purpose not count (AP-2); semantic model as a precondition for text-to-SQL (SQ-7); baseline before optimization (LA-3, LA-5); single-agent before multi-agent (§3) | **External sources read in this revision** — see §34 for the per-file inventory, nature, and what each actually supports. Each claim is cited inline by filename and section/lesson/slide/page. | S |
-| Pilot definition and success criteria; hard-blocker selection; severity assignment; the MUST/SHOULD trace split; the "why"-question investigation rule; operator requirements; stop conditions; exit criteria; whether passing existing required CI checks is an explicit readiness-gate condition | Judgment calls made in this document. Contestable; several are surfaced as open decisions in §32. | C |
+| Pilot definition and success criteria; hard-blocker selection; severity assignment; the MUST/SHOULD trace split; the "why"-question investigation rule; operator requirements; stop conditions; exit criteria; the resolved requirement that passing existing required CI checks is an explicit readiness-gate condition | Judgment calls made in this document. Contestable; several are surfaced as open decisions in §32. | C |
 | Everything in §32 | Deliberately unresolved; needs a named human. | D |
 
 ---
