@@ -57,7 +57,7 @@ def _login(page, base_url: str, username: str) -> None:
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
     page.get_by_role("button", name="Entrar").click()
-    page.wait_for_url(f"{base_url}/analyst")
+    page.wait_for_url(f"{base_url}/analyst", timeout=10_000)
 
 
 def test_pilot_feedback_ui_submits_immutable_report_and_reviewer_updates_status(monkeypatch, tmp_path):
