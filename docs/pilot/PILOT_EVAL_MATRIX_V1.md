@@ -59,7 +59,7 @@ into the blueprint taxonomy.
 | `block_vs_warning` | BLOCK = pilot does not start / stops. WARN = monitored. |
 | `trace_fields_required` | Fields from the Pilot Trace Contract (§24). |
 | `representative_tasks` | Task-bank ids. |
-| `current_coverage` | What exists at `d986996` — verified. |
+| `current_coverage` | What exists in the current synchronized repository state — verified. References to `d986996` identify historical design-origin evidence unless stated otherwise. |
 | `gap` | What is missing. |
 | `proposed_future_implementation` | The contract for closing it. Not built here. |
 | `source_rationale` | S / A / B / C / D per the standard's authority model (§ "Authority model"). **S** citations name the source file and its section/lesson/slide/page. `A(general)` no longer exists — Draft 1 used it for principles whose sources had not been read; those sources have now been read and are cited concretely. |
@@ -156,13 +156,13 @@ stops the whole pilot, `BLOCK/C` removes the affected capability from the pilot 
 - **DATA** · data foundation stability
 - **prevents:** a silent ingestion regression shipping into a pilot
 - contract-test · deterministic · **evidence:** failing-test-ID set vs persisted baseline manifest
-- **metric:** count of failing IDs **not present** in the `d986996` baseline set
+- **metric:** count of failing IDs **not present** in the active 19-item known-failure allowlist
 - `ZERO_TOLERANCE` on new IDs (the baseline itself is `BASELINE_RELATIVE`) · P0 · **BLOCK**
 - **trace:** n/a (suite artifact)
 - **tasks:** n/a
-- **current_coverage:** `tests/db`, `tests/datasets`, `tests/analytics` run under bare `pytest` (`testpaths=tests`) **[B]**. The `21 failed / 1342 passed / 6 skipped / 1 xfailed` baseline is an **external run result not persisted anywhere in the repo** **[B]** (blueprint §B.8)
-- **gap:** the baseline ID manifest does not exist; no CI **[B]**
-- **future:** persist the exact failing-test-ID set; compare sets, never counts (blueprint §M)
+- **current_coverage:** Eval Foundation Step 0 is **CLOSED / PASS**. Load-bearing CI on `feat/alpha-v0.1` requires `tests` (baseline-gated), `eval/benchmark/tests` (100% green), and `eval/product_alpha/tests` (100% green). The active known-failure allowlist contains exactly 19 historical failing IDs **[B]**.
+- **gap:** no baseline-manifest or CI-existence gap remains. The gate blocks new failures, stale/resolved allowlist entries, anomalous outcomes, IDs not collected, and collection/internal errors **[B]**.
+- **future:** maintain the exact allowlist by set comparison, never counts; remove an ID when its known failure is fixed (blueprint §M)
 - **source:** A (blueprint §M) + B
 
 ## PE-04 — `superseded_at` discipline
@@ -419,7 +419,7 @@ stops the whole pilot, `BLOCK/C` removes the affected capability from the pilot 
 - **trace:** `sql_statements[]`, authorizer log
 - **tasks:** T-042
 - **current_coverage:** **strongest area in the stack** — `tools/analyst_runtime/sqlite_guard.py::make_authorizer()` allow-lists `SELECT/READ/FUNCTION/RECURSIVE`, shared verbatim between `SnapshotSandbox` and `LiveReadOnlySandbox` **[B]**. `actions.py::validate_sql()` is documented as UX-only, not the boundary **[B]**
-- **gap:** the tests asserting it sit outside `pytest.ini`'s `testpaths` and no CI runs them **[B]**
+- **gap:** CI exists, but coverage of these assertions by the required CI checks remains to be confirmed **[B]**
 - **future:** wire into the pre-deployment check (blueprint §P step 0.1)
 - **source:** A (blueprint §B.7/§N) + B
 
@@ -512,7 +512,7 @@ stops the whole pilot, `BLOCK/C` removes the affected capability from the pilot 
 - **trace:** `citations`, `tool_calls[]`, `gate_results`, `judge_model`/`rubric_version`/`judge_impl_version`
 - **tasks:** T-036, T-037, T-039, T-045
 - **current_coverage:** F1 implemented, judge-decided; C1/C2 deterministic **[B]**
-- **gap:** none in mechanism; the gap is that nothing runs it automatically **[B]** (no CI)
+- **gap:** none in mechanism; CI exists, but automatic execution of this particular mechanism by the required checks remains to be evidenced **[B]**
 - **future:** included in the pre-deployment check; judge cost bounded by sampling on pilot traffic (§24 SHOULD)
 - **source:** A (blueprint §I/N, judge policy)
 
