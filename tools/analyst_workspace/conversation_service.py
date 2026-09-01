@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from uuid import uuid4
 
 from tools.analyst_runtime.session import AnalystSession, AnalystSessionFactory, AnalystSessionResult
+from tools.analyst_runtime.turn_trace import build_turn_trace
 from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message
 from tools.analyst_workspace.store import DEFAULT_TITLE, WorkspaceStore
 from tools.analyst_workspace.title_generator import LightweightTitleGenerator, TitleGenerator, is_substantive_text
@@ -19,6 +21,10 @@ class ConversationServiceError(Exception):
     """Raised for service-level input errors before an analyst call."""
 
 
+class TurnTracePersistenceError(ConversationServiceError):
+    """The mandatory durable trace could not be written with its answer."""
+
+
 class ConversationService:
     def __init__(self, store: WorkspaceStore, session_factory: AnalystSessionFactory,
                  title_generator: TitleGenerator | None = None):
@@ -26,6 +32,7 @@ class ConversationService:
         self.session_factory = session_factory
         self.title_generator = title_generator or LightweightTitleGenerator()
         self._sessions: dict[str, AnalystSession] = {}
+        self._session_ids: dict[str, str] = {}
 
     def create_conversation(self, context: dict[str, Any] | None = None, title: str | None = None, user_id: str | None = None) -> Conversation:
         return self.store.create_conversation(context=context, title=title, owner_user_id=user_id)
@@ -51,6 +58,7 @@ class ConversationService:
     def archive_conversation(self, conversation_id: str) -> Conversation:
         conversation = self.store.archive_conversation(conversation_id)
         self._sessions.pop(conversation_id, None)
+        self._session_ids.pop(conversation_id, None)
         return conversation
 
     def archive_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
@@ -67,7 +75,18 @@ class ConversationService:
         if not isinstance(text, str) or not text.strip():
             raise ConversationServiceError("message text cannot be empty")
         conversation = self.store.get_conversation(conversation_id)
-        user_message = self.store.append_message(conversation_id, "user", text)
+        messages = self.store.list_messages(conversation_id)
+        pending = messages[-1] if messages else None
+        if (pending is not None and pending.role == "user" and pending.content == text
+                and (pending.metadata or {}).get("turn_trace_status") == "pending"):
+            user_message = pending
+            turn_id = str(pending.metadata["turn_id"])
+        else:
+            turn_id = str(uuid4())
+            user_message = self.store.append_message(
+                conversation_id, "user", text,
+                metadata={"turn_id": turn_id, "turn_trace_status": "pending"},
+            )
         session = self._sessions.get(conversation_id)
         hydration_latency_ms = 0.0
         if session is None:
@@ -89,9 +108,22 @@ class ConversationService:
         started = time.monotonic()
         result = session.ask(text)
         latency_ms = (time.monotonic() - started) * 1000
-        assistant = self.store.append_message(
-            conversation_id, "assistant", result.text, metadata=runtime_result_to_metadata(result, latency_ms, hydration_latency_ms)
-        )
+        session_id = self._session_ids.setdefault(conversation_id, str(uuid4()))
+        assistant_id = str(uuid4())
+        try:
+            trace = build_turn_trace(
+                result, user_text=text, turn_id=turn_id, conversation_id=conversation_id,
+                session_id=session_id, user_message_id=user_message.id, assistant_message_id=assistant_id,
+            )
+            metadata = runtime_result_to_metadata(result, latency_ms, hydration_latency_ms)
+            metadata.update({"turn_trace_status": "completed", "turn_trace": trace})
+            assistant = self.store.append_message(
+                conversation_id, "assistant", result.text, metadata=metadata, message_id=assistant_id,
+            )
+        except Exception as exc:
+            self._sessions.pop(conversation_id, None)
+            self._session_ids.pop(conversation_id, None)
+            raise TurnTracePersistenceError("unable to persist analyst turn trace") from exc
         if result.durable_memory:
             self.store.persist_analytical_turn(conversation_id, user_message.id, assistant.id, result.durable_memory)
         if conversation.title_origin == "default" and is_substantive_text(text):

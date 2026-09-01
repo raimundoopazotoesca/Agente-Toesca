@@ -856,7 +856,8 @@ class WorkspaceStore:
         return self._update_conversation(conversation_id, "archived_at = NULL", ())
 
     def append_message(
-        self, conversation_id: str, role: str, content: str, metadata: dict[str, Any] | None = None
+        self, conversation_id: str, role: str, content: str, metadata: dict[str, Any] | None = None,
+        *, message_id: str | None = None,
     ) -> Message:
         if role not in _ROLES:
             raise ValidationError("role must be 'user' or 'assistant'")
@@ -864,7 +865,7 @@ class WorkspaceStore:
             raise ValidationError("content must be a string")
         serialized_metadata = _serialize_object(metadata, "metadata")
         now = _utc_now()
-        message = Message(str(uuid4()), conversation_id, role, content, now, metadata)
+        message = Message(message_id or str(uuid4()), conversation_id, role, content, now, metadata)
         conn = self._connect()
         try:
             with conn:

@@ -9,6 +9,7 @@ from tools.analyst_workspace.conversation_service import (
     AnalystSessionResult,
     ConversationService,
     ConversationServiceError,
+    TurnTracePersistenceError,
 )
 from tools.analyst_workspace.store import WorkspaceStore
 
@@ -77,6 +78,32 @@ def test_send_persists_visible_user_then_assistant_message(workspace):
     assert [message.role for message in messages] == ["user", "assistant"]
     assert messages[0].content == "¿Cuál es la vacancia?"
     assert assistant.content == "La vacancia es 5%. "
+
+
+def test_send_persists_completed_correlated_turn_trace(workspace):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    assistant = service.send_message(conversation.id, "Pregunta")
+    messages = workspace.list_messages(conversation.id)
+    trace = assistant.metadata["turn_trace"]
+    assert trace["completion"]["status"] == "completed"
+    assert trace["identity"]["conversation_id"] == conversation.id
+    assert trace["identity"]["user_message_id"] == messages[0].id
+    assert trace["identity"]["assistant_message_id"] == assistant.id
+
+
+def test_trace_persistence_failure_keeps_pending_user_and_retry_does_not_duplicate_it(workspace, monkeypatch):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    monkeypatch.setattr("tools.analyst_workspace.conversation_service.build_turn_trace", lambda **_: (_ for _ in ()).throw(ValueError("broken trace")))
+    with pytest.raises(TurnTracePersistenceError):
+        service.send_message(conversation.id, "Pregunta")
+    pending = workspace.list_messages(conversation.id)
+    assert len(pending) == 1 and pending[0].metadata["turn_trace_status"] == "pending"
+    pending_turn_id = pending[0].metadata["turn_id"]
+    monkeypatch.undo()
+    assistant = service.send_message(conversation.id, "Pregunta")
+    messages = workspace.list_messages(conversation.id)
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert assistant.metadata["turn_trace"]["identity"]["turn_id"] == pending_turn_id
 
 
 def test_same_conversation_reuses_one_in_memory_session(workspace):
@@ -151,6 +178,10 @@ def test_runtime_metadata_is_whitelisted_and_raw_reasoning_is_not_persisted(work
     conversation = service.create_conversation()
     assistant = service.send_message(conversation.id, "Consulta")
     assert assistant.metadata.pop("turn_metrics")["llm_rounds"] == 2
+    trace = assistant.metadata.pop("turn_trace")
+    assert assistant.metadata.pop("turn_trace_status") == "completed"
+    assert trace["execution"]["sql_statements"] == ["SELECT 1"]
+    assert "secret" not in str(trace)
     assert assistant.metadata == {
         "latency_ms": pytest.approx(assistant.metadata["latency_ms"]),
         "model_calls": 2,
