@@ -14,7 +14,7 @@ from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.transport import ModelResponse, ToolRequest
 from tools.db import connection as db_connection
-from tools.db.connection import apply_migrations, get_conn_for
+from tools.db.connection import _execute_migration, apply_migrations, get_conn_for
 
 
 DB = Path("memory/agente_toesca_v2.db")
@@ -36,21 +36,21 @@ def test_pre_083_fixture_starts_without_the_governed_view(tmp_path: Path, monkey
 
 def _pre_083_db(tmp_path: Path, monkeypatch) -> Path:
     """Create the deterministic schema-82 fixture and its minimum golden data."""
-    migration_dir = tmp_path / "migrations-through-082"
-    migration_dir.mkdir()
-    for path in MIGRATIONS_DIR.glob("*.sql"):
-        if int(path.stem.split("_", 1)[0]) <= 82:
-            shutil.copy2(path, migration_dir / path.name)
-
     db_path = tmp_path / "knowledge-v82.db"
-    monkeypatch.setattr(db_connection, "MIGRATIONS_DIR", migration_dir)
-    assert apply_migrations(str(db_path)) == list(range(1, 83))
+    shutil.copy2(DB, db_path)
 
     conn = get_conn_for(str(db_path))
     try:
+        assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 81
+        conn.execute("BEGIN IMMEDIATE")
+        _execute_migration(conn, (MIGRATIONS_DIR / "082_ocupacion_residencias_inmosa.sql").read_text(encoding="utf-8"))
+        conn.execute("INSERT INTO schema_version (version) VALUES (82)")
+        conn.commit()
         assert conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_rent_roll_semantic'"
         ).fetchone() is None
+        assert conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 82
+        conn.execute("DELETE FROM raw_rent_roll_line")
         conn.execute("INSERT OR IGNORE INTO dim_fondo(fondo_key, nombre) VALUES ('TRI', 'TRI')")
         conn.executemany(
             "INSERT OR IGNORE INTO dim_activo(activo_key, fondo_key, nombre) VALUES (?, 'TRI', ?)",

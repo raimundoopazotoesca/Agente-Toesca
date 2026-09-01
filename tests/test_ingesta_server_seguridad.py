@@ -11,10 +11,14 @@ import io
 import pytest
 
 from scripts import ingesta_server
+from tools.db import estado_ingesta
+from tools.db.connection import apply_migrations
 
 
 @pytest.fixture
-def app():
+def app(tmp_db_path, monkeypatch):
+    apply_migrations(tmp_db_path)
+    monkeypatch.setattr(estado_ingesta, "DB_PATH", tmp_db_path)
     ingesta_server.app.config["TESTING"] = True
     return ingesta_server.app
 

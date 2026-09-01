@@ -1,7 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- BASELINE del esquema — equivale a aplicar las migraciones 001..073.
+-- BASELINE del esquema — equivale a aplicar las migraciones 001..084.
 --
 -- GENERADO POR scripts/regenerar_baseline.py — no editar a mano.
+--
+-- BASELINE_VERSION es el watermark operacional incorporado aquí, no
+-- necesariamente la última migración del repositorio. Las migraciones
+-- posteriores se aplican normalmente a una DB vacía después del baseline.
 --
 -- Por qué existe
 -- --------------
@@ -12,7 +16,7 @@
 -- producción, y los tests validaban un esquema que producción no tenía.
 --
 -- Este archivo es el esquema real de producción. El runner lo aplica a una DB
--- vacía y registra 1..73 como aplicadas — ahora sí de forma veraz, porque el
+-- vacía y registra 1..84 como aplicadas — ahora sí de forma veraz, porque el
 -- baseline incorpora sus efectos. Las migraciones históricas se conservan como
 -- referencia pero ya no se ejecutan sobre DBs nuevas.
 --
@@ -117,6 +121,14 @@ CREATE TABLE dim_kpi (
     consumidores    TEXT,   -- quién lo usa hoy: factsheet, asistente, …
     nota            TEXT,
     actualizado_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE dim_residencia (
+    residencia_key TEXT PRIMARY KEY,
+    nombre         TEXT NOT NULL,
+    activo_key     TEXT NOT NULL REFERENCES dim_activo(activo_key),
+    camas          INTEGER,
+    vigente_hasta  TEXT
 );
 
 CREATE TABLE dim_serie (
@@ -343,6 +355,56 @@ CREATE TABLE raw_flujo_line (
     superseded_at TEXT
 );
 
+CREATE TABLE raw_mercado_bodegas (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    periodo               TEXT NOT NULL,   -- 'YYYY-MM', mes de cierre del semestre (06/12)
+    zona                  TEXT NOT NULL,   -- 'Centro'|'Nor-Poniente'|'Norte'|'Poniente'|'Sur'|'Gran Santiago'
+    clase                 TEXT,            -- 'A/B' (null para el total 'Gran Santiago')
+    es_total              INTEGER DEFAULT 0,
+    produccion_m2         REAL,
+    inventario_final_m2   REAL,
+    participacion_pct     REAL,            -- 4.6, no 0.046
+    vacancia_actual_m2    REAL,
+    tasa_vacancia_pct     REAL,
+    vacancia_anterior_m2  REAL,
+    absorcion_m2          REAL,
+    precio_uf_m2          REAL,
+    precio_usd_m2         REAL,
+    file_hash             TEXT,
+    source_row            INTEGER,
+    ingest_run_id         INTEGER REFERENCES ingest_run(id),
+    loaded_at             TEXT DEFAULT (datetime('now')),
+    superseded_at         TEXT,
+    UNIQUE(file_hash, source_row)
+);
+
+CREATE TABLE raw_mercado_bodegas_evolucion (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    semestre      TEXT NOT NULL,   -- '2S-2015', '1S-2016', ...
+    anio          INTEGER NOT NULL,
+    periodo_num   INTEGER NOT NULL,  -- 1|2
+    uf_m2         REAL,
+    vacancia_pct  REAL,            -- fracción, 0.0995 = 9.95%
+    source_file   TEXT,
+    file_hash     TEXT,
+    loaded_at     TEXT DEFAULT (datetime('now')),
+    superseded_at TEXT,
+    UNIQUE(semestre, file_hash)
+);
+
+CREATE TABLE raw_mercado_comercio (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    periodo                 TEXT NOT NULL,   -- 'YYYY-MM'
+    categoria               TEXT NOT NULL,   -- una de las 7 categorías fijas (ver build_factsheet.py)
+    variacion_acumulada_pct REAL,            -- fracción: 0.007 = 0,7%
+    file_hash               TEXT,
+    source_row              INTEGER,
+    ingest_run_id           INTEGER REFERENCES ingest_run(id),
+    loaded_at               TEXT DEFAULT (datetime('now')),
+    superseded_at           TEXT,
+    UNIQUE(periodo, categoria, file_hash)
+);
+
 CREATE TABLE raw_mercado_oficinas (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     periodo             TEXT NOT NULL,        -- 'YYYY-MM', último mes del trimestre
@@ -365,6 +427,72 @@ CREATE TABLE raw_mercado_oficinas (
     loaded_at           TEXT DEFAULT (datetime('now')),
     superseded_at       TEXT,
     UNIQUE(file_hash, source_row)
+);
+
+CREATE TABLE raw_mercado_oficinas_evolucion (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    periodo       TEXT NOT NULL,   -- 'YYYY-MM', mes de cierre del trimestre (03/06/09/12)
+    anio          INTEGER NOT NULL,
+    trimestre     INTEGER NOT NULL,  -- 1..4
+    submercado    TEXT NOT NULL DEFAULT 'Las Condes (CBD)',
+    clase         TEXT NOT NULL,   -- 'A' | 'B'
+    vacancia_pct  REAL,            -- fracción, ej. 0.034 = 3.4%
+    renta_uf_m2   REAL,
+    source_file   TEXT,
+    source_sheet  TEXT,
+    file_hash     TEXT,
+    ingest_run_id INTEGER REFERENCES ingest_run(id),
+    loaded_at     TEXT DEFAULT (datetime('now')),
+    superseded_at TEXT,
+    UNIQUE(periodo, submercado, clase, file_hash)
+);
+
+CREATE TABLE raw_movimiento_contrato (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    activo_key              TEXT NOT NULL,
+    tipo_unidad             TEXT,
+    status                  TEXT,
+    arrendatario            TEXT,
+    nuevo_arrendatario      TEXT,
+    antes_uf                REAL,
+    hoy_uf                  REAL,
+    antes_uf_m2             REAL,
+    hoy_uf_m2               REAL,
+    m2                      REAL,
+    pct_variacion           REAL,
+    vencimiento             TEXT,
+    inicio_nuevo_contrato   TEXT,
+    nuevo_vencimiento       TEXT,
+    comentarios             TEXT,
+    source_file             TEXT,
+    source_sheet            TEXT,
+    source_row              INTEGER,
+    file_hash               TEXT,
+    ingest_run_id           INTEGER REFERENCES ingest_run(id),
+    loaded_at               TEXT DEFAULT (datetime('now')),
+    superseded_at           TEXT,
+    UNIQUE (file_hash, source_sheet, source_row)
+);
+
+CREATE TABLE raw_ocupacion_residencia_line (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    residencia_key        TEXT NOT NULL REFERENCES dim_residencia(residencia_key),
+    periodo               TEXT NOT NULL,
+    camas                 INTEGER,
+    cantidad_residentes   REAL,
+    ocupacion_pct         REAL,
+    ocupacion_pct_fuente  REAL,
+    ingresos              REAL,
+    egresos               REAL,
+    fallecimientos        REAL,
+    source_file           TEXT,
+    source_sheet          TEXT,
+    source_row            INTEGER,
+    file_hash             TEXT,
+    ingest_run_id         INTEGER REFERENCES ingest_run(id),
+    loaded_at             TEXT DEFAULT (datetime('now')),
+    superseded_at         TEXT,
+    UNIQUE(file_hash, residencia_key, source_row)
 );
 
 CREATE TABLE raw_pagare_intercompania (
@@ -467,6 +595,21 @@ CREATE TABLE raw_uf_diaria (
     loaded_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE raw_vacancia_manual (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    activo_key    TEXT NOT NULL,
+    tipo_unidad   TEXT,
+    periodo       TEXT NOT NULL,
+    m2_gla        REAL,
+    m2_vacantes   REAL,
+    source_file   TEXT,
+    source_sheet  TEXT,
+    file_hash     TEXT,
+    ingest_run_id INTEGER REFERENCES ingest_run(id),
+    loaded_at     TEXT DEFAULT (datetime('now')),
+    superseded_at TEXT
+);
+
 CREATE TABLE "raw_valor_cuota_bursatil" (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     nemotecnico TEXT NOT NULL,
@@ -492,6 +635,18 @@ CREATE TABLE "raw_valor_cuota_contable" (
     loaded_at     TEXT DEFAULT (datetime('now')),
     superseded_at TEXT,
     UNIQUE(nemotecnico, fecha, source_file)
+);
+
+CREATE TABLE raw_variacion_comercio_rm (
+    id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+    periodo                         TEXT NOT NULL,   -- 'YYYY-MM'
+    total_comercio_var_anual        REAL,            -- fracción: 0.036 = 3,6%
+    supermercado_tradicional_var_anual REAL,
+    file_hash                       TEXT,
+    ingest_run_id                   INTEGER REFERENCES ingest_run(id),
+    loaded_at                       TEXT DEFAULT (datetime('now')),
+    superseded_at                   TEXT,
+    UNIQUE(periodo, file_hash)
 );
 
 CREATE TABLE sucden_valores_fijos (
@@ -534,6 +689,19 @@ CREATE INDEX idx_kpi_kpi     ON derived_kpi(kpi);
 
 CREATE INDEX idx_kpi_periodo ON derived_kpi(periodo);
 
+CREATE INDEX idx_mercado_bodegas_evolucion_semestre
+    ON raw_mercado_bodegas_evolucion(semestre);
+
+CREATE INDEX idx_mercado_bodegas_lookup ON raw_mercado_bodegas(periodo, zona)
+    WHERE superseded_at IS NULL;
+
+CREATE INDEX idx_mercado_bodegas_periodo ON raw_mercado_bodegas(periodo);
+
+CREATE INDEX idx_mercado_comercio_lookup ON raw_mercado_comercio(periodo, categoria)
+    WHERE superseded_at IS NULL;
+
+CREATE INDEX idx_mercado_comercio_periodo ON raw_mercado_comercio(periodo);
+
 CREATE INDEX idx_mercado_lookup ON raw_mercado_oficinas(periodo, submercado, clase)
     WHERE superseded_at IS NULL;
 
@@ -565,9 +733,21 @@ CREATE INDEX idx_raw_flujo_activo_periodo   ON raw_flujo_line(activo_key, period
 
 CREATE INDEX idx_raw_flujo_hash        ON raw_flujo_line(file_hash);
 
+CREATE INDEX idx_raw_mercado_oficinas_evolucion_periodo
+    ON raw_mercado_oficinas_evolucion(submercado, clase, periodo);
+
+CREATE INDEX idx_raw_movimiento_contrato_activo
+    ON raw_movimiento_contrato(activo_key);
+
+CREATE INDEX idx_raw_ocupacion_residencia_key_periodo
+    ON raw_ocupacion_residencia_line(residencia_key, periodo);
+
 CREATE INDEX idx_raw_rr_activo_periodo      ON raw_rent_roll_line(activo_key, periodo);
 
 CREATE INDEX idx_raw_rr_hash           ON raw_rent_roll_line(file_hash);
+
+CREATE INDEX idx_raw_vacancia_manual_activo_periodo
+    ON raw_vacancia_manual(activo_key, periodo);
 
 CREATE INDEX idx_raw_valor_cuota_bursatil_nemo_fecha ON "raw_valor_cuota_bursatil"(nemotecnico, fecha);
 
@@ -576,6 +756,11 @@ CREATE INDEX idx_raw_vc_contable_nemo_fecha
 
 CREATE INDEX idx_tasacion_activo_periodo
     ON fact_tasacion(activo_key, periodo);
+
+CREATE INDEX idx_variacion_comercio_rm_lookup ON raw_variacion_comercio_rm(periodo)
+    WHERE superseded_at IS NULL;
+
+CREATE INDEX idx_variacion_comercio_rm_periodo ON raw_variacion_comercio_rm(periodo);
 
 CREATE INDEX ix_raw_balance_consolidado_line_fondo_periodo
     ON raw_balance_consolidado_line(fondo_key, periodo);
@@ -679,6 +864,32 @@ CREATE VIEW raw_valor_cuota_line AS
            'bursatil' AS tipo, NULL AS fondo_key
       FROM raw_valor_cuota_bursatil;
 
+CREATE VIEW v_absorcion_activo AS
+SELECT activo_key, periodo, SUM(m2_absorcion) AS m2_absorcion_neta
+FROM v_absorcion_movimiento
+WHERE periodo IS NOT NULL
+GROUP BY activo_key, periodo;
+
+CREATE VIEW v_absorcion_movimiento AS
+SELECT
+    activo_key,
+    tipo_unidad,
+    status,
+    CASE status
+        WHEN 'Nuevo Contrato' THEN substr(inicio_nuevo_contrato, 1, 7)
+        WHEN 'Término'        THEN substr(vencimiento, 1, 7)
+        ELSE NULL
+    END AS periodo,
+    CASE status
+        WHEN 'Nuevo Contrato' THEN m2
+        WHEN 'Término'        THEN -m2
+        ELSE 0
+    END AS m2_absorcion,
+    id AS movimiento_id
+FROM raw_movimiento_contrato
+WHERE superseded_at IS NULL
+  AND (tipo_unidad IS NULL OR tipo_unidad != 'Estacionamientos');
+
 CREATE VIEW v_activo_fondo_efectivo AS
   SELECT
     a.activo_key,
@@ -760,6 +971,31 @@ WHERE r.superseded_at IS NULL
         AND r2.monto_uf_cuota IS NOT NULL
         AND r2.monto_uf_cuota > 0
   );
+
+CREATE VIEW v_ocupacion_inmosa_consolidado AS
+SELECT
+    d.activo_key,
+    r.periodo,
+    SUM(r.camas)               AS camas_total,
+    SUM(r.cantidad_residentes) AS residentes_total,
+    CAST(SUM(r.cantidad_residentes) AS REAL) / NULLIF(SUM(r.camas), 0) AS ocupacion_pct
+FROM raw_ocupacion_residencia_line r
+JOIN dim_residencia d ON d.residencia_key = r.residencia_key
+WHERE r.superseded_at IS NULL
+GROUP BY d.activo_key, r.periodo;
+
+CREATE VIEW v_ocupacion_inmosa_vigente AS
+SELECT
+    d.activo_key,
+    r.periodo,
+    SUM(r.camas)               AS camas_total,
+    SUM(r.cantidad_residentes) AS residentes_total,
+    CAST(SUM(r.cantidad_residentes) AS REAL) / NULLIF(SUM(r.camas), 0) AS ocupacion_pct
+FROM raw_ocupacion_residencia_line r
+JOIN dim_residencia d ON d.residencia_key = r.residencia_key
+WHERE r.superseded_at IS NULL
+  AND d.vigente_hasta IS NULL
+GROUP BY d.activo_key, r.periodo;
 
 CREATE VIEW v_parking_mensual AS
 SELECT
@@ -868,6 +1104,44 @@ FROM mensual m
 JOIN gastos g ON g.periodo = m.periodo
 JOIN uf_mes u ON u.periodo = m.periodo;
 
+CREATE VIEW v_rent_roll_semantic AS
+SELECT
+    'rent_roll' AS dataset_key,
+    'rent_roll_semantics_v1' AS semantic_version,
+    r.activo_key,
+    r.periodo,
+    r.unidad,
+    CASE
+        WHEN r.unidad LIKE '(sin detalle, fila %)' THEN 'synthetic_missing_source_identity'
+        ELSE 'source_identity'
+    END AS unit_identity_quality,
+    r.arrendatario,
+    r.m2,
+    r.renta_uf,
+    CASE
+        WHEN LOWER(TRIM(r.arrendatario)) = 'vacante' THEN 'vacant'
+        WHEN r.arrendatario IS NULL OR TRIM(r.arrendatario) = '' THEN 'unknown'
+        WHEN LOWER(TRIM(r.arrendatario)) LIKE '%vacante%' THEN 'unknown'
+        ELSE 'occupied'
+    END AS occupancy_status,
+    CASE
+        WHEN json_extract(r.extra_json, '$.tipo_activo_2') IS NULL
+          OR TRIM(json_extract(r.extra_json, '$.tipo_activo_2')) = '' THEN 'unknown'
+        WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'oficina' THEN 'office'
+        WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'local' THEN 'local'
+        WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) = 'bodega' THEN 'storage'
+        WHEN LOWER(TRIM(json_extract(r.extra_json, '$.tipo_activo_2'))) IN ('estacionamiento', 'parking') THEN 'parking'
+        ELSE 'other_source_declared'
+    END AS unit_category,
+    json_extract(r.extra_json, '$.tipo_activo_2') AS unit_category_source,
+    CASE WHEN r.superseded_at IS NULL THEN 1 ELSE 0 END AS is_current,
+    r.source_file,
+    r.source_sheet,
+    r.source_row,
+    r.file_hash,
+    r.ingest_run_id
+FROM raw_rent_roll_line r;
+
 CREATE VIEW v_serie_patrimonio AS
 WITH
 cs_hist AS (
@@ -909,6 +1183,47 @@ SELECT
 FROM val v
 LEFT JOIN cs_hist cs ON cs.nemotecnico = v.nemotecnico
 LEFT JOIN div_acc da ON da.nemotecnico = v.nemotecnico;
+
+CREATE VIEW v_vacancia_activo AS
+WITH total_row AS (SELECT activo_key,periodo,fuente,m2_gla t_gla,m2_vacantes t_vac FROM v_vacancia_activo_tipo WHERE tipo_unidad IS NULL),
+tipo_sum AS (SELECT activo_key,periodo,fuente,SUM(m2_gla) s_gla,SUM(m2_vacantes) s_vac FROM v_vacancia_activo_tipo WHERE tipo_unidad IS NOT NULL AND tipo_unidad!='Estacionamiento' GROUP BY activo_key,periodo,fuente),
+combinado AS (
+ SELECT COALESCE(tr.activo_key,ts.activo_key) activo_key,COALESCE(tr.periodo,ts.periodo) periodo,COALESCE(tr.fuente,ts.fuente) fuente,tr.t_gla,tr.t_vac,ts.s_gla,ts.s_vac FROM total_row tr LEFT JOIN tipo_sum ts ON ts.activo_key=tr.activo_key AND ts.periodo=tr.periodo AND ts.fuente=tr.fuente
+ UNION SELECT COALESCE(tr.activo_key,ts.activo_key),COALESCE(tr.periodo,ts.periodo),COALESCE(tr.fuente,ts.fuente),tr.t_gla,tr.t_vac,ts.s_gla,ts.s_vac FROM tipo_sum ts LEFT JOIN total_row tr ON tr.activo_key=ts.activo_key AND tr.periodo=ts.periodo AND tr.fuente=ts.fuente)
+SELECT activo_key,periodo,fuente,COALESCE(t_gla,s_gla) m2_gla,COALESCE(t_vac,s_vac) m2_vacantes,CAST(COALESCE(t_vac,s_vac) AS REAL)/NULLIF(COALESCE(t_gla,s_gla),0) vacancia_pct FROM combinado;
+
+CREATE VIEW v_vacancia_activo_efectivo AS
+SELECT v.activo_key,v.periodo,v.m2_gla,v.m2_vacantes,v.m2_vacantes*COALESCE(d.participacion_fondo_activo,1.0) m2_vacantes_efectivo,v.vacancia_pct,v.fuente FROM v_vacancia_activo v LEFT JOIN dim_activo d ON d.activo_key=v.activo_key;
+
+CREATE VIEW v_vacancia_activo_tipo AS
+WITH rr AS (
+    SELECT activo_key, periodo,
+        CASE LOWER(TRIM(json_extract(extra_json, '$.tipo_activo_2')))
+            WHEN 'oficina' THEN 'Oficinas'
+            WHEN 'local' THEN 'Locales Comerciales'
+            WHEN 'bodega' THEN 'Bodegas'
+            WHEN 'estacionamiento' THEN 'Estacionamiento'
+            WHEN 'parking' THEN 'Estacionamiento'
+            ELSE 'Otro'
+        END AS tipo_unidad,
+        SUM(m2) AS m2_gla,
+        SUM(CASE WHEN LOWER(arrendatario) = 'vacante' THEN m2 ELSE 0 END) AS m2_vacantes
+    FROM raw_rent_roll_line WHERE superseded_at IS NULL
+    GROUP BY activo_key, periodo, tipo_unidad
+)
+SELECT activo_key, periodo, tipo_unidad, m2_gla, m2_vacantes, 'rent_roll' AS fuente FROM rr
+UNION ALL
+SELECT m.activo_key, m.periodo, m.tipo_unidad, m.m2_gla, m.m2_vacantes, 'manual'
+FROM raw_vacancia_manual m WHERE m.superseded_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM rr WHERE rr.activo_key=m.activo_key AND rr.periodo=m.periodo);
+
+CREATE VIEW v_vacancia_apoquindo_consolidado_tipo AS
+SELECT periodo,tipo_unidad,SUM(m2_gla) m2_gla,SUM(m2_vacantes) m2_vacantes,fuente FROM v_vacancia_activo_tipo WHERE activo_key IN ('Apo4501','Apo4700') GROUP BY periodo,tipo_unidad,fuente
+UNION ALL SELECT periodo,tipo_unidad,m2_gla,m2_vacantes,fuente FROM v_vacancia_activo_tipo WHERE activo_key='Fondo Apoquindo' AND tipo_unidad IS NOT NULL;
+
+CREATE VIEW v_vacancia_pt_consolidado_tipo AS
+SELECT periodo,tipo_unidad,SUM(m2_gla) m2_gla,SUM(m2_vacantes) m2_vacantes,fuente FROM v_vacancia_activo_tipo WHERE activo_key IN ('Torre A','Boulevard') GROUP BY periodo,tipo_unidad,fuente
+UNION ALL SELECT periodo,tipo_unidad,m2_gla,m2_vacantes,fuente FROM v_vacancia_activo_tipo WHERE activo_key='PT_consolidado';
 
 
 -- ── Seeds de dimensiones ───────────────────────────────────────────────

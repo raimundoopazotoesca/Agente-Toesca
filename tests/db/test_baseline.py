@@ -168,7 +168,7 @@ def test_baseline_al_dia_respecto_de_produccion():
 
     root = Path(__file__).resolve().parents[2]
     res = subprocess.run(
-        [sys.executable, str(root / "scripts" / "regenerar_baseline.py"), "--check"],
+        [sys.executable, "-X", "utf8", str(root / "scripts" / "regenerar_baseline.py"), "--check"],
         capture_output=True,
         text=True,
         cwd=str(root),
