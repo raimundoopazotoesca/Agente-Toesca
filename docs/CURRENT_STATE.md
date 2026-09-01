@@ -22,7 +22,7 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 | **Eval Foundation Step 0** | **CLOSED / PASS.** PR #1 ("eval: make analyst evaluation foundation load-bearing") merged into the protected branch `feat/alpha-v0.1`. See "Eval Foundation Step 0" under Eval & Observability below for the full gate detail. |
 | Protected branch (`feat/alpha-v0.1`) HEAD, post-merge | `631987393f240a17d902bf5a61104119c0e3eb98` — **ahead of this docs branch's own base** (`d986996`); this documentation branch has not been rebased onto it (see note below) |
 | CI (on the protected branch, post-merge) | `.github/workflows/eval-foundation.yml` now exists on `origin/feat/alpha-v0.1` — confirmed via `git ls-tree`. **Not yet present on this docs branch's own tree** (branched before the merge); do not assume this branch's working copy has the workflow file until it's rebased/merged forward. |
-| Current development phase | Data-foundation hardening (A0/A1) and Eval Foundation Step 0 both closed. Next: Baseline Debt Triage / Burn-down #1, before A2 — see `docs/ROADMAP.md` |
+| Current development phase | A0/A1/A1.5 (Current State & Reproducibility / Data Foundation & Semantic Layer / Data Foundation Target Contract & WIP Boundary) and Eval Foundation Step 0 both closed. JLL v2 is a separate parallel track — technical cutover candidate frozen, external gate pending, not part of this sequence. Next: Baseline Debt Triage / Burn-down #1, before A2 — see `docs/ROADMAP.md` |
 
 <!-- AUTO-GENERATED:START -->
 Not implemented. No `scripts/update_current_state.py` exists yet. The fields above

@@ -27,7 +27,8 @@ date, say so rather than following it blindly.
 1. Code
 2. Migrations / schema
 3. Tests
-4. CI / workflows (there are currently none configured — see `docs/CURRENT_STATE.md`)
+4. CI / workflows (active and load-bearing on the protected branch — see
+   `docs/CURRENT_STATE.md` for the required checks and gate detail)
 5. Git history / branches / tags
 6. Docs recently marked as current design (`docs/CURRENT_STATE.md`, `docs/ROADMAP.md`,
    `docs/ARCHITECTURE.md`)
@@ -98,9 +99,12 @@ print('schema_version:', c.execute('SELECT MAX(version) FROM schema_version').fe
   `tests/db/test_invariantes.py` and check `tests/db/test_baseline.py` still passes —
   it verifies a fresh-head DB matches an upgraded-production DB, not just that
   migrations apply cleanly in isolation.
-- There is no CI configured on this repo yet (see `docs/CURRENT_STATE.md`) — running
-  tests locally before claiming success is not optional busywork, it's the only gate
-  that exists.
+- CI exists and is load-bearing on the protected branch (`feat/alpha-v0.1`) — required
+  checks (`tests (baseline-gated)`, `eval/benchmark/tests`, `eval/product_alpha/tests`)
+  are enforced by an active GitHub ruleset with no bypass. See `docs/CURRENT_STATE.md`
+  for the exact required-check names and gate behavior. Running tests locally before
+  claiming success is still not optional — it's what CI will check anyway, and you
+  should know the result before pushing, not after.
 
 ## Semantic / data invariants
 

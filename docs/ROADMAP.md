@@ -15,11 +15,13 @@ current. See `docs/CURRENT_STATE.md`'s Product table for what actually exists to
 ## Sequence (approved)
 
 ```
-A0 — [closed] Data foundation hardening (the old ROADMAP.md's Phase 0/1)
-A1 — [closed] JLL v2 governed ingestion pipeline, implemented + tested in source (this commit, d986996)
-A1.5 — [closed] Documentation base alignment (Pass 1.5 — fast-forwarded this branch onto A1's work)
-     ↓
-Eval Foundation Step 0                              [closed / PASS — PR #1 merged into feat/alpha-v0.1]
+A0 — [closed] Current State & Reproducibility
+A1 — [closed] Data Foundation & Semantic Layer
+A1.5 — [closed / ready for A2 with domain gates] Data Foundation Target Contract & WIP Boundary
+     +
+JLL v2 — [technical cutover candidate frozen / external gate pending] parallel track, not part of the A-sequence
+     +
+Eval Foundation Step 0 — [closed / PASS] PR #1 merged into feat/alpha-v0.1
      ↓
 Documentation Reset / Current State Sync             ← this branch, docs/current-state-reset
      ↓
@@ -37,24 +39,41 @@ A5 — Evals & Observability
      ↓
 A6 — Roadmap & Development Process
      ↓
+Pilot Hardening / Pilot Readiness Gate
+     ↓
 External data / Inciti / personalized artifacts / Excel / PPT / etc.
 ```
 
 ### Closed blocks (historical record, not operational state)
 
-- **A0 — Data foundation hardening.** Corresponds to the old ROADMAP.md's Phase 0:
-  DB integrity (Apoquindo key consolidation, migration 058; referential integrity to
-  zero; partial-unique indexes), server auth (`X-Ingesta-Token`), Streamlit-cluster
-  removal, repo hygiene, schema re-baselining. Full detail: `docs/archive/ROADMAP-v2.1-2026-07-24.md`.
-  Do not treat any specific number in that archived file (schema_version, row counts) as
-  current — check `docs/CURRENT_STATE.md` instead.
-- **A1 — JLL v2 governed ingestion pipeline.** Migrations 085–091, ingestion/derivation
-  code, 70 new tests, wired into the live ingesta web UI. Implemented and tested in
-  source; gated off production. Full detail in `docs/CURRENT_STATE.md`'s JLL v2 section —
-  intentionally not re-summarized here to avoid a second copy that can drift.
-- **A1.5 — Documentation base alignment.** This branch was fast-forwarded from
-  `origin/feat/alpha-v0.1` (`c819e87d`) onto `d986996ba` specifically so the documentation
-  reset in progress here would reflect A1's work rather than a stale pre-JLL-v2 snapshot.
+These three (A0, A1, A1.5) are the canonical audit-taxonomy blocks — distinct from, and
+not to be confused with, either the JLL v2 pipeline or the documentation-reset work
+below. Their detailed audit reports live outside this branch (other audit worktrees/
+branches); this roadmap only carries their names, closure status, and pointers, not a
+restated copy of their findings.
+
+- **A0 — Current State & Reproducibility.** Closed. Corresponds to the old
+  ROADMAP.md's Phase 0 in spirit (DB integrity, Apoquindo key consolidation — migration
+  058, referential integrity to zero, partial-unique indexes, server auth, Streamlit-
+  cluster removal, schema re-baselining) — see `docs/archive/ROADMAP-v2.1-2026-07-24.md`
+  for that narrative detail. Do not treat any specific number in that archived file
+  (schema_version, row counts) as current — check `docs/CURRENT_STATE.md` instead.
+- **A1 — Data Foundation & Semantic Layer.** Closed. The governed dataset/semantic
+  layer (`semantic/`, `tools/datasets/`) and canonical raw/derived table structure — see
+  `docs/CURRENT_STATE.md`'s Data Foundation section for what exists today.
+- **A1.5 — Data Foundation Target Contract & WIP Boundary.** Closed / ready for A2 with
+  domain gates. Defines the target data contract and the boundary between what's
+  finished vs. intentionally-still-WIP in the data foundation — its own audit report
+  (branch `audit/a1.5-data-foundation-target-contract`) is not reproduced here.
+
+**JLL v2 (parallel track, not part of the A0/A1/A1.5 sequence)**: the governed JLL v2
+ingestion pipeline (migrations 085–091, ingestion/derivation code, 70 new tests, wired
+into the live ingesta web UI) is a **technical cutover candidate, frozen, with an
+external gate pending** — implemented and tested in source, but **not a closed
+production cutover**. Do not imply otherwise. Full detail, including the three-way
+implemented/gated/not-Analyst-queryable distinction, lives in `docs/CURRENT_STATE.md`'s
+JLL v2 section — intentionally not re-summarized here to avoid a second copy that can
+drift.
 
 ### Eval Foundation Step 0 — CLOSED / PASS
 
@@ -74,6 +93,11 @@ Establishes `docs/CURRENT_STATE.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md` a
 canonical sources and aligns `README.md`/`AGENTS.md`/`CLAUDE.md`/`CODEX.md` to point at
 them instead of duplicating state. See `docs/CURRENT_STATE.md` for exactly what's real
 right now; this roadmap file states what comes next.
+
+This branch was fast-forwarded from `origin/feat/alpha-v0.1` (`c819e87d`) onto
+`d986996ba` specifically so this reset would reflect the JLL v2 pipeline's actual state
+rather than a stale pre-JLL-v2 snapshot — a base-alignment step internal to this work,
+not a separate roadmap block of its own.
 
 ### Baseline Debt Triage / Burn-down #1
 
@@ -162,6 +186,12 @@ than starting from zero.
 ### A6 — Roadmap & Development Process
 
 Not yet started.
+
+### Pilot Hardening / Pilot Readiness Gate
+
+Not yet started. Will assess the existing pilot-feedback surface
+(`/pilot-feedback`, `/pilot-control` — see `docs/CURRENT_STATE.md`'s Product table) for
+readiness before any wider rollout; a formal gate, not yet defined.
 
 ### External data / Inciti / personalized artifacts / Excel / PPT / etc.
 

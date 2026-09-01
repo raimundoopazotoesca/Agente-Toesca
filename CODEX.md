@@ -32,6 +32,7 @@ architecture, both of which drift and are tracked canonically elsewhere.
    a number from a doc.
 5. Prefer existing helpers/repos over ad-hoc SQL in production code.
 6. Make minimal changes and verify them (run the relevant tests — see `AGENTS.md`'s
-   testing section; there is no CI, so this is the only gate that exists).
+   testing section for required-check names; CI is active and load-bearing on the
+   protected branch, `docs/CURRENT_STATE.md` has the gate detail).
 7. If you learn something durable, update the wiki and its log per `CLAUDE.md`'s wiki
    rules — as Codex, don't commit/push that update unless asked.

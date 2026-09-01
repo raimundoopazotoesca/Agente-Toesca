@@ -27,8 +27,12 @@ One Flask process (`scripts/ingesta_server.py`) serves the Analyst, the validate
 ingestion wizard, the factsheet, and pilot-feedback tooling from a single SQLite database
 (`memory/agente_toesca_v2.db`). The Analyst runtime (`tools/analyst_runtime/`) is
 provider-neutral by design — it doesn't import any specific LLM SDK. Data flows in
-through human-confirmed validation (never silently), and every number the Analyst or the
-factsheet shows traces back to a governed table or view. Detail: `docs/ARCHITECTURE.md`.
+through human-confirmed validation (never silently). SQLite is the canonical
+business-data source, and governed datasets/semantic contracts (`semantic/`,
+`tools/datasets/`) are the intended path for both the Analyst and deterministic
+reporting to read from — that target invariant isn't fully realized yet: provenance and
+semantic coverage are still being hardened, and known gaps are tracked in
+`docs/CURRENT_STATE.md`. Detail: `docs/ARCHITECTURE.md`.
 
 ## Running it locally
 
