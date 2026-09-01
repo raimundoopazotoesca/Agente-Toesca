@@ -46,7 +46,7 @@ def resolution_from_entity_payload(payload: Mapping[str, Any], trace: Mapping[st
             candidates=candidates,
         )
     if internal == "ambiguous":
-        return ResolutionOutcome("ambiguous", "entity_resolver", evidence=evidence, candidates=candidates)
+        return ResolutionOutcome("ambiguous", method="entity_resolver", evidence=evidence, candidates=candidates)
     return ResolutionOutcome("unknown", method="entity_resolver", reason_code=internal, evidence=evidence, candidates=candidates)
 
 

@@ -91,19 +91,51 @@ def test_send_persists_completed_correlated_turn_trace(workspace):
     assert trace["identity"]["assistant_message_id"] == assistant.id
 
 
-def test_trace_persistence_failure_keeps_pending_user_and_retry_does_not_duplicate_it(workspace, monkeypatch):
+def test_trace_persistence_failure_keeps_pending_user_and_explicit_retry_does_not_duplicate_it(workspace, monkeypatch):
     service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
     monkeypatch.setattr("tools.analyst_workspace.conversation_service.build_turn_trace", lambda **_: (_ for _ in ()).throw(ValueError("broken trace")))
-    with pytest.raises(TurnTracePersistenceError):
+    with pytest.raises(TurnTracePersistenceError) as excinfo:
         service.send_message(conversation.id, "Pregunta")
+    assert excinfo.value.turn_id and excinfo.value.user_message_id
     pending = workspace.list_messages(conversation.id)
     assert len(pending) == 1 and pending[0].metadata["turn_trace_status"] == "pending"
     pending_turn_id = pending[0].metadata["turn_id"]
+    assert pending_turn_id == excinfo.value.turn_id
     monkeypatch.undo()
-    assistant = service.send_message(conversation.id, "Pregunta")
+    # Retry must present the turn_id the failed attempt returned -- reuse is never
+    # inferred from conversation + last-pending-message + identical text alone.
+    assistant = service.send_message(conversation.id, "Pregunta", turn_id=pending_turn_id)
     messages = workspace.list_messages(conversation.id)
     assert [message.role for message in messages] == ["user", "assistant"]
     assert assistant.metadata["turn_trace"]["identity"]["turn_id"] == pending_turn_id
+
+
+def test_new_turn_with_identical_text_and_no_turn_id_is_not_collapsed_into_failed_turn(workspace, monkeypatch):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    monkeypatch.setattr("tools.analyst_workspace.conversation_service.build_turn_trace", lambda **_: (_ for _ in ()).throw(ValueError("broken trace")))
+    with pytest.raises(TurnTracePersistenceError) as excinfo:
+        service.send_message(conversation.id, "Pregunta")
+    failed_turn_id = excinfo.value.turn_id
+    monkeypatch.undo()
+    # A genuinely new send with the same text but no turn_id must never be
+    # silently treated as a retry of the earlier failed turn.
+    assistant = service.send_message(conversation.id, "Pregunta")
+    messages = workspace.list_messages(conversation.id)
+    user_messages = [message for message in messages if message.role == "user"]
+    assert len(user_messages) == 2
+    assert user_messages[0].metadata["turn_id"] == failed_turn_id
+    assert user_messages[1].metadata["turn_id"] != failed_turn_id
+    assert assistant.metadata["turn_trace"]["identity"]["turn_id"] == user_messages[1].metadata["turn_id"]
+
+
+def test_unrelated_metadata_failure_is_not_mislabeled_trace_persistence_failed(workspace, monkeypatch):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    monkeypatch.setattr(
+        "tools.analyst_workspace.conversation_service.runtime_result_to_metadata",
+        lambda *_a, **_k: (_ for _ in ()).throw(ValueError("unrelated metadata bug")),
+    )
+    with pytest.raises(ValueError, match="unrelated metadata bug"):
+        service.send_message(conversation.id, "Pregunta")
 
 
 def test_same_conversation_reuses_one_in_memory_session(workspace):

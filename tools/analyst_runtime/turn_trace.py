@@ -11,6 +11,18 @@ from tools.analyst_runtime.resolution import ResolutionOutcome, unavailable_reso
 TRACE_VERSION = "1"
 _OPTIONAL_FIELD_ERRORS = "optional_field_errors"
 
+# Durable TurnTrace action metadata is allowlist-first: only fields the
+# contract actually reads/needs survive into persisted storage. A future
+# ToolCall.trace key (e.g. a raw provider payload) is dropped by default
+# instead of leaking through, unless explicitly added here.
+_ALLOWED_ACTION_METADATA_FIELDS = frozenset({
+    "tool_name", "status", "success", "duration_ms", "candidates", "resolution",
+    "evidence_id", "error", "result", "arguments", "scope", "unknown_fields",
+    "semantic_rejection", "requested_limit", "effective_limit", "dialect",
+    "metadata_version", "candidate_names", "object_count",
+    "requested_entity_types", "fund", "query",
+})
+
 
 @dataclass(frozen=True)
 class ReconstructedTurn:
@@ -76,10 +88,17 @@ def _action(call: Any, optional_errors: list[dict[str, str]]) -> dict[str, Any]:
     if not isinstance(trace, Mapping):
         optional_errors.append({"field": "action.trace", "reason_code": "invalid_optional_action_trace"})
         trace = {}
+    dropped_count = len(set(trace) - _ALLOWED_ACTION_METADATA_FIELDS)
+    if dropped_count:
+        # Field names themselves are not recorded here: a dropped key can be an
+        # attacker/provider-chosen string (e.g. "prompt"), and echoing key names
+        # back into the trace would defeat the allowlist's own purpose.
+        optional_errors.append({"field": "action.trace", "reason_code": "unallowlisted_action_trace_fields", "dropped_count": str(dropped_count)})
+    safe_metadata = {key: value for key, value in trace.items() if key in _ALLOWED_ACTION_METADATA_FIELDS}
     name = str(getattr(call, "name", "unknown"))
     arguments = getattr(call, "args", {}) or {}
     safe_args = {key: value for key, value in arguments.items() if key in {"query", "entity_types", "fund", "metric_id", "period", "periodo", "limit", "filters"}}
-    return {"name": name, "ok": bool(getattr(call, "ok", False)), "duration_ms": getattr(call, "duration_ms", None), "arguments": safe_args, "metadata": dict(trace)}
+    return {"name": name, "ok": bool(getattr(call, "ok", False)), "duration_ms": getattr(call, "duration_ms", None), "arguments": safe_args, "metadata": safe_metadata}
 
 
 def _resolutions(actions: list[Mapping[str, Any]]) -> dict[str, ResolutionOutcome]:

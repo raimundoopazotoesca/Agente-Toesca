@@ -31,7 +31,7 @@ class ConversationServiceProtocol(Protocol):
     def rename_conversation_for_user(self, conversation_id: str, user_id: str, title: str) -> Any: ...
     def archive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
-    def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Any: ...
+    def send_message_for_user(self, conversation_id: str, user_id: str, text: str, *, turn_id: str | None = None) -> Any: ...
     def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Any: ...
     def clear_feedback_for_user(self, message_id: str, user_id: str) -> None: ...
     def get_feedback_for_user(self, message_id: str, user_id: str) -> Any: ...
@@ -70,6 +70,10 @@ class AnalystForbiddenError(AnalystApiError):
 class AnalystTracePersistenceError(AnalystApiError):
     """The mandatory durable TurnTrace could not be written with its answer."""
 
+    def __init__(self, message: str = "", *, turn_id: str | None = None):
+        super().__init__(message)
+        self.turn_id = turn_id
+
 
 class ConversationApiAdapter:
     """Translate the stable HTTP contract to the concrete ConversationService."""
@@ -98,8 +102,8 @@ class ConversationApiAdapter:
             return _conversation(self._call(self._service.unarchive_conversation_for_user, conversation_id, user_id))
         raise AnalystValidationError("provide a title or archived boolean")
 
-    def send_message(self, conversation_id: str, user_id: str, text: str) -> dict[str, Any]:
-        return _message(self._call(self._service.send_message_for_user, conversation_id, user_id, text))
+    def send_message(self, conversation_id: str, user_id: str, text: str, *, turn_id: str | None = None) -> dict[str, Any]:
+        return _message(self._call(self._service.send_message_for_user, conversation_id, user_id, text, turn_id=turn_id))
 
     def set_feedback(self, message_id: str, user_id: str, rating: str, note: str | None) -> dict[str, Any]:
         return _feedback(self._call(self._service.set_feedback_for_user, message_id, user_id, rating, note))
@@ -148,7 +152,7 @@ class ConversationApiAdapter:
         except (ConversationNotFoundError, MessageNotFoundError, FeedbackReportNotFoundError) as exc:
             raise AnalystNotFoundError from exc
         except TurnTracePersistenceError as exc:
-            raise AnalystTracePersistenceError from exc
+            raise AnalystTracePersistenceError(str(exc), turn_id=getattr(exc, "turn_id", None)) from exc
         except (ValidationError, ConversationServiceError) as exc:
             raise AnalystValidationError from exc
         except WorkspaceStoreError as exc:

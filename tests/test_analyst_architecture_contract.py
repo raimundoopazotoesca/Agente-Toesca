@@ -44,8 +44,10 @@ class _FakeConversationService:
     def get_conversation_for_user(self, conversation_id, user_id):
         return self.conversation
 
-    def send_message_for_user(self, conversation_id, user_id, text):
-        raise TurnTracePersistenceError("unable to persist analyst turn trace")
+    def send_message_for_user(self, conversation_id, user_id, text, *, turn_id=None):
+        raise TurnTracePersistenceError(
+            "unable to persist analyst turn trace", turn_id="turn-1", user_message_id="msg-pending",
+        )
 
 
 @pytest.fixture

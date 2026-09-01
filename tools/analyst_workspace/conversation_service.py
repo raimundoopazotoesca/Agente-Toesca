@@ -22,7 +22,17 @@ class ConversationServiceError(Exception):
 
 
 class TurnTracePersistenceError(ConversationServiceError):
-    """The mandatory durable trace could not be written with its answer."""
+    """The mandatory durable trace could not be written with its answer.
+
+    Carries the pending turn's identity so a caller can retry deterministically
+    by resubmitting the same turn_id -- reuse is never inferred from
+    conversation + last-pending-message + identical text alone.
+    """
+
+    def __init__(self, message: str, *, turn_id: str, user_message_id: str):
+        super().__init__(message)
+        self.turn_id = turn_id
+        self.user_message_id = user_message_id
 
 
 class ConversationService:
@@ -71,14 +81,23 @@ class ConversationService:
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
         return self.store.unarchive_conversation_for_user(conversation_id, user_id)
 
-    def send_message(self, conversation_id: str, text: str) -> Message:
+    def send_message(self, conversation_id: str, text: str, *, turn_id: str | None = None) -> Message:
         if not isinstance(text, str) or not text.strip():
             raise ConversationServiceError("message text cannot be empty")
         conversation = self.store.get_conversation(conversation_id)
-        messages = self.store.list_messages(conversation_id)
-        pending = messages[-1] if messages else None
-        if (pending is not None and pending.role == "user" and pending.content == text
-                and (pending.metadata or {}).get("turn_trace_status") == "pending"):
+        pending = None
+        if turn_id is not None:
+            # Explicit correlation only: a retry must present the exact turn_id a
+            # prior TurnTracePersistenceError returned. Without an exact match we
+            # never fall back to guessing from conversation + last message + text,
+            # since that can silently collapse a genuinely new turn into a stale one.
+            pending = next(
+                (m for m in reversed(self.store.list_messages(conversation_id))
+                 if m.role == "user" and (m.metadata or {}).get("turn_id") == turn_id
+                 and (m.metadata or {}).get("turn_trace_status") == "pending"),
+                None,
+            )
+        if pending is not None:
             user_message = pending
             turn_id = str(pending.metadata["turn_id"])
         else:
@@ -108,14 +127,21 @@ class ConversationService:
         started = time.monotonic()
         result = session.ask(text)
         latency_ms = (time.monotonic() - started) * 1000
+        # Deliberately outside the trace boundary below: this only computes
+        # operational bookkeeping (latency/token/tool-call counters), not the
+        # TurnTrace itself, so a bug here must not be mislabeled as a trace
+        # persistence failure.
+        metadata = runtime_result_to_metadata(result, latency_ms, hydration_latency_ms)
         session_id = self._session_ids.setdefault(conversation_id, str(uuid4()))
         assistant_id = str(uuid4())
         try:
+            # The only three things TurnTracePersistenceError is allowed to mean:
+            # trace construction, trace serialization, or the durable write that
+            # persists the trace with its answer.
             trace = build_turn_trace(
                 result, user_text=text, turn_id=turn_id, conversation_id=conversation_id,
                 session_id=session_id, user_message_id=user_message.id, assistant_message_id=assistant_id,
             )
-            metadata = runtime_result_to_metadata(result, latency_ms, hydration_latency_ms)
             metadata.update({"turn_trace_status": "completed", "turn_trace": trace})
             assistant = self.store.append_message(
                 conversation_id, "assistant", result.text, metadata=metadata, message_id=assistant_id,
@@ -123,7 +149,9 @@ class ConversationService:
         except Exception as exc:
             self._sessions.pop(conversation_id, None)
             self._session_ids.pop(conversation_id, None)
-            raise TurnTracePersistenceError("unable to persist analyst turn trace") from exc
+            raise TurnTracePersistenceError(
+                "unable to persist analyst turn trace", turn_id=turn_id, user_message_id=user_message.id,
+            ) from exc
         if result.durable_memory:
             self.store.persist_analytical_turn(conversation_id, user_message.id, assistant.id, result.durable_memory)
         if conversation.title_origin == "default" and is_substantive_text(text):
@@ -135,9 +163,9 @@ class ConversationService:
                 pass
         return assistant
 
-    def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Message:
+    def send_message_for_user(self, conversation_id: str, user_id: str, text: str, *, turn_id: str | None = None) -> Message:
         self.store.get_conversation_for_user(conversation_id, user_id)
-        return self.send_message(conversation_id, text)
+        return self.send_message(conversation_id, text, turn_id=turn_id)
 
     def list_messages(self, conversation_id: str) -> list[Message]:
         return self.store.list_messages(conversation_id)

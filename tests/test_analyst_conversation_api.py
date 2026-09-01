@@ -122,7 +122,7 @@ class FakeConversationService:
     def rename_conversation_for_user(self, conversation_id, user_id, title): return self.rename_conversation(conversation_id, title)
     def archive_conversation_for_user(self, conversation_id, user_id): return self.archive_conversation(conversation_id)
     def unarchive_conversation_for_user(self, conversation_id, user_id): return self.conversation
-    def send_message_for_user(self, conversation_id, user_id, text): return self.send_message(conversation_id, text)
+    def send_message_for_user(self, conversation_id, user_id, text, *, turn_id=None): return self.send_message(conversation_id, text)
     def set_feedback_for_user(self, message_id, user_id, rating, note=None): return self.set_feedback(message_id, rating, note)
 
 
@@ -315,10 +315,12 @@ def test_create_service_exception_maps_to_safe_503(client, headers, service):
 
 
 def test_trace_persistence_failure_maps_to_explicit_503(client, headers, service):
-    service.raise_on_send = TurnTracePersistenceError("unable to persist analyst turn trace")
+    service.raise_on_send = TurnTracePersistenceError(
+        "unable to persist analyst turn trace", turn_id="turn-99", user_message_id="msg-pending",
+    )
     response = client.post("/api/analyst/conversations/conv-1/messages", headers=headers, json={"text": "Hola"})
     assert response.status_code == 503
-    assert response.get_json() == {"error": "trace_persistence_failed"}
+    assert response.get_json() == {"error": "trace_persistence_failed", "turn_id": "turn-99"}
 
 
 def test_raw_reasoning_is_never_serialized(client, headers):

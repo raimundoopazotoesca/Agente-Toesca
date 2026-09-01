@@ -735,10 +735,14 @@ def analyst_update_conversation(conversation_id: str):
 @app.post("/api/analyst/conversations/<conversation_id>/messages")
 def analyst_send_message(conversation_id: str):
     try:
-        text = _analyst_body().get("text")
+        body = _analyst_body()
+        text = body.get("text")
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-blank string")
-        return jsonify(_analyst_adapter().send_message(conversation_id, _analyst_user_id(), text.strip())), 201
+        turn_id = body.get("turn_id")
+        if turn_id is not None and (not isinstance(turn_id, str) or not turn_id.strip()):
+            raise ValueError("turn_id must be a non-blank string")
+        return jsonify(_analyst_adapter().send_message(conversation_id, _analyst_user_id(), text.strip(), turn_id=turn_id)), 201
     except ValueError as exc:
         return _analyst_error("validation_error", 400, details=_analyst_request_validation_details(exc))
     except analyst_api.AnalystValidationError:
@@ -749,8 +753,13 @@ def analyst_send_message(conversation_id: str):
         }])
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
-    except analyst_api.AnalystTracePersistenceError:
-        return _analyst_error("trace_persistence_failed", 503)
+    except analyst_api.AnalystTracePersistenceError as exc:
+        # Surface the failed turn's id so a client can retry deterministically
+        # by resubmitting it -- never inferred from text equality alone.
+        payload = {"error": "trace_persistence_failed"}
+        if exc.turn_id:
+            payload["turn_id"] = exc.turn_id
+        return jsonify(payload), 503
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 
