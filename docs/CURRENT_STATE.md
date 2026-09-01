@@ -231,9 +231,18 @@ the tracked Git DB snapshot at this protected base is **81** (stale); the baseli
 watermark is **84**; migration head is **91**. Migrations **085–091** remain JLL-gated
 and outside the baseline. This does not independently verify live production.
 
-**Explicitly deferred:** IDs **1/12** (trajectory-test staleness), **2** (source-truth
-verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
-and **13–17** (`db_chat` retirement/transition decision in A2).
+**Explicitly deferred:** IDs **1/12** — A2 inspected both
+(`tests/analyst_runtime/test_entity_resolution_barrier.py::test_resolved_entity_keeps_m3_and_analytics_paths_open`,
+`tests/entities/test_canonical_entity_resolver.py::test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates`)
+and added explicit A2 resolution-contract assertions to both, which pass. Both still fail
+on a pre-existing, unrelated assertion (`payload["row_count"] == 10` / an m2-sum total)
+against a real `run_sql` query result over `memory/agente_toesca_v2.db` — this is live
+business-data drift, not stale trajectory/entity-resolution positioning as previously
+assumed, and its resolution requires source-truth/business-rule verification, out of A2
+scope (same category as ID 2). They stay on the allowlist; the allowlist count is unchanged
+at 14. **2** (source-truth verification), **6/7/9/10/11** (until JLL cutover), **8** (PT
+admin legacy expectation), and **13–17** (`db_chat` retirement/transition decision in A2 —
+see `docs/a2-db-chat-transition-boundary.md`).
 
 **Key Track D conclusion:** among the 19 baseline failures, triage found no evidence of
 a current semantic/entity defect in the canonical Analyst. This is a triage conclusion,
@@ -245,7 +254,12 @@ not universal proof.
 - `tools/datasets/catalog_v1.yaml` not yet updated for JLL v2's `v_rent_roll_semantic`
   contract (deliberately deferred to the cutover commit).
 - Config for fondos duplicated across 4+ legacy structures (see Data Foundation above).
-- Relationship between `db_chat.py`/`chat_bubble.js` and `analyst_runtime` unresolved.
+- Relationship between `db_chat.py`/`chat_bubble.js` and `analyst_runtime`: ownership is
+  now documented — see `docs/a2-db-chat-transition-boundary.md` (A2 caller/capability
+  audit). `db_chat.py`/`POST /api/chat` remain transition-only; the canonical runtime does
+  not and must not import them (regression-guarded by
+  `tests/test_analyst_architecture_contract.py`). Retirement itself is still not met (see
+  that doc's retirement-signal checklist).
 - 14 historical test failures remain tracked debt under the baseline gate's allowlist —
   see Baseline Debt Triage above. They are permitted to exist but not to grow.
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from scripts import ingesta_server
+from tools.analyst_workspace.conversation_service import TurnTracePersistenceError
 from tools.analyst_workspace.store import ConversationNotFoundError, MessageNotFoundError
 
 
@@ -311,6 +312,13 @@ def test_create_service_exception_maps_to_safe_503(client, headers, service):
     response = client.post("/api/analyst/conversations", headers=headers, json={})
     assert response.status_code == 503
     assert response.get_json() == {"error": "service_unavailable"}
+
+
+def test_trace_persistence_failure_maps_to_explicit_503(client, headers, service):
+    service.raise_on_send = TurnTracePersistenceError("unable to persist analyst turn trace")
+    response = client.post("/api/analyst/conversations/conv-1/messages", headers=headers, json={"text": "Hola"})
+    assert response.status_code == 503
+    assert response.get_json() == {"error": "trace_persistence_failed"}
 
 
 def test_raw_reasoning_is_never_serialized(client, headers):

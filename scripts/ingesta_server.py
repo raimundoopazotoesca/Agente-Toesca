@@ -749,6 +749,8 @@ def analyst_send_message(conversation_id: str):
         }])
     except analyst_api.AnalystNotFoundError:
         return _analyst_error("not_found", 404)
+    except analyst_api.AnalystTracePersistenceError:
+        return _analyst_error("trace_persistence_failed", 503)
     except analyst_api.AnalystServiceUnavailableError:
         return _analyst_error("service_unavailable", 503)
 

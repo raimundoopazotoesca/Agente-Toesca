@@ -1,6 +1,6 @@
-"""Stable HTTP-facing adapter for the pending analyst conversation service.
+"""Stable HTTP-facing adapter for the analyst ConversationService.
 
-This module intentionally does not import or construct the A4 service.  The
+This module intentionally does not import or construct the service.  The
 Flask application supplies it through a lazy factory, allowing HTTP tests and
 module imports to stay free of workspace, provider, and knowledge-DB effects.
 """
@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 from openai import OpenAIError
 
-from tools.analyst_workspace.conversation_service import ConversationServiceError
+from tools.analyst_workspace.conversation_service import ConversationServiceError, TurnTracePersistenceError
 from tools.analyst_workspace.store import (
     ConversationNotFoundError,
     FeedbackReportNotFoundError,
@@ -22,7 +22,7 @@ from tools.analyst_workspace.store import (
 
 
 class ConversationServiceProtocol(Protocol):
-    """The small HTTP-facing subset of the A4 ConversationService."""
+    """The small HTTP-facing subset of the ConversationService."""
 
     def create_conversation(self, *, title: str | None = None, context: dict[str, Any] | None = None, user_id: str) -> Any: ...
     def list_conversations_for_user(self, user_id: str, include_archived: bool = False) -> list[Any]: ...
@@ -67,8 +67,12 @@ class AnalystForbiddenError(AnalystApiError):
     pass
 
 
+class AnalystTracePersistenceError(AnalystApiError):
+    """The mandatory durable TurnTrace could not be written with its answer."""
+
+
 class ConversationApiAdapter:
-    """Translate the stable HTTP contract to the concrete A3/A4 service."""
+    """Translate the stable HTTP contract to the concrete ConversationService."""
 
     def __init__(self, service: ConversationServiceProtocol):
         self._service = service
@@ -95,7 +99,6 @@ class ConversationApiAdapter:
         raise AnalystValidationError("provide a title or archived boolean")
 
     def send_message(self, conversation_id: str, user_id: str, text: str) -> dict[str, Any]:
-        """The only point tied to A4's eventual send-message return shape."""
         return _message(self._call(self._service.send_message_for_user, conversation_id, user_id, text))
 
     def set_feedback(self, message_id: str, user_id: str, rating: str, note: str | None) -> dict[str, Any]:
@@ -144,6 +147,8 @@ class ConversationApiAdapter:
             return method(*args, **kwargs)
         except (ConversationNotFoundError, MessageNotFoundError, FeedbackReportNotFoundError) as exc:
             raise AnalystNotFoundError from exc
+        except TurnTracePersistenceError as exc:
+            raise AnalystTracePersistenceError from exc
         except (ValidationError, ConversationServiceError) as exc:
             raise AnalystValidationError from exc
         except WorkspaceStoreError as exc:
