@@ -19,7 +19,7 @@ A0 — [closed] Data foundation hardening (the old ROADMAP.md's Phase 0/1)
 A1 — [closed] JLL v2 governed ingestion pipeline, implemented + tested in source (this commit, d986996)
 A1.5 — [closed] Documentation base alignment (Pass 1.5 — fast-forwarded this branch onto A1's work)
      ↓
-Eval Foundation Step 0                              [closure in progress, parallel Track A]
+Eval Foundation Step 0                              [closed / PASS — PR #1 merged into feat/alpha-v0.1]
      ↓
 Documentation Reset / Current State Sync             ← this branch, docs/current-state-reset
      ↓
@@ -56,12 +56,17 @@ External data / Inciti / personalized artifacts / Excel / PPT / etc.
   `origin/feat/alpha-v0.1` (`c819e87d`) onto `d986996ba` specifically so the documentation
   reset in progress here would reflect A1's work rather than a stale pre-JLL-v2 snapshot.
 
-### Eval Foundation Step 0 (in progress, parallel track)
+### Eval Foundation Step 0 — CLOSED / PASS
 
-Owned by Track A, branch `audit/analyst-eval-blueprint-v1` (PR #1). This documentation
-branch does not read from or depend on that branch's working tree. Its closure/final
-required-check state will be synchronized into `docs/CURRENT_STATE.md` once Track A
-reports it — no PASS/FAIL is assumed here, and no future SHA is invented.
+Owned by Track A, branch `audit/analyst-eval-blueprint-v1`, merged as PR #1 ("eval: make
+analyst evaluation foundation load-bearing") into the protected branch `feat/alpha-v0.1`,
+final HEAD `631987393f240a17d902bf5a61104119c0e3eb98`, final green GitHub Actions run
+`33524409504`. Full gate detail (required checks, the 19-item historical allowlist, and
+why the baseline-gated check is not a zero-failure gate) lives in
+`docs/CURRENT_STATE.md`'s Eval & Observability section — not restated here to avoid a
+second copy that can drift. The GitHub ruleset "Toesca protected devel" enforcing these
+checks on `feat/alpha-v0.1` is now active and load-bearing for every subsequent PR,
+including the one that lands this documentation sync.
 
 ### Documentation Reset / Current State Sync (this work)
 

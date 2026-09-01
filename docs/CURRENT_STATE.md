@@ -13,14 +13,16 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 
 | Field | Value |
 |---|---|
-| Branch this state was verified on | `docs/current-state-reset`, forked from `feat/alpha-v0.1` |
-| SHA this state was verified against | `d986996baf2636ff7978314f424614c5f33afc75` |
+| Branch this state was verified on | `docs/current-state-reset`, forked from `feat/alpha-v0.1` at `d986996` |
+| SHA this state's product/data-foundation content was verified against | `d986996baf2636ff7978314f424614c5f33afc75` |
 | Date verified | 2026-09-01 |
-| Latest migration in repo | `091_rent_roll_semantic_renta.sql` (`tools/db/migrations/`) |
+| Latest migration in repo (on this branch's own tree) | `091_rent_roll_semantic_renta.sql` (`tools/db/migrations/`) |
 | Production DB schema (last known, per source-level self-disclosure — not independently checked against a live DB) | `84` — migrations 085–091 are **not yet applied to production** |
 | Test files in repo | 146 under `tests/`, 57 under `eval/` (file counts, not a pass/fail run) |
-| CI | **Not configured.** No `.github/workflows/` directory exists in this branch. Any claim of "CI passing" is meaningless until a workflow exists — do not write one into this file until it's true. |
-| Current development phase | Between ROADMAP Phase 0/1 (data-foundation hardening, largely closed) and Phase 2 (Analyst hardening, in progress) — see `docs/ROADMAP.md` |
+| **Eval Foundation Step 0** | **CLOSED / PASS.** PR #1 ("eval: make analyst evaluation foundation load-bearing") merged into the protected branch `feat/alpha-v0.1`. See "Eval Foundation Step 0" under Eval & Observability below for the full gate detail. |
+| Protected branch (`feat/alpha-v0.1`) HEAD, post-merge | `631987393f240a17d902bf5a61104119c0e3eb98` — **ahead of this docs branch's own base** (`d986996`); this documentation branch has not been rebased onto it (see note below) |
+| CI (on the protected branch, post-merge) | `.github/workflows/eval-foundation.yml` now exists on `origin/feat/alpha-v0.1` — confirmed via `git ls-tree`. **Not yet present on this docs branch's own tree** (branched before the merge); do not assume this branch's working copy has the workflow file until it's rebased/merged forward. |
+| Current development phase | Data-foundation hardening (A0/A1) and Eval Foundation Step 0 both closed. Next: Baseline Debt Triage / Burn-down #1, before A2 — see `docs/ROADMAP.md` |
 
 <!-- AUTO-GENERATED:START -->
 Not implemented. No `scripts/update_current_state.py` exists yet. The fields above
@@ -191,10 +193,31 @@ Present at this SHA (`d986996`):
 - `eval/analysis/audit_renta_uf_semantics.py` — the reproducibility script backing
   `docs/rent-roll-renta-semantics-v1.md`'s claims.
 
-**Eval Foundation Step 0**: closure/implementation work exists in parallel on Track A
-(`audit/analyst-eval-blueprint-v1`, PR #1). Final CI / required-check state will be
-synchronized into this document before this documentation branch is finalized. No
-PASS/FAIL is asserted here, and no future SHA is assumed.
+**Eval Foundation Step 0: CLOSED / PASS.** Track A (`audit/analyst-eval-blueprint-v1`)
+merged as PR #1 ("eval: make analyst evaluation foundation load-bearing") into the
+protected branch `feat/alpha-v0.1`, final HEAD `631987393f240a17d902bf5a61104119c0e3eb98`,
+final successful GitHub Actions run `33524409504`.
+
+**Required checks, active on `feat/alpha-v0.1`** (GitHub ruleset "Toesca protected devel";
+target: `feat/alpha-v0.1` only; enforcement: active; bypass: none; strict/up-to-date
+requirement: **off**):
+- `tests (baseline-gated)`
+- `eval/benchmark/tests (must be 100% green)`
+- `eval/product_alpha/tests (must be 100% green)`
+
+**Baseline-aware CI behavior**: the `tests (baseline-gated)` check does not require a
+zero-failure suite — it requires the failure set to match an explicit, tracked allowlist.
+At closure: **19 historical allowed failures** (pre-existing, tracked debt — not a
+regression), and every other gate bucket empty:
+`new_failure_ids = []`, `new_anomalous_ids = {}`, `stale_pass_ids = []`,
+`prohibited_state_ids = {}`, `not_collected_ids = []`, `collection_errors = []`,
+`internal_errors = []`. **The 19 historical failures are explicitly tracked and do not
+permit new regressions** — any test id outside that allowlist failing trips the gate.
+`eval/benchmark/tests` and `eval/product_alpha/tests` must both be 100% green with no
+allowlist.
+
+This ruleset is now load-bearing for every future PR into `feat/alpha-v0.1`, including
+the docs PR this branch will open.
 
 ## Known debt / blockers
 
@@ -203,7 +226,13 @@ PASS/FAIL is asserted here, and no future SHA is assumed.
   contract (deliberately deferred to the cutover commit).
 - Config for fondos duplicated across 4+ legacy structures (see Data Foundation above).
 - Relationship between `db_chat.py`/`chat_bubble.js` and `analyst_runtime` unresolved.
-- No CI configured.
+- This docs branch's own tree still has no `.github/workflows/` (it was forked before
+  the Eval Foundation Step 0 merge) — it will pick up `eval-foundation.yml` once rebased
+  onto or merged with the current `feat/alpha-v0.1` tip. CI itself is no longer missing
+  at the protected-branch level; see the Snapshot table and Eval & Observability section.
+- 19 historical test failures remain tracked debt under the baseline gate's allowlist —
+  see Baseline Debt Triage / Burn-down #1 in `docs/ROADMAP.md`. They are permitted to
+  exist but not to grow.
 
 **Architectural debt**
 - `agent.py`'s long-term role (which of its 102 tools survive) is an open question
@@ -224,8 +253,10 @@ PASS/FAIL is asserted here, and no future SHA is assumed.
 
 ## Next exact steps
 
-See `docs/ROADMAP.md` for the live roadmap. This file states *what is true now*; it does
-not restate the plan.
+With Eval Foundation Step 0 and this documentation sync closed, the next step is
+**Baseline Debt Triage / Burn-down #1** — before any A2 implementation work starts. See
+`docs/ROADMAP.md` for the live roadmap; this file states *what is true now* and does not
+restate the plan beyond naming what's immediately next.
 
 ## Auto-update design (not implemented)
 
@@ -244,4 +275,7 @@ still-present vs. removed).
 decisions (Machalí exclusion, UG treatment, collections-rate definition), qualitative
 blockers, roadmap priorities and sequencing rationale, any deployment-disposition claim
 not verifiable from source (e.g. "JLL v2 is live in production"), and any PASS/FAIL claim
-owned by a PR this document doesn't have access to (Eval Foundation Step 0).
+owned by a PR this document doesn't have direct access to at the time of writing (Eval
+Foundation Step 0 was one such case — closed as PASS on 2026-09-01 once Track A reported
+it; a future case of the same shape should be handled the same way: don't guess, wait for
+the report, then record it here with its actual SHA/run ID).
