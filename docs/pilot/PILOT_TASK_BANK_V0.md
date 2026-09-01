@@ -8,6 +8,14 @@ turn each into a real eval case.
 Companion to `docs/pilot/PILOT_QUALITY_STANDARD_V1.md` (§ refs) and
 `docs/pilot/PILOT_EVAL_MATRIX_V1.md` (PE- refs).
 
+**Revision note.** In the source-backed revision pass, the 50 tasks were audited against
+the eval-dataset criteria in the external sources now available (standard §34). **No task
+was added, removed, renumbered, or given a numeric answer.** Two things changed: the
+`PILOT_OPS` value was removed from `eval_dimensions_triggered` (rule 5) and the affected
+tasks re-tagged to canonical classes, and an audit record was added at the end of this
+document. Task count 50, family count 23, and the `ground_truth_status` distribution are
+unchanged.
+
 ## Rules this bank obeys
 
 1. **No invented ground truth.** No task states a number, a tenant name, a percentage, or
@@ -23,8 +31,15 @@ Companion to `docs/pilot/PILOT_QUALITY_STANDARD_V1.md` (§ refs) and
    are **scopes**, not assets (A1.5 §G).
 4. **No holdout reconstruction.** Nothing here is derived from, or an attempt to recall,
    holdout content (PE-40, blueprint §J).
-5. `eval_dimensions_triggered` uses the **blueprint taxonomy only** (§D), plus `PILOT_OPS`
-   where the matrix defines a pilot-specific row.
+5. `eval_dimensions_triggered` uses the **canonical blueprint taxonomy only** (§D) — the
+   sixteen values `DATA · SEMANTIC · ENTITY · METRIC · PERIOD · CONTEXT · PLANNING ·
+   TOOL_SELECTION · TOOL_ARGUMENTS · SQL · RESULT_VALIDATION · TRAJECTORY · SYNTHESIS ·
+   CONVERSATION_STATE · SAFETY · INFRA`. **Corrected in this revision:** Draft 1 also
+   allowed `PILOT_OPS`, which was a pilot-operations concept masquerading as a failure
+   class. It has been removed here and in the matrix; the five affected rows (PE-45 to
+   PE-49) now carry canonical dimensions, and the tasks that referenced them have been
+   re-tagged accordingly. Operational obligations live in the matrix's separate
+   `pilot_operational_requirement` field and never appear as a task dimension.
 
 ## `ground_truth_status` values
 
@@ -217,7 +232,7 @@ re-classified and joins the subset.
 - **expected_clarification_behavior:** clarify total-vs-rate only if the phrasing is genuinely ambiguous; "renta promedio en UF" should resolve to the rate
 - **likely_tools_datasets:** governed rent-roll dataset / `v_rent_roll_semantic`
 - **must_not_do:** **must not report a per-m² rate as a total, or a total as a rate**; must not use the deprecated overloaded `renta_uf` field; must not answer if the catalog and the schema disagree on the field's meaning
-- **eval_dimensions_triggered:** SEMANTIC, METRIC, SYNTHESIS, `PILOT_OPS` (PE-06, PE-05, PE-45)
+- **eval_dimensions_triggered:** SEMANTIC, METRIC, SYNTHESIS, DATA (PE-06, PE-05, PE-45)
 - **ground_truth_status:** `BLOCKED_ON_DECISION`
 - **evidence_needed_to_finalize_ground_truth:** the JLL v2 cutover (schema ≥ 91 in production **and** the catalog cutover applied in the same change) plus the `fecha_corte_rent_roll_convencion` gate item — until then the metric's meaning is not settled
 
@@ -341,7 +356,7 @@ re-classified and joins the subset.
 - **expected_clarification_behavior:** none
 - **likely_tools_datasets:** governed cartera dataset
 - **must_not_do:** must not sum a snapshot across periods; must not relabel currency; must not answer at all if the Analyst is not wired to the JLL v2 surface (PE-45 claim 3) — refuse explicitly instead
-- **eval_dimensions_triggered:** SEMANTIC, DATA, RESULT_VALIDATION, `PILOT_OPS` (PE-06, PE-26, PE-45)
+- **eval_dimensions_triggered:** SEMANTIC, DATA, RESULT_VALIDATION (PE-06, PE-26, PE-45)
 - **ground_truth_status:** `BLOCKED_ON_DECISION`
 - **evidence_needed_to_finalize_ground_truth:** JLL v2 production cutover and Analyst wiring; until then the correct behavior is explicit refusal, which is itself gradeable
 
@@ -445,7 +460,7 @@ re-classified and joins the subset.
 - **expected_clarification_behavior:** may clarify the scope (OD-2)
 - **likely_tools_datasets:** coverage/freshness surface
 - **must_not_do:** must not report `MAX(periodo)` globally as the metric's latest; must not claim coverage of tables the Analyst cannot query (PE-45)
-- **eval_dimensions_triggered:** DATA, PERIOD, `PILOT_OPS` (PE-01, PE-45)
+- **eval_dimensions_triggered:** DATA, PERIOD (PE-01, PE-45)
 - **ground_truth_status:** `NEEDS_VALIDATION`
 - **evidence_needed_to_finalize_ground_truth:** SQL for the last eligible period plus a verified statement of which surfaces the Analyst is actually wired to
 
@@ -949,7 +964,7 @@ re-classified and joins the subset.
 - **expected_clarification_behavior:** may clarify the scope
 - **likely_tools_datasets:** deterministic vacancia report generator over governed datasets
 - **must_not_do:** **must not generate the report content with the LLM**; must not produce numbers that differ from the chat answer for the same inputs; must not render when validation fails — block instead
-- **eval_dimensions_triggered:** `PILOT_OPS`, SEMANTIC (PE-46, PE-47, PE-05)
+- **eval_dimensions_triggered:** INFRA, SEMANTIC (PE-46, PE-47, PE-05)
 - **ground_truth_status:** `BLOCKED_ON_DECISION`
 - **evidence_needed_to_finalize_ground_truth:** the report does not exist (approved, not implemented) **and** its numbers depend on the UG decision (OD-6). Two runs producing identical bytes is the reproducibility ground truth once it exists
 
@@ -965,11 +980,33 @@ re-classified and joins the subset.
 - **expected_clarification_behavior:** none
 - **likely_tools_datasets:** deterministic recaudación report generator
 - **must_not_do:** **must not include a `tasa_recaudacion`** — no invoice/document linkage exists to make it a real cohort rate; must not compute one for the report that the chat would refuse (T-014)
-- **eval_dimensions_triggered:** `PILOT_OPS`, METRIC, CONTEXT (PE-46, PE-47, PE-12, PE-15)
+- **eval_dimensions_triggered:** INFRA, SEMANTIC, METRIC, CONTEXT (PE-46, PE-47, PE-12, PE-15)
 - **ground_truth_status:** `BLOCKED_ON_DECISION`
 - **evidence_needed_to_finalize_ground_truth:** the report does not exist; and the collections-rate business contract is explicitly pending
 
 ---
+
+## Audit against the external sources (revision pass)
+
+The 50 tasks were audited against the eval-dataset criteria stated in the external sources
+read for this revision (see standard §34 for what each source is). **No task was added,
+removed, or renumbered as a result.** The audit is recorded because "we checked and it held"
+is a finding, and because the two criteria that were *not* fully met are worth stating.
+
+| Criterion, and where it comes from | Status in this bank |
+|---|---|
+| Tasks should be **realistic**, drawn from real usage rather than invented prompts — `07_anthropic_agent_engineering_context_tools_evals.md` §3; `05_openai_api_agents_consolidated_knowledge.md` §17.2 step 2 ("real examples, common paths, edge cases, expected failures") | **Met.** Rule 2 already required real analyst voice in Spanish, including terse follow-ups. |
+| Tasks should be **unambiguous and demonstrably solvable** — `07_...md` §3 | **Partially met, by design.** Every numeric task is `NEEDS_VALIDATION` precisely because solvability has not yet been demonstrated against the DB. That is the honest state, not a gap to paper over: a task is not solvable-by-assertion. The eight `BLOCKED_ON_DECISION` tasks are *knowingly* unsolvable until a human decides, which is different again and is tracked separately. |
+| Coverage should **balance cases where a behaviour should occur against cases where it should not** — `07_...md` §3 | **Met.** All 50 tasks carry both an `expected_behavior` (what must happen) and a `must_not_do` (what must not) — verified by field count, not asserted. Beyond that per-task balance, seven whole tasks exist *only* to test that a behaviour does **not** occur: the `insufficient data` family (T-036, T-037, T-038), the `refused / bounded` family (T-042, T-044, T-045), and the forecast refusal (T-041) — to which the entity/metric/period ambiguity families add the no-silent-guess cases. |
+| Eval sets should include **tasks that are not solvable**, to test whether the agent recognises infeasibility rather than inventing a plan — `04_cs329t_knowledge_pack_all.md`, Agent Evals Survey slides 36–37 (PlanGenLLMs' *completeness* criterion: "if no feasible plan is possible, the model should recognize this and refrain"; PlanCraft includes impossible tasks deliberately) | **Met.** The `insufficient data` family (T-036, T-037, T-038), the unbounded request (T-044), the forecast request (T-041), and the domain-gated metrics are all cases where the correct outcome is a bounded refusal or an explicit insufficiency statement. |
+| Evaluation should cover **recovery from a failed tool or result**, not only clean paths — `04_...md` Agent GPA slide 11 (error handling should resolve without repeated attempts caused by correctable input errors); `07_...md` §2 ("Make errors actionable") | **Met, narrowly.** T-050 is written around a long series where a tool timeout is expected, and T-044 around an unbounded query that may fail; PE-27/PE-43 grade the behaviour. This is the thinnest area of the bank and is the first place to add cases once real failures arrive via FB-4 — which is the source-recommended way to grow an eval set anyway, rather than inventing failures in advance. |
+| Grading should prefer **outcomes over one prescribed reasoning path** — `07_...md` §3 | **Met.** `expected_investigation_pattern` is written as a shape, not a required sequence, consistent with standard §11's "there is no gold path" (P5) and PE-50's PQ-3. |
+| Tasks should exercise **planning and replanning quality**, not only final answers — `04_...md` Agent GPA slides 13 and 17 | **Met by existing tasks, newly cross-referenced.** T-039, T-040, T-041, T-044 and T-050 are the tasks where a plan and a replan actually occur; they are now also the representative tasks for the new matrix row PE-50. No new task was needed. |
+
+Two deliberate divergences from the sources, recorded so they are not read as oversights
+**[C]**: this bank does **not** adopt any benchmark's scoring conventions or figures, and it
+does **not** include adversarial/red-team prompts (the pilot is internal, authenticated, and
+read-only; that surface is a post-pilot concern).
 
 ## What this bank is not
 

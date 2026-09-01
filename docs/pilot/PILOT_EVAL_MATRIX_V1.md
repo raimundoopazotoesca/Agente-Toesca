@@ -8,27 +8,46 @@ specification of *what evals pilot readiness requires*, not the evals themselves
 below like "§10" point there) and `docs/pilot/PILOT_TASK_BANK_V0.md` (the tasks; refs like
 `T-012`).
 
-## Taxonomy reuse — read this first
+## Taxonomy — read this first
 
 The `taxonomy_dimension` column uses **the eval blueprint's existing failure taxonomy,
-unchanged** (`docs/toesca-analyst-eval-observability-blueprint-v1.md` §D):
+unchanged and closed** (`docs/toesca-analyst-eval-observability-blueprint-v1.md` §D):
 
 `DATA · SEMANTIC · ENTITY · METRIC · PERIOD · CONTEXT · PLANNING · TOOL_SELECTION ·
 TOOL_ARGUMENTS · SQL · RESULT_VALIDATION · TRAJECTORY · SYNTHESIS · CONVERSATION_STATE ·
 SAFETY · INFRA`
 
-**No parallel taxonomy is introduced.** One additional value, `PILOT_OPS`, is used for the
-five rows that are pilot-operations concerns with no blueprint analogue (JLL freshness,
-deterministic reports, operator escalation, feedback capture, pilot scope disclosure).
-`PILOT_OPS` is explicitly flagged as a **pilot-specific addition, not a taxonomy-blueprint
-dimension**, and must not be back-propagated into the blueprint taxonomy.
+**These sixteen values are the only values `taxonomy_dimension` may take.**
+
+### `PILOT_OPS` removed (correction in this revision)
+
+Draft 1 introduced a seventeenth value, `PILOT_OPS`, for five rows (PE-45 to PE-49). That
+conflated two different things: the **failure mode** a row prevents, and the **operational
+obligation** a row imposes on people. A dead operator is not a taxonomy class.
+
+`PILOT_OPS` has been removed from this document, from the standard, and from the task bank.
+Each affected row now declares a canonical `taxonomy_dimension` chosen by its *actual*
+failure mode, plus — where applicable — a separate `pilot_operational_requirement`:
+
+| Row | Draft 1 | Now | Reasoning (some of it debatable, flagged) |
+|---|---|---|---|
+| PE-45 JLL freshness & coverage honesty | `PILOT_OPS` | **DATA** (+ INFRA secondary) | The failure is *claiming data coverage that does not exist*, or answering pre-v2 data with v2 semantics — a data-correctness failure. The "Analyst cannot reach the v2 views" half is genuinely INFRA (wiring), so INFRA is recorded as secondary. **Debatable:** a reviewer could reasonably make INFRA primary. DATA was chosen because the user-visible harm is a wrong or overclaimed fact, not an outage. Operational: `external_gate_closure`. |
+| PE-46 Deterministic report reproducibility | `PILOT_OPS` | **INFRA** (+ RESULT_VALIDATION secondary) | The failures are an LLM appearing in a path declared LLM-free and identical inputs producing different bytes — both properties of the generation *system*. The "validation must block rendering" clause is RESULT_VALIDATION. Operational: `report_cutover`. |
+| PE-47 Report-vs-chat number parity | `PILOT_OPS` | **SEMANTIC** (+ RESULT_VALIDATION secondary) | Divergence between report and chat for the same (metric, entity, period) means two implementations of one metric — a violation of single semantic authority (A1.5 §F). That is squarely SEMANTIC. Operational: `report_cutover`. |
+| PE-48 Feedback capture & triage loop | `PILOT_OPS` | **INFRA** | The gradeable, mechanical part is *does the flag carry the trace* — observability plumbing, i.e. INFRA. The human triage half is not a failure mode at all and moves entirely to `pilot_operational_requirement: weekly_triage`. |
+| PE-49 Operator escalation & stop mechanism | `PILOT_OPS` | **SAFETY** | **Most debatable of the five.** Per the standard §6, operator sign-off is not really a taxonomy dimension — it is an operational requirement. But the row does prevent a concrete failure: *the system keeps serving users after a stop condition has been met*, which is a failure of a safety control, not of analysis. SAFETY is therefore recorded as the failure class, with the substance of the row carried by `pilot_operational_requirement: operator_governance`. A reviewer who wants this row to have no taxonomy dimension at all has a fair argument; the schema does not permit an empty value. |
+
+No blueprint class is renamed, split, merged, or replaced, and nothing is back-propagated
+into the blueprint taxonomy.
 
 ## Column definitions
 
 | Column | Meaning |
 |---|---|
 | `eval_id` | Stable id, `PE-nn`. |
-| `taxonomy_dimension` | Blueprint §D class, or `PILOT_OPS`. |
+| `taxonomy_dimension` | **Canonical blueprint §D class only** — one of the sixteen listed above. No other value is legal. Where a row also touches a second class, it is recorded as "(+ X secondary)"; the primary value is the one the row is filed under. |
+| `pilot_operational_requirement` | The named human/process obligation the row imposes, where it imposes one: `operator_governance`, `weekly_triage`, `external_gate_closure`, `report_cutover`. Empty for most rows. **Never a substitute for `taxonomy_dimension`, and never a taxonomy value.** |
+| `authority_type` | `SOURCE-DERIVED` / `REPO-EVIDENCE` / `TOESCA-DESIGN-DECISION` / `OPEN-DECISION`, per the standard's authority model. Mapping from the inline letter tags: **S** → `SOURCE-DERIVED`; **A** and **B** → `REPO-EVIDENCE` (governing document / implementation state respectively); **C** → `TOESCA-DESIGN-DECISION`; **D** → `OPEN-DECISION`. A row with several tags takes the *strongest claim it makes*: if any part of the row is a Toesca judgment, the row is `TOESCA-DESIGN-DECISION` in part, and the index below records the mix. |
 | `capability` | The product capability under test. |
 | `failure_being_prevented` | The concrete bad outcome. |
 | `eval_type` | outcome / component / trajectory / operational / contract-test / human-review. |
@@ -43,61 +62,66 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 | `current_coverage` | What exists at `d986996` — verified. |
 | `gap` | What is missing. |
 | `proposed_future_implementation` | The contract for closing it. Not built here. |
-| `source_rationale` | A / A(general) / B / C / D per the standard's tagging. |
+| `source_rationale` | S / A / B / C / D per the standard's authority model (§ "Authority model"). **S** citations name the source file and its section/lesson/slide/page. `A(general)` no longer exists — Draft 1 used it for principles whose sources had not been read; those sources have now been read and are cited concretely. |
 
 ## Index
 
-| eval_id | dimension | capability | severity | block/warn |
-|---|---|---|---|---|
-| PE-01 | DATA | Coverage & freshness awareness | P0 | BLOCK |
-| PE-02 | DATA | Excluded-entity hygiene | P0 | BLOCK |
-| PE-03 | DATA | Ingestion baseline regression | P0 | BLOCK |
-| PE-04 | DATA | `superseded_at` discipline | P0 | BLOCK |
-| PE-05 | SEMANTIC | Metric contract completeness | P0 | BLOCK |
-| PE-06 | SEMANTIC | Unit correctness | P0 | BLOCK |
-| PE-07 | SEMANTIC | Source-policy / precedence correctness | P0 | BLOCK |
-| PE-08 | SEMANTIC | No model-invented definitions | P0 | BLOCK |
-| PE-09 | ENTITY | Component-level entity resolution | P0 | BLOCK |
-| PE-10 | ENTITY | Ambiguity surfacing (no silent guess) | P0 | BLOCK |
-| PE-11 | METRIC | Component-level metric resolution | P1 | WARN |
-| PE-12 | METRIC | Domain-gated metric unreachability | P0 | BLOCK |
-| PE-13 | PERIOD | Component-level period resolution | P0 | BLOCK |
-| PE-14 | PERIOD | Declared-substitution discipline | P0 | BLOCK |
-| PE-15 | CONTEXT | Follow-up inheritance | P0 | BLOCK |
-| PE-16 | CONTEXT | Entity/period replacement follow-ups | P0 | BLOCK |
-| PE-17 | PLANNING | Clarify-vs-answer judgment | P1 | WARN |
-| PE-18 | PLANNING | Investigation depth on causal questions | P0 | BLOCK |
-| PE-19 | TOOL_SELECTION | Correct tool chosen | P1 | WARN |
-| PE-20 | TOOL_ARGUMENTS | Correct arguments | P1 | WARN |
-| PE-21 | TOOL_SELECTION | Governed-path preference over long tail | P1 | WARN |
-| PE-22 | SQL | SQL write safety | P0 | BLOCK |
-| PE-23 | SQL | SQL logical correctness | P1 | WARN |
-| PE-24 | SQL | Long-tail result-contract parity | P0 | BLOCK |
-| PE-25 | RESULT_VALIDATION | Empty / anomalous result handling | P0 | BLOCK |
-| PE-26 | RESULT_VALIDATION | Invariant violation surfacing | P0 | BLOCK |
-| PE-27 | TRAJECTORY | Deterministic anti-patterns | P0/P1 | BLOCK (AP-2/3/5) |
-| PE-28 | TRAJECTORY | Premature stopping | P0 | BLOCK |
-| PE-29 | SYNTHESIS | Fabrication (F1 + C1/C2) | P0 | BLOCK |
-| PE-30 | SYNTHESIS | Unsupported causality (C4) | P0 | BLOCK |
-| PE-31 | SYNTHESIS | Forbidden claim (C5) | P0 | BLOCK |
-| PE-32 | SYNTHESIS | Numeric restatement fidelity | P0 | BLOCK |
-| PE-33 | SYNTHESIS | Completeness | P1 | WARN |
-| PE-34 | SYNTHESIS | Jargon leakage / readability | P1 | WARN |
-| PE-35 | SYNTHESIS | Evidence package present & inspectable | P0 | BLOCK |
-| PE-36 | CONVERSATION_STATE | Correction handling (F5) | P0 | BLOCK |
-| PE-37 | CONVERSATION_STATE | Topic reset | P0 | BLOCK |
-| PE-38 | SAFETY | Session isolation (F3/F4) | P0 | BLOCK |
-| PE-39 | SAFETY | Auth boundary | P0 | BLOCK |
-| PE-40 | SAFETY | Holdout non-contamination | P0 | BLOCK |
-| PE-41 | INFRA | Trace completeness | P0 | BLOCK |
-| PE-42 | INFRA | Latency & cost baseline | P1 | WARN |
-| PE-43 | INFRA | Error handling / graceful degradation | P0 | BLOCK |
-| PE-44 | INFRA | Gate/dimension liveness | P0 | BLOCK |
-| PE-45 | PILOT_OPS | JLL v2 freshness & coverage honesty | P0 | BLOCK |
-| PE-46 | PILOT_OPS | Deterministic report reproducibility | P0 (if shipped) | BLOCK |
-| PE-47 | PILOT_OPS | Report-vs-chat number parity | P0 (if shipped) | BLOCK |
-| PE-48 | PILOT_OPS | Feedback capture & triage loop | P0 | BLOCK |
-| PE-49 | PILOT_OPS | Operator escalation & stop mechanism | P0 | BLOCK |
+`block/warn` now also carries the **blocking scope** introduced in standard §6: `BLOCK/P`
+stops the whole pilot, `BLOCK/C` removes the affected capability from the pilot surface
+(unreachable and explicitly refused) while the rest proceeds.
+
+| eval_id | taxonomy_dimension | capability | severity | block/warn | pilot_operational_requirement | authority_type |
+|---|---|---|---|---|---|---|
+| PE-01 | DATA | Coverage & freshness awareness | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-02 | DATA | Excluded-entity hygiene | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-03 | DATA | Ingestion baseline regression | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-04 | DATA | `superseded_at` discipline | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-05 | SEMANTIC | Metric contract completeness | P0 | BLOCK/C | — | REPO-EVIDENCE |
+| PE-06 | SEMANTIC | Unit correctness | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-07 | SEMANTIC | Source-policy / precedence correctness | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-08 | SEMANTIC | No model-invented definitions | P0 | BLOCK/P | — | REPO-EVIDENCE + TOESCA-DESIGN-DECISION |
+| PE-09 | ENTITY | Component-level entity resolution | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-10 | ENTITY | Ambiguity surfacing (no silent guess) | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-11 | METRIC | Component-level metric resolution | P1 | WARN | — | REPO-EVIDENCE |
+| PE-12 | METRIC | Domain-gated metric unreachability | P0 | BLOCK/C | — | REPO-EVIDENCE |
+| PE-13 | PERIOD | Component-level period resolution | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-14 | PERIOD | Declared-substitution discipline | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-15 | CONTEXT | Follow-up inheritance | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-16 | CONTEXT | Entity/period replacement follow-ups | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-17 | PLANNING | Clarify-vs-answer judgment | P1 | WARN | — | REPO-EVIDENCE |
+| PE-18 | PLANNING | Investigation depth on causal questions | P0 | BLOCK/P | — | REPO-EVIDENCE + TOESCA-DESIGN-DECISION |
+| PE-19 | TOOL_SELECTION | Correct tool chosen | P1 | WARN | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-20 | TOOL_ARGUMENTS | Correct arguments | P1 | WARN | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-21 | TOOL_SELECTION | Governed-path preference over long tail | P1 | WARN | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-22 | SQL | SQL write safety | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-23 | SQL | SQL logical correctness | P1 | WARN | — | REPO-EVIDENCE |
+| PE-24 | SQL | Long-tail result-contract parity | P0 | BLOCK/C | — | REPO-EVIDENCE |
+| PE-25 | RESULT_VALIDATION | Empty / anomalous / irrelevant result handling | P0 | BLOCK/P | — | REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION |
+| PE-26 | RESULT_VALIDATION | Invariant violation surfacing | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-27 | TRAJECTORY | Deterministic anti-patterns | P0/P1 | BLOCK/P (AP-3/AP-4/AP-5); WARN (AP-1/AP-2/AP-6) | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-28 | TRAJECTORY | Premature stopping | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-29 | SYNTHESIS | Fabrication (F1 + C1/C2) | P0 | BLOCK/P | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-30 | SYNTHESIS | Unsupported causality (C4) | P0 | BLOCK/P | — | REPO-EVIDENCE + TOESCA-DESIGN-DECISION |
+| PE-31 | SYNTHESIS | Forbidden claim (C5) | P0 | BLOCK/P | — | REPO-EVIDENCE + OPEN-DECISION |
+| PE-32 | SYNTHESIS | Numeric restatement fidelity | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-33 | SYNTHESIS | Completeness | P1 | WARN | — | REPO-EVIDENCE |
+| PE-34 | SYNTHESIS | Jargon leakage / readability | P1 | WARN | — | REPO-EVIDENCE |
+| PE-35 | SYNTHESIS | Evidence package present & inspectable | P0 | BLOCK/P | — | REPO-EVIDENCE + OPEN-DECISION |
+| PE-36 | CONVERSATION_STATE | Correction handling (F5) | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-37 | CONVERSATION_STATE | Topic reset | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-38 | SAFETY | Session isolation (F3/F4) | P0 | BLOCK/P | — | REPO-EVIDENCE + TOESCA-DESIGN-DECISION |
+| PE-39 | SAFETY | Auth boundary | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-40 | SAFETY | Holdout non-contamination | P0 | BLOCK/P | — | REPO-EVIDENCE |
+| PE-41 | INFRA | Trace reconstructibility | P0 | BLOCK/P | — | REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION |
+| PE-42 | INFRA | Latency & cost baseline | P1 | WARN | — | REPO-EVIDENCE + SOURCE-DERIVED |
+| PE-43 | INFRA | Error handling / graceful degradation | P0 | BLOCK/P | — | REPO-EVIDENCE + TOESCA-DESIGN-DECISION |
+| PE-44 | INFRA | Gate/dimension liveness | P0 | BLOCK/P (P0-backing gates); WARN (others, SW-9) | — | REPO-EVIDENCE |
+| PE-45 | DATA (+ INFRA secondary) | JLL v2 freshness & coverage honesty | P0 | BLOCK/C | `external_gate_closure` | REPO-EVIDENCE + TOESCA-DESIGN-DECISION + OPEN-DECISION |
+| PE-46 | INFRA (+ RESULT_VALIDATION secondary) | Deterministic report reproducibility | P0 (if shipped) | BLOCK/C | `report_cutover` | REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION |
+| PE-47 | SEMANTIC (+ RESULT_VALIDATION secondary) | Report-vs-chat number parity | P0 (if shipped) | BLOCK/C | `report_cutover` | REPO-EVIDENCE |
+| PE-48 | INFRA | Feedback capture & triage loop | P0 | BLOCK/P | `weekly_triage` | REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION |
+| PE-49 | SAFETY | Operator escalation & stop mechanism | P0 | BLOCK/P | `operator_governance` | TOESCA-DESIGN-DECISION + SOURCE-DERIVED |
+| PE-50 | PLANNING | Plan quality & justified replanning | P1 | WARN | — | SOURCE-DERIVED + TOESCA-DESIGN-DECISION |
 
 ---
 
@@ -358,7 +382,7 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **current_coverage:** `tool_correctness` dim, deterministic when `tool_requirements` present **[B]**
 - **gap:** blended with arguments; `tool_requirements` optional, so the denominator shrinks silently **[B]**
 - **future:** split per blueprint §F/§P step 1.1; make `tool_requirements` mandatory on new cases
-- **source:** A (blueprint §F/N/O)
+- **source:** A (blueprint §F/N/O) + **S** — the split is independently the shape used by the GPA framework, which evaluates *Tool Selection* (match-to-goal, comparative suitability, awareness of tool limits; explicitly **not** call syntax) and *Tool Calling* (syntactic and semantic validity of inputs, preconditions, faithful interpretation of outputs, handling of tool-returned errors; explicitly **not** tool choice) as two judges with disjoint rubrics — `04_cs329t_knowledge_pack_all.md`, Agent GPA slides 15 and 19. This corroborates a split the blueprint had already justified; it does not introduce a new dimension
 
 ## PE-20 — Correct tool arguments
 - **TOOL_ARGUMENTS** · tool contract
@@ -426,19 +450,19 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** one result-contract type shared by governed and long-tail paths
 - **source:** A (A1.5 §L)
 
-## PE-25 — Empty / anomalous result handling
-- **RESULT_VALIDATION** · validator
-- **prevents:** "la vacancia fue 0%" when the result set was empty
+## PE-25 — Empty / anomalous / irrelevant result handling
+- **RESULT_VALIDATION** · validator · **blocking scope:** `PRODUCT` · **authority_type:** REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION
+- **prevents:** "la vacancia fue 0%" when the result set was empty — **and, added in this revision, a non-empty result that answers a different question than the one asked** (RV-6). "The query executed" is not "the query answered the question"
 - component · deterministic
-- **evidence:** `result_metadata.empty` in trace vs the answer's claim
-- **metric:** empty-set results rendered as a business fact
-- `ZERO_TOLERANCE` · P0 · **BLOCK**
-- **trace:** `tool_calls[].result_metadata`, `validator_outcome`, `final_answer_text`
+- **evidence:** `result_metadata.empty` in trace vs the answer's claim; **plus** equality between the resolved `(entity, metric, period, grain)` tuple and the tuple the result's own metadata declares (TU-3)
+- **metric:** (a) empty-set results rendered as a business fact; (b) answers whose resolved tuple differs from the returned result's declared tuple
+- `ZERO_TOLERANCE` on both · P0 · **BLOCK/P**
+- **trace:** `tool_calls[].result_metadata`, `tool_calls[].provenance`, `resolved_entity/metric/period`, `validator_outcome`, `final_answer_text`, `span_type=retrieval`
 - **tasks:** T-036, T-037, T-038
 - **current_coverage:** **none — no result-validation component exists in the runtime or the eval** **[B]** (blueprint §D/§F, flagged for A3)
-- **gap:** the entire component
-- **future:** the §14 RV-5 minimum subset (empty-set, null/zero vs declared null semantics, unit equality, coverage) — richer anomaly-injection harness is P2
-- **source:** A (blueprint §F) + C (the minimum-subset scoping is a proposal)
+- **gap:** the entire component. The relevance leg (b) additionally requires the `span_type` labelling of §24 so the evaluated retrieval steps are identifiable
+- **future:** the §14 RV-5 minimum subset (empty-set, null/zero vs declared null semantics, unit equality, coverage, relevance) — richer anomaly-injection harness is P2; RV-7 cardinality/duplication is P1
+- **source:** A (blueprint §F) + **S** — the relevance leg is the RAG-Triad's *context relevance* applied to a data agent's retrieval steps (`01_building_and_evaluating_data_agents.md` Lesson 4) and the separately-named failures in `04_cs329t_knowledge_pack_all.md` Lecture 3 slides 38–40 — + C. Note the deliberate divergence from the source: it scores relevance with an LLM judge over free text; Toesca's results are *structured*, so the same check is done deterministically by tuple comparison, which is cheaper and does not inherit the judge failure modes of P15
 
 ## PE-26 — Invariant violation surfacing
 - **RESULT_VALIDATION** · metric invariants
@@ -455,10 +479,10 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 
 ## PE-27 — Deterministic trajectory anti-patterns
 - **TRAJECTORY** · orchestration
-- **prevents:** AP-1 repeated identical action, AP-2 loops, AP-3 ignored tool error, AP-4 ignored validator result, AP-6 redundant querying after sufficient evidence (§11)
+- **prevents:** AP-1 repeated identical action, AP-2 unproductive repetition, AP-3 ignored tool error, AP-4 ignored validator result, AP-6 redundant querying after sufficient evidence (§11)
 - trajectory · deterministic, pure trace analysis, **no LLM call**
 - **metric:** per-anti-pattern occurrence counts
-- AP-2/AP-3/AP-4: `ZERO_TOLERANCE`, P0, **BLOCK**. AP-1/AP-6: `BASELINE_RELATIVE`, P1/P2, **WARN**
+- **AP-3/AP-4: `ZERO_TOLERANCE`, P0, BLOCK/P. AP-1/AP-2/AP-6: `BASELINE_RELATIVE`, P1/P2, WARN.** *(Changed in this revision: Draft 1 made AP-2 a `ZERO_TOLERANCE` P0 gate triggered by "the same `(tool, args)` 3+ times", an invented count. The sources judge repetition by purpose rather than frequency — the Execution Efficiency rubric explicitly permits verification steps and inline-evaluation steps that "provide unique feedback, serve as sanity checks, or use a demonstrably different approach", and penalises only repetition that contributes nothing (`04_cs329t_knowledge_pack_all.md`, Agent GPA slide 11) **[S]**. The P0 hazard — repetition that ends in an unacknowledged failure — is already fully covered by AP-3 and AP-5/PE-28, so nothing is weakened.)*
 - **trace:** `tool_calls[]` sequence, `retries[]`, `validator_outcome`, resolved-state per step
 - **tasks:** T-039, T-040, T-044
 - **current_coverage:** **none automated** — the closest evidence is `FINDINGS.md`'s manually-gathered observation **[B]**
@@ -635,13 +659,13 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** blueprint §P step 0.1; extend the ID grep toward fuzzy phrase matching per §J
 - **source:** A (blueprint §J/§M) + B
 
-## PE-41 — Trace completeness
-- **INFRA** · observability
+## PE-41 — Trace reconstructibility
+- **INFRA** · observability · **blocking scope:** `PRODUCT` · **authority_type:** REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION
 - **prevents:** a pilot that produces anecdotes instead of evidence; makes failure attribution (blueprint §D) impossible
 - operational · deterministic
-- **metric:** turns missing any MUST field of the Pilot Trace Contract (§24)
-- `HARD_INVARIANT` (a turn is traced or is not served) · P0 · **BLOCK**
-- **trace:** all §24 MUST fields
+- **metric:** **analytically consequential** turns (per HB-10: turns that state a business fact, invoke a tool or SQL, or resolve an entity/metric/period) missing any `MUST_FOR_PILOT` field of the Pilot Trace Contract (§24). *(Changed in this revision: Draft 1 required a trace on every turn. The requirement is reconstructibility of answers that could be wrong, not universal logging; an untraced greeting causes no diagnosable harm. Two fields were **added** to the MUST set on source evidence — `span_type`, so retrieval steps are identifiable and the groundedness/relevance checks are computable at all, and `app_version`, without which pilot traffic cannot be compared before and after a change. `01_building_and_evaluating_data_agents.md` Lessons 4 and 6 **[S]**.)*
+- `HARD_INVARIANT` (a consequential turn is traced or is not served) · P0 · **BLOCK/P**
+- **trace:** all §24 `MUST_FOR_PILOT` fields, including `span_type` and `app_version`
 - **tasks:** all
 - **current_coverage:** `eval/benchmark`'s `turns.jsonl`/`events.jsonl` already approximate the shape **[B]**; `eval/alpha_eval_v1` captures tool calls, SQL, tokens, latency, termination reason, presentation pre/post **[B]**
 - **gap:** no single standardized trace across benchmark and production; blueprint §K's explicit instruction is to standardize, **not** invent a fourth format
@@ -687,7 +711,9 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** blueprint §P step 0.2, run as its own check
 - **source:** A (blueprint §C.3/§H)
 
-## PE-45 — JLL v2 freshness & coverage honesty *(PILOT_OPS — pilot-specific, not a blueprint taxonomy dimension)*
+## PE-45 — JLL v2 freshness & coverage honesty
+- **taxonomy_dimension:** DATA (+ INFRA secondary — the Analyst-wiring half) · **pilot_operational_requirement:** `external_gate_closure` · **authority_type:** REPO-EVIDENCE + TOESCA-DESIGN-DECISION + OPEN-DECISION · **blocking scope:** `CAPABILITY`
+- *(Re-filed in this revision. Draft 1 had `PILOT_OPS`, which is no longer a legal value. The failure prevented is a wrong or overclaimed business fact, hence DATA; the external-gate obligation now lives in `pilot_operational_requirement`. The substance of the row below — including all three JLL claims — is unchanged.)*
 - **capability:** rent roll / recaudación / cartera availability and freshness
 - **prevents:** claiming coverage the Analyst cannot query; answering pre-v2 data with v2 semantics; a catalog/schema mismatch
 - contract-test + human · deterministic (wiring & schema) + `HUMAN_ACCEPTANCE_REQUIRED` (gate items)
@@ -704,7 +730,9 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** either close all three (§27 JL-2) or ship without JLL-v2-dependent capabilities and refuse those questions explicitly (§27 JL-3)
 - **source:** B (all three claims) + A (A1.5 §K for the temporal/`latest` rule) + C (the pilot requirement)
 
-## PE-46 — Deterministic report reproducibility *(PILOT_OPS)*
+## PE-46 — Deterministic report reproducibility
+- **taxonomy_dimension:** INFRA (+ RESULT_VALIDATION secondary — validation must block rendering) · **pilot_operational_requirement:** `report_cutover` · **authority_type:** REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION · **blocking scope:** `CAPABILITY`
+- *(Re-filed from `PILOT_OPS`. An LLM appearing in a path declared LLM-free, and identical inputs producing different bytes, are properties of the generation system.)*
 - **capability:** Informe de Vacancia / Recaudación / Ingresos
 - **prevents:** a "deterministic" report that isn't — LLM in the path, or non-reproducible output
 - contract-test · deterministic
@@ -717,7 +745,9 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** build to the ROADMAP shape (generator → governed dataset/SQL → validation → HTML), with validation blocking rendering rather than rendering a caveat
 - **source:** B (ROADMAP + CURRENT_STATE) + C (the reproducibility bar)
 
-## PE-47 — Report-vs-chat number parity *(PILOT_OPS)*
+## PE-47 — Report-vs-chat number parity
+- **taxonomy_dimension:** SEMANTIC (+ RESULT_VALIDATION secondary) · **pilot_operational_requirement:** `report_cutover` · **authority_type:** REPO-EVIDENCE · **blocking scope:** `CAPABILITY`
+- *(Re-filed from `PILOT_OPS`. Two implementations of one metric is a breach of single semantic authority, A1.5 §F.)*
 - **capability:** single metrics implementation
 - **prevents:** the report and the chat disagreeing on the same metric/entity/period — the fastest way to destroy trust in both
 - contract-test · deterministic
@@ -730,7 +760,9 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** the Analyst invokes the *same* generator (e.g. `generate_vacancy_report(scope, period)`), never a parallel LLM path
 - **source:** B (ROADMAP) + A (A1.5 §F single authority)
 
-## PE-48 — Feedback capture & triage loop *(PILOT_OPS)*
+## PE-48 — Feedback capture & triage loop
+- **taxonomy_dimension:** INFRA · **pilot_operational_requirement:** `weekly_triage` · **authority_type:** REPO-EVIDENCE + SOURCE-DERIVED + TOESCA-DESIGN-DECISION · **blocking scope:** `PRODUCT`
+- *(Re-filed from `PILOT_OPS`. The gradeable half is "does the flag carry the trace" — observability plumbing. The human triage half is not a failure mode and is now an operational requirement. Independently supported: production failures becoming eval cases is stated in `07_anthropic_agent_engineering_context_tools_evals.md` §3 and its checklist, and in `05_openai_api_agents_consolidated_knowledge.md` §17.2 step 4 **[S]**.)*
 - **capability:** production → eval loop
 - **prevents:** a pilot that generates anecdotes rather than regression cases
 - operational + human
@@ -744,7 +776,9 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** a **manual** weekly loop is acceptable for pilot (§25 FB-5); automation is P2; per blueprint §J the regression set is "all dev-set cases run on every change", not a separate artifact
 - **source:** A (blueprint §J/§L/§O) + B + C
 
-## PE-49 — Operator escalation & stop mechanism *(PILOT_OPS)*
+## PE-49 — Operator escalation & stop mechanism
+- **taxonomy_dimension:** SAFETY · **pilot_operational_requirement:** `operator_governance` · **authority_type:** TOESCA-DESIGN-DECISION + SOURCE-DERIVED · **blocking scope:** `PRODUCT`
+- *(Re-filed from `PILOT_OPS`, and the most debatable of the five remappings — see the taxonomy section above. The failure prevented is a real one, "the system keeps serving after a stop condition has been met", which is a safety-control failure; but the row's substance is governance, carried by `pilot_operational_requirement`. Supported as a practice by `02_a_practical_guide_to_building_agents.pdf` p. 31, where human intervention triggers on failure thresholds and high-risk situations, and by `05_...md` §13 "Human control" **[S]** — neither of which prescribes Toesca's specific arrangement.)*
 - **capability:** pilot governance
 - **prevents:** a pilot that keeps running after a stop condition is met
 - human
@@ -758,35 +792,67 @@ dimension**, and must not be back-propagated into the blueprint taxonomy.
 - **future:** §28 + §30 of the standard, signed off before entry (HB-12)
 - **source:** C
 
+## PE-50 — Plan quality & justified replanning
+- **taxonomy_dimension:** PLANNING · **blocking scope:** — · **authority_type:** SOURCE-DERIVED + TOESCA-DESIGN-DECISION
+- **capability:** multi-step investigation planning
+- **prevents:** a plan that cannot achieve the goal with the tools available, and — more importantly for Toesca — a **replan with no recorded trigger**, which is how a multi-step investigation quietly changes what question it is answering
+- **why this row is new:** PLANNING had only PE-17 (clarify-vs-answer) and PE-18 (causal depth). Neither evaluates the plan itself. The sources treat plan quality and plan adherence as first-class, separately-rubricked failure surfaces, and Toesca's §17 "why" family is precisely where they bite
+- trajectory · judge (plan-quality style rubric) + deterministic (a replan event carries a recorded trigger)
+- **evidence:** structured plan steps in the trace (`span_type=planning`), replan events with triggers, executed steps
+- **metric:** (a) replans with no recorded trigger — deterministic; (b) plan-quality and plan-adherence scores — judge
+- `HARD_INVARIANT` for (a) once plans are structured in the trace; `THRESHOLD_TO_CALIBRATE` for (b), **monitored, never blocking, until judge variance is measured** (judge policy, P15) · P1 · **WARN**
+- **trace:** `planner_decision`, `span_type=planning`, `tool_calls[]`, `retries[]`
+- **representative_tasks:** T-039, T-040, T-041, T-044, T-050
+- **current_coverage:** `investigation_quality` judge dimension exists **[B]**; no plan structure is recorded in the trace today, so neither leg is currently computable **[B]**
+- **gap:** plans are not emitted as structured trace objects; no replan-trigger field exists
+- **proposed_future_implementation:** structured plan steps with goal/precondition/postcondition per step (standard §11 PQ-1), a `replan{trigger}` trace event, then the judge rubric. **Not scheduled here.** Note the explicit non-goal: plan quality is judged against the goal and the available tools, **never against a reference plan** (P5, PQ-3)
+- **source_rationale:** **S** — `04_cs329t_knowledge_pack_all.md`, Agent GPA slides 13 (Plan Quality rubric: every step justified, feasible with the tools provided, replans presented with explicit rationale) and 17 (Plan Adherence judged step-by-step, omissions counting as failures regardless of final-answer quality); `01_building_and_evaluating_data_agents.md` Lessons 5–6, where making plan steps explicit measurably improved adherence; `07_anthropic_agent_engineering_context_tools_evals.md` §3 ("Prefer grading outcomes over enforcing one exact reasoning path"), which is why PE-50 grades justification rather than path shape. Severity, non-blocking status, and Toesca's specific trace shape are **C**
+
 ---
 
-## Coverage check against the blueprint taxonomy
+## Coverage check against the canonical taxonomy
 
 | Taxonomy class | Rows |
 |---|---|
-| DATA | PE-01, PE-02, PE-03, PE-04 |
-| SEMANTIC | PE-05, PE-06, PE-07, PE-08 |
+| DATA | PE-01, PE-02, PE-03, PE-04, PE-45 |
+| SEMANTIC | PE-05, PE-06, PE-07, PE-08, PE-47 |
 | ENTITY | PE-09, PE-10 |
 | METRIC | PE-11, PE-12 |
 | PERIOD | PE-13, PE-14 |
 | CONTEXT | PE-15, PE-16 |
-| PLANNING | PE-17, PE-18 |
+| PLANNING | PE-17, PE-18, PE-50 |
 | TOOL_SELECTION | PE-19, PE-21 |
 | TOOL_ARGUMENTS | PE-20 |
 | SQL | PE-22, PE-23, PE-24 |
-| RESULT_VALIDATION | PE-25, PE-26 |
+| RESULT_VALIDATION | PE-25, PE-26 (+ PE-46, PE-47 secondary) |
 | TRAJECTORY | PE-27, PE-28 |
 | SYNTHESIS | PE-29, PE-30, PE-31, PE-32, PE-33, PE-34, PE-35 |
 | CONVERSATION_STATE | PE-36, PE-37 |
-| SAFETY | PE-38, PE-39, PE-40 |
-| INFRA | PE-41, PE-42, PE-43, PE-44 |
-| `PILOT_OPS` *(pilot-specific addition)* | PE-45, PE-46, PE-47, PE-48, PE-49 |
+| SAFETY | PE-38, PE-39, PE-40, PE-49 |
+| INFRA | PE-41, PE-42, PE-43, PE-44, PE-46, PE-48 (+ PE-45 secondary) |
 
-**All 16 blueprint classes are covered. No blueprint class is renamed, split, merged, or
-replaced.** The only extensions used (splitting `tool_correctness` into PE-19/PE-20;
-standalone SQL correctness at PE-23; standalone unit correctness at PE-06) are the
-blueprint's **own** justified extensions (§F, §O, §P step 1.1), cited as such rather than
-re-derived here.
+**All 16 canonical classes are covered, and `taxonomy_dimension` now contains canonical
+values only.** No class is renamed, split, merged, or replaced. The extensions used
+(splitting `tool_correctness` into PE-19/PE-20; standalone SQL correctness at PE-23;
+standalone unit correctness at PE-06) are the blueprint's **own** justified extensions (§F,
+§O, §P step 1.1), cited as such rather than re-derived here — and PE-19/PE-20 are
+independently corroborated by the external sources.
+
+### Operational requirements (orthogonal to the taxonomy)
+
+| Requirement | Rows | Owner |
+|---|---|---|
+| `operator_governance` | PE-49 | Named pilot operator (§28 OP-1) |
+| `weekly_triage` | PE-48 | Named pilot operator (§28 OP-3) |
+| `external_gate_closure` | PE-45 | Named human, currently unassigned (§32 OD-11) |
+| `report_cutover` | PE-46, PE-47 | Product + eng (§32 OD-15) |
+
+### Row count
+
+**49 → 50.** No row was removed. One row was added (PE-50), five were re-filed out of
+`PILOT_OPS` into canonical classes, and three (PE-25, PE-27, PE-41) changed substance on
+source evidence. The five re-filed rows kept their content, evidence, and gaps unchanged;
+only their classification and their operational-requirement field changed.
 
 ## Sequencing note
 

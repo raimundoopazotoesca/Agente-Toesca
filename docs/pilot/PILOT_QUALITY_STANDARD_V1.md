@@ -4,6 +4,15 @@
 deployment change is made or implied by this document. Base commit `d986996`, worktree
 `docs/pilot-quality-standard-v1`.
 
+**Revision provenance.** Draft 1 of this standard was written without access to the
+external agent-engineering and agent-evaluation sources it referred to; principles taken
+from them were tagged `A(general)` and nothing specific was attributed. Those sources are
+now available and have been read. This revision is an **incremental, evidence-driven pass**
+over Draft 1 — it keeps Draft 1's structure and numbering, cites the sources concretely,
+corrects the claims that the new evidence contradicts or qualifies, and removes the
+`PILOT_OPS` pseudo-taxonomy. §34 records exactly which sources were read, what each is,
+what it supports, and what changed as a result. Every Draft 1 open decision is still open.
+
 **Relationship to existing work.** This document does **not** create a second evaluation
 taxonomy. It consumes:
 
@@ -24,14 +33,24 @@ it?"* Pilot readiness ⊇ eval reliability core, and adds product, operations, d
 freshness, reporting, and human-support dimensions the blueprint deliberately did not
 cover.
 
-### Evidence tagging convention (used throughout)
+### Authority model (used throughout)
 
-| Tag | Meaning |
-|---|---|
-| **A** | Principle backed by a source — either the local eval blueprint / judge policy / A1.5 contract, or general knowledge of a publicly-known agent framework (Anthropic's "Building Effective Agents" / context-engineering / tool-writing guidance; OpenAI's "A Practical Guide to Building Agents"; standard outcome-vs-trajectory agent-eval practice). Where the source is general knowledge rather than a local repo file, it is marked **A(general)** — those materials are **not** present in this repository and nothing specific is quoted from them. |
-| **B** | Verified fact about the current Toesca repository state, with the file it came from. |
-| **C** | A judgment call proposed here for Toesca. Not derived from any source. Contestable. |
-| **D** | Open question. Needs a human decision; deliberately left unresolved. |
+Every load-bearing claim in this document belongs to exactly one of four authority types.
+The letter tags below are the shorthand actually written inline; the authority type is what
+the tag *means*. The distinction matters most in one direction: **an external source may
+motivate a Toesca requirement, but it never issues one.** "Anthropic/OpenAI/Stanford
+describe X, therefore Toesca must implement exactly Y" is two claims, and the second is
+always a `TOESCA-DESIGN-DECISION`.
+
+| Tag | Authority type | Meaning |
+|---|---|---|
+| **S** | `SOURCE-DERIVED` | A principle directly supported by one of the external sources read in the revision pass (§34). Cited by filename plus section/lesson/slide/page. Replaces the earlier `A(general)` tag, which existed only because those sources had not yet been read. |
+| **A** | `REPO-EVIDENCE` (governing documents) | Backed by a governing Toesca document already in this repository: the eval blueprint, the judge policy, or the A1.5 data-foundation contract. Normative *inside this repo*; not an external authority. |
+| **B** | `REPO-EVIDENCE` (implementation state) | A verified fact about the current repository: code, migrations, tests, `CURRENT_STATE.md`, `ROADMAP.md`, gate manifests. Cited with the file it came from. |
+| **C** | `TOESCA-DESIGN-DECISION` | A judgment call proposed here for Toesca. May be *motivated* by **S** or **A**, but is not required by them. Contestable by construction. |
+| **D** | `OPEN-DECISION` | Needs a named human. Deliberately unresolved; an external source can never close one of these. |
+
+Where a claim is motivated by a source but decided here, both tags appear: **S → C**.
 
 ### Threshold policy tags (used for every quantitative statement)
 
@@ -120,8 +139,12 @@ Out of scope for pilot readiness, deliberately **[C]**:
   (`PILOT_TASK_BANK_V0.md`), not by enumerating every intent.
 - **P3** Multi-agent architecture. Per the product brief, a single Analyst agent is the
   target; multi-agent is not a readiness condition and adds evaluation surface without
-  demonstrated need. **A(general)** — the standard advice is to exhaust single-agent
-  designs before adding orchestration.
+  demonstrated need. **[S]** — `02_a_practical_guide_to_building_agents.pdf`, "When to
+  consider creating multiple agents" (p. 16): *"Our general recommendation is to maximize a
+  single agent's capabilities first"*, and `05_openai_api_agents_consolidated_knowledge.md`
+  §15, which sequences deterministic workflow → single agent + tools → network of agents and
+  says to move right *"only when evaluation shows the current architecture is
+  insufficient"*. Applying that to Toesca's pilot is **[C]**.
 - **P3** Personalized artifacts, Excel/PPT generation, external data (Inciti). Per
   `docs/ROADMAP.md`, deferred by design. **[B]**
 - **P2** Factsheet as the primary application. Per `docs/ROADMAP.md` "Product Shell &
@@ -143,51 +166,121 @@ Out of scope for pilot readiness, deliberately **[C]**:
 | P7 | **Meaning is declared, not inferred.** Unit, grain, temporal type, precedence, and provenance come from the contract layer, not from the model reading a column name. | **A** (A1.5 §H/I/J/K) | P0 |
 | P8 | **Cheap deterministic checks run always; expensive judge/outcome runs only where they change a decision.** | **A** (blueprint §M) | P1 |
 | P9 | **Latency and cost are optimized after quality, but must be *measured* before architecture tradeoffs are argued.** | **A** (blueprint §C.8) | P1 |
-| P10 | **Context is engineered, not accumulated.** What the agent sees at each step is a designed artifact (governed tool results, structured evidence), not an ever-growing transcript. | **A(general)** — Anthropic context-engineering guidance; not a local repo file | P1 |
-| P11 | **Tools are a product surface.** Tool names, descriptions, and argument schemas are written for the model as a reader, and a tool that returns unlabeled numbers is a defective tool. | **A(general)** — Anthropic "writing tools for agents" guidance; not a local repo file | P1 |
-| P12 | **Evaluate outcome *and* trajectory.** A right answer reached by an invalid path is a latent failure, not a pass. | **A(general)** standard agent-eval practice, instantiated locally by blueprint §E/F/G | P1 |
+| P10 | **Context is engineered, not accumulated.** What the agent sees at each step is a designed artifact (governed tool results, structured evidence), not an ever-growing transcript. | **S** — `07_anthropic_agent_engineering_context_tools_evals.md` §1 (paraphrased digest of Anthropic's *Effective context engineering for AI agents*, 2025-09-29): treat the context window as a scarce working-memory resource; start from the minimum context needed; retrieve detail just in time | P1 |
+| P11 | **Tools are a product surface.** Tool names, descriptions, and argument schemas are written for the model as a reader, and a tool that returns unlabeled numbers is a defective tool. | **S** — `07_...md` §2 (digest of *Writing effective tools for AI agents*): treat names, descriptions, parameter schemas and output formats as prompt design; return only context useful for the next decision; make errors actionable. Corroborated by `02_a_practical_guide_to_building_agents.pdf` p. 9 ("well-documented, thoroughly tested, and reusable tools") | P1 |
+| P12 | **Evaluate outcome *and* trajectory.** A right answer reached by an invalid path is a latent failure, not a pass. | **S** — `07_...md` §3 ("Evaluation may therefore need to inspect both the final outcome and the run trace"); `04_cs329t_knowledge_pack_all.md`, Guest Lecture *Agent GPA*, slides 6–7, which decompose agent evaluation into Goal→Plan→Action alignment rather than judging only the final answer. Instantiated locally by blueprint §E/F/G **[A]** | P1 |
 | P13 | **Infrastructure that is written but never invoked is worse than absent infrastructure**, because it produces a false sense of coverage (the F5 case). Anything this standard requires must be demonstrated *firing*, not merely present. | **A** (blueprint §C.3) → adopted here as a pilot rule **[C]** | P0 |
+| P14 | **Determinism first; autonomy only where evaluation shows a fixed path cannot cope.** Where the analytical path is known, it belongs in code (governed dataset, deterministic report), not in the agent's discretion. This is the architectural justification for §26, and for keeping the governed-tool path preferred over the SQL long tail (TU-5). | **S** — `05_...md` §5.5: *"Do not add autonomy unless representative evaluations show that a fixed workflow cannot handle the real variation"*, and §15's level progression; `02_...pdf` p. 6: *"Before committing to building an agent, validate that your use case can meet these criteria clearly. Otherwise, a deterministic solution may suffice."* Applying it as a Toesca rule is **[C]** | P1 |
+| P15 | **A judge is a system with its own error modes, and must be calibrated against humans before it gates anything.** Two specific modes matter here: judges are *distracted by too much information*, and they *agree with the agent's own stated reasoning even when it is wrong* — which is precisely the failure a self-justifying trajectory produces. This is why P1/P2 (deterministic evidence overrides the judge) are P0, why SY-6 keeps judge dimensions monitored rather than blocking, and why UC-5 adds a human layer over the C4 causality gate. | **S** — `07_...md` §3 ("Calibrate model judges with humans and inspect transcripts"); `04_cs329t...md`, *Agent GPA* slides 21–31 (LLM judges themselves benchmarked against human-annotated traces, and re-run repeatedly to measure consistency) and *Agent Evals Survey* slide 38 (AgentRewardBench: rules-based evaluation under-reports success while LLM-judges over-report it; named judge failure modes). Toesca's specific response is **[C]** | P0 |
+| P16 | **Retrieval quality, groundedness, and answer relevance are three different failures and must be separable.** A query that runs and returns rows can still return the *wrong slice*; a grounded-sounding answer can rest on irrelevant context; a well-grounded answer can address the wrong question. Collapsing them into "the answer was wrong" destroys attribution (P4). | **S** — `01_building_and_evaluating_data_agents.md` Lesson 4 (the RAG-Triad applied to data agents: context relevance / groundedness / answer relevance, computed from the trace's retrieval spans); `04_cs329t...md` Lecture 3 slides 38–40 name the three failures separately (*Retrieval Failure*, *Lack of Groundedness*, *Answering the Wrong Question*) | P0 |
 
 ## 5. Pilot-readiness dimensions
 
-Pilot readiness is assessed across ten dimensions. Each maps onto the blueprint taxonomy
-where one exists; the last three are pilot-specific additions with no blueprint analogue
-and are labelled `PILOT_OPS`.
+Pilot readiness is assessed across ten dimensions, **all of which map onto the canonical
+blueprint failure taxonomy**. Draft 1 introduced a tenth taxonomy value, `PILOT_OPS`, for
+pilot-operations concerns. That was a mistake and is **corrected in this revision**: a
+failure mode and an operational obligation are different objects. `PILOT_OPS` no longer
+exists anywhere in this standard, the eval matrix, or the task bank.
 
-| # | Dimension | Blueprint taxonomy classes it covers | Standard section |
-|---|---|---|---|
-| R1 | Data readiness | DATA | §8 |
-| R2 | Semantic readiness | SEMANTIC | §9 |
-| R3 | Resolution correctness | ENTITY, METRIC, PERIOD, CONTEXT | §10 |
-| R4 | Investigation quality | PLANNING, TRAJECTORY | §11 |
-| R5 | Tool & SQL correctness | TOOL_SELECTION, TOOL_ARGUMENTS, SQL | §12–13 |
-| R6 | Validation & evidence | RESULT_VALIDATION | §14–15 |
-| R7 | Answer quality | SYNTHESIS, CONVERSATION_STATE | §16–19 |
-| R8 | Safety | SAFETY | §20 |
-| R9 | Operability | INFRA | §21, §23, §24 |
-| R10 | Pilot operations | `PILOT_OPS` (new) | §25–28 |
+Operational obligations are now carried by a separate, orthogonal attribute,
+`pilot_operational_requirement` — a named human/process commitment (operator governance,
+weekly triage, external gate closure, report cutover). Every eval row still declares a
+canonical `taxonomy_dimension` describing the *failure* it prevents; rows that also carry
+an operational obligation declare it in the second field. **[C]**
+
+The canonical taxonomy, unchanged from blueprint §D and closed to additions:
+
+`DATA · SEMANTIC · ENTITY · METRIC · PERIOD · CONTEXT · PLANNING · TOOL_SELECTION ·
+TOOL_ARGUMENTS · SQL · RESULT_VALIDATION · TRAJECTORY · SYNTHESIS · CONVERSATION_STATE ·
+SAFETY · INFRA`
+
+| # | Dimension | Canonical taxonomy classes it covers | Operational requirement | Standard section |
+|---|---|---|---|---|
+| R1 | Data readiness | DATA | — | §8 |
+| R2 | Semantic readiness | SEMANTIC | — | §9 |
+| R3 | Resolution correctness | ENTITY, METRIC, PERIOD, CONTEXT | — | §10 |
+| R4 | Investigation quality | PLANNING, TRAJECTORY | — | §11 |
+| R5 | Tool & SQL correctness | TOOL_SELECTION, TOOL_ARGUMENTS, SQL | — | §12–13 |
+| R6 | Validation & evidence | RESULT_VALIDATION | — | §14–15 |
+| R7 | Answer quality | SYNTHESIS, CONVERSATION_STATE | — | §16–19 |
+| R8 | Safety | SAFETY | — | §20 |
+| R9 | Operability | INFRA | — | §21, §23, §24 |
+| R10 | Pilot operations | DATA / SAFETY / INFRA (per the specific failure) | `operator_governance`, `weekly_triage`, `external_gate_closure`, `report_cutover` | §25–28 |
+
+The GPA framing used by the external sources (`04_cs329t_knowledge_pack_all.md`, *Agent
+GPA* slides 7–19; `01_building_and_evaluating_data_agents.md` Lesson 5) maps onto this
+taxonomy without extending it — recorded here so nobody introduces it as a rival scheme
+**[S → C]**:
+
+| GPA judge (source) | Canonical class here |
+|---|---|
+| Goal Fulfillment / Answer Relevance | SYNTHESIS |
+| Plan Quality | PLANNING |
+| Plan Adherence | TRAJECTORY |
+| Execution Efficiency | TRAJECTORY |
+| Logical Consistency | TRAJECTORY (with SYNTHESIS for the final claim) |
+| Tool Selection | TOOL_SELECTION |
+| Tool Calling | TOOL_ARGUMENTS |
 
 ## 6. Hard blockers
 
 **P0 items only.** Every item here is either a `HARD_INVARIANT`, a `ZERO_TOLERANCE` gate,
-or `HUMAN_ACCEPTANCE_REQUIRED`. If any is unmet, the pilot does not start. No item here is
-a tunable quality percentage — quality percentages live in §7 and in the matrix as P1/P2.
+or `HUMAN_ACCEPTANCE_REQUIRED`. No item here is a tunable quality percentage — quality
+percentages live in §7 and in the matrix as P1/P2.
 
-| ID | Blocker | Policy tag | Source tag |
+**Blocking scope (new in this revision).** Draft 1 treated all thirteen blockers as
+blocking the *entire* pilot. That is wrong for some of them, and a standard that
+over-blocks gets ignored rather than obeyed. Each blocker now declares its **scope**:
+
+| Scope | Meaning |
+|---|---|
+| `PRODUCT` | Unmet ⇒ no pilot at all. |
+| `CAPABILITY` | Unmet ⇒ the affected capability is removed from the pilot surface (unreachable, and refused explicitly if asked); the rest of the pilot may proceed. |
+
+`CAPABILITY` scoping is not a softening: a capability that fails its blocker must be made
+**unreachable**, not caveated — the same construction HB-9 already uses. **[C]**
+
+### Review of each blocker (revision pass)
+
+Each of Draft 1's thirteen blockers was re-examined against the question set: what is the
+exact failure, what is the damage, must it block the whole product, is it demonstrable, and
+does any evidence support that severity. Outcome:
+
+| Blocker | Draft 1 | This revision | Why |
 |---|---|---|---|
-| **HB-1** | **No fabricated business fact reaches a user.** Any number, entity, period, or tenant name stated as fact must trace to a tool/query result in the same turn's trace. Corresponds to blueprint gate F1 + C1/C2. | `ZERO_TOLERANCE` | A (blueprint §N) |
-| **HB-2** | **No write path from the Analyst to any database.** Enforced by the SQLite authorizer (`tools/analyst_runtime/sqlite_guard.py::make_authorizer`), which allow-lists `SELECT/READ/FUNCTION/RECURSIVE` and is shared verbatim between sandbox and production **[B]**. Stated as "authorizer denial count on any non-read action = 0", which is guaranteed by construction, not measured. | `HARD_INVARIANT` | A (blueprint §N) + B |
-| **HB-3** | **No cross-session/cross-user data leakage.** Session isolation holds for every pilot user. Blueprint gates F3/F4. | `ZERO_TOLERANCE` | A (blueprint §D SAFETY) |
-| **HB-4** | **Entity resolution never silently guesses.** Every answer's entity is `resolved` with evidence, or the turn is a clarification, or an explicit `unknown`. Specifically: `Apo3001` must never be attributed to fund `Apo` **[B]** (`docs/matriz-claves-ambiguas-apoquindo.md`; it belongs to `TRI`), and `Apoquindo` / `Fondo Apoquindo` must be treated as scopes, not assets **[B]** (A1.5 §G). | `ZERO_TOLERANCE` on silent guessing | A (A1.5 §G) + B |
-| **HB-5** | **Period resolution never silently substitutes.** A period different from the one asked may be used only if the answer declares the substitution. Blueprint gate C3. | `ZERO_TOLERANCE` on undeclared substitution | A (blueprint §E) |
-| **HB-6** | **Unit is never relabelled.** The unit reported must be the `value_unit` the structured evidence declares (A1.5 §H). The `renta_uf` total-vs-per-m² class of bug is the canonical example. | `ZERO_TOLERANCE` on unit relabelling | A (blueprint §E, A1.5 §H/I) |
-| **HB-7** | **Forbidden source is never used.** "No usar el CDG" is a standing project rule, not a preference **[B]** (`CLAUDE.md`, MEMORY). Source precedence must be established from structured tool provenance (A1.5 §J), not from which table a query happened to hit. | `ZERO_TOLERANCE` | A (blueprint §E/N) + B |
-| **HB-8** | **No unsupported causal claim.** Blueprint gate C4. See §17. | `ZERO_TOLERANCE` | A (blueprint §N) |
-| **HB-9** | **Every metric the Analyst can answer on is `active` in the contract layer.** Metrics behind an A1.5 domain gate (`dy_amort`; LTV/DSCR/net debt/duration without approved temporal methodology; vacancia with unresolved UG treatment; Mall Curicó ER account mapping) must be *unreachable* in the pilot surface, not merely discouraged **[B]** (A1.5 A2 Entry Gates). | `HARD_INVARIANT` (unreachable by construction) | A (A1.5) + B |
-| **HB-10** | **Trace exists for every pilot turn**, containing the MUST-have fields of §24. Without it, a pilot generates anecdotes instead of evidence, and P4 (attribution) is impossible. | `HARD_INVARIANT` (turn is traced or is not served) | C, grounded in blueprint §K |
-| **HB-11** | **Every gate and guard this standard relies on is demonstrated firing at least once** on the pilot-representative task set — the anti-F5 rule (P13). | `ZERO_TOLERANCE` on dead gates | A (blueprint §C.3/§H) |
-| **HB-12** | **A named pilot operator has signed off** that the product is fit to put in front of the named pilot users, having personally run the P0 subset of the task bank. | `HUMAN_ACCEPTANCE_REQUIRED` | C |
-| **HB-13** | **Data freshness is declared and true.** Every answer's period coverage is stated, and the JLL/data-freshness conditions of §27 hold. | `HUMAN_ACCEPTANCE_REQUIRED` + `HARD_INVARIANT` (declared coverage or refusal) | C, grounded in A1.5 §K |
+| HB-1 fabrication | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | The damage is a wrong business fact acted on. Corroborated: `04_cs329t...md` Lecture 2 slide 8 defines grounding as *every* claim being attributable to an authoritative source; the *Agent GPA* Logical Consistency rubric (slide 9) treats an unjustified claim as a trace-level defect, not a style issue **[S]**. |
+| HB-2 no write path | P0 `HARD_INVARIANT` | **unchanged**, `PRODUCT` | Guaranteed by construction **[B]**. `02_...pdf` p. 26 ("Tool safeguards") rates tool risk by read-only vs write, reversibility and financial impact — a read-only surface is the reason this product's guardrail surface can be narrow **[S]**. |
+| HB-3 no cross-session leak | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | Irreversible confidentiality damage; the pilot is the first genuinely multi-user context **[B]**. |
+| HB-4 no silent entity guess | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | `Apo3001 ∈ TRI` makes a silent guess a cross-fund error **[B]**. |
+| HB-5 no undeclared period substitution | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | Declared substitution is already carved out (CB-4). |
+| HB-6 no unit relabel | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | `renta_uf` rate-vs-total is a live, documented defect class **[B]**. |
+| HB-7 no forbidden source | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | Standing project rule **[B]**. |
+| HB-8 no unsupported causality | P0 `ZERO_TOLERANCE` | **unchanged**, `PRODUCT` | Most useful-sounding failure mode; see §17. |
+| HB-9 gated metrics unreachable | P0 `HARD_INVARIANT` | **unchanged**, `CAPABILITY` by construction | Already the model for scope-aware blocking. |
+| HB-10 trace on every turn | P0 `HARD_INVARIANT`, all turns | **reformulated**, `PRODUCT` | The requirement Draft 1 wanted was reconstructibility, not universal logging. Restated below as *analytically consequential* turns. |
+| HB-11 every gate firing | P0 `ZERO_TOLERANCE`, all gates | **split**, `PRODUCT` for P0-backing gates, `CAPABILITY`/P1 otherwise | A dead gate behind a P0 blocker is a false safety claim; a dead P2 dimension is a coverage gap, not a hazard. |
+| HB-12 operator sign-off | P0 `HUMAN_ACCEPTANCE_REQUIRED` | **kept P0**, reclassified as `pilot_operational_requirement`, not a taxonomy dimension | Supported: `02_...pdf` p. 31 makes human intervention *"especially important early in deployment, helping identify failures, uncover edge cases, and establish a robust evaluation cycle"*; `05_...md` §13 requires human control for risky or ambiguous actions **[S]**. The choice to make it a blocker is **[C]**. |
+| HB-13 declared-and-true freshness | P0, mixed tags | **split**, `PRODUCT` for the declare-or-refuse invariant, `CAPABILITY` for the per-surface freshness sign-off | Two different obligations were fused; see below. |
+
+No blocker was removed. Two were reformulated, two were split, and one was reclassified as
+an operational requirement. **[C]**
+
+| ID | Blocker | Policy tag | Scope | Source tag |
+|---|---|---|---|---|
+| **HB-1** | **No fabricated business fact reaches a user.** Any number, entity, period, or tenant name stated as fact must trace to a tool/query result in the same turn's trace. Corresponds to blueprint gate F1 + C1/C2. | `ZERO_TOLERANCE` | `PRODUCT` | A (blueprint §N) + S (`04_cs329t...md` L2 slide 8; *Agent GPA* slide 9) |
+| **HB-2** | **No write path from the Analyst to any database.** Enforced by the SQLite authorizer (`tools/analyst_runtime/sqlite_guard.py::make_authorizer`), which allow-lists `SELECT/READ/FUNCTION/RECURSIVE` and is shared verbatim between sandbox and production **[B]**. Stated as "authorizer denial count on any non-read action = 0", which is guaranteed by construction, not measured. | `HARD_INVARIANT` | `PRODUCT` | A (blueprint §N) + B + S (`02_...pdf` p. 26 tool-risk rating) |
+| **HB-3** | **No cross-session/cross-user data leakage.** Session isolation holds for every pilot user. Blueprint gates F3/F4. | `ZERO_TOLERANCE` | `PRODUCT` | A (blueprint §D SAFETY) |
+| **HB-4** | **Entity resolution never silently guesses.** Every answer's entity is `resolved` with evidence, or the turn is a clarification, or an explicit `unknown`. Specifically: `Apo3001` must never be attributed to fund `Apo` **[B]** (`docs/matriz-claves-ambiguas-apoquindo.md`; it belongs to `TRI`), and `Apoquindo` / `Fondo Apoquindo` must be treated as scopes, not assets **[B]** (A1.5 §G). | `ZERO_TOLERANCE` on silent guessing | `PRODUCT` | A (A1.5 §G) + B |
+| **HB-5** | **Period resolution never silently substitutes.** A period different from the one asked may be used only if the answer declares the substitution. Blueprint gate C3. | `ZERO_TOLERANCE` on undeclared substitution | `PRODUCT` | A (blueprint §E) |
+| **HB-6** | **Unit is never relabelled.** The unit reported must be the `value_unit` the structured evidence declares (A1.5 §H). The `renta_uf` total-vs-per-m² class of bug is the canonical example. | `ZERO_TOLERANCE` on unit relabelling | `PRODUCT` | A (blueprint §E, A1.5 §H/I) |
+| **HB-7** | **Forbidden source is never used.** "No usar el CDG" is a standing project rule, not a preference **[B]** (`CLAUDE.md`, MEMORY). Source precedence must be established from structured tool provenance (A1.5 §J), not from which table a query happened to hit. | `ZERO_TOLERANCE` | `PRODUCT` | A (blueprint §E/N) + B |
+| **HB-8** | **No unsupported causal claim.** Blueprint gate C4. See §17. | `ZERO_TOLERANCE` | `PRODUCT` | A (blueprint §N) |
+| **HB-9** | **Every metric the Analyst can answer on is `active` in the contract layer.** Metrics behind an A1.5 domain gate (`dy_amort`; LTV/DSCR/net debt/duration without approved temporal methodology; vacancia with unresolved UG treatment; Mall Curicó ER account mapping) must be *unreachable* in the pilot surface, not merely discouraged **[B]** (A1.5 A2 Entry Gates). | `HARD_INVARIANT` (unreachable by construction) | `CAPABILITY` | A (A1.5) + B |
+| **HB-10** | **Every analytically consequential turn produces a reconstructible trace.** An *analytically consequential* turn is any turn that (a) states a business fact, (b) invokes a tool or emits SQL, or (c) resolves an entity, metric, or period. For those turns the §24 MUST fields exist and are sufficient to reconstruct `entity → metric → period → plan → tool → query → result → validation → evidence → synthesis`. Turns that are none of the three (greetings, meta-questions about the product, pure clarification exchanges carrying no resolved state) are not required to carry a full trace. **Revised from Draft 1's "every turn"**: the failure being prevented is an *undiagnosable wrong answer*, and an untraced greeting cannot produce one. Over-broad logging was also the wrong ask — the sources treat the trace as the input to evaluation, spanned by step type, not as an audit log of everything. | `HARD_INVARIANT` (a consequential turn is traced or is not served) | `PRODUCT` | C, grounded in blueprint §K and **S** (`01_...md` Lesson 4: spans typed *planning / routing / retrieval / tool use / generation*, with retrieval spans carrying the eval inputs; `05_...md` §6, which lists exactly model calls, tool calls, tool outputs, handoffs, guardrails, approvals and retries as what observability must cover) |
+| **HB-11** | **Every gate and guard that backs a P0 blocker is demonstrated firing at least once** on the pilot-representative task set — the anti-F5 rule (P13). Concretely: F1, F3, F4, F5, C1–C5, the SQLite authorizer, the coverage guard, and the RV-5 validator subset. **Revised from Draft 1's "every gate"**: a dead gate behind a P0 blocker is a *false safety claim* and blocks the product; a dead P1/P2 dimension is a coverage gap, and blocks only the claim that that dimension is covered (it moves to SW-9). | `ZERO_TOLERANCE` on dead P0-backing gates | `PRODUCT` (P0-backing) / `CAPABILITY` (all others) | A (blueprint §C.3/§H) |
+| **HB-12** | **A named pilot operator has signed off** that the product is fit to put in front of the named pilot users, having personally run the P0 subset of the task bank. This is a **`pilot_operational_requirement` (`operator_governance`), not a taxonomy dimension** — it prevents no specific failure mode; it establishes who is accountable when one occurs. It remains a blocker because a pilot with no accountable human is a demo, and because the sources treat early-deployment human oversight as the mechanism that turns failures into an evaluation cycle at all. | `HUMAN_ACCEPTANCE_REQUIRED` | `PRODUCT` | C, motivated by **S** (`02_...pdf` p. 31 "Plan for human intervention"; `05_...md` §13 "Human control") |
+| **HB-13a** | **Declare-or-refuse.** Every factual answer states the period coverage and `as_of` behind it, or refuses. An answer that is silent about its own freshness is the failure being prevented; whether the underlying data is *recent enough* is a separate judgment (HB-13b). | `HARD_INVARIANT` (declared coverage or refusal) | `PRODUCT` | A (A1.5 §K) + C |
+| **HB-13b** | **Per-surface freshness acceptance.** For each data surface in pilot scope, the operator confirms the freshness is fit for the questions that surface will be asked, and the §27 JLL conditions hold for the surfaces they govern. **Split from Draft 1's HB-13**, which fused a product-wide invariant with a per-surface human judgment. A stale surface removes *that* capability, not the pilot. | `HUMAN_ACCEPTANCE_REQUIRED`; `pilot_operational_requirement: external_gate_closure` | `CAPABILITY` | C, grounded in A1.5 §K + B (§27) |
 
 ## 7. Soft warnings
 
@@ -204,6 +297,8 @@ the user, and instrumented**. Each is P1 or P2 — none blocks the pilot. **[C]*
 | SW-6 | The long-tail SQL path answers a question the governed path should have owned. | P1 | Allowed but must be traced and reviewed weekly (§13). |
 | SW-7 | `conversational_quality` is permanently unscored on turns where the deterministic layer cannot compute it. | P2 | Known, narrow, documented gap **[B]** (blueprint §I, judge policy). The judge must **never** fill it. |
 | SW-8 | Deterministic reports (§26) not yet built. | P2 | The pilot may launch chat-only; but then §26's claims must not be made to users. |
+| SW-9 | A gate or dimension that does **not** back a P0 blocker is present but never fires (the demoted half of Draft 1's HB-11). | P1 | Must be *listed* as not-covered in the entry-gate record, so nobody reads its presence as coverage. Zero tolerance still applies to P0-backing gates (HB-11). |
+| SW-10 | Judge-scored dimensions disagree with each other, or with a human reviewer, on the same turn. | P1 | Expected, not alarming: the sources record that LLM judges over-report success and are swayed by the agent's own reasoning, while rule-based checks under-report it (**S**, `04_cs329t...md` *Agent Evals Survey* slide 38). Disagreement is a calibration input (XC-3), not a defect — provided no judge is gating (SY-6). |
 
 ## 8. Data readiness
 
@@ -252,7 +347,7 @@ trajectory gates fire only on the anti-patterns below. **[A]**
 | Anti-pattern | Definition | Severity | Policy tag |
 |---|---|---|---|
 | **AP-1 Repeated identical action** | Same `(tool, args)` re-invoked with no intervening state change justifying it. | P1 | `BASELINE_RELATIVE` (count not worse than baseline) |
-| **AP-2 Loops** | Same `(tool, args)` appears 3+ times in one turn. | P0 | `ZERO_TOLERANCE` in the pilot — a visible loop destroys user trust and burns cost |
+| **AP-2 Loops** | Same `(tool, args)` re-invoked with no new information and no recorded justification, until either the turn ends without an answer or the agent stops without acknowledging the failure. **Revised:** Draft 1 set this at "3+ times", which was an invented number. The sources are explicit that repetition is judged by *purpose*, not count — the Execution Efficiency rubric permits verification steps and inline-evaluation steps that "provide unique feedback, serve as sanity checks, or use a demonstrably different approach", and penalises only repetition that adds nothing (**S**, `04_cs329t...md` *Agent GPA* slide 11). Unproductive repetition that still ends in a correct, acknowledged outcome is now an efficiency concern (P1); repetition that ends in an unacknowledged failure is already AP-3/AP-5. | P1 (efficiency) / P0 via AP-3 when it ends in silence | `BASELINE_RELATIVE` on repetition counts; the P0 remains on AP-3/AP-5 |
 | **AP-3 Ignored tool error** | A tool errors or returns empty and the next action neither retries differently, reformulates, nor surfaces it to the user. | P0 | `ZERO_TOLERANCE` (this is the direct path to fabrication) |
 | **AP-4 Ignored validator result** | The result validator flags a concern and the agent proceeds unchanged. | P0 | `ZERO_TOLERANCE` — conditional on the validator existing (§14) |
 | **AP-5 Premature stopping** | An answer is returned though a required fact was never fetched by any tool call in the trace. | P0 | `ZERO_TOLERANCE` (equivalent to fabrication at the trajectory level) |
@@ -267,6 +362,30 @@ single-query answer is *itself* a planning failure — either the agent investig
 declares the evidence insufficient. **P0**, `ZERO_TOLERANCE` on single-query causal
 assertions.
 
+### Plan quality and replanning (added in this revision)
+
+Draft 1 evaluated the trajectory only through deterministic anti-patterns. The sources
+identify a failure surface it did not cover at all: **the plan itself, and the justification
+for changing it**. Both are directly relevant to Toesca, because the multi-step questions
+the pilot exists to serve (§17, §11) are exactly where an unjustified replan produces a
+confident wrong answer. **[S]**, from `04_cs329t_knowledge_pack_all.md` *Agent GPA* slides
+13 and 17, and `01_building_and_evaluating_data_agents.md` Lessons 5–6:
+
+| ID | Requirement | Severity | Policy tag |
+|---|---|---|---|
+| PQ-1 | Where the agent plans, the plan is recorded in the trace as structured steps, not as free prose, and each step names what it will establish. The source's own intervention was to add explicit goal / precondition / postcondition per step, which improved both plan adherence and groundedness (`01_...md` Lesson 6). Adopting that shape for Toesca is **[C]**. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` at review |
+| PQ-2 | A replan is accompanied by a recorded trigger (an error, an empty result, new information). An unjustified replan is the trajectory-level form of an unexplained change of mind, and the source rubric treats it as a plan-quality failure. | P1 | `THRESHOLD_TO_CALIBRATE` (judge-scored; monitored only, per SY-6) |
+| PQ-3 | Plan quality is **not** judged against a reference plan. Consistent with P5 and with `07_...md` §3 ("Prefer grading outcomes over enforcing one exact reasoning path"), it is judged against the goal and the *available tools* — the source explicitly scopes plan quality to the planner's knowledge of available resources, ignoring execution outputs (`04_...md` slide 13). | P1 | — |
+| PQ-4 | Plan *adherence* is judged step-by-step: an omitted or partially executed planned step is a failure of adherence **regardless of whether the final answer happened to be right** (`04_...md` slide 17). This is the same logic as P12 and PE-23 (right number, wrong query). | P1 | `THRESHOLD_TO_CALIBRATE` |
+
+**Inline (runtime) evaluation — deferred, deliberately.** `01_...md` Lesson 6 demonstrates
+feeding a retrieval-quality score back into the executor so it can decide to investigate
+further, and reports the honest tradeoff: groundedness and plan adherence improved, while
+**execution efficiency and logical consistency got slightly worse** — more work, more
+latency, better answers. This is a real design option for the Analyst and it is recorded
+here so A2–A5 can choose it knowingly. It is **not** a pilot requirement **[C]**: it adds
+per-turn model calls, and its cost lands directly on §23, which has no baseline yet.
+
 ## 12. Tool use
 
 | ID | Requirement | Severity | Policy tag |
@@ -274,8 +393,9 @@ assertions.
 | TU-1 | `tool_selection` and `tool_arguments` are scored **separately**, per blueprint §F/§O ("stop using tool correctness as a single blended metric"). | P1 | `THRESHOLD_TO_CALIBRATE` per sub-dimension (blueprint §N's ≥95% is the starting proposal, not an accepted number) |
 | TU-2 | Every pilot-relevant eval case declares `tool_requirements`, so the deterministic denominator stops shrinking silently **[A]** blueprint §N. | P1 | `HARD_INVARIANT` on new cases |
 | TU-3 | Tool results carry structured metadata: row count, empty flag, error, `value_unit`, provenance, dataset/metric contract ref **[A]** blueprint §K + A1.5 §I/J. A tool returning a bare number is defective (P11). | P0 | `HARD_INVARIANT` (schema-enforced) |
-| TU-4 | Tool descriptions and argument schemas are written for the model as reader; ambiguous tool pairs are disambiguated in their descriptions, not in the system prompt. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` (review at pilot entry) — **A(general)**, Anthropic tool-writing guidance |
-| TU-5 | Governed tools/datasets are preferred over the SQL long tail whenever a governed path exists; long-tail use where a governed path existed is logged as SW-6. | P1 | `BASELINE_RELATIVE` (share of turns using long tail, trended) |
+| TU-4 | Tool descriptions and argument schemas are written for the model as reader; ambiguous tool pairs are disambiguated in their descriptions, not in the system prompt. **The review criterion is distinctness, not tool count** — `02_a_practical_guide_to_building_agents.pdf` p. 16 records that some deployments handle more than fifteen well-defined distinct tools while others struggle with fewer than ten overlapping ones. No tool-count threshold is set here, because the sources give a reason not to. **[S]** | P1 | `HUMAN_ACCEPTANCE_REQUIRED` (review at pilot entry) |
+| TU-5 | Governed tools/datasets are preferred over the SQL long tail whenever a governed path exists; long-tail use where a governed path existed is logged as SW-6. Motivated by P14 **[S]** and by the fact that the governed path is where units, provenance and precedence are declared. | P1 | `BASELINE_RELATIVE` (share of turns using long tail, trended) |
+| TU-6 | Tool errors are returned to the agent in an actionable form — what failed, and what a valid call would look like — not as an opaque exception. An unactionable error is a direct cause of AP-2/AP-3. **[S]** `07_...md` §2 ("Make errors actionable"); `04_cs329t...md` *Agent GPA* slide 11 penalises repeated attempts caused by "easily correctable input errors". | P1 | `HUMAN_ACCEPTANCE_REQUIRED` (review at pilot entry) |
 
 ## 13. SQL long-tail requirements
 
@@ -289,7 +409,8 @@ under conditions. **[C]**, structurally grounded in A1.5 §L.
 | SQ-3 | The long-tail path returns the **same result contract** as governed tools — entity/scope, metric/method version, period/as-of, unit, quality, structured citations **[A]** A1.5 §L. A long-tail answer with weaker provenance than a governed answer is not acceptable. | P0 | `HARD_INVARIANT` |
 | SQ-4 | Every emitted statement is captured in the trace with text, row count, and tables hit **[A]** blueprint §K — noting that table-hit inspection is a *fallback* provenance signal, never the primary one. | P0 | `HARD_INVARIANT` |
 | SQ-5 | SQL correctness is gradeable as its own component: generated SQL, executed, returns the same result set as the case's `ground_truth_refs` SQL — so a right-number-by-coincidence case is caught **[A]** blueprint §F. | P1 | `THRESHOLD_TO_CALIBRATE` |
-| SQ-6 | **[D]** Whether the long-tail path is enabled for pilot users at all, or restricted to the operator, is an open decision. Proposal **[C]**: enabled, but every long-tail turn is flagged in the trace and reviewed in the weekly pilot review (§28). |
+| SQ-7 | The long-tail path depends on a **semantic model of the data**, not on the model reading column names. `01_building_and_evaluating_data_agents.md` Lesson 3 describes the text-to-SQL service as relying on a semantic model file declaring what columns mean, what values mean, and common synonyms — i.e. the same object A1.5 §F calls the Semantic Registry. **[S]** This does not change SQ-2/SQ-3; it changes their justification, and it gives OD-3 a technical criterion rather than an appetite question: exposure of the long tail should be conditioned on the semantic layer existing, not on willingness to risk it. | P0 | `HARD_INVARIANT` (no semantic layer for a domain ⇒ no long tail in that domain) |
+| SQ-6 | **[D]** Whether the long-tail path is enabled for pilot users at all, or restricted to the operator, is an open decision. **Still open** — the sources inform the criterion (SQ-7) but cannot make a Toesca product decision. Proposal **[C]**: enabled, but every long-tail turn is flagged in the trace and reviewed in the weekly pilot review (§28). |
 
 ## 14. Result validation
 
@@ -302,7 +423,9 @@ runtime or the eval today** **[B]** (blueprint §D/§F; flagged for A3).
 | RV-2 | A suspicious zero, a sign flip, or a value outside the metric's declared invariants (A1.5 §H) is surfaced, not silently reported. | P0 | `ZERO_TOLERANCE` on silent pass-through of invariant violations |
 | RV-3 | Unit mismatch between the retrieved evidence and the reported answer is blocked (HB-6). | P0 | `ZERO_TOLERANCE` |
 | RV-4 | A full validator component with an anomaly-injection harness (blueprint §F) is **not** a pilot blocker. RV-1..RV-3 are the minimum subset. | P2 (full validator) | `THRESHOLD_TO_CALIBRATE` post-pilot |
-| RV-5 | **[C]** Minimum viable validator for pilot: empty-set check, null/zero check against the metric's declared null semantics, unit equality check, and coverage check ("is this period within declared coverage?"). Anything richer is P2. | P0 (this subset) | `HARD_INVARIANT` |
+| RV-5 | **[C]** Minimum viable validator for pilot: empty-set check, null/zero check against the metric's declared null semantics, unit equality check, coverage check ("is this period within declared coverage?"), and the RV-6 relevance check. Anything richer is P2. | P0 (this subset) | `HARD_INVARIANT` |
+| RV-6 | **Result relevance.** A non-empty result is checked against the *resolved* (entity, metric, period, grain) tuple before it is used — "the query executed" is not "the query answered the question asked". Added in this revision: Draft 1 covered emptiness, nulls, units and coverage but had no check that the returned slice is the slice the user asked for. **[S]** — the RAG-Triad's *context relevance* leg, applied to a data agent's retrieval steps (`01_...md` Lesson 4), and the three separately-named failures in `04_cs329t...md` Lecture 3 slides 38–40 (retrieval failure ≠ lack of groundedness ≠ answering the wrong question). Toesca's deterministic form of the check — comparing the resolved tuple against the result's own declared entity/metric/period metadata (TU-3) rather than scoring relevance with a model — is **[C]**, and is cheaper and more reliable than the source's LLM-judge implementation because Toesca's results are structured. | P0 | `HARD_INVARIANT` (tuple equality against result metadata) |
+| RV-7 | Cardinality and duplication: a result whose row count contradicts the metric's declared grain (one row per period expected, many returned; or duplicate keys after a join) is flagged rather than aggregated. Follows from A1.5 §H grain declarations **[A]**; it is the failure that turns a correct query into a silently double-counted total. | P1 | `THRESHOLD_TO_CALIBRATE` |
 
 ## 15. Evidence / provenance
 
@@ -329,7 +452,8 @@ contract, not measured as a rate). EV-3 existence is `HUMAN_ACCEPTANCE_REQUIRED`
 | SY-3 | Completeness — every part of a multi-part question is addressed or explicitly deferred. | P1 | `THRESHOLD_TO_CALIBRATE` (deterministic `required_facts` presence) |
 | SY-4 | No internal jargon leakage (table names, column names, `fondo_key` internals, tool names) in the user-facing answer. | P1 | `THRESHOLD_TO_CALIBRATE` — the presentation holdout **[B]** already graded this dimension manually |
 | SY-5 | Appropriate brevity for the question asked. | P2 | `BASELINE_RELATIVE` |
-| SY-6 | Judge-scored dimensions (`analytical_quality`, `grounding`, `hallucination`, `clarification_judgment`, `investigation_quality`, `output_usefulness`) are **monitored, not hard-blocking**, until repeated-run judge variance has been measured **[A]** judge policy + blueprint §N. | P1 | `THRESHOLD_TO_CALIBRATE` (N≥3 runs; the ±0.5-on-0–4 tolerance in the judge policy is explicitly provisional, not established) |
+| SY-6 | Judge-scored dimensions (`analytical_quality`, `grounding`, `hallucination`, `clarification_judgment`, `investigation_quality`, `output_usefulness`) are **monitored, not hard-blocking**, until repeated-run judge variance has been measured **[A]** judge policy + blueprint §N. This revision found external corroboration rather than a reason to change it: judges must be calibrated against human annotation and re-run to measure consistency before they are trusted (**S**, `07_...md` §3; `04_cs329t...md` *Agent GPA* slides 27 and 30, which measure both human-score alignment and cross-run consistency as separate properties). The published agreement figures in that deck are properties of *that* judge on *that* benchmark and are **not** adopted as Toesca targets. | P1 | `THRESHOLD_TO_CALIBRATE` (N≥3 runs; the ±0.5-on-0–4 tolerance in the judge policy is explicitly provisional, not established) |
+| SY-7 | For non-deterministic behaviour, the repeated-run statistic is chosen to match what matters: **P0 gates are scored on consistency across all trials** (a single violation in any trial is a violation), while quality dimensions are scored on the mean across trials. **[S → C]** — `07_...md` §3 ("choose metrics based on whether occasional success or consistency matters"); the assignment of which Toesca metric gets which treatment is a decision made here. | P1 | `THRESHOLD_TO_CALIBRATE` |
 
 ## 17. Unsupported causality policy
 
@@ -342,7 +466,7 @@ most useful-sounding. Blueprint gate C4, judge-decided. **[A]**
 | UC-2 | Correlation language must not be upgraded to causal language in synthesis. | P0 | `ZERO_TOLERANCE` |
 | UC-3 | When evidence is insufficient, the required behavior is an explicit statement — "la evidencia disponible no permite atribuir la causa; lo que sí puedo mostrar es la descomposición X/Y/Z" — plus what *would* be needed. | P0 | `HARD_INVARIANT` (required response shape) |
 | UC-4 | Decomposition (which line items / which units / which tenants moved) **is** a legitimate and encouraged answer to a "why" question; it is not the same as asserting a cause. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` at review |
-| UC-5 | UC-1..UC-3 are judge-decided (C4) per blueprint §I. Because judge variance is unmeasured, the pilot additionally requires **operator spot-review of every "why" turn** during the pilot's first phase **[C]**. | P0 | `HUMAN_ACCEPTANCE_REQUIRED` |
+| UC-5 | UC-1..UC-3 are judge-decided (C4) per blueprint §I. Because judge variance is unmeasured, the pilot additionally requires **operator spot-review of every "why" turn** during the pilot's first phase **[C]**. This revision strengthens the rationale rather than the rule: a documented LLM-judge failure mode is agreeing with an agent's own stated reasoning even when it is wrong (**S**, `04_cs329t...md` *Agent Evals Survey* slide 38), which is exactly the shape of a fluent unsupported causal claim. A judge is therefore the weakest possible sole arbiter for this specific gate. | P0 | `HUMAN_ACCEPTANCE_REQUIRED` |
 
 ## 18. Clarification behavior
 
@@ -375,6 +499,8 @@ The most mature category in the stack **[B]** (blueprint §D).
 | SF-4 | Confidentiality: fund/asset data must not leave the deployment boundary beyond what the model provider already receives. **[D]** — whether pilot conversations may be retained by the provider, and under what data-processing terms, is an open decision requiring a human owner. | P0 | `HUMAN_ACCEPTANCE_REQUIRED` |
 | SF-5 | Any authorizer denial in production is alerted on, with a nonzero count treated as an incident **[A]** blueprint §H. | P0 | `ZERO_TOLERANCE` |
 | SF-6 | The pilot does not weaken the holdout isolation: no holdout content, IDs, or reconstructed question shapes enter the pilot task bank **[A]** blueprint §J. | P0 | `ZERO_TOLERANCE` |
+| SF-7 | Every tool exposed to the Analyst carries a recorded risk rating derived from write access, reversibility, permissions required, and financial impact. Today every rating is *low* because the surface is read-only (HB-2) — which is precisely why this product's guardrail surface can be as narrow as it is. The requirement exists so that the first tool with side effects re-opens the question deliberately rather than by omission. **[S]** `02_...pdf` p. 26 ("Tool safeguards"), which ties risk rating to pausing or escalating to a human; `05_...md` §5.3 (bounded tool authority: the model may *request*, the application validates and executes). Recording the ratings is **[C]**. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` (review at pilot entry) |
+| SF-8 | Guardrails are layered, not singular: a deterministic gate, a judge, and a human review each cover what the others miss, and none is treated as sufficient alone. **[S]** `02_...pdf` p. 25: *"a single one is unlikely to provide sufficient protection"*. This is already the shape of §6 + §16 + §28; SF-8 states it so it is not simplified away later. | P1 | — |
 
 ## 21. Operational reliability
 
@@ -408,7 +534,8 @@ but the Track A adapter leaves token counts `None` **[B]** (blueprint §C.8).
 |---|---|---|---|
 | LA-1 | Per-turn latency (p50/p95) is recorded, split by whether the turn involved tool calls **[A]** blueprint §H. | P0 | `HARD_INVARIANT` (field populated) |
 | LA-2 | Token counts and cost per turn are populated — currently a known gap **[B]**. | P1 | `HARD_INVARIANT` (field populated) once done; the *number* is `BASELINE_RELATIVE` |
-| LA-3 | A latency baseline is measured on the task bank **before** the pilot, and pilot latency is judged against it, never against an invented target. | P1 | `BASELINE_RELATIVE` |
+| LA-3 | A latency baseline is measured on the task bank **before** the pilot, and pilot latency is judged against it, never against an invented target. Corroborated **[S]**: `02_a_practical_guide_to_building_agents.pdf` p. 8 sequences model selection as *set up evals to establish a baseline → meet the accuracy target with the best available model → only then optimize cost and latency by substituting smaller models*. That ordering is the same as P9, and it means a pilot that ships without a baseline forfeits the ability to make any later model or architecture change defensibly. | P1 | `BASELINE_RELATIVE` |
+| LA-5 | Any quality mechanism that adds per-turn model calls (inline evals, additional judges, self-verification) has its latency and token cost attributed to it in the baseline before it is adopted. The one measured example available reports the tradeoff in both directions at once — better groundedness and plan adherence, worse execution efficiency (**S**, `01_...md` Lesson 6). | P1 | `BASELINE_RELATIVE` |
 | LA-4 | **[C]** A qualitative pilot bar: a simple lookup should feel like a query, a multi-step investigation may feel like a task, and the user must be told which one is happening (UX-3). No absolute second-count is set here, deliberately. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` |
 
 ## 24. Observability / traceability — Pilot Trace Contract
@@ -417,9 +544,24 @@ Blueprint §K defines the eval trace. This section makes the **pilot-launch judg
 blueprint did not make: which subset must exist before pilot, and which can wait. This
 split is new **[C]**; the field list itself is **[A]** blueprint §K + A1.5 §J.
 
+Pilot status values are `MUST_FOR_PILOT` (shown as **MUST**), `SHOULD_FOR_PILOT` (**SHOULD**),
+and `LATER`.
+
+**Governing test for this contract**, restated from HB-10: the trace of an analytically
+consequential turn must let someone who was not present reconstruct
+`entity → metric → period → plan → tool → query → result → validation → evidence →
+synthesis` well enough to say *which* of those steps produced a wrong answer. A field earns
+`MUST` by being necessary for that reconstruction, not by being available. **[C]**
+
+Two fields were **added in this revision** on source evidence (`span_type`, `app_version`);
+one requirement was **narrowed** (universal → consequential turns, HB-10). Nothing was
+removed.
+
 | Field | Pilot status | Why |
 |---|---|---|
 | `turn_id`, `session_id`, `timestamp` | **MUST** | Nothing is attributable without it |
+| `app_version` (agent/prompt/tool-registry version identifying this build) | **MUST** | **Added in this revision.** Without it, pilot traffic cannot be compared before and after a change, which is the entire point of collecting it. **[S]** `01_...md` Lessons 4 and 6: the app is registered with a name *and version*, and the whole improvement loop of Lesson 6 consists of comparing the same records across two versions. `07_...md` §3 makes the same point via regression evals. |
+| `span_type` per recorded step (`planning` / `routing` / `retrieval` / `tool_use` / `generation`) | **MUST** | **Added in this revision.** A flat event list makes the groundedness, result-relevance (RV-6) and context-quality checks unimplementable, because nothing marks *which* steps produced the evidence the answer must be grounded in. **[S]** `01_...md` Lesson 4 identifies retrieval spans specifically as the ones carrying the evaluation inputs, and annotates them with `query_text` and `retrieved_context`. Toesca's equivalent of a retrieval span is a governed tool result or an executed SELECT — this is a labelling requirement, not new telemetry. |
 | `user_turn_text` | **MUST** | Reproduction |
 | `resolved_entity` (id + method: explicit/inherited/inferred) | **MUST** | HB-4, ER-5 |
 | `resolved_metric` (id + method) | **MUST** | HB-9, SR-1 |
@@ -438,8 +580,18 @@ split is new **[C]**; the field list itself is **[A]** blueprint §K + A1.5 §J.
 | `dimension_scores` with deterministic-vs-judge flag | **SHOULD** for pilot traffic; **MUST** for benchmark runs | Same reason |
 | `judge_model`, `rubric_version`, `judge_impl_version` | **MUST** wherever a judge verdict is persisted **[A]** judge policy | Comparability rule |
 
+Explicitly **`LATER`** — recorded so their absence is a decision rather than an oversight
+**[C]**: per-step model reasoning content (never stored; `planner_decision` carries a
+structured reason code instead, per §24 above), inline-evaluation scores (§11, deferred),
+approval/handoff events (no approvals or handoffs exist in a single-agent read-only
+product — `05_...md` §6 lists both as observability targets, and they are simply not
+applicable here **[S → C]**), and full OpenTelemetry span export.
+
 Standardization rule **[A]** blueprint §K: this is one trace shape across benchmark runs
-and production logging — do not invent a second format.
+and production logging — do not invent a second format. The `span_type` labelling above is
+compatible with that rule and with OpenTelemetry-style span typing, which is how the source
+implementation carries it (`01_...md` Lesson 4) — but adopting an OTEL-compatible exporter
+is a `LATER` decision, not a pilot requirement **[C]**.
 
 ## 25. Feedback capture
 
@@ -451,7 +603,7 @@ message-level feedback, and feedback-report markdown export (`docs/CURRENT_STATE
 | FB-1 | A user can flag a bad answer in one action, at the message level, without leaving the Analyst. | P0 | `HARD_INVARIANT` |
 | FB-2 | A flag captures the **trace**, not just the text — otherwise the report is an anecdote. | P0 | `HARD_INVARIANT` |
 | FB-3 | Flagged failures are triaged into exactly one primary failure class from the blueprint §D taxonomy. **[A]** | P0 | `HUMAN_ACCEPTANCE_REQUIRED` (weekly, §28) |
-| FB-4 | A classified, reproducible failure becomes a new dev-set case with SQL `ground_truth_refs` — never a free-text expectation **[A]** blueprint §J. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` |
+| FB-4 | A classified, reproducible failure becomes a new dev-set case with SQL `ground_truth_refs` — never a free-text expectation **[A]** blueprint §J. Independently corroborated **[S]**: `07_...md` §3 and its closing checklist both state that eval tasks should be drawn from manual tests, bugs and real user failures, and that production failures should become new eval cases; `05_...md` §17.2 step 4 is the same loop (inspect failures → update → rerun → automate). This is the mechanism that makes the pilot worth running at all, and it is `pilot_operational_requirement: weekly_triage`, not a taxonomy dimension. | P1 | `HUMAN_ACCEPTANCE_REQUIRED` |
 | FB-5 | The production→eval loop **does not exist today** **[B]** (blueprint §C.6/§J: `eval/alpha_eval_v1` and the presentation holdout are one-shot artifacts). For pilot, a *manual* loop (FB-3 + FB-4 executed weekly by the operator) is acceptable; automation is P2. | P0 (manual loop), P2 (automation) | `HUMAN_ACCEPTANCE_REQUIRED` |
 | FB-6 | Positive signal is captured too — otherwise the pilot only learns what's broken and can't tell what's worth keeping. | P2 | — |
 
@@ -465,6 +617,15 @@ Informe de Ingresos. The required shape:
 button / Analyst tool → deterministic report generator → governed dataset / SQL
    → validation → HTML template → report        (NO LLM, no model API in this path)
 ```
+
+This architecture is not merely a convenience. It is the direct application of P14: where
+the analytical path is fully known — one scope, one period, one governed dataset, one
+layout — putting an LLM in that path adds variance and removes reproducibility while buying
+nothing. **[S]** `05_openai_api_agents_consolidated_knowledge.md` §5.5 ("Workflow… best
+when the path is known") and §15 Level 1; `02_a_practical_guide_to_building_agents.pdf`
+p. 6 ("Otherwise, a deterministic solution may suffice"). The same sources are also the
+reason the *chat* path is agentic: the analyst's ad-hoc question does not have a known
+path. The two coexist by design, not by indecision. **[S → C]**
 
 **If the pilot ships without reports, that is acceptable (SW-8, P2).** If it ships *with*
 them, this bar applies **[C]**:
@@ -547,11 +708,11 @@ above; nothing here is new.
 
 | # | Entry condition | Evidence required |
 |---|---|---|
-| EG-1 | All §6 hard blockers (HB-1..HB-13) satisfied. | Written check per item, with the artifact that proves it |
-| EG-2 | Every gate/guard relied on demonstrated **firing** at least once (HB-11 / P13). | Liveness check output |
+| EG-1 | All §6 `PRODUCT`-scope blockers satisfied (HB-1..HB-8, HB-10, HB-11 P0-backing, HB-12, HB-13a). Every `CAPABILITY`-scope blocker (HB-9, HB-13b, HB-11 non-P0) either satisfied, **or** its capability removed from the pilot surface and refused explicitly. | Written check per item, with the artifact that proves it, plus the list of removed capabilities |
+| EG-2 | Every gate/guard backing a P0 blocker demonstrated **firing** at least once (HB-11 / P13); every non-P0 gate that does not fire is *listed* as uncovered (SW-9). | Liveness check output + uncovered list |
 | EG-3 | The P0 subset of `PILOT_TASK_BANK_V0.md` executed end-to-end, with ground truth finalized for those tasks. | Run artifacts + a `NEEDS_VALIDATION` count of zero **for the P0 subset only** |
 | EG-4 | Component-level entity/period/metric resolution measured, with thresholds calibrated (ER-1..ER-3) — not assumed. | ≥3-run measurement, per blueprint §N |
-| EG-5 | Trace MUST-fields (§24) populated on every turn. | Trace sample inspection |
+| EG-5 | Trace `MUST_FOR_PILOT` fields (§24), including `app_version` and `span_type`, populated on every **analytically consequential** turn (HB-10). | Trace sample inspection, including one reconstruction walk-through of a deliberately wrong answer |
 | EG-6 | Feedback loop live: flag → trace captured → triage path defined (FB-1..FB-3, FB-5). | Operator walkthrough |
 | EG-7 | Latency/cost baseline measured (§23). | Baseline artifact |
 | EG-8 | JLL/freshness position explicitly chosen (JL-2 **or** JL-3) and true. | Gate manifest state + wiring check |
@@ -570,7 +731,7 @@ from the ZERO_TOLERANCE set.
 | SP-3 | Any cross-session/user data leak. | `ZERO_TOLERANCE` |
 | SP-4 | Any answer using a forbidden source (HB-7) or a domain-gated metric (HB-9). | `ZERO_TOLERANCE` |
 | SP-5 | Any unsupported causal claim that a user acted on, or would plausibly have acted on. | `ZERO_TOLERANCE` |
-| SP-6 | Trace loss — turns being served without a trace (HB-10). | `ZERO_TOLERANCE` |
+| SP-6 | Trace loss — an analytically consequential turn served without a reconstructible trace (HB-10). | `ZERO_TOLERANCE` |
 | SP-7 | A user reports being unable to tell whether an answer was right, and the evidence package does not let the operator resolve it either. | `HUMAN_ACCEPTANCE_REQUIRED` |
 | SP-8 | Sustained error rate or latency degradation making the product unusable. | `BASELINE_RELATIVE` |
 | SP-9 | A pilot user quietly stops using it. Not a failure of the software, but a failure of the pilot — investigate before continuing. | `HUMAN_ACCEPTANCE_REQUIRED` |
@@ -591,11 +752,16 @@ The pilot **ends** — successfully — when it has produced what it was for. **
 
 ## 32. Open decisions
 
+**None of these was closed by the external sources read in §34, and none can be.** Each is
+a Toesca business, product, legal, or ownership decision. Where a source informs the
+*criterion* for deciding (OD-1's "smallest useful slice", OD-3's semantic-layer
+precondition), that is noted at the item and changes nothing about who must decide.
+
 | # | Open decision | Owner needed | Blocking? |
 |---|---|---|---|
-| OD-1 | Pilot data scope — full portfolio or a confidence-selected subset (DR-7). | Product + data owner | Yes, for EG-3 |
+| OD-1 | Pilot data scope — full portfolio or a confidence-selected subset (DR-7). The sources lean toward the narrower slice (a bounded, useful, observable first test — `05_...md` §§2.3–2.5; "start small, validate with real users" — `02_...pdf` p. 32) **[S]**, but the choice of *which* Toesca entities and periods is a data-confidence judgment only Toesca can make. **Remains open.** | Product + data owner | Yes, for EG-3 |
 | OD-2 | `Apoquindo` unqualified: always clarify, or default to the `Apo` fund scope (ER-6). | Product | Yes |
-| OD-3 | Is the SQL long tail exposed to pilot users at all (SQ-6)? | Product + eng | Yes |
+| OD-3 | Is the SQL long tail exposed to pilot users at all (SQ-6)? Now has a technical precondition (SQ-7: no semantic layer ⇒ no long tail in that domain) **[S]**, which narrows the question but does not answer it. **Remains open.** | Product + eng | Yes |
 | OD-4 | Provider data-retention / confidentiality terms for pilot conversations (SF-4). | Legal / compliance | Yes |
 | OD-5 | Publication threshold for `legacy_unknown` provenance (EV-5) **[B]** A1.5 §P.5. | Data owner | Yes, if any affected metric ships |
 | OD-6 | UG treatment in vacancia **[B]** A1.5 §P.3 / migration 090 / gate item `tratamiento_ug`. | Gestión de renta business owner | Yes, for vacancia + RP-6 |
@@ -618,18 +784,53 @@ The pilot **ends** — successfully — when it has produced what it was for. **
 | Entity/Metric/Dataset/Source/Temporal contracts; `resolved\|ambiguous\|unknown`; single semantic authority; publication boundary; A2 entry gates; open business decisions | `docs/toesca-data-foundation-target-contract-v1.md` §F–L, §P, closeout amendment | A |
 | Product state: no CI; JLL v2 triple disposition; reports not built; Analyst-first shell approved-not-built; `renta_uf` semantics debt; feedback surfaces shipped; legacy surfaces still present | `docs/CURRENT_STATE.md`, `docs/ROADMAP.md`, `docs/superpowers/plans/2026-08-28-jll-v2-production-readiness.md`, `.worktrees/jll-v2-production-readiness/docs/jll-v2-external-gate-manifest.yaml` | B |
 | Fund/asset key conventions; `Apo3001 ∈ TRI`; `superseded_at` filtering; CDG quarter offsets; "no usar el CDG"; excluded assets; server auth | `CLAUDE.md`, project memory, `docs/matriz-claves-ambiguas-apoquindo.md` | B |
-| Context engineering as design (P10); tools as a product surface (P11); outcome-and-trajectory evaluation (P12); prefer single-agent until proven insufficient (§3) | General knowledge of publicly-documented frameworks — Anthropic's agent-building / context-engineering / tool-writing guidance and OpenAI's practical agent guide. **These materials are not present in this repository**; no specific claim, number, or quotation is attributed to them here. | A(general) |
+| Context engineering as design (P10); tools as a product surface and actionable tool errors (P11, TU-4, TU-6); outcome-and-trajectory evaluation (P12); determinism-before-autonomy (P14, §26); judge calibration and judge failure modes (P15, SY-6, SY-7, UC-5, SW-10); retrieval/groundedness/relevance separation (P16, RV-6); plan quality and justified replanning (PQ-1..PQ-4); `span_type` and `app_version` in the trace (§24); repetition judged by purpose not count (AP-2); semantic model as a precondition for text-to-SQL (SQ-7); baseline before optimization (LA-3, LA-5); single-agent before multi-agent (§3) | **External sources read in this revision** — see §34 for the per-file inventory, nature, and what each actually supports. Each claim is cited inline by filename and section/lesson/slide/page. | S |
 | Pilot definition and success criteria; hard-blocker selection; severity assignment; the MUST/SHOULD trace split; the "why"-question investigation rule; operator requirements; stop conditions; exit criteria; the proposal that CI is not a pilot blocker | Judgment calls made in this document. Contestable; several are surfaced as open decisions in §32. | C |
 | Everything in §32 | Deliberately unresolved; needs a named human. | D |
 
 ---
 
-### Missing sources — stated explicitly
+## 34. External sources — inventory and disposition
 
-The following were requested as inputs and **do not exist as files anywhere in this
-repository or its worktrees**: *Building and Evaluating Data Agents*; *A Practical Guide to
-Building Agents*; *Workflows and Agents*; *Stanford CS329T Knowledge Pack*; consolidated
-OpenAI API/Agents knowledge; *MCP / Build Rich-Context AI Apps with Anthropic*; Anthropic
-context-engineering / writing-tools-for-agents / evals-for-agents materials. Where their
-well-known general principles are used, they are tagged **A(general)** and no specific
-claim, figure, or quotation is attributed to them.
+**This section supersedes Draft 1's "Missing sources" note, which is no longer true.**
+Draft 1 was written before these materials were available and stated, correctly at the
+time, that seven external course/framework sources were not present locally; principles
+drawn from them were tagged `A(general)` with nothing specific attributed. In this revision
+all seven were supplied as a read-only research bundle and **all seven were read**. The
+`A(general)` tag has been retired and replaced by **S** with concrete per-claim citations.
+
+The bundle is a research input only. It is **not** part of this repository, is not tracked
+by Git, was not copied into the worktree, and is not a Toesca governing document. Nothing
+in it can close a Toesca open decision (§32).
+
+| # | File | Nature (per the bundle's own manifest) | Read? | What it actually supports here | Limitations |
+|---|---|---|---|---|---|
+| 01 | `01_building_and_evaluating_data_agents.md` | Course transcript and notebook code (DeepLearning.AI / Snowflake, *Building and Evaluating Data Agents*) | **Yes** — Intro, Lessons 1–6 transcripts and notebook narrative | The RAG-Triad applied to data agents (P16, RV-6); GPA framing (P12, §11); trace spans typed by step with retrieval spans carrying eval inputs, and app versioning for before/after comparison (§24); inline/runtime evaluation and its measured tradeoff (§11, LA-5); text-to-SQL depending on a semantic model file (SQ-7) | It is a course built on one vendor stack (Snowflake Cortex, LangGraph, TruLens). The *concepts* transfer; the tooling choices are not adopted. Its reported metric values are demo runs on a sales dataset and are never used as Toesca targets. |
+| 02 | `02_a_practical_guide_to_building_agents.pdf` | Practical guide to building agents (OpenAI) | **Yes** — extracted to text and read in full (33 pp.); page numbers cited from the document's own footer | Single-agent-first (§3); tool distinctness over tool count (TU-4); tool-risk rating and layered guardrails (§20, HB-2); baseline-before-optimization in model selection (LA-3); human intervention early in deployment (HB-12); "otherwise a deterministic solution may suffice" (P14, §26) | Vendor guide with SDK-specific code; the code and SDK primitives are not adopted. Its guardrail catalogue (PII, moderation, jailbreak classifiers) is largely aimed at consumer-facing assistants and is only partially relevant to an internal read-only analyst. |
+| 03 | `03_workflows_and_agents.txt` | Workflows and agents material — in fact LangChain/LangGraph documentation on workflow patterns (prompt chaining, parallelization, routing, orchestrator-worker, evaluator-optimizer, agents) | **Yes** — read; predominantly framework code | Reinforces the workflow-vs-agent distinction behind P14. **Contributed no independent requirement**, and is cited nowhere as sole support for a criterion. Recorded here rather than dressed up as more than it is. | It is framework documentation, not evaluation guidance. Its patterns are implementation shapes, and Toesca's architecture decision (single agent + governed tools + deterministic reports) is already made elsewhere. |
+| 04 | `04_cs329t_knowledge_pack_all.md` | Consolidated Stanford CS329T knowledge pack — per-slide extractions of ten lecture decks, with explicit visual-context flags where text extraction is incomplete | **Yes** — index and concept map; Lecture 2 (trustworthiness, RAG triad); Lecture 3 (agentic patterns, RAG failure modes); Guest Lecture *Agent GPA* (slides 1–42, including the appendix Agent Evals Survey); Lecture 10 overview | The GPA judge decomposition and its rubrics — Plan Quality, Plan Adherence, Execution Efficiency, Logical Consistency, Tool Selection, Tool Calling (§5 mapping, §11 PQ-1..PQ-4, AP-2); grounding defined as every claim being attributable (HB-1); judge benchmarking, judge/human alignment, judge cross-run consistency, and named judge failure modes (P15, SY-6, UC-5, SW-10); the three separable RAG failures (P16) | It is a **slide extraction**, not a paper or a transcript: many slides are diagrams whose semantics the text does not carry, and the pack flags this itself. Reported figures (error-coverage and localization agreement, benchmark precision/recall) are properties of the cited papers' systems on their benchmarks; none is used as a Toesca threshold. The pack also notes one deck is missing and that source 02 was deliberately excluded from it. |
+| 05 | `05_openai_api_agents_consolidated_knowledge.md` | **Consolidation** of two OpenAI Academy presentations into one retrieval-friendly document — explicitly a consolidation with slide-page attributions, not the original decks | **Yes** — read in full, with §§2, 4.4, 5.3–5.6, 6, 13, 14, 15, 17 used | Smallest-capability-first and bounded first test (§2, OD-1 framing); autonomy only when evals show a fixed path fails, and the Level 1→3 architecture progression (P14, §26); bounded tool authority and human control for risky/ambiguous actions (§20, HB-12); the observability field list (§24); "retrieval does not fix every failure" (§14); eval = dataset + model + grader + metrics, and what to grade for tools and agents (§12, §16) | A consolidation of presentations, so wording is paraphrased even where page numbers are given; it is cited as a consolidation, never as a primary OpenAI publication. Its conversation-state and SDK-orchestration material is API-specific and not adopted. |
+| 06 | `06_mcp_build_rich_context_ai_apps_anthropic.md` | Course transcript and notebooks, *MCP: Build Rich-Context AI Apps with Anthropic* (DeepLearning.AI / Anthropic) | **Yes** — Intro, Lesson 2 (architecture and primitives), Lessons 8–9 (host integration, remote servers); remaining lessons are implementation walkthroughs | Only two things, both minor and neither load-bearing: the tools/resources/prompts primitive split as a way to think about read-only context exposure, and the observation that human-in-the-loop approval is a property of the *host application*, not of the tool layer. **No pilot criterion rests on this source.** | It is a protocol-implementation course. Toesca does not use MCP today, and this revision does not propose adopting it. Presenting it as evaluation or quality guidance would be a misuse of it. |
+| 07 | `07_anthropic_agent_engineering_context_tools_evals.md` | **Paraphrased digest** of three Anthropic Engineering articles (context engineering; writing tools for agents; demystifying evals for agents). The bundle states explicitly that it is a digest, not a verbatim copy | **Yes** — read in full | Context as a scarce designed resource (P10); tool definitions as prompt design and actionable errors (P11, TU-6); outcome *and* trace evaluation, capability vs regression evals, grading outcomes rather than one reasoning path, repeated trials with a metric chosen for consistency vs occasional success, judge calibration against humans, and production failures becoming eval cases (P12, P15, PQ-3, SY-7, FB-4) | **A digest.** Every citation to it in this document is a citation to the digest, not to the original articles, and is worded accordingly. It contains no figures, examples, or exact wording from the originals; where precision matters, the original articles must be consulted. |
+
+**Sources not accessible: none.** No file in the bundle failed to open or parse. The PDF
+(source 02) required text extraction; the extraction succeeded and was read in full,
+including page-footer numbering, which is why page references to it are given.
+
+### What the sources changed, and what they did not
+
+Changed a criterion: AP-2 (repetition judged by purpose, not an invented count); HB-10
+(reconstructibility of consequential turns, not universal logging); HB-11 (scope-aware);
+HB-13 (split); §24 (`span_type`, `app_version` added; `LATER` list made explicit); §14
+(RV-6 result relevance added; RV-7 cardinality); §11 (plan quality / justified replanning
+added, inline evals explicitly deferred with their cost); §12 (TU-4 reframed away from tool
+counts, TU-6 added); §13 (SQ-7); §16 (SY-7 trial statistic); §23 (LA-5).
+
+Confirmed without change: P1/P2 judge authority, SY-6 monitored-not-gating, UC-5 human
+layer, §26 deterministic-report architecture, §3 single-agent, LA-3 baseline-first, FB-4
+failures-become-cases, and the entire evidence/provenance contract in §15.
+
+Explicitly **not** changed by the sources: every open decision in §32 remains open; no
+external figure has been adopted as a Toesca threshold; the JLL triple distinction in §27
+is unchanged because no new *repository* evidence appeared; and no source was used to
+justify a requirement that does not change a decision or a criterion.
