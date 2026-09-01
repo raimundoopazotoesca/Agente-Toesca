@@ -178,8 +178,15 @@ def test_native_provider_factory_routes_without_network(monkeypatch):
 
 
 def test_frozen_contract_hashes_and_profile_roster_are_unchanged():
+    # system_prompt_sha256 re-pinned in a00d7ae's wake: commit a00d7ae
+    # ("feat(analytics): add generic canonical semantic core") added
+    # `aliases:` to semantic/entities.yaml, which _semantic_context() renders
+    # verbatim into the system prompt. That is a legitimate, intentional
+    # catalog change, not drift -- b155ded... was the pre-a00d7ae value;
+    # b4c6dab... is the byte-verified post-a00d7ae value (schema_summary and
+    # tool_schema_sha256 are unaffected).
     assert _effective_contract_hashes() == (
-        "b155ded6464def5a8cf7ba8d4e9c56af8dc3b402cf0227b5f9f097ab96e17f44",
+        "b4c6dab114ca78fbff88226cb02c380501fc5dfc9f13778e43bdf8d8b5e0c0b1",
         "d5623b5fc7f1cbc35d6f75b69403df87bbb326c9995d8e240f6a5e51d1b196ca",
     )
     assert {(p.provider, p.model) for p in B1_STANDARD_PROFILES} >= {

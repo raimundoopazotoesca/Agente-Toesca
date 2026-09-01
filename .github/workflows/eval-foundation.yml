@@ -1,0 +1,152 @@
+name: Eval Foundation
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feat/alpha-v0.1
+
+# PR checks here must make no system-under-test or judge calls: this
+# workflow only runs pytest (deterministic, in-process) against the three
+# canonical suites, each its own process (see
+# docs/superpowers/plans/2026-08-31-eval-foundation-step-0.md Global
+# constraints — never combine them, never add __init__.py package markers
+# to eval/benchmark/tests or eval/product_alpha/tests).
+#
+# IMPORTANT — environment sensitivity of eval/baselines/pytest-d986996.json:
+# tests/db/test_ingest_er_{inmosa,sucden,apo3001,curico}.py each contain one
+# `skipif`-guarded test whose condition probes a specific proprietary xlsx
+# file synced via a developer's OneDrive (never present in CI). This is NOT
+# simply "present vs. absent" on a given machine — it is genuinely flaky in
+# time even on the SAME machine across immediate, back-to-back runs: two
+# consecutive `pytest tests` runs here produced `21 failed, 1342 passed,
+# 6 skipped` both times (the file resolved as accessible), while a run
+# generated shortly before in a separate clean-environment checkout, and a
+# later run here with the 3 IDs explicitly `--deselect`-ed, both produced
+# the frozen `19 failed, 1341 passed, 9 skipped, 1 xfailed`. The likely
+# cause is OneDrive on-demand hydration / file-lock state, which is not
+# stable across runs. Anyone regenerating this baseline MUST pass:
+#   --deselect tests/db/test_ingest_er_inmosa.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
+#   --deselect tests/db/test_ingest_er_sucden.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
+#   --deselect tests/db/test_ingest_er_apo3001.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
+#   --deselect tests/db/test_ingest_er_curico.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad
+# and then splice those 4 node IDs back into the historical manifest's
+# `skip_ids` (never into `failure_ids`/the active allowlist) with reason
+# "archivo real no disponible o locked en este entorno" — see
+# eval/baselines/pytest-d986996.json's own "notes" field for the exact
+# command used. Omitting --deselect risks a spurious 21-failure baseline
+# that would forever fail CI once those 3 IDs surface as new/unexpected
+# states relative to whatever got frozen.
+jobs:
+  tests:
+    name: tests (baseline-gated)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install Chromium for PDF export tests
+        run: python -m playwright install chromium
+
+      - name: Run tests suite (exit 1 permitted here only)
+        id: run_tests
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          set +e
+          python -X utf8 -m pytest tests -q \
+            --deselect tests/analyst_runtime/test_synthesis_schema_provider.py::test_synthesis_envelope_schema_accepted_by_openai_strict_structured_outputs \
+            --deselect tests/db/test_ingest_er_inmosa.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_sucden.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_apo3001.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --deselect tests/db/test_ingest_er_curico.py::test_parse_archivo_real_no_lanza_y_cuadra_integridad \
+            --junitxml=artifacts/pytest-tests.xml \
+            -p tools.eval.pytest_nodeid_reporter \
+            --nodeid-report=artifacts/pytest-tests-nodeids.json
+          code=$?
+          echo "pytest_exit_code=$code" >> "$GITHUB_OUTPUT"
+          # Exit codes 2-5 (collection/internal errors, usage errors, no
+          # tests collected) and setup/teardown infrastructure trouble hard
+          # -fail independently of the active allowlist: only 0 (all green)
+          # and 1 (some failures, to be judged by the baseline gate) may
+          # continue past this step.
+          if [ "$code" != "0" ] && [ "$code" != "1" ]; then
+            echo "pytest exited with infrastructure-failure code $code (not a plain test failure)"
+            exit "$code"
+          fi
+          exit 0
+
+      - name: Upload tests suite artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-tests-artifacts
+          path: |
+            artifacts/pytest-tests.xml
+            artifacts/pytest-tests-nodeids.json
+          if-no-files-found: warn
+
+      - name: Gate tests suite against baseline + active allowlist
+        shell: bash
+        run: |
+          python -X utf8 -m tools.eval.pytest_baseline_gate \
+            --nodeid-report artifacts/pytest-tests-nodeids.json \
+            --baseline eval/baselines/pytest-d986996.json \
+            --known-failures eval/baselines/pytest-known-failures.json \
+            --output artifacts/pytest-tests-gate-result.json
+
+      - name: Upload gate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-tests-gate-result
+          path: artifacts/pytest-tests-gate-result.json
+          if-no-files-found: warn
+
+  benchmark-tests:
+    name: eval/benchmark/tests (must be 100% green)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      # No baseline/allowlist file for this suite: it must exit 0. Its own
+      # process, never combined with `tests` or `eval/product_alpha/tests`.
+      - name: Run eval/benchmark/tests
+        run: python -X utf8 -m pytest eval/benchmark/tests -q
+
+  product-alpha-tests:
+    name: eval/product_alpha/tests (must be 100% green)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      # No baseline/allowlist file for this suite: it must exit 0. Its own
+      # process, never combined with `tests` or `eval/benchmark/tests`.
+      - name: Run eval/product_alpha/tests
+        run: python -X utf8 -m pytest eval/product_alpha/tests -q

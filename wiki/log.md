@@ -1477,3 +1477,41 @@ disponible en `error_detalle` (no se muestra en el chat) para debug interno.
 Aplica en los 3 puntos donde antes se filtraba el error crudo: sin API key
 configurada, fallo en el paso de generar SQL, fallo en el paso de redactar
 la respuesta. 6 tests nuevos en `tests/test_db_chat.py` (44 total).
+
+## [2026-08-28] feat | Pipeline JLL v2 — nueva planilla única (sandbox, producción bloqueada)
+
+JLL reemplaza el `{AAMM} Rent Roll y NOI.xlsx` por una planilla única multi-hoja
+y multi-período: rent roll (formato distinto), auxiliar contable (facturación
+por tercero), cartera de morosos, recaudación, presupuesto y tabla UF.
+
+**Implementado en sandbox. NO aplicado a producción** — hay un gate explícito
+(ver el plan de la sesión y `docs/rent-roll-renta-semantics-v1.md`).
+
+Migraciones 085–091 · parser `tools/jll_planilla_tools.py` · ingesta
+`tools/db/ingest_jll_planilla.py` · reglas internas `tools/db/er_reglas.py` ·
+derivación `tools/db/derive_er_jll_v2.py` · repos `tools/db/repo_jll_v2.py`.
+
+Hallazgos que conviene no re-descubrir:
+
+- **`raw_rent_roll_line.renta_uf` es una TASA UF/m²/mes, no un total.** Demostrado
+  al 100% en Apo4501/4700/Boulevard/Torre A: `renta_uf × m2 = extra_json.renta_esperada_total`.
+  Viene de la columna `"Renta Fija (UF/m2 /mes)"` (`ingest_rent_roll_validated.py:819`).
+- **El `renta_renta_real` de JLL v2 es el total CONTRACTUAL, no el efectivo**, pese
+  al nombre: se computa como tasa × área en el 99,7% de las filas. Su equivalente
+  legacy es `renta_esperada_total`. **v2 no trae renta efectiva por unidad**; esa
+  información migró al `AuxiliarContable`, que sólo llega a (activo, tercero)
+  porque `inmueble` y `centro_de_costo` vienen 100% vacías.
+- **`raw_er_activo_line.monto_clp` contiene UF de facto** para los activos JLL
+  (Apo4501 2026-05 = 13.135 son UF). Deuda declarada, aislada en
+  `legacy_er_compat_adapter()`.
+- **`ingest_run.tool` NO es evidencia de procedencia**: `ingest_rent_roll_validated:jll`
+  produjo también las filas de Viña Centro y Mall Curicó, que son de Tres Asociados.
+  La procedencia se deriva de `source_file` (migración 089).
+- Contribuciones JLL vs interno: la brecha es idéntica mes a mes entre Apo4501 y
+  Apo4700 (+47,9% a +69,4% en 2025), o sea un factor escalar sobre la base
+  compartida, no un problema del split 75/25.
+
+Anomalías del archivo del 2026-08-12 (no oficial): 1.039 filas con
+`estado_rent_roll` conteniendo códigos de local, 123 con categoría `UG` sin
+tratamiento confirmado, 51 sin categoría, 48 sin fecha de corte, 6 con renta que
+no reconcilia (unidad 703 de Apo4700).

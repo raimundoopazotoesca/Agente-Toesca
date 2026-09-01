@@ -112,6 +112,22 @@ def _check_semantics(case: Case) -> None:
                 raise CaseValidationError(
                     f"{case.id} turn {i}: primary_fact {primary!r} is not among required_facts"
                 )
+        correction = turn.get("correction_context")
+        if correction is not None:
+            if i == 0:
+                raise CaseValidationError(f"{case.id} turn zero cannot declare correction_context")
+            if correction["corrected_entities"] != (turn.get("expected_entities") or {}):
+                raise CaseValidationError(
+                    f"{case.id} turn {i}: correction_context.corrected_entities must equal expected_entities"
+                )
+
+
+def correction_context_for_turn(case: Case, index: int) -> tuple[dict[str, str], dict[str, str]] | None:
+    """Return declared correction context for one turn, if applicable."""
+    context = case.turns[index].get("correction_context")
+    if context is None:
+        return None
+    return context["previous_entities"], context["corrected_entities"]
 
 
 def load_case(path: Path, schema: dict[str, Any] | None = None) -> Case:

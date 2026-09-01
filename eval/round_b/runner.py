@@ -27,6 +27,7 @@ from eval.benchmark.graders.ground_truth import resolve_ground_truth
 from eval.benchmark.snapshot import SnapshotSandbox
 from eval.round_b.incremental import IncrementalStore
 from eval.benchmark.snapshot import load_lock
+from eval.benchmark.adapters.provider_factory import CANDIDATES, provider_config_for_track
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "eval/round_b/mini_dev_v1.yaml"
@@ -58,7 +59,9 @@ FULL_DEV_HASH_ALGORITHM = "sha256-lf-normalized-v1"
 FULL_DEV_V1_1_LEGACY_BYTE_SHA = "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
 
 # Current fingerprint, reproducible from any checkout.
-FULL_DEV_V1_1_CANONICAL_SHA = "5c0e6d9b1e57cd2e08ebe535f7ff59fa63c9d4f3a22ae1933eb45df675a0cdb5"
+# Step 0 adds declared F5 correction metadata to two existing dev turns.
+# Case/turn counts and historical byte-level evidence remain unchanged.
+FULL_DEV_V1_1_CANONICAL_SHA = "79b3e78092df96e4978fd72e9b5fe13c30baaca51cc6d81c9b41ec80e60654c2"
 
 
 def _canonical_hash(data: dict[str, Any]) -> str:
@@ -199,7 +202,6 @@ def committed_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-CANDIDATES = {"groq": ("GROQ_API_KEY", "https://api.groq.com/openai/v1"), "fireworks": ("FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1"), "nvidia": ("NVIDIA_API_KEY", "https://integrate.api.nvidia.com/v1"), "dashscope": ("DASHSCOPE_API_KEY", None), "mistral": ("MISTRAL_API_KEY", "https://api.mistral.ai/v1"), "sambanova": ("SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1"), "openai": ("OPENAI_API_KEY", None), "anthropic": ("ANTHROPIC_API_KEY", None)}
 
 
 def classify_execution_error(exc: Exception) -> str:
@@ -344,14 +346,9 @@ class FullDevRoundBRunner(RoundBRunner):
 
 
 def live_adapter_factory(provider: str, model: str, profile):
-    key_name, base_url = CANDIDATES[provider]
-    if provider == "dashscope":
-        base_url = os.environ.get("DASHSCOPE_BASE_URL")
-    if not os.environ.get(key_name) or (not base_url and provider not in {"openai", "anthropic"}):
-        raise RuntimeError("credential_missing")
-    config = {"api_key": os.environ[key_name], "model": model}
-    if base_url:
-        config["base_url"] = base_url
+    track = "track_b_anthropic" if provider == "anthropic" else "track_b_openai_responses" if provider == "openai" else "track_b_frontier"
+    config = provider_config_for_track(track, None if track != "track_b_frontier" else provider, model)
+    config.pop("provider")
     if provider == "anthropic":
         return TrackBAnthropic(provider=config)
     if provider == "openai":

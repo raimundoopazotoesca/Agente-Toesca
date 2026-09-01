@@ -75,12 +75,17 @@ def test_same_entity_period_segmented_claims_bind_without_collision():
 def test_governed_vacancy_view_normalizes_raw_parking_without_reclassifying_other(tmp_path):
     db = tmp_path / "vacancy.db"
     shutil.copy2(DB, db)
-    from tools.db.connection import apply_migrations
-    assert apply_migrations(str(db)) == []  # production DB is already on schema 84
+    from tools.db.connection import _discover_migrations, apply_migrations
+    # Se aplican las migraciones pendientes en la copia y se comprueba que el
+    # esquema quede en la cabeza. Antes esto fijaba `== []` y `== 84`, lo que
+    # hacía fallar el test ante cualquier migración nueva sin que hubiera nada
+    # roto: el número de versión es andamiaje, no lo que este test verifica.
+    apply_migrations(str(db))
+    head = max(version for version, _ in _discover_migrations())
     conn = sqlite3.connect(db)
     try:
         schema_version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-        assert schema_version == 84
+        assert schema_version == head
         parking = conn.execute("SELECT tipo_unidad, m2_gla FROM v_vacancia_activo_tipo WHERE activo_key='Viña Centro' AND periodo='2026-05' AND tipo_unidad='Estacionamiento'").fetchone()
         other = conn.execute("SELECT COUNT(*) FROM v_vacancia_activo_tipo WHERE activo_key='Mall Curicó' AND periodo='2026-05' AND tipo_unidad='Otro'").fetchone()[0]
     finally:
