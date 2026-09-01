@@ -174,7 +174,7 @@ def test_logout_clears_selection_before_another_user_logs_in(monkeypatch, tmp_pa
         _login(page, base_url, "raimundo")
         page.evaluate("localStorage.setItem('toesca_asistente_conversation_id', 'raimundo-chat')")
         page.get_by_role("button", name="Salir").click()
-        page.wait_for_url(f"{base_url}/login")
+        page.wait_for_url(f"{base_url}/login", timeout=5_000)
 
         _login(page, base_url, "gregorio")
         page.get_by_role("heading", name="Hola, Gregorio").wait_for(state="visible")
@@ -183,7 +183,7 @@ def test_logout_clears_selection_before_another_user_logs_in(monkeypatch, tmp_pa
         assert page.evaluate("localStorage.getItem('toesca_asistente_conversation_id')") is None
 
         page.get_by_role("button", name="Salir").click()
-        page.wait_for_url(f"{base_url}/login")
+        page.wait_for_url(f"{base_url}/login", timeout=5_000)
         _login(page, base_url, "marcos")
         page.get_by_role("heading", name="Hola, Marcos").wait_for(state="visible")
         browser.close()
