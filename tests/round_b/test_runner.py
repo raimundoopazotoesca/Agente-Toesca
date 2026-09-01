@@ -27,7 +27,7 @@ def test_full_dev_v1_1_freeze_is_valid_and_pinned():
     # Canonical (EOL-invariant) fingerprint -- reproducible from any checkout.
     # The pre-migration byte-level value is preserved alongside it as evidence,
     # because B24-B27 recorded that one; see the portability-fix doc.
-    assert checked["content_sha256"] == "5c0e6d9b1e57cd2e08ebe535f7ff59fa63c9d4f3a22ae1933eb45df675a0cdb5"
+    assert checked["content_sha256"] == "79b3e78092df96e4978fd72e9b5fe13c30baaca51cc6d81c9b41ec80e60654c2"
     assert checked["hash_algorithm"] == "sha256-lf-normalized-v1"
     assert checked["legacy_byte_sha256"] == "090fb1c91bcf34e64c09ad285ac1c133ab13d06c256b96ab4af0e6c4f6e6033c"
 

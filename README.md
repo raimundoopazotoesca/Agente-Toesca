@@ -1,138 +1,93 @@
-# Asistente Virtual Inmobiliario Toesca — Automatización Microsoft 365
+# Toesca Real Estate AI Analyst
 
-Asistente conversacional con Gemini 2.5 Flash para automatizar Outlook, SharePoint y Excel en entorno corporativo inmobiliario.
+A data and reporting platform for Toesca's real-estate funds (TRI, PT, Apo) and their
+underlying assets. A governed SQLite database is the single source of financial truth;
+an AI Analyst workspace, a validated ingestion pipeline, and a deterministic HTML
+factsheet sit on top of it.
 
-## Compatibilidad
+The project also still carries a legacy piece: `agent.py`, a Gemini-based CLI agent for
+Outlook/SharePoint/Excel automation, predating the data platform and not yet
+decommissioned. See `docs/CURRENT_STATE.md` for exactly which surfaces are current,
+which are legacy, and which are approved-but-not-yet-built.
 
-| Funcionalidad | Windows | Mac |
-|---|---|---|
-| Excel / SharePoint / archivos | OK | OK |
-| Gestión Renta Comercial (xlsx) | OK | OK |
-| NOI-RCSD: ER Viña, ER Curicó, JLL, INMOSA | OK | OK |
-| Precios bursátiles (web) | OK | OK |
-| Email (Outlook Desktop) | OK | No disponible |
+## What's here
 
----
+| Doc | For |
+|---|---|
+| **[docs/CURRENT_STATE.md](docs/CURRENT_STATE.md)** | What actually exists right now — canonical, evidence-checked |
+| **[docs/ROADMAP.md](docs/ROADMAP.md)** | What's planned next |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Component map and data flow |
+| **[AGENTS.md](AGENTS.md)** | Universal rules for any coding agent working in this repo |
+| **[CLAUDE.md](CLAUDE.md)** | Claude-specific workflow notes |
+| **[wiki/](wiki/index.md)** | Domain knowledge — fund structure, processes, KPI methodology |
 
-## Instalación en Mac
+## Architecture, in one paragraph
 
-### 1. Clonar el repositorio
+One Flask process (`scripts/ingesta_server.py`) serves the Analyst, the validated
+ingestion wizard, the factsheet, and pilot-feedback tooling from a single SQLite database
+(`memory/agente_toesca_v2.db`). The Analyst runtime (`tools/analyst_runtime/`) is
+provider-neutral by design — it doesn't import any specific LLM SDK. Data flows in
+through human-confirmed validation (never silently). SQLite is the canonical
+business-data source, and governed datasets/semantic contracts (`semantic/`,
+`tools/datasets/`) are the intended path for both the Analyst and deterministic
+reporting to read from — that target invariant isn't fully realized yet: provenance and
+semantic coverage are still being hardened, and known gaps are tracked in
+`docs/CURRENT_STATE.md`. Detail: `docs/ARCHITECTURE.md`.
 
-```bash
-git clone https://github.com/raimundoopazotoesca/Agente-Toesca.git
-cd Agente-Toesca
-```
+## Running it locally
 
-### 2. Crear entorno virtual e instalar dependencias
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-> `pywin32` (Windows only) se omite automáticamente en Mac.
-
-### 3. Configurar el `.env`
-
-```bash
-cp .env.example .env
-```
-
-Editar `.env` con los valores correctos para Mac:
-
-```env
-GEMINI_API_KEY=tu_clave_de_google_ai_studio
-
-# Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
-AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
-
-# Ruta de OneDrive sincronizado en Mac (buscar en Finder)
-# Suele ser algo como:
-SHAREPOINT_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos
-
-# Ruta completa a la carpeta Comercial (con subcarpetas 2025/, 2026/, etc.)
-RENTA_COMERCIAL_DIR=/Users/raimundo/Library/CloudStorage/OneDrive-Toesca/Documentos/Control de Gestión/CDG Mensual
-```
-
-> **Cómo encontrar la ruta exacta en Mac:**
-> Abre Finder → busca la carpeta OneDrive → arrastra la carpeta al Terminal para obtener la ruta completa.
-
-### 4. Ejecutar el agente
-
-```bash
-source venv/bin/activate   # si no está activado
-python agent.py
-```
-
----
-
-## Instalación en Windows
-
-### 1. Clonar el repositorio
+### Windows
 
 ```bash
 git clone https://github.com/raimundoopazotoesca/Agente-Toesca.git
 cd Agente-Toesca
-```
-
-### 2. Instalar dependencias
-
-```bash
 pip install -r requirements.txt
-```
-
-### 3. Configurar el `.env`
-
-```bash
 copy .env.example .env
 ```
 
-Editar `.env`:
+Edit `.env` — at minimum:
 
 ```env
 GEMINI_API_KEY=tu_clave_de_google_ai_studio
-
-# Requerido solo para `python agent.py --server` (mínimo 32 caracteres)
-AGENT_SERVER_API_TOKEN=otro_secreto_aleatorio_largo_y_unico
-
-# Ruta de la carpeta Comercial (SharePoint o R:)
-RENTA_COMERCIAL_DIR=C:\Users\raimundo.opazo\OneDrive - Toesca\Inmobiliario Toesca - Documentos\Control de Gestión\CDG Mensual
-
-# Opcional: servidor local R:
-# LOCAL_FILES_DIR=R:\Planillas
+INGESTA_TOKEN=un_secreto_local_para_el_servidor_de_ingesta
 ```
 
-### 4. Ejecutar
+Run the ingesta/Analyst/factsheet server:
 
 ```bash
-python -X utf8 agent.py
+python -X utf8 scripts/ingesta_server.py
 ```
 
-## Seguridad del servidor HTTP
+Then open `http://127.0.0.1:8765/analyst` (not the file directly — the server injects
+the auth token; opening `factsheet.html` via `file://` will 401).
 
-El servidor opcional escucha en `127.0.0.1` por defecto y rechaza el arranque
-si `AGENT_SERVER_API_TOKEN` no tiene al menos 32 caracteres. Las solicitudes a
-`POST /run` deben enviar:
+For the legacy Outlook/Excel agent (`agent.py`), also set
+`AGENT_SERVER_API_TOKEN` (≥32 chars) if you plan to run `python agent.py --server`.
 
-```http
-Authorization: Bearer <AGENT_SERVER_API_TOKEN>
-Content-Type: application/json
-```
-
-No expongas `AGENT_SERVER_HOST=0.0.0.0` sin firewall, TLS mediante un proxy y
-control de acceso de red. `AGENT_SERVER_API_TOKEN` nunca debe guardarse en Git.
-
----
-
-## Mantener sincronizado entre computadores
+### Mac
 
 ```bash
-# Subir cambios
-git add -A && git commit -m "descripción" && git push
-
-# Bajar cambios en el otro computador
-git pull
+git clone https://github.com/raimundoopazotoesca/Agente-Toesca.git
+cd Agente-Toesca
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
 ```
 
-> El `.env` **no se sube a GitHub** (está en `.gitignore`). Cada computador tiene su propio `.env` con las rutas locales correctas.
+> `pywin32` (Windows-only) is skipped automatically on Mac. `agent.py`'s Outlook
+> integration (`email_tools.py`) does not work on Mac — it returns a clear error instead
+> of crashing. The data platform (Analyst, ingesta, factsheet) is 100% cross-platform.
+
+## Security
+
+The ingesta/Analyst server binds to `127.0.0.1` by default and requires
+`X-Ingesta-Token` on every `/api/*` route. Never expose it on `0.0.0.0` without a
+firewall, TLS via a reverse proxy, and network access control. Never commit `.env` or
+any `*_TOKEN`/`*_API_KEY` value to git.
+
+## Git safety
+
+See `AGENTS.md` for the full rules. In short: never `git add -A` or `git add .` — stage
+files by name. Check `git status` before any command that could discard uncommitted
+work. Don't push or open a PR unless explicitly asked.

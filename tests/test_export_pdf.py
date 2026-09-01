@@ -6,6 +6,7 @@ import time
 import urllib.request
 import zipfile
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -13,8 +14,18 @@ from scripts import ingesta_server
 
 
 @pytest.fixture(scope="module")
-def running_server():
+def running_server(tmp_path_factory):
     """Levanta ingesta_server en un thread real (Playwright necesita un puerto TCP real, no test_client)."""
+    factsheet_root = tmp_path_factory.mktemp("factsheet")
+    (factsheet_root / "factsheet.html").write_text(
+        """<!doctype html>
+<html><head><style>.page { width: 1122px; height: 793px; }</style></head>
+<body><main class="page">Factsheet de prueba</main>
+<script>window.__PDF_READY__ = true;</script></body></html>""",
+        encoding="utf-8",
+    )
+    original_root = ingesta_server.ROOT
+    ingesta_server.ROOT = Path(factsheet_root)
     server_thread = threading.Thread(
         target=lambda: ingesta_server.app.run(port=8765, use_reloader=False, threaded=True),
         daemon=True,
@@ -29,7 +40,10 @@ def running_server():
             time.sleep(0.2)
     else:
         pytest.fail("El servidor no levantó a tiempo")
-    yield
+    try:
+        yield
+    finally:
+        ingesta_server.ROOT = original_root
 
 
 def test_export_pdf_genera_zip_con_pdf_valido(running_server):
@@ -41,13 +55,16 @@ def test_export_pdf_genera_zip_con_pdf_valido(running_server):
         json={"fondos": ["PT"], "periodo_cb": "2026-03", "periodo_op": "2026-06"},
         timeout=120,
     )
-    assert resp.status_code in (200, 422)
-    if resp.status_code == 200:
-        zf = zipfile.ZipFile(BytesIO(resp.content))
-        names = zf.namelist()
-        assert any(n.startswith("FS_PT_") and n.endswith(".pdf") for n in names)
-        pdf_bytes = zf.read([n for n in names if n.endswith(".pdf")][0])
-        assert pdf_bytes[:4] == b"%PDF"
+    assert resp.status_code == 200, resp.text
+    zf = zipfile.ZipFile(BytesIO(resp.content))
+    names = zf.namelist()
+    assert any(n.startswith("FS_PT_") and n.endswith(".pdf") for n in names)
+    pdf_bytes = zf.read([n for n in names if n.endswith(".pdf")][0])
+    assert pdf_bytes[:4] == b"%PDF"
+    import pdfplumber
+
+    with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+        assert len(pdf.pages) >= 1
 
 
 def test_export_pdf_sin_token_da_401(running_server):

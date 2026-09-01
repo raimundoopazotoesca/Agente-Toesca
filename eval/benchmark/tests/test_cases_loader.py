@@ -93,6 +93,32 @@ def test_primary_fact_must_be_required(tmp_path):
         load_case(_write(tmp_path, body))
 
 
+def test_correction_context_must_match_expected_entities_and_follow_a_prior_turn(tmp_path):
+    body = VALID.replace(
+        'expected_entities: {activo: "Vina Centro"}',
+        'expected_entities: {activo: "Mall Curico"}\n'
+        '    correction_context:\n'
+        '      previous_entities: {activo: "Vina Centro"}\n'
+        '      corrected_entities: {activo: "Mall Curico"}',
+    )
+    with pytest.raises(CaseValidationError, match="turn zero"):
+        load_case(_write(tmp_path, body))
+
+
+def test_correction_context_rejects_mismatched_corrected_entities(tmp_path):
+    body = VALID.replace(
+        'ground_truth_refs:',
+        '  - question: "Ahora Mall Curico"\n'
+        '    expected_entities: {activo: "Mall Curico"}\n'
+        '    correction_context:\n'
+        '      previous_entities: {activo: "Vina Centro"}\n'
+        '      corrected_entities: {activo: "Otro activo"}\n'
+        'ground_truth_refs:',
+    )
+    with pytest.raises(CaseValidationError, match="corrected_entities"):
+        load_case(_write(tmp_path, body))
+
+
 def test_holdout_split_must_live_in_holdout_dir(tmp_path):
     body = VALID.replace("split: dev", "split: holdout")
     with pytest.raises(CaseValidationError, match="not under cases/holdout"):
