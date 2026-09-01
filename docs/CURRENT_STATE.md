@@ -14,7 +14,8 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 | Field | Value |
 |---|---|
 | Canonical protected branch | `feat/alpha-v0.1` |
-| Checkpoint HEAD | `4d0a13075736c9bfd5f7c420c684253a636cd093` |
+| Protected base HEAD captured for this checkpoint | `4d0a13075736c9bfd5f7c420c684253a636cd093` |
+| Checkpoint documentation source commit | `f93c74cf82268669fdb9afbde82beb5feb599ac1` |
 | Date verified | 2026-09-01 |
 | Latest migration in repo (on this branch's own tree) | `091_rent_roll_semantic_renta.sql` (`tools/db/migrations/`) |
 | Production DB schema (last known, per source-level self-disclosure — not independently checked against a live DB) | `84` — migrations 085–091 are **not yet applied to production** |
@@ -182,7 +183,7 @@ pass; verify before relying on this claim for a safety-critical decision.**
 
 ## Eval & Observability
 
-Present at the checkpoint SHA (`4d0a13075736c9bfd5f7c420c684253a636cd093`):
+Present at the protected base HEAD captured for this checkpoint (`4d0a13075736c9bfd5f7c420c684253a636cd093`):
 - `eval/benchmark/` — frozen dev/holdout process (`DEV_SET_V1_FREEZE.md`,
   `HOLDOUT_SET_V1_FREEZE.md`, `PENDING.md` — known gaps include unvalidated
   `renta_uf/m²`, no capex, no morosidad table, unvalidated DSCR).
@@ -195,8 +196,8 @@ Present at the checkpoint SHA (`4d0a13075736c9bfd5f7c420c684253a636cd093`):
 
 **Eval Foundation Step 0: CLOSED / PASS.** Track A (`audit/analyst-eval-blueprint-v1`)
 merged as PR #1 ("eval: make analyst evaluation foundation load-bearing") into the
-protected branch `feat/alpha-v0.1`. The protected-branch checkpoint HEAD is now
-`4d0a13075736c9bfd5f7c420c684253a636cd093`.
+protected branch `feat/alpha-v0.1`. The protected base HEAD captured for this checkpoint
+is `4d0a13075736c9bfd5f7c420c684253a636cd093`.
 
 **Required checks, active on `feat/alpha-v0.1`** (GitHub ruleset "Toesca protected devel";
 target: `feat/alpha-v0.1` only; enforcement: active; bypass: none; strict/up-to-date

@@ -85,7 +85,8 @@ drift.
 
 Owned by Track A, branch `audit/analyst-eval-blueprint-v1`, merged as PR #1 ("eval: make
 analyst evaluation foundation load-bearing") into the protected branch `feat/alpha-v0.1`,
-protected-branch checkpoint HEAD `4d0a13075736c9bfd5f7c420c684253a636cd093`. Full gate
+protected base HEAD captured for this checkpoint
+`4d0a13075736c9bfd5f7c420c684253a636cd093`. Full gate
 detail (required checks, the 19-item historical allowlist, and
 why the baseline-gated check is not a zero-failure gate) lives in
 `docs/CURRENT_STATE.md`'s Eval & Observability section — not restated here to avoid a
