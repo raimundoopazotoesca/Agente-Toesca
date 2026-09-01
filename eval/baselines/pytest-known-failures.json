@@ -2,9 +2,6 @@
   "failure_ids": [
     "tests/analyst_runtime/test_entity_resolution_barrier.py::test_resolved_entity_keeps_m3_and_analytics_paths_open",
     "tests/analytics/test_fund_financial_surface.py::test_market_unit_value_takes_the_latest_observation_of_the_requested_month",
-    "tests/db/test_baseline.py::test_baseline_al_dia_respecto_de_produccion",
-    "tests/db/test_estado_ingesta.py::test_config_tiene_los_tipos_del_menu",
-    "tests/db/test_estado_ingesta.py::test_estado_ingesta_devuelve_todos_los_tipos",
     "tests/db/test_estado_ingesta.py::test_estado_tipo_rentroll_mensual_completo",
     "tests/db/test_estado_ingesta.py::test_rentroll_sub_ingestas_por_proveedor",
     "tests/db/test_ingest_er_pt.py::test_parse_pt_overrides_gastos_usuario",
@@ -16,8 +13,6 @@
     "tests/test_db_chat.py::TestContextBuilderWiring::test_clarify_short_circuit_before_sql_generation",
     "tests/test_db_chat.py::TestContextBuilderWiring::test_context_sections_reach_the_sql_prompt",
     "tests/test_db_chat.py::TestConversationalInheritance::test_entity_replacement_keeps_metric_and_period",
-    "tests/test_db_chat.py::TestConversationalInheritance::test_followup_inherits_metric_and_entity",
-    "tests/test_ingesta_server_estado.py::test_estado_ingesta_endpoint_devuelve_tipos",
-    "tests/test_ingesta_server_seguridad.py::test_token_correcto_pasa"
+    "tests/test_db_chat.py::TestConversationalInheritance::test_followup_inherits_metric_and_entity"
   ]
 }

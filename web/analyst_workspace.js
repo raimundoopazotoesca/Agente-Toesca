@@ -138,6 +138,7 @@
   let openMenuId = null;
   let viewingNovedades = false;
   let unseenProductUpdateCount = 0;
+  let unseenProductUpdateStateVersion = 0;
 
   // ── Novedades ("what's new") ──
   // Pure product-discovery feed: no LLM call, no tool call, no analytical
@@ -214,6 +215,7 @@
   }
 
   async function openNovedades() {
+    unseenProductUpdateStateVersion += 1;
     clearError();
     openMenuId = null;
     viewingNovedades = true;
@@ -695,7 +697,10 @@
     }
     renderHome({ focusComposer: true });
     renderSidebar();
-    getUnseenProductUpdateCount().then(updateUnreadDot).catch(() => {});
+    const unseenCountRequestVersion = ++unseenProductUpdateStateVersion;
+    getUnseenProductUpdateCount().then((count) => {
+      if (unseenCountRequestVersion === unseenProductUpdateStateVersion) updateUnreadDot(count);
+    }).catch(() => {});
 
     const urlId = pathConversationId();
     if (urlId) {

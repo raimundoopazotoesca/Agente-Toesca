@@ -71,7 +71,7 @@ def _server(monkeypatch, tmp_path):
 
 
 def _login(page, base_url: str, username: str) -> None:
-    page.goto(f"{base_url}/login")
+    page.goto(f"{base_url}/login", wait_until="domcontentloaded", timeout=10_000)
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
     page.get_by_role("button", name="Entrar").click()
@@ -127,6 +127,33 @@ def test_update_becomes_seen_after_viewing_and_indicator_clears(monkeypatch, tmp
         browser.close()
 
 
+def test_stale_initial_unseen_count_does_not_restore_indicator(monkeypatch, tmp_path):
+    """A delayed initial count must not overwrite the state set by Novedades."""
+    with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page.set_default_timeout(3_000)
+        pending = []
+
+        def hold_initial_unseen_count(route):
+            pending.append(route)
+
+        page.route("**/api/analyst/product_updates/unseen_count", hold_initial_unseen_count)
+        _login(page, base_url, "raimundo")
+
+        page.get_by_role("button", name="Novedades").click()
+        page.locator("#conversation").get_by_text("Reportar problema", exact=True).wait_for(state="visible")
+        page.wait_for_function(
+            "!document.getElementById('novedades-unread-dot').classList.contains('show')", timeout=3_000
+        )
+
+        assert len(pending) == 1
+        with page.expect_response("**/api/analyst/product_updates/unseen_count"):
+            pending.pop().fulfill(status=200, content_type="application/json", body='{"count": 2}')
+        assert page.locator("#novedades-unread-dot.show").count() == 0
+        browser.close()
+
+
 def test_second_users_indicator_is_independent(monkeypatch, tmp_path):
     with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -172,7 +199,9 @@ def test_cta_routes_through_the_normal_chat_composer_path(monkeypatch, tmp_path)
         _login(page, base_url, "raimundo")
 
         page.get_by_role("button", name="Novedades").click()
-        page.get_by_role("button", name="Volver al chat").click()
+        cta = page.get_by_role("button", name="Volver al chat")
+        cta.wait_for(state="visible", timeout=10_000)
+        cta.click()
         page.wait_for_url(f"{base_url}/analyst", timeout=3_000)
         page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
         browser.close()

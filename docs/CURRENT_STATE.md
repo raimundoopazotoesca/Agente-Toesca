@@ -222,11 +222,14 @@ future documentation and implementation PRs.
 
 ## Baseline Debt Triage
 
-**Diagnosis COMPLETE / READY.** The active historical-failure allowlist contains
-exactly **19 IDs**; zero new regressions are permitted. The debt itself is not fixed.
+**Baseline Debt Burn-down #1 — CLOSED / PASS.** IDs **3, 4, 5, 18, 19** are
+closed. The active historical-failure allowlist contains exactly **14 IDs**;
+zero new regressions are permitted. Deferred groups remain unchanged.
 
-**Approved Burn-down #1 implementation batch:** IDs **3, 4, 5, 18, 19** — schema
-baseline, ingest-status contract, and server-test isolation.
+**Schema baseline contract:** the operational/local DB observed schema is **84**;
+the tracked Git DB snapshot at this protected base is **81** (stale); the baseline
+watermark is **84**; migration head is **91**. Migrations **085–091** remain JLL-gated
+and outside the baseline. This does not independently verify live production.
 
 **Explicitly deferred:** IDs **1/12** (trajectory-test staleness), **2** (source-truth
 verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
@@ -243,7 +246,7 @@ not universal proof.
   contract (deliberately deferred to the cutover commit).
 - Config for fondos duplicated across 4+ legacy structures (see Data Foundation above).
 - Relationship between `db_chat.py`/`chat_bubble.js` and `analyst_runtime` unresolved.
-- 19 historical test failures remain tracked debt under the baseline gate's allowlist —
+- 14 historical test failures remain tracked debt under the baseline gate's allowlist —
   see Baseline Debt Triage above. They are permitted to exist but not to grow.
 
 **Architectural debt**
@@ -265,10 +268,8 @@ not universal proof.
 
 ## Next exact steps
 
-The current operational step is **Current State Checkpoint / Chat Reset**: make the
-repository the primary context source before implementation resumes. Its next
-implementation step is **Baseline Debt Burn-down #1**, before any A2 work starts. See
-`docs/ROADMAP.md` for the live roadmap.
+The next implementation block is **A2 — Agent Architecture**. JLL v2 remains gated;
+see `docs/ROADMAP.md` for the live roadmap.
 
 ## Auto-update design (not implemented)
 

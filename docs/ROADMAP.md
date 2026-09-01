@@ -111,28 +111,27 @@ Closed as PR #3. The formal standard now exists in
 `docs/pilot/PILOT_EVAL_MATRIX_V1.md` and task bank in
 `docs/pilot/PILOT_TASK_BANK_V0.md`.
 
-### Baseline Debt Triage — DIAGNOSIS COMPLETE
+### Baseline Debt Triage / Burn-down #1 — CLOSED / PASS
 
-Diagnosis is complete and ready for implementation; it does not claim the debt is fixed.
-The active historical-failure allowlist has exactly 19 IDs and permits zero new
-regressions. Burn-down #1's approved implementation batch is IDs **3, 4, 5, 18, 19**:
-schema baseline, ingest-status contract, and server-test isolation.
+Baseline Debt Burn-down #1 closed IDs **3, 4, 5, 18, 19**: schema baseline,
+ingest-status contract, and server-test isolation. The active historical-failure
+allowlist has exactly **14 IDs** and permits zero new regressions.
+
+Baseline contract: operational/local DB observed schema **84**; tracked Git snapshot
+at this protected base **81** (stale); baseline watermark **84**; migration head **91**.
+Migrations **085–091** remain JLL-gated and outside the baseline; this is not an
+independent verification of live production.
 
 Explicitly deferred: IDs **1/12** (trajectory-test staleness), **2** (source-truth
 verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
-and **13–17** (`db_chat` retirement/transition decision in A2). Among the 19 baseline
+and **13–17** (`db_chat` retirement/transition decision in A2). Among the original 19 baseline
 failures, Track D found no evidence of a current semantic/entity defect in the canonical
 Analyst; this is a triage conclusion, not universal proof.
 
-### Current State Checkpoint / Chat Reset — CURRENT
+### Current State Checkpoint / Chat Reset — CLOSED
 
 An operational checkpoint, not an architecture phase. Its purpose is to make the
 repository the primary context source before implementation resumes.
-
-### Baseline Debt Burn-down #1
-
-Next implementation batch after the chat reset. It executes the approved IDs 3, 4, 5,
-18, and 19 before A2 begins.
 
 ### A2 — Agent Architecture
 
