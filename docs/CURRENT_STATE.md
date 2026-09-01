@@ -13,16 +13,16 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 
 | Field | Value |
 |---|---|
-| Branch this state was verified on | `docs/current-state-reset`, forked from `feat/alpha-v0.1` at `d986996` |
-| SHA this state's product/data-foundation content was verified against | `d986996baf2636ff7978314f424614c5f33afc75` |
+| Canonical protected branch | `feat/alpha-v0.1` |
+| Checkpoint HEAD | `4d0a13075736c9bfd5f7c420c684253a636cd093` |
 | Date verified | 2026-09-01 |
 | Latest migration in repo (on this branch's own tree) | `091_rent_roll_semantic_renta.sql` (`tools/db/migrations/`) |
 | Production DB schema (last known, per source-level self-disclosure — not independently checked against a live DB) | `84` — migrations 085–091 are **not yet applied to production** |
 | Test files in repo | 146 under `tests/`, 57 under `eval/` (file counts, not a pass/fail run) |
 | **Eval Foundation Step 0** | **CLOSED / PASS.** PR #1 ("eval: make analyst evaluation foundation load-bearing") merged into the protected branch `feat/alpha-v0.1`. See "Eval Foundation Step 0" under Eval & Observability below for the full gate detail. |
-| Protected branch (`feat/alpha-v0.1`) HEAD, post-merge | `631987393f240a17d902bf5a61104119c0e3eb98` — **ahead of this docs branch's own base** (`d986996`); this documentation branch has not been rebased onto it (see note below) |
-| CI (on the protected branch, post-merge) | `.github/workflows/eval-foundation.yml` now exists on `origin/feat/alpha-v0.1` — confirmed via `git ls-tree`. **Not yet present on this docs branch's own tree** (branched before the merge); do not assume this branch's working copy has the workflow file until it's rebased/merged forward. |
-| Current development phase | A0/A1/A1.5 (Current State & Reproducibility / Data Foundation & Semantic Layer / Data Foundation Target Contract & WIP Boundary) and Eval Foundation Step 0 both closed. JLL v2 is a separate parallel track — technical cutover candidate frozen, external gate pending, not part of this sequence. Next: Baseline Debt Triage / Burn-down #1, before A2 — see `docs/ROADMAP.md` |
+| **Documentation Reset / Current State Sync** | **CLOSED / PASS.** PR #2 merged. |
+| **Pilot Quality Standard v1** | **CLOSED / PASS.** PR #3 merged; canonical files: `docs/pilot/PILOT_QUALITY_STANDARD_V1.md`, `docs/pilot/PILOT_EVAL_MATRIX_V1.md`, and `docs/pilot/PILOT_TASK_BANK_V0.md`. |
+| Current development phase | A0/A1/A1.5, Eval Foundation Step 0, Documentation Reset, and Pilot Quality Standard v1 are closed. Baseline Debt Triage is diagnosis complete / ready. JLL v2 remains a separate parallel track — technical cutover candidate frozen, external gate pending. Current operational step: Current State Checkpoint / Chat Reset; next implementation: Baseline Debt Burn-down #1, before A2. See `docs/ROADMAP.md`. |
 
 <!-- AUTO-GENERATED:START -->
 Not implemented. No `scripts/update_current_state.py` exists yet. The fields above
@@ -182,7 +182,7 @@ pass; verify before relying on this claim for a safety-critical decision.**
 
 ## Eval & Observability
 
-Present at this SHA (`d986996`):
+Present at the checkpoint SHA (`4d0a13075736c9bfd5f7c420c684253a636cd093`):
 - `eval/benchmark/` — frozen dev/holdout process (`DEV_SET_V1_FREEZE.md`,
   `HOLDOUT_SET_V1_FREEZE.md`, `PENDING.md` — known gaps include unvalidated
   `renta_uf/m²`, no capex, no morosidad table, unvalidated DSCR).
@@ -195,8 +195,8 @@ Present at this SHA (`d986996`):
 
 **Eval Foundation Step 0: CLOSED / PASS.** Track A (`audit/analyst-eval-blueprint-v1`)
 merged as PR #1 ("eval: make analyst evaluation foundation load-bearing") into the
-protected branch `feat/alpha-v0.1`, final HEAD `631987393f240a17d902bf5a61104119c0e3eb98`,
-final successful GitHub Actions run `33524409504`.
+protected branch `feat/alpha-v0.1`. The protected-branch checkpoint HEAD is now
+`4d0a13075736c9bfd5f7c420c684253a636cd093`.
 
 **Required checks, active on `feat/alpha-v0.1`** (GitHub ruleset "Toesca protected devel";
 target: `feat/alpha-v0.1` only; enforcement: active; bypass: none; strict/up-to-date
@@ -217,7 +217,23 @@ permit new regressions** — any test id outside that allowlist failing trips th
 allowlist.
 
 This ruleset is now load-bearing for every future PR into `feat/alpha-v0.1`, including
-the docs PR this branch will open.
+future documentation and implementation PRs.
+
+## Baseline Debt Triage
+
+**Diagnosis COMPLETE / READY.** The active historical-failure allowlist contains
+exactly **19 IDs**; zero new regressions are permitted. The debt itself is not fixed.
+
+**Approved Burn-down #1 implementation batch:** IDs **3, 4, 5, 18, 19** — schema
+baseline, ingest-status contract, and server-test isolation.
+
+**Explicitly deferred:** IDs **1/12** (trajectory-test staleness), **2** (source-truth
+verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
+and **13–17** (`db_chat` retirement/transition decision in A2).
+
+**Key Track D conclusion:** among the 19 baseline failures, triage found no evidence of
+a current semantic/entity defect in the canonical Analyst. This is a triage conclusion,
+not universal proof.
 
 ## Known debt / blockers
 
@@ -226,13 +242,8 @@ the docs PR this branch will open.
   contract (deliberately deferred to the cutover commit).
 - Config for fondos duplicated across 4+ legacy structures (see Data Foundation above).
 - Relationship between `db_chat.py`/`chat_bubble.js` and `analyst_runtime` unresolved.
-- This docs branch's own tree still has no `.github/workflows/` (it was forked before
-  the Eval Foundation Step 0 merge) — it will pick up `eval-foundation.yml` once rebased
-  onto or merged with the current `feat/alpha-v0.1` tip. CI itself is no longer missing
-  at the protected-branch level; see the Snapshot table and Eval & Observability section.
 - 19 historical test failures remain tracked debt under the baseline gate's allowlist —
-  see Baseline Debt Triage / Burn-down #1 in `docs/ROADMAP.md`. They are permitted to
-  exist but not to grow.
+  see Baseline Debt Triage above. They are permitted to exist but not to grow.
 
 **Architectural debt**
 - `agent.py`'s long-term role (which of its 102 tools survive) is an open question
@@ -253,10 +264,10 @@ the docs PR this branch will open.
 
 ## Next exact steps
 
-With Eval Foundation Step 0 and this documentation sync closed, the next step is
-**Baseline Debt Triage / Burn-down #1** — before any A2 implementation work starts. See
-`docs/ROADMAP.md` for the live roadmap; this file states *what is true now* and does not
-restate the plan beyond naming what's immediately next.
+The current operational step is **Current State Checkpoint / Chat Reset**: make the
+repository the primary context source before implementation resumes. Its next
+implementation step is **Baseline Debt Burn-down #1**, before any A2 work starts. See
+`docs/ROADMAP.md` for the live roadmap.
 
 ## Auto-update design (not implemented)
 
