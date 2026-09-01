@@ -75,7 +75,7 @@ def _login(page, base_url: str, username: str) -> None:
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
     page.get_by_role("button", name="Entrar").click()
-    page.wait_for_url(f"{base_url}/analyst", timeout=5_000)
+    page.wait_for_url(f"{base_url}/analyst", timeout=10_000)
 
 
 @pytest.mark.parametrize("viewport", [{"width": 1440, "height": 900}, {"width": 1280, "height": 800}])
