@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.db import connection
 from tools.db.connection import apply_migrations
 from tools.db import ingest_mercado_bodegas
 
@@ -17,6 +18,7 @@ def texto_gps():
 def client(tmp_db_path, monkeypatch):
     apply_migrations(tmp_db_path)
     monkeypatch.setattr(ingest_mercado_bodegas, "DB_PATH", tmp_db_path)
+    monkeypatch.setattr(connection, "DEFAULT_DB_PATH", tmp_db_path)
     from scripts import ingesta_server
     ingesta_server.app.config["TESTING"] = True
     with ingesta_server.app.test_client() as c:
