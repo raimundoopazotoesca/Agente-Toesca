@@ -128,6 +128,49 @@ def test_new_turn_with_identical_text_and_no_turn_id_is_not_collapsed_into_faile
     assert assistant.metadata["turn_trace"]["identity"]["turn_id"] == user_messages[1].metadata["turn_id"]
 
 
+def test_unknown_turn_id_is_rejected_and_creates_no_new_message(workspace):
+    service = ConversationService(workspace, FakeFactory([])); conversation = service.create_conversation()
+    with pytest.raises(ConversationServiceError):
+        service.send_message(conversation.id, "Pregunta", turn_id="turn-does-not-exist")
+    assert workspace.list_messages(conversation.id) == []
+
+
+def test_turn_id_from_another_conversation_is_rejected_and_creates_no_new_message(workspace, monkeypatch):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")]))
+    conversation_a = service.create_conversation()
+    conversation_b = service.create_conversation()
+    monkeypatch.setattr("tools.analyst_workspace.conversation_service.build_turn_trace", lambda **_: (_ for _ in ()).throw(ValueError("broken trace")))
+    with pytest.raises(TurnTracePersistenceError) as excinfo:
+        service.send_message(conversation_a.id, "Pregunta")
+    other_turn_id = excinfo.value.turn_id
+    monkeypatch.undo()
+    with pytest.raises(ConversationServiceError):
+        service.send_message(conversation_b.id, "Pregunta", turn_id=other_turn_id)
+    assert workspace.list_messages(conversation_b.id) == []
+
+
+def test_completed_turn_id_is_rejected(workspace):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    assistant = service.send_message(conversation.id, "Pregunta")
+    completed_turn_id = assistant.metadata["turn_trace"]["identity"]["turn_id"]
+    with pytest.raises(ConversationServiceError):
+        service.send_message(conversation.id, "Pregunta", turn_id=completed_turn_id)
+    assert len(workspace.list_messages(conversation.id)) == 2
+
+
+def test_pending_turn_id_with_different_text_is_rejected(workspace, monkeypatch):
+    service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
+    monkeypatch.setattr("tools.analyst_workspace.conversation_service.build_turn_trace", lambda **_: (_ for _ in ()).throw(ValueError("broken trace")))
+    with pytest.raises(TurnTracePersistenceError) as excinfo:
+        service.send_message(conversation.id, "Pregunta original")
+    pending_turn_id = excinfo.value.turn_id
+    monkeypatch.undo()
+    with pytest.raises(ConversationServiceError):
+        service.send_message(conversation.id, "Pregunta distinta", turn_id=pending_turn_id)
+    pending = workspace.list_messages(conversation.id)
+    assert len(pending) == 1 and pending[0].content == "Pregunta original"
+
+
 def test_unrelated_metadata_failure_is_not_mislabeled_trace_persistence_failed(workspace, monkeypatch):
     service = ConversationService(workspace, FakeFactory([_result("Respuesta")])); conversation = service.create_conversation()
     monkeypatch.setattr(

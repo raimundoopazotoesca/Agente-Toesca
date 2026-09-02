@@ -81,23 +81,44 @@ class ConversationService:
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Conversation:
         return self.store.unarchive_conversation_for_user(conversation_id, user_id)
 
+    def _find_pending_turn(self, conversation_id: str, turn_id: str) -> Message | None:
+        """A turn is retryable only while it has no completed assistant reply yet.
+
+        The user message's own "turn_trace_status" is written once, at creation,
+        and is never flipped afterward -- it is not, by itself, evidence that the
+        turn is still open. A turn_id whose assistant reply already completed
+        must be rejected rather than silently replayed.
+        """
+        messages = self.store.list_messages(conversation_id)
+        pending = next(
+            (m for m in reversed(messages)
+             if m.role == "user" and (m.metadata or {}).get("turn_id") == turn_id
+             and (m.metadata or {}).get("turn_trace_status") == "pending"),
+            None,
+        )
+        if pending is None:
+            return None
+        already_completed = any(
+            m.role == "assistant" and (m.metadata or {}).get("turn_trace", {}).get("identity", {}).get("turn_id") == turn_id
+            for m in messages
+        )
+        return None if already_completed else pending
+
     def send_message(self, conversation_id: str, text: str, *, turn_id: str | None = None) -> Message:
         if not isinstance(text, str) or not text.strip():
             raise ConversationServiceError("message text cannot be empty")
         conversation = self.store.get_conversation(conversation_id)
-        pending = None
         if turn_id is not None:
-            # Explicit correlation only: a retry must present the exact turn_id a
-            # prior TurnTracePersistenceError returned. Without an exact match we
-            # never fall back to guessing from conversation + last message + text,
-            # since that can silently collapse a genuinely new turn into a stale one.
-            pending = next(
-                (m for m in reversed(self.store.list_messages(conversation_id))
-                 if m.role == "user" and (m.metadata or {}).get("turn_id") == turn_id
-                 and (m.metadata or {}).get("turn_trace_status") == "pending"),
-                None,
-            )
-        if pending is not None:
+            # Explicit retry contract: supplying turn_id means "retry this exact
+            # failed logical turn", not "retry if found, else start a new one".
+            # It must resolve to a still-pending user message in this conversation
+            # with matching text, or the request fails closed -- it never silently
+            # falls back to minting a replacement turn_id.
+            pending = self._find_pending_turn(conversation_id, turn_id)
+            if pending is None:
+                raise ConversationServiceError(f"turn_id {turn_id!r} does not match a pending turn in this conversation")
+            if pending.content.strip() != text.strip():
+                raise ConversationServiceError(f"turn_id {turn_id!r} does not match the submitted text")
             user_message = pending
             turn_id = str(pending.metadata["turn_id"])
         else:
