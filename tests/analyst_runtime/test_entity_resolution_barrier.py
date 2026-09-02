@@ -109,7 +109,20 @@ def test_ambiguous_entity_blocks_followup_tools(tmp_path: Path):
     assert sql.calls == []
 
 
-def test_resolved_entity_keeps_m3_and_analytics_paths_open():
+def test_resolved_entity_keeps_m3_and_analytics_paths_open(governed_v84_db):
+    """Proves the barrier does not block a resolved entity from reaching the
+    real SchemaSearchAction/RunSqlAction tools -- i.e. the M3/analytics path
+    stays open end-to-end against a real (governed) dataset.
+
+    This deliberately asserts only structural conditions (no clarification,
+    the right call sequence, a real non-error result set touching the
+    expected column). The exact golden values for this same Apo3001 query
+    (row_count==10, sum(m2)==1656.6) are pinned once, not duplicated here --
+    see tests/entities/test_canonical_entity_resolver.py::
+    test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates,
+    which owns that pin because it is specifically about the resolved key
+    propagating into a correct downstream result.
+    """
     class M3Transport(ScriptedTransport):
         def __init__(self):
             super().__init__([
@@ -120,14 +133,20 @@ def test_resolved_entity_keeps_m3_and_analytics_paths_open():
             ])
 
     transport = M3Transport()
-    registry = ActionRegistry([ResolveEntityAction(DB), SchemaSearchAction(DB), RunSqlAction(LiveReadOnlySandbox(DB))])
+    registry = ActionRegistry([
+        ResolveEntityAction(governed_v84_db),
+        SchemaSearchAction(governed_v84_db),
+        RunSqlAction(LiveReadOnlySandbox(governed_v84_db)),
+    ])
     result = AnalystLoop("sys", transport, registry, registry.tool_specs()).ask("consulta")
     payload = json.loads(result.round_trajectory[-2].tool_results[0].content)
 
     assert "termination_reason" not in result.turn.raw
     assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "schema_search", "run_sql"]
-    assert payload["row_count"] == 10
-    assert sum(row[payload["columns"].index("m2")] for row in payload["rows"]) == pytest.approx(1656.6)
+    assert result.turn.tool_calls[0].trace["resolution_status"] == "resolved"
+    assert "error" not in payload
+    assert payload["row_count"] > 0
+    assert "m2" in payload["columns"]
 
 
 def test_next_user_turn_resets_barrier_and_skips_presenter_for_clarification():

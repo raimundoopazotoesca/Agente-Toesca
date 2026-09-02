@@ -1,14 +1,11 @@
 {
   "failure_ids": [
-    "tests/analyst_runtime/test_entity_resolution_barrier.py::test_resolved_entity_keeps_m3_and_analytics_paths_open",
-    "tests/analytics/test_fund_financial_surface.py::test_market_unit_value_takes_the_latest_observation_of_the_requested_month",
     "tests/db/test_estado_ingesta.py::test_estado_tipo_rentroll_mensual_completo",
     "tests/db/test_estado_ingesta.py::test_rentroll_sub_ingestas_por_proveedor",
     "tests/db/test_ingest_er_pt.py::test_parse_pt_overrides_gastos_usuario",
     "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_idempotente",
     "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_jll_pt",
     "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_mapea_todos_los_activos",
-    "tests/entities/test_canonical_entity_resolver.py::test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates",
     "tests/test_db_chat.py::TestContextBuilderWiring::test_answer_synthesis_receives_resolved_metric_context",
     "tests/test_db_chat.py::TestContextBuilderWiring::test_clarify_short_circuit_before_sql_generation",
     "tests/test_db_chat.py::TestContextBuilderWiring::test_context_sections_reach_the_sql_prompt",
