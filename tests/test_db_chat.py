@@ -261,38 +261,87 @@ class TestAnswerWithIntentLayer:
 
 
 # ─── answer() con context_builder wiring (Task 5) ────────────────────────────
+def _routed_fake_chat_completion(intent_responses, sql_response=None, answer_response=None,
+                                  on_sql=None, on_answer=None):
+    """Fake for db_chat._chat_completion_with_fallback that routes by the
+    distinctive system prompt of each pass (intent-extraction has none of
+    db_chat's own system prompts; SQL-gen and synthesis are identified by
+    _SQL_SYSTEM / _ANSWER_SYSTEM) instead of by call order, since
+    context_builder wiring adds an intent-extraction pass before SQL-gen.
+    Intent responses are consumed in order (one per intent-extraction call);
+    SQL/synthesis responses are fixed since only one pass of each happens
+    per answer() call in these tests.
+    """
+    sql_response = sql_response or '{"sql": "SELECT valor FROM derived_kpi WHERE kpi = \'vacancia_pct\'"}'
+    answer_response = answer_response or "Vacancia: 10%."
+    queue = list(intent_responses)
+
+    def _fake(messages, **_kwargs):
+        if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
+            if on_sql:
+                on_sql(messages)
+            return _FakeResp(sql_response), {"model": "fake-model-1"}
+        if any(m.get("content") == db_chat._ANSWER_SYSTEM for m in messages):
+            if on_answer:
+                on_answer(messages)
+            return _FakeResp(answer_response), {"model": "fake-model-1"}
+        return _FakeResp(queue.pop(0)), {"model": "fake-model-1"}
+
+    return _fake
+
+
 class TestContextBuilderWiring(unittest.TestCase):
     def test_clarify_short_circuit_before_sql_generation(self):
         from tools.analyst.conversation_state import clear_state
         clear_state("test-clarify-wiring")
-        result = db_chat.answer("cuéntame algo", session_id="test-clarify-wiring")
+
+        # Deterministic "no metric, no entities, low confidence" intent
+        # response: the exact grounding-signal combination ambiguity.decide()
+        # requires to short-circuit to clarify (no provider credentials
+        # needed, no network call).
+        intent_json = (
+            '{"metric": null, "entities": {}, "period": null, '
+            '"comparison": null, "confidence": 0.0}'
+        )
+        sql_gen_reached = {"value": False}
+
+        def _on_sql(_messages):
+            sql_gen_reached["value"] = True
+
+        fake = _routed_fake_chat_completion([intent_json], on_sql=_on_sql)
+
+        with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+             unittest.mock.patch.object(db_chat, "_chat_completion_with_fallback", fake):
+            result = db_chat.answer("cuéntame algo", session_id="test-clarify-wiring")
+
         # A fully ungrounded question with no prior state must clarify
         # deterministically, without ever reaching SQL generation.
         self.assertTrue(result.get("clarify"))
         self.assertIsNone(result.get("sql"))
+        self.assertFalse(sql_gen_reached["value"], "SQL generation must not be reached on clarify short-circuit")
 
     def test_context_sections_reach_the_sql_prompt(self):
         # Regression guard: RESOLVED INTENT / labeled sections must appear
         # in the messages sent for SQL generation, not just be computed and
-        # discarded.
+        # discarded. Only the LLM/provider/SQL-execution boundaries are
+        # faked; real intent extraction -> context_builder.build_context ->
+        # SQL-prompt assembly wiring runs unmocked.
         captured = {}
-        original = db_chat._chat_completion_with_fallback
 
-        def _spy(messages, **kwargs):
-            # answer() now issues an intent-extraction LLM call (via
-            # _intent_llm_call, added by this same wiring) before the SQL
-            # generation call, so "first call" is no longer the SQL prompt.
-            # Identify the SQL-generation call by its distinctive system
-            # message instead of by call order.
-            if any(m.get("content") == db_chat._SQL_SYSTEM for m in messages):
-                captured["captured_sql_messages"] = messages
-            return original(messages, **kwargs)
+        def _on_sql(messages):
+            captured["captured_sql_messages"] = messages
 
-        db_chat._chat_completion_with_fallback = _spy
-        try:
+        intent_json = (
+            '{"metric": "vacancia_pct", "entities": {"activo": "Parque Titanium"}, '
+            '"period": null, "comparison": null, "confidence": 0.9}'
+        )
+        fake = _routed_fake_chat_completion([intent_json], on_sql=_on_sql)
+
+        with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+             unittest.mock.patch.object(db_chat, "_chat_completion_with_fallback", fake), \
+             unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[10.0]])), \
+             unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
             db_chat.answer("vacancia de Parque Titanium este mes", session_id="test-sections-wiring")
-        finally:
-            db_chat._chat_completion_with_fallback = original
 
         contents = " ".join(
             m["content"] for m in captured.get("captured_sql_messages", []) if isinstance(m.get("content"), str)
@@ -340,17 +389,21 @@ class TestContextBuilderWiring(unittest.TestCase):
 
     def test_answer_synthesis_receives_resolved_metric_context(self):
         calls = []
-        original = db_chat._chat_completion_with_fallback
 
-        def _spy(messages, **kwargs):
+        def _record(messages):
             calls.append(messages)
-            return original(messages, **kwargs)
 
-        db_chat._chat_completion_with_fallback = _spy
-        try:
+        intent_json = (
+            '{"metric": "vacancia_pct", "entities": {"fondo": "TRI"}, '
+            '"period": "2026-06", "comparison": null, "confidence": 0.9}'
+        )
+        fake = _routed_fake_chat_completion([intent_json], on_sql=_record, on_answer=_record)
+
+        with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+             unittest.mock.patch.object(db_chat, "_chat_completion_with_fallback", fake), \
+             unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[10.0]])), \
+             unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
             db_chat.answer("vacancia del fondo TRI en 2026-06", session_id="test-synthesis-context")
-        finally:
-            db_chat._chat_completion_with_fallback = original
 
         # Find the synthesis pass by its distinctive system prompt rather than
         # asserting an exact total call count, which is brittle to future
@@ -366,16 +419,38 @@ class TestContextBuilderWiring(unittest.TestCase):
 
 class TestConversationalInheritance(unittest.TestCase):
     def test_followup_inherits_metric_and_entity(self):
+        # Only the LLM/provider/SQL-execution boundaries are faked; the real
+        # intent extraction -> tools/analyst/conversation_state.py
+        # get_state/update_state wiring inside db_chat's legacy path runs
+        # unmocked, so this exercises the actual inheritance logic.
         from tools.analyst.conversation_state import clear_state, get_state
         clear_state("test-followup-1")
-        db_chat.answer("¿Cuál fue la ocupación de Parque Titanium en julio?",
-                        session_id="test-followup-1")
-        state_after_q1 = get_state("test-followup-1")
-        self.assertIsNotNone(state_after_q1["last_metric"])
-        self.assertTrue(state_after_q1["last_entities"])
 
-        db_chat.answer("¿Y versus el año pasado?", session_id="test-followup-1")
-        state_after_q2 = get_state("test-followup-1")
+        q1_intent = (
+            '{"metric": "vacancia_pct", "entities": {"activo": "Parque Titanium"}, '
+            '"period": "2026-07", "comparison": null, "confidence": 0.9}'
+        )
+        # A vague follow-up: the LLM extracts no new metric/entities, only a
+        # comparison marker -- forcing the inheritance path in intent.py to
+        # fall back to conversation_state's last_metric/last_entities.
+        q2_intent = (
+            '{"metric": null, "entities": {}, "period": null, '
+            '"comparison": "same_period_last_year", "confidence": 0.3}'
+        )
+        fake = _routed_fake_chat_completion([q1_intent, q2_intent])
+
+        with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+             unittest.mock.patch.object(db_chat, "_chat_completion_with_fallback", fake), \
+             unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[10.0]])), \
+             unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
+            db_chat.answer("¿Cuál fue la ocupación de Parque Titanium en julio?",
+                            session_id="test-followup-1")
+            state_after_q1 = get_state("test-followup-1")
+            self.assertIsNotNone(state_after_q1["last_metric"])
+            self.assertTrue(state_after_q1["last_entities"])
+
+            db_chat.answer("¿Y versus el año pasado?", session_id="test-followup-1")
+            state_after_q2 = get_state("test-followup-1")
         # metric/entity carried forward; not reset to None by the follow-up.
         self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
         self.assertEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])
@@ -383,10 +458,28 @@ class TestConversationalInheritance(unittest.TestCase):
     def test_entity_replacement_keeps_metric_and_period(self):
         from tools.analyst.conversation_state import clear_state, get_state
         clear_state("test-replace-1")
-        db_chat.answer("Evolución mensual de ocupación de PT en 2026", session_id="test-replace-1")
-        state_after_q1 = get_state("test-replace-1")
 
-        db_chat.answer("Ahora Viña Centro", session_id="test-replace-1")
-        state_after_q2 = get_state("test-replace-1")
+        q1_intent = (
+            '{"metric": "vacancia_pct", "entities": {"fondo": "PT"}, '
+            '"period": "2026", "comparison": null, "confidence": 0.9}'
+        )
+        # No new metric extracted (inherits vacancia_pct from state) but a
+        # new, explicit entity -- exercising entity_resolver + intent.py's
+        # "resolved_entities or state['last_entities']" replacement branch.
+        q2_intent = (
+            '{"metric": null, "entities": {"activo": "Viña Centro"}, '
+            '"period": null, "comparison": null, "confidence": 0.9}'
+        )
+        fake = _routed_fake_chat_completion([q1_intent, q2_intent])
+
+        with unittest.mock.patch.object(db_chat, "_provider_chain", lambda: [{"model": "fake-model-1"}]), \
+             unittest.mock.patch.object(db_chat, "_chat_completion_with_fallback", fake), \
+             unittest.mock.patch.object(db_chat, "_run_sql", lambda sql: (["valor"], [[10.0]])), \
+             unittest.mock.patch.object(db_chat, "_extract_metric_from_sql", lambda sql: "vacancia_pct"):
+            db_chat.answer("Evolución mensual de ocupación de PT en 2026", session_id="test-replace-1")
+            state_after_q1 = get_state("test-replace-1")
+
+            db_chat.answer("Ahora Viña Centro", session_id="test-replace-1")
+            state_after_q2 = get_state("test-replace-1")
         self.assertEqual(state_after_q2["last_metric"], state_after_q1["last_metric"])
         self.assertNotEqual(state_after_q2["last_entities"], state_after_q1["last_entities"])

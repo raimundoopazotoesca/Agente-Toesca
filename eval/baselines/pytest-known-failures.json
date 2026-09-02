@@ -4,11 +4,6 @@
     "tests/db/test_estado_ingesta.py::test_rentroll_sub_ingestas_por_proveedor",
     "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_idempotente",
     "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_jll_pt",
-    "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_mapea_todos_los_activos",
-    "tests/test_db_chat.py::TestContextBuilderWiring::test_answer_synthesis_receives_resolved_metric_context",
-    "tests/test_db_chat.py::TestContextBuilderWiring::test_clarify_short_circuit_before_sql_generation",
-    "tests/test_db_chat.py::TestContextBuilderWiring::test_context_sections_reach_the_sql_prompt",
-    "tests/test_db_chat.py::TestConversationalInheritance::test_entity_replacement_keeps_metric_and_period",
-    "tests/test_db_chat.py::TestConversationalInheritance::test_followup_inherits_metric_and_entity"
+    "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_mapea_todos_los_activos"
   ]
 }
