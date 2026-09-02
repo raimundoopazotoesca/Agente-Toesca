@@ -61,7 +61,8 @@ archived `ROADMAP.md`'s F1.7).
   │   Excel automation) — see AGENTS.md/CODEX.md for its own rules       │
   │ tools/factsheet_tools.py — PPTX factsheet, scheduled for removal     │
   │ tools/db_chat.py + web/chat_bubble.js — prior-generation chat,       │
-  │   relationship to analyst_runtime unresolved (see CURRENT_STATE.md) │
+  │   transition-only; canonical runtime does not import it (audit:     │
+  │   docs/a2-db-chat-transition-boundary.md)                           │
   └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -121,7 +122,39 @@ enforced boundary):
   reasoning loop — `conversation_service.py`, `store.py`, `admin.py`,
   `export_markdown.py`. This is why `tools/analyst_api.py` supplies the service via a lazy
   factory rather than constructing it directly: HTTP tests and module imports stay free of
-  workspace/provider/DB side effects.
+  workspace/provider/DB side effects. `ConversationService` is persistence/orchestration
+  infrastructure, not a semantic-conversation service — it does not implement cross-turn
+  inheritance, correction semantics, or topic reset (that is A4's future scope).
+
+### 5.1 Resolution contract and TurnTrace v1 (A2)
+
+`tools/analyst_runtime/resolution.py` normalizes entity/metric/period outcomes to one
+public shape: `status` (`resolved | ambiguous | unknown`), `canonical_value`, `method`,
+`reason_code`, `evidence`, `candidates`. Internal diagnostic detail is never destroyed —
+entity resolver `not_found`/`low_confidence` map to public `unknown` with that internal
+state preserved as `reason_code`/`evidence.internal_status`.
+
+`tools/analyst_runtime/turn_trace.py` builds a JSON-safe `TurnTrace v1`
+(`build_turn_trace`/`reconstruct_turn`) from the actual runtime trajectory: identity,
+input text, resolution outcomes, routing decision, sanitized tool-call arguments/SQL,
+evidence references, observable model usage, and the final answer. It never carries raw
+provider payloads, prompts, chain-of-thought, or scratchpad fields.
+
+`ConversationService.send_message` allocates a `turn_id` and persists a pending user
+message before calling the runtime, builds the trace, and writes it into the assistant
+message's `metadata.turn_trace` in the same insert that persists the answer
+(`store.append_message(..., message_id=...)` accepts a preassigned id so the trace's
+`assistant_message_id` matches the row it lives in). If trace construction, serialization,
+or that write fails, `ConversationService` raises `TurnTracePersistenceError` — the model
+answer is neither returned nor persisted, and `tools/analyst_api.py` /
+`scripts/ingesta_server.py` map that error to an explicit `503 trace_persistence_failed`
+HTTP response rather than a generic 500/400. The already-persisted user message keeps its
+pending turn id; a retry with the same conversation/text reuses that turn id and user
+message instead of appending a duplicate user turn. Durable analytical memory
+(`persist_analytical_turn`) is written only after the traced assistant message succeeds.
+Collection of an individual optional trace field (e.g. an action-trace anomaly) is
+best-effort and does not raise this error — only failure to build/persist the mandatory
+trace envelope does.
 
 ## 6. LLM / provider surfaces
 

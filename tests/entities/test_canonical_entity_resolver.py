@@ -40,6 +40,10 @@ def test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates():
     payload = json.loads(result.content)
     assert result.ok and payload["candidates"][0]["entity_key"] == "Apo3001"
     assert result.trace["status"] == "resolved"
+    assert result.trace["resolution"]["status"] == "resolved"
+    assert result.trace["resolution"]["canonical_value"] == "Apo3001"
+    assert result.trace["resolution"]["method"] == "exact_display"
+    assert result.trace["resolution"]["evidence"]["internal_status"] == "resolved"
 
     class ScriptedTransport:
         def __init__(self):

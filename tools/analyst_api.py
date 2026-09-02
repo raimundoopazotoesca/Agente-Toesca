@@ -1,6 +1,6 @@
-"""Stable HTTP-facing adapter for the pending analyst conversation service.
+"""Stable HTTP-facing adapter for the analyst ConversationService.
 
-This module intentionally does not import or construct the A4 service.  The
+This module intentionally does not import or construct the service.  The
 Flask application supplies it through a lazy factory, allowing HTTP tests and
 module imports to stay free of workspace, provider, and knowledge-DB effects.
 """
@@ -11,7 +11,7 @@ from typing import Any, Protocol
 
 from openai import OpenAIError
 
-from tools.analyst_workspace.conversation_service import ConversationServiceError
+from tools.analyst_workspace.conversation_service import ConversationServiceError, TurnTracePersistenceError
 from tools.analyst_workspace.store import (
     ConversationNotFoundError,
     FeedbackReportNotFoundError,
@@ -22,7 +22,7 @@ from tools.analyst_workspace.store import (
 
 
 class ConversationServiceProtocol(Protocol):
-    """The small HTTP-facing subset of the A4 ConversationService."""
+    """The small HTTP-facing subset of the ConversationService."""
 
     def create_conversation(self, *, title: str | None = None, context: dict[str, Any] | None = None, user_id: str) -> Any: ...
     def list_conversations_for_user(self, user_id: str, include_archived: bool = False) -> list[Any]: ...
@@ -31,7 +31,7 @@ class ConversationServiceProtocol(Protocol):
     def rename_conversation_for_user(self, conversation_id: str, user_id: str, title: str) -> Any: ...
     def archive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
     def unarchive_conversation_for_user(self, conversation_id: str, user_id: str) -> Any: ...
-    def send_message_for_user(self, conversation_id: str, user_id: str, text: str) -> Any: ...
+    def send_message_for_user(self, conversation_id: str, user_id: str, text: str, *, turn_id: str | None = None) -> Any: ...
     def set_feedback_for_user(self, message_id: str, user_id: str, rating: str, note: str | None = None) -> Any: ...
     def clear_feedback_for_user(self, message_id: str, user_id: str) -> None: ...
     def get_feedback_for_user(self, message_id: str, user_id: str) -> Any: ...
@@ -67,8 +67,16 @@ class AnalystForbiddenError(AnalystApiError):
     pass
 
 
+class AnalystTracePersistenceError(AnalystApiError):
+    """The mandatory durable TurnTrace could not be written with its answer."""
+
+    def __init__(self, message: str = "", *, turn_id: str | None = None):
+        super().__init__(message)
+        self.turn_id = turn_id
+
+
 class ConversationApiAdapter:
-    """Translate the stable HTTP contract to the concrete A3/A4 service."""
+    """Translate the stable HTTP contract to the concrete ConversationService."""
 
     def __init__(self, service: ConversationServiceProtocol):
         self._service = service
@@ -94,9 +102,8 @@ class ConversationApiAdapter:
             return _conversation(self._call(self._service.unarchive_conversation_for_user, conversation_id, user_id))
         raise AnalystValidationError("provide a title or archived boolean")
 
-    def send_message(self, conversation_id: str, user_id: str, text: str) -> dict[str, Any]:
-        """The only point tied to A4's eventual send-message return shape."""
-        return _message(self._call(self._service.send_message_for_user, conversation_id, user_id, text))
+    def send_message(self, conversation_id: str, user_id: str, text: str, *, turn_id: str | None = None) -> dict[str, Any]:
+        return _message(self._call(self._service.send_message_for_user, conversation_id, user_id, text, turn_id=turn_id))
 
     def set_feedback(self, message_id: str, user_id: str, rating: str, note: str | None) -> dict[str, Any]:
         return _feedback(self._call(self._service.set_feedback_for_user, message_id, user_id, rating, note))
@@ -144,6 +151,8 @@ class ConversationApiAdapter:
             return method(*args, **kwargs)
         except (ConversationNotFoundError, MessageNotFoundError, FeedbackReportNotFoundError) as exc:
             raise AnalystNotFoundError from exc
+        except TurnTracePersistenceError as exc:
+            raise AnalystTracePersistenceError(str(exc), turn_id=getattr(exc, "turn_id", None)) from exc
         except (ValidationError, ConversationServiceError) as exc:
             raise AnalystValidationError from exc
         except WorkspaceStoreError as exc:

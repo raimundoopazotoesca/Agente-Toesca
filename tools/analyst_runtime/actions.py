@@ -40,6 +40,7 @@ from tools.schema_discovery import (
 from tools.entities.catalog import ENTITY_TYPES
 from tools.entities.resolver import EntityResolver
 from tools.entities.canonical_scope import CanonicalScopeValidator, expected_asset_universe
+from tools.analyst_runtime.resolution import resolution_from_entity_payload
 
 MAX_ROWS_RETURNED = 50
 
@@ -239,6 +240,7 @@ class ResolveEntityAction:
             if fund is not None and not isinstance(fund,str): raise ValueError("fund must be a canonical fund key or null")
             result=EntityResolver(self.db_path).resolve(query,tuple(types),fund); payload=result.as_dict()
             trace={"tool_name":self.name,"query":query,"requested_entity_types":types,"fund":fund,"status":result.status,"candidates":[{"entity_key":c.entity_key,"canonical_name":c.canonical_name,"score":c.score,"match_kind":c.match_kind} for c in result.candidates],"success":True,"duration_ms":(time.monotonic()-started)*1000}
+            trace["resolution"] = resolution_from_entity_payload(payload, trace).as_dict()
             control = None
             if result.status != "resolved":
                 control = {
