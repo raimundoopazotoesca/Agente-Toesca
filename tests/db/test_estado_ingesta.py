@@ -73,7 +73,7 @@ def _insert_eeff(con, periodo, fondo):
     con.commit()
 
 
-def _insert_rentroll(con, periodo, activo_key="PT"):
+def _insert_rentroll(con, periodo, activo_key="Torre A"):
     # dim_activo trae el catálogo real y raw_rent_roll_line.activo_key lo
     # referencia; las claves ficticias hay que crearlas.
     con.execute(
@@ -144,7 +144,10 @@ def test_estado_tipo_eeff_incompleto_marca_pendiente(con):
 def test_estado_tipo_rentroll_mensual_completo(con):
     cfg = next(c for c in CONFIG if c["id"] == "rentroll")
     hoy = date(2026, 7, 23)  # cerrado esperado: 2026-06
-    for activo in ("PT", "Apoquindo", "Apo3001", "Viña Centro", "Mall Curicó"):
+    for activo in (
+        "Torre A", "Boulevard", "Apo4501", "Apo4700", "Apo3001",
+        "Viña Centro", "Mall Curicó",
+    ):
         _insert_rentroll(con, "2026-06", activo)
     resultado = estado_tipo(con, cfg, hoy)
     assert resultado["ultimo_ingestado"] == "2026-06"
@@ -153,8 +156,8 @@ def test_estado_tipo_rentroll_mensual_completo(con):
 
 
 def test_estado_tipo_rentroll_parcial_no_marca_al_dia(con):
-    # Falta JLL (PT/Apoquindo/Apo3001): aunque Viña y Curicó estén, el período
-    # completo debe seguir "pendiente" — no alcanza con que ingresen algunos.
+    # Falta JLL (Torre A, Boulevard, Apo4501, Apo4700 y Apo3001): aunque Viña
+    # y Curicó estén, el período completo debe seguir "pendiente".
     cfg = next(c for c in CONFIG if c["id"] == "rentroll")
     hoy = date(2026, 7, 23)  # cerrado esperado: 2026-06
     _insert_rentroll(con, "2026-06", "Viña Centro")
@@ -227,8 +230,8 @@ def test_eeff_sub_ingestas_por_fondo(con):
 def test_rentroll_sub_ingestas_por_proveedor(con):
     cfg = next(c for c in CONFIG if c["id"] == "rentroll")
     hoy = date(2026, 7, 23)  # cerrado esperado: 2026-06
-    # JLL completo (3 activos)
-    for activo in ("PT", "Apoquindo", "Apo3001"):
+    # JLL completo (cinco edificios)
+    for activo in ("Torre A", "Boulevard", "Apo4501", "Apo4700", "Apo3001"):
         _insert_rentroll(con, "2026-06", activo)
     # Tres A Viña incompleto (falta 2026-06)
     _insert_rentroll(con, "2026-05", "Viña Centro")

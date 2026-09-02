@@ -1,9 +1,4 @@
 {
   "failure_ids": [
-    "tests/db/test_estado_ingesta.py::test_estado_tipo_rentroll_mensual_completo",
-    "tests/db/test_estado_ingesta.py::test_rentroll_sub_ingestas_por_proveedor",
-    "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_idempotente",
-    "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_jll_pt",
-    "tests/db/test_rentroll_dualwrite.py::test_persist_rent_roll_mapea_todos_los_activos"
   ]
 }
