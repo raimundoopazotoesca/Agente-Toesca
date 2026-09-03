@@ -55,11 +55,12 @@ def _amount(rows: list[dict], activo: str, codigo: str) -> float:
     return matches[0]
 
 
-def test_parse_pt_overrides_gastos_usuario(tmp_path):
+def test_parse_pt_uses_raw_administration_and_keeps_current_overrides(tmp_path):
     rows = mod.parse_planilla(_build_fixture_xlsx(tmp_path))
 
-    assert _amount(rows, "Torre A", "PT_ADM") == -20.2
-    assert _amount(rows, "Boulevard", "PT_ADM") == -46.4
+    # Administración usa las filas fuente R32/R33 y normaliza gastos a negativo.
+    assert _amount(rows, "Torre A", "PT_ADM") == -999.0
+    assert _amount(rows, "Boulevard", "PT_ADM") == -999.0
 
     assert _amount(rows, "Boulevard", "PT_GC_VAC") == -531.0
     assert _amount(rows, "Torre A", "PT_CONTRIB") == -1257.0

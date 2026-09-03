@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.db import connection
 from tools.db.connection import apply_migrations
 from tools.db import ingest_amortizacion_extra
 
@@ -22,6 +23,7 @@ def _seed_credito(db_path, credito_key="TEST_CRED", estado="VIGENTE"):
 def client(tmp_db_path, monkeypatch):
     apply_migrations(tmp_db_path)
     monkeypatch.setattr(ingest_amortizacion_extra, "DB_PATH", tmp_db_path)
+    monkeypatch.setattr(connection, "DEFAULT_DB_PATH", tmp_db_path)
     from scripts import ingesta_server
     ingesta_server.app.config["TESTING"] = True
     with ingesta_server.app.test_client() as c:

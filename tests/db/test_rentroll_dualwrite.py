@@ -12,9 +12,9 @@ def _fake_src(tmp_path):
     return str(fake)
 
 
-def _source(activo1, n=2):
+def _source(activo1, activo2, n=2):
     return {
-        (f"Edificio{i}", f"Local {i}"): {
+        (activo2, f"Local {i}"): {
             "Activo1": activo1,
             "Arrendatario": f"Tenant {i}",
             "Area Arrendable (m2)": 100.0 + i,
@@ -26,31 +26,16 @@ def _source(activo1, n=2):
     }
 
 
-def _seed_activos_jll(conn):
-    """Los activos con los que JLL entrega el rent roll y el NOI ('PT' como
-    conjunto, 'Apoquindo' como agregado de 4501+4700) no están en el catálogo
-    real de dim_activo — ver ROADMAP §8. Los tests que ejercitan esa ruta los
-    crean explícitamente en vez de depender de un seed."""
-    conn.executemany(
-        "INSERT OR IGNORE INTO dim_activo "
-        "(activo_key, fondo_key, nombre, participacion_fondo_activo) VALUES (?,?,?,?)",
-        [("PT", "PT", "Parque Titanium", 1.0),
-         ("Apoquindo", "Apo", "Apoquindo (4501+4700)", 0.3)],
-    )
-    conn.commit()
-
-
 def test_persist_rent_roll_jll_pt(tmp_db_path, tmp_path, monkeypatch):
     apply_migrations(tmp_db_path)
-    _seed_activos_jll(get_conn_for(tmp_db_path))
     monkeypatch.setattr(rr, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_src(tmp_path)
 
-    n = rr._persist_rent_roll(path, "2026-03", _source("Fondo Rentas PT", 3), "jll")
+    n = rr._persist_rent_roll(path, "2026-03", _source("Fondo Rentas PT", "Torre A", 3), "jll")
     assert n == 3
 
     conn = get_conn_for(tmp_db_path)
-    rows = repo_rent_roll.list_by_periodo(conn, "PT", "2026-03")
+    rows = repo_rent_roll.list_by_periodo(conn, "Torre A", "2026-03")
     assert len(rows) == 3
     assert rows[0]["arrendatario"] == "Tenant 0"
     assert rows[0]["renta_uf"] == 0.5
@@ -59,19 +44,21 @@ def test_persist_rent_roll_jll_pt(tmp_db_path, tmp_path, monkeypatch):
 
 def test_persist_rent_roll_mapea_todos_los_activos(tmp_db_path, tmp_path, monkeypatch):
     apply_migrations(tmp_db_path)
-    _seed_activos_jll(get_conn_for(tmp_db_path))
     monkeypatch.setattr(rr, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
 
-    casos = {
-        "Fondo Rentas Apoquindo": "Apoquindo",
-        "Apoquindo 3001": "Apo3001",
-        "Paseo Viña Centro": "Viña Centro",
-        "Mall Curicó": "Mall Curicó",
-    }
-    for activo1, activo_key in casos.items():
+    casos = (
+        ("Fondo Rentas PT", "Torre A", "Torre A"),
+        ("Fondo Rentas PT", "Inmob. CdC", "Boulevard"),
+        ("Fondo Rentas Apoquindo", "Apoquindo 4501", "Apo4501"),
+        ("Fondo Rentas Apoquindo", "Apoquindo 4700", "Apo4700"),
+        ("Apoquindo 3001", "Apoquindo 3001", "Apo3001"),
+        ("Paseo Viña Centro", "Paseo Viña Centro", "Viña Centro"),
+        ("Mall Curicó", "Mall Curicó", "Mall Curicó"),
+    )
+    for activo1, activo2, activo_key in casos:
         path = tmp_path / f"{activo_key}.xlsx"
         path.write_bytes(f"contenido {activo_key}".encode())
-        rr._persist_rent_roll(str(path), "2026-03", _source(activo1, 1), "p")
+        rr._persist_rent_roll(str(path), "2026-03", _source(activo1, activo2, 1), "p")
         conn = get_conn_for(tmp_db_path)
         rows = repo_rent_roll.list_by_periodo(conn, activo_key, "2026-03")
         assert len(rows) == 1, f"fallo para {activo_key}"
@@ -80,20 +67,18 @@ def test_persist_rent_roll_mapea_todos_los_activos(tmp_db_path, tmp_path, monkey
 
 def test_persist_rent_roll_salta_activo_no_mapeable(tmp_db_path, tmp_path, monkeypatch):
     apply_migrations(tmp_db_path)
-    _seed_activos_jll(get_conn_for(tmp_db_path))
     monkeypatch.setattr(rr, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_src(tmp_path)
 
-    n = rr._persist_rent_roll(path, "2026-03", _source("Activo Desconocido", 2), "jll")
+    n = rr._persist_rent_roll(path, "2026-03", _source("Activo Desconocido", "Edificio X", 2), "jll")
     assert n == 0
 
 
 def test_persist_rent_roll_idempotente(tmp_db_path, tmp_path, monkeypatch):
     apply_migrations(tmp_db_path)
-    _seed_activos_jll(get_conn_for(tmp_db_path))
     monkeypatch.setattr(rr, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = _fake_src(tmp_path)
-    data = _source("Fondo Rentas PT", 2)
+    data = _source("Fondo Rentas PT", "Torre A", 2)
 
     assert rr._persist_rent_roll(path, "2026-03", data, "jll") == 2
     assert rr._persist_rent_roll(path, "2026-03", data, "jll") == 0
@@ -105,7 +90,7 @@ def test_persist_rent_roll_no_rompe_si_db_falla(tmp_path, monkeypatch):
 
     monkeypatch.setattr(rr, "_db_get_conn", _boom)
     path = _fake_src(tmp_path)
-    assert rr._persist_rent_roll(path, "2026-03", _source("Fondo Rentas PT", 1), "jll") == 0
+    assert rr._persist_rent_roll(path, "2026-03", _source("Fondo Rentas PT", "Torre A", 1), "jll") == 0
 
 
 def test_persist_rent_roll_real_jll_si_existe(tmp_db_path, monkeypatch):
@@ -124,7 +109,6 @@ def test_persist_rent_roll_real_jll_si_existe(tmp_db_path, monkeypatch):
         pytest.skip("No hay RR JLL real sincronizado")
 
     apply_migrations(tmp_db_path)
-    _seed_activos_jll(get_conn_for(tmp_db_path))
     monkeypatch.setattr(rr, "_db_get_conn", lambda: get_conn_for(tmp_db_path))
     path = sorted(candidatos)[-1]
     data = rr._read_source_data(path)

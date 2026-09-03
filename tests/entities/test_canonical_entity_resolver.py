@@ -34,8 +34,23 @@ def test_resolver_golden_normalization_and_safe_outcomes():
     assert resolver.resolve("activo inexistente", ("asset",)).status == "not_found"
 
 
-def test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates():
-    action = ResolveEntityAction(DB)
+def test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates(governed_v84_db):
+    """Owns the exact golden-value pin (row_count==10, sum(m2)==1656.6) for
+    this Apo3001/2026-06 vacant-units query: this test is specifically about
+    the resolved key ("Apoquindo 3001" -> "Apo3001") propagating into a real
+    downstream schema_search/run_sql call and producing the *correct*
+    governed result, not just a non-error one.
+
+    Uses a deterministic schema-84 fixture (tests/conftest.py::governed_v84_db)
+    instead of the tracked memory/agente_toesca_v2.db so this doesn't depend
+    on that file's schema version at test time. See
+    tests/analyst_runtime/test_entity_resolution_barrier.py::
+    test_resolved_entity_keeps_m3_and_analytics_paths_open for the sibling
+    test that asserts only the lighter structural condition (the barrier
+    does not block a resolved entity) on the same fixture, to avoid pinning
+    the identical exact values twice.
+    """
+    action = ResolveEntityAction(governed_v84_db)
     result = action.execute(ToolRequest("resolve", action.name, {"query": "Apoquindo 3001", "entity_types": ["asset"], "fund": None}))
     payload = json.loads(result.content)
     assert result.ok and payload["candidates"][0]["entity_key"] == "Apo3001"
@@ -54,7 +69,11 @@ def test_resolve_entity_action_serializes_safe_trace_and_m3_key_propagates():
                 ModelResponse("respuesta"),
             ])
         def complete(self, _request): return next(self.responses)
-    registry = ActionRegistry([ResolveEntityAction(DB), SchemaSearchAction(DB), RunSqlAction(LiveReadOnlySandbox(DB))])
+    registry = ActionRegistry([
+        ResolveEntityAction(governed_v84_db),
+        SchemaSearchAction(governed_v84_db),
+        RunSqlAction(LiveReadOnlySandbox(governed_v84_db)),
+    ])
     result = AnalystLoop("sys", ScriptedTransport(), registry, registry.tool_specs()).ask("consulta")
     assert [call.name for call in result.turn.tool_calls] == ["resolve_entity", "schema_search", "run_sql"]
     assert "Apo3001" in result.turn.tool_calls[2].args["query"]

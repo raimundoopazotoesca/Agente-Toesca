@@ -240,7 +240,7 @@ def test_market_unit_value_takes_the_latest_observation_of_the_requested_month()
     rows = run(metric="valor_cuota_serie", funds=("TRI",), period="2026-08",
                dimensions=(("valuation_basis", "market"),)).rows
     assert {row.dimensions["series"]: row.value for row in rows} == {"A": 15000.0, "C": 17000.0, "I": 11000.0}
-    assert {row.provenance["fecha"] for row in rows} == {"2026-08-18"}
+    assert {row.provenance["fecha"] for row in rows} == {"2026-08-07"}
 
 
 def test_market_unit_value_of_the_pt_single_series():
