@@ -168,6 +168,27 @@ def test_schema_search_does_not_repeat_generic_dimension_evidence_across_metadat
     assert result.objects[0].name == "raw_movimiento_contrato"
 
 
+def test_schema_search_never_exposes_internal_or_sqlite_internal_objects(tmp_path: Path):
+    db_path = tmp_path / "surface_policy.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE dim_kpi (kpi_key TEXT PRIMARY KEY)")
+    conn.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY)")
+    conn.execute("CREATE TABLE dim_fondo (fondo_key TEXT PRIMARY KEY)")
+    conn.execute("CREATE TABLE autoincrement_helper (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+    conn.execute("CREATE TABLE unclassified_object (foo TEXT)")
+    conn.commit()
+    conn.close()
+
+    introspector = SQLiteSchemaIntrospector(db_path)
+
+    for hidden_name in ("dim_kpi", "schema_version", "sqlite_sequence", "unclassified_object"):
+        result = introspector.search(hidden_name, limit=10)
+        assert hidden_name not in {obj.name for obj in result.objects}
+
+    exposed = introspector.search("fondo", limit=10)
+    assert "dim_fondo" in {obj.name for obj in exposed.objects}
+
+
 def test_benchmark_contract_exposes_only_frozen_run_sql_tool():
     from eval.benchmark.adapters.track_b_frontier import _RUN_SQL_SPEC
 
