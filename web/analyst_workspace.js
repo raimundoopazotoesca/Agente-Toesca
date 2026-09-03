@@ -697,10 +697,17 @@
     }
     renderHome({ focusComposer: true });
     renderSidebar();
-    const unseenCountRequestVersion = ++unseenProductUpdateStateVersion;
-    getUnseenProductUpdateCount().then((count) => {
-      if (unseenCountRequestVersion === unseenProductUpdateStateVersion) updateUnreadDot(count);
-    }).catch(() => {});
+    if (!viewingNovedades) {
+      const unseenCountRequestVersion = ++unseenProductUpdateStateVersion;
+      getUnseenProductUpdateCount().then((count) => {
+        if (
+          unseenCountRequestVersion === unseenProductUpdateStateVersion &&
+          !viewingNovedades
+        ) {
+          updateUnreadDot(count);
+        }
+      }).catch(() => {});
+    }
 
     const urlId = pathConversationId();
     if (urlId) {
