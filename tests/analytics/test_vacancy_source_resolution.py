@@ -25,8 +25,8 @@ metrics:
     primary: {kind: derived_kpi, entity_type: fondo, kpi: vacancia_pct}
     fallback:
       kind: rollup_ratio_view
-      view: v_component
-      entity_column: entity_key
+      view: v_vacancia_activo
+      entity_column: activo_key
       asset_groups:
         fund-1: [[asset-a], [fund-1-total]]
         fund-2: [[asset-b, asset-c], [fund-2-total]]
@@ -53,9 +53,17 @@ def executor(tmp_path: Path) -> AnalyticsExecutor:
     connection.execute(
         "INSERT INTO derived_kpi VALUES ('fondo','fund-1','vacancia_pct','2026-01', 42.0, 'stored_canonical', 900)"
     )
-    connection.execute("CREATE TABLE v_component (entity_key TEXT, periodo TEXT, m2_gla REAL, m2_vacantes REAL)")
+    # Minimal synthetic stand-in for the canonical MODEL_QUERYABLE object
+    # v_vacancia_activo -- this test exercises generic fallback/rollup
+    # semantics, not the production view's actual DDL/columns. Using a real
+    # MODEL_QUERYABLE object name here (rather than an arbitrary one like the
+    # old `v_component`) is intentional so this test continues to exercise
+    # real object-name governance under the A3.1b authorizer, consistent
+    # with how this same fixture already uses `derived_kpi` (also a real
+    # MODEL_QUERYABLE object) as a synthetic stand-in above.
+    connection.execute("CREATE TABLE v_vacancia_activo (activo_key TEXT, periodo TEXT, m2_gla REAL, m2_vacantes REAL)")
     connection.executemany(
-        "INSERT INTO v_component VALUES (?,?,?,?)",
+        "INSERT INTO v_vacancia_activo VALUES (?,?,?,?)",
         [
             # fund-1 also has a granular-asset row for the SAME period as its stored row —
             # a deliberate conflicting-equivalent-source case: primary must still win.
@@ -141,5 +149,5 @@ def test_g_no_compatible_source_returns_none(executor):
 def test_h_lineage_identifies_source_and_components_for_derived_result(executor):
     result = _query(executor, "fund-2", "2026-02")
     formula = result.rows[0].provenance["formula"]
-    assert formula.startswith("rollup_ratio:v_component:[asset-b,asset-c]:")
+    assert formula.startswith("rollup_ratio:v_vacancia_activo:[asset-b,asset-c]:")
     assert "m2_vacantes" in formula and "m2_gla" in formula

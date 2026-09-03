@@ -179,7 +179,9 @@ def test_live_sandbox_against_real_db_is_read_only_and_untouched():
     sandbox = LiveReadOnlySandbox(REAL_DB)
     conn = sandbox.connect(guard=True)
     try:
-        row = conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        # sqlite_master is INTERNAL/UNCLASSIFIED under the A3.1b authorizer
+        # and is now correctly denied; use a MODEL_QUERYABLE table instead.
+        row = conn.execute("SELECT * FROM dim_fondo LIMIT 1").fetchone()
         assert row is not None
     finally:
         conn.close()
