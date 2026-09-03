@@ -1,9 +1,13 @@
 """Canonical SQL surface registry for schema84 (BASELINE_VERSION).
 
 Deny-by-default: any schema object not explicitly listed here classifies as
-UNCLASSIFIED and is never queryable. New objects (new tables, new views,
-migrations 085+) must be added to a bucket explicitly before becoming visible
-to SchemaSearch or RunSql.
+UNCLASSIFIED under this surface policy. New objects (new tables, new views,
+migrations 085+) must be added to a bucket explicitly before ``is_queryable``
+will admit them.
+
+As of A3.1a, SchemaSearch enforces this policy (objects are filtered through
+``is_queryable`` before introspection). RunSql does not yet consume this
+registry — RunSql enforcement is planned for A3.1b.
 """
 from __future__ import annotations
 

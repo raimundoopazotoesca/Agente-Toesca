@@ -58,6 +58,13 @@ def test_schema84_drift_against_scratch_baseline():
     assert len(tables) == 47, f"expected 47 tables (incl. sqlite_sequence), got {len(tables)}"
     assert len(views) == 33, f"expected 33 views, got {len(views)}"
 
+    assert tables == (
+        sql_surface.MODEL_QUERYABLE_TABLES
+        | sql_surface.INTERNAL
+        | sql_surface.SQLITE_INTERNAL
+    )
+    assert views == sql_surface.MODEL_QUERYABLE_VIEWS
+
     assert non_sqlite == sql_surface.MODEL_QUERYABLE | sql_surface.INTERNAL
     assert len(non_sqlite) == 79
 
