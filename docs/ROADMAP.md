@@ -169,8 +169,8 @@ timeout; **A3.1d** — validator cleanup; **A3.1e** — adversarial / PE-22 gate
 After A3.1: **A3.2** — Result + Evidence Contract; **A3.3** — Result Validation;
 **A3.4** — Minimal load-bearing trace; **A3.5** — Adversarial / Pilot gate.
 
-Scope closes the gap A2 found between `sqlite_guard.py`'s actual behavior and the
-SQL-allowlist validation the old roadmap specified (AST-based, e.g. `sqlglot`); the
+Scope closes the SQL-safety gaps identified after A2 through the approved A3.1
+surface-policy, authorizer, timeout, validator, and adversarial-gate sequence. The
 `db_chat.py`/`analyst_runtime` relationship itself is resolved (see A2 above) — A3
 inherits the SQL-safety and evidence-contract work, not that open question.
 
