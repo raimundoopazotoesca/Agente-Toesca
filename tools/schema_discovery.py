@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tools.datasets.catalog import load_dataset_catalog
+from tools.db.sql_surface import is_queryable
 
 
 DEFAULT_SCHEMA_SEARCH_LIMIT = 5
@@ -91,10 +92,14 @@ class SQLiteSchemaIntrospector:
         effective_limit = _effective_limit(limit)
         conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
         try:
-            objects = [self._object(conn, name, kind) for name, kind in conn.execute(
-                "SELECT name, type FROM sqlite_master "
-                "WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )]
+            objects = [
+                self._object(conn, name, kind)
+                for name, kind in conn.execute(
+                    "SELECT name, type FROM sqlite_master "
+                    "WHERE type IN ('table', 'view') ORDER BY name"
+                )
+                if is_queryable(name)
+            ]
         finally:
             conn.close()
         ranked = [(self._score(obj, query_tokens), obj) for obj in objects]
