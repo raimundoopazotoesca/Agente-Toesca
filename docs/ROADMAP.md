@@ -29,13 +29,16 @@ Pilot Quality Standard v1 — [closed / PASS] PR #3 merged
      ↓
 Baseline Debt Triage — [diagnosis complete]
      ↓
-Current State Checkpoint / Chat Reset — [current operational checkpoint]
+Current State Checkpoint / Chat Reset — [closed]
      ↓
-Baseline Debt Burn-down #1
+Baseline Debt Burn-down #1 — [closed / PASS] PR #5 merged, allowlist 19 → 14
      ↓
-A2 — Agent Architecture
+A2 — Agent Architecture — [closed / PASS] PR #6 merged
      ↓
-A3 — Tools, SQL & Safety
+Baseline Debt Burn-down #2 — [closed / PASS] PR #7 merged, allowlist 14 → 0
+     ↓
+A3 — Tools, SQL & Safety — [current phase; next slice A3.1 — SQL Safety, design
+                            reviewed, implementation not yet started]
      ↓
 Product Shell & Reporting v1
      ↓
@@ -111,18 +114,19 @@ Closed as PR #3. The formal standard now exists in
 `docs/pilot/PILOT_EVAL_MATRIX_V1.md` and task bank in
 `docs/pilot/PILOT_TASK_BANK_V0.md`.
 
-### Baseline Debt Triage / Burn-down #1 — CLOSED / PASS
+### Baseline Debt Triage / Burn-down #1 — CLOSED / PASS (historical)
 
-Baseline Debt Burn-down #1 closed IDs **3, 4, 5, 18, 19**: schema baseline,
-ingest-status contract, and server-test isolation. The active historical-failure
-allowlist has exactly **14 IDs** and permits zero new regressions.
+Baseline Debt Burn-down #1 (PR #5) closed IDs **3, 4, 5, 18, 19**: schema baseline,
+ingest-status contract, and server-test isolation. At that point the active
+historical-failure allowlist had exactly **14 IDs** and permitted zero new regressions.
+This has since been superseded by Burn-down #2 below — the allowlist is no longer 14.
 
 Baseline contract: operational/local DB observed schema **84**; tracked Git snapshot
 at this protected base **81** (stale); baseline watermark **84**; migration head **91**.
 Migrations **085–091** remain JLL-gated and outside the baseline; this is not an
 independent verification of live production.
 
-Explicitly deferred: IDs **1/12** (trajectory-test staleness), **2** (source-truth
+Deferred at that point: IDs **1/12** (trajectory-test staleness), **2** (source-truth
 verification), **6/7/9/10/11** (until JLL cutover), **8** (PT admin legacy expectation),
 and **13–17** (`db_chat` retirement/transition decision in A2). Among the original 19 baseline
 failures, Track D found no evidence of a current semantic/entity defect in the canonical
@@ -133,21 +137,42 @@ Analyst; this is a triage conclusion, not universal proof.
 An operational checkpoint, not an architecture phase. Its purpose is to make the
 repository the primary context source before implementation resumes.
 
-### A2 — Agent Architecture
+### A2 — Agent Architecture — CLOSED / PASS
 
-Not yet started as a formally scoped block, but **not greenfield either**: per the Pass
-1.5 delta audit, `tools/analyst_runtime/canonical_guard.py`, `coverage_guard.py`, and
-`sqlite_guard.py` already exist and are in active use. This block should audit what's
-already built against what the old ROADMAP.md's Phase 2 items (F2.0 contract
-documentation, F2.2 traceability/`chat_query_log`, F2.3 SQL-allowlist validation) actually
-require, rather than treating those items as 0% done.
+Closed as PR #6 ("feat/a2-agent-architecture"). Established the canonical
+single-Analyst architecture and confirmed the transition-only status of
+`tools/db_chat.py` / `POST /api/chat` — see `docs/a2-db-chat-transition-boundary.md` and
+`docs/CURRENT_STATE.md`'s Known debt section. Per the Pass 1.5 delta audit that preceded
+this block, `tools/analyst_runtime/canonical_guard.py`, `coverage_guard.py`, and
+`sqlite_guard.py` were already in active use going in — this block audited what was
+already built rather than starting from zero.
 
-### A3 — Tools, SQL & Safety
+### Baseline Debt Burn-down #2 — CLOSED / PASS
 
-Depends on A2's findings. Likely scope: closing whatever gap A2 finds between
-`sqlite_guard.py`'s actual behavior and the SQL-allowlist validation the old roadmap
-specified (AST-based, e.g. `sqlglot`); resolving the `db_chat.py`/`analyst_runtime`
-relationship flagged as open debt in `docs/CURRENT_STATE.md`.
+Closed as PR #7 ("Baseline Debt Burn-down #2: close remaining known failures"). Closed
+the remaining 14 historical IDs deferred by Burn-down #1. The active historical-failure
+allowlist (`eval/baselines/pytest-known-failures.json`) is now empty — zero remaining
+historical allowance. Overall trajectory: **19 → 14 → 0**. Final CI on the merging PR
+passed (`tests (baseline-gated)`, `eval/benchmark/tests`, `eval/product_alpha/tests`,
+all required and green) after a rerun; an initial CI timing flake reran successfully
+without a code change and is not tracked as product debt. The business DB
+(`memory/agente_toesca_v2.db`) remained unchanged through this work.
+
+### A3 — Tools, SQL & Safety — CURRENT PHASE
+
+Immediate next slice: **A3.1 — SQL Safety**. Design has completed read-only review and
+is ready for implementation (not yet started as of this checkpoint). Implementation
+sequence: **A3.1a** — SQL surface registry / shared surface policy; **A3.1b** —
+authorizer + evidence-backed function allowlist; **A3.1c** — per-statement execution
+timeout; **A3.1d** — validator cleanup; **A3.1e** — adversarial / PE-22 gate.
+
+After A3.1: **A3.2** — Result + Evidence Contract; **A3.3** — Result Validation;
+**A3.4** — Minimal load-bearing trace; **A3.5** — Adversarial / Pilot gate.
+
+Scope closes the SQL-safety gaps identified after A2 through the approved A3.1
+surface-policy, authorizer, timeout, validator, and adversarial-gate sequence. The
+`db_chat.py`/`analyst_runtime` relationship itself is resolved (see A2 above) — A3
+inherits the SQL-safety and evidence-contract work, not that open question.
 
 ### Product Shell & Reporting v1
 
