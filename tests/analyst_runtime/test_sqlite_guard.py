@@ -478,6 +478,185 @@ def test_all_schema84_model_queryable_views_remain_queryable(schema84_conn):
 # `not authorized to use function: instr` before this amendment.
 # ---------------------------------------------------------------------------
 
+EXPECTED_ALLOWED_FUNCTIONS = frozenset({
+    "SUM", "AVG", "COUNT", "MIN", "MAX", "ROUND", "ABS", "UPPER", "LOWER",
+    "SUBSTR", "DATE", "STRFTIME", "COALESCE", "JSON_EXTRACT", "NULLIF",
+    "LIKE", "TRIM", "INSTR", "GOVERNED_JLL_FLOOR",
+})
+
+
+def test_allowed_functions_exact_contract():
+    """Set equality (not subset/superset/"contains") against the frozen
+    19-entry contract documented in the module docstring and this PR's
+    description -- must fail on ANY addition, removal, or spelling/case
+    drift, not just a missing entry."""
+    assert ALLOWED_FUNCTIONS == EXPECTED_ALLOWED_FUNCTIONS
+
+
+# ---------------------------------------------------------------------------
+# 19: deny-by-default opcode matrix -- every security-relevant SQLite action
+# code NOT in the frozen allow-set (SQLITE_SELECT, SQLITE_READ,
+# SQLITE_FUNCTION, SQLITE_RECURSIVE) must deny at the authorizer-callback
+# level. Built from `getattr(sqlite3, name, None)` so it only exercises
+# constants this Python build's sqlite3 module actually exposes -- no
+# invented constants.
+# ---------------------------------------------------------------------------
+
+# name -> reason skipped, for constants not present in this Python build's
+# `sqlite3` module. SQLITE_COPY is long-deprecated upstream and was never
+# exposed by CPython's sqlite3 module; documented here rather than invented.
+_OPCODE_SKIP_REASONS = {
+    "SQLITE_COPY": "deprecated SQLite opcode, not exposed by CPython's sqlite3 module",
+}
+
+# Every security-relevant action code that must be denied: DML, DDL
+# (including TEMP variants and virtual tables), ATTACH/DETACH, PRAGMA,
+# transaction/savepoint control, ALTER/REINDEX/ANALYZE. Excludes
+# SQLITE_SELECT, SQLITE_READ, SQLITE_FUNCTION, SQLITE_RECURSIVE (the
+# allow-listed action classes, covered by other tests) and SQLITE_COPY
+# (unavailable in this build, see _OPCODE_SKIP_REASONS).
+_DENY_OPCODE_NAMES = [
+    # DML
+    "SQLITE_INSERT",
+    "SQLITE_UPDATE",
+    "SQLITE_DELETE",
+    # DDL: tables, indexes, views, triggers (+ TEMP variants)
+    "SQLITE_CREATE_TABLE",
+    "SQLITE_CREATE_TEMP_TABLE",
+    "SQLITE_CREATE_INDEX",
+    "SQLITE_CREATE_TEMP_INDEX",
+    "SQLITE_CREATE_VIEW",
+    "SQLITE_CREATE_TEMP_VIEW",
+    "SQLITE_CREATE_TRIGGER",
+    "SQLITE_CREATE_TEMP_TRIGGER",
+    "SQLITE_DROP_TABLE",
+    "SQLITE_DROP_TEMP_TABLE",
+    "SQLITE_DROP_INDEX",
+    "SQLITE_DROP_TEMP_INDEX",
+    "SQLITE_DROP_VIEW",
+    "SQLITE_DROP_TEMP_VIEW",
+    "SQLITE_DROP_TRIGGER",
+    "SQLITE_DROP_TEMP_TRIGGER",
+    "SQLITE_ALTER_TABLE",
+    # Virtual tables
+    "SQLITE_CREATE_VTABLE",
+    "SQLITE_DROP_VTABLE",
+    # Attach/detach another database file
+    "SQLITE_ATTACH",
+    "SQLITE_DETACH",
+    # Pragma
+    "SQLITE_PRAGMA",
+    # Transaction / savepoint control
+    "SQLITE_TRANSACTION",
+    "SQLITE_SAVEPOINT",
+    # Schema maintenance
+    "SQLITE_REINDEX",
+    "SQLITE_ANALYZE",
+    # Deprecated / possibly-absent
+    "SQLITE_COPY",
+]
+
+
+@pytest.mark.parametrize("opcode_name", _DENY_OPCODE_NAMES)
+def test_deny_by_default_opcode_matrix(opcode_name):
+    action = getattr(sqlite3, opcode_name, None)
+    if action is None:
+        pytest.skip(_OPCODE_SKIP_REASONS.get(opcode_name, f"{opcode_name} not exposed by this Python build's sqlite3 module"))
+    authorizer = make_authorizer()
+    # arg1/arg2 values are irrelevant here: the implementation only inspects
+    # them for SQLITE_READ/SQLITE_FUNCTION, so any action code outside the
+    # {SELECT, READ, FUNCTION, RECURSIVE} allow-set falls straight through to
+    # SQLITE_DENY regardless of what object/name is named.
+    result = authorizer(action, "some_table", "some_col", "main", None)
+    assert result == sqlite3.SQLITE_DENY, f"{opcode_name} ({action}) was not denied"
+
+
+def test_deny_opcode_matrix_covers_all_security_relevant_constants_in_this_build():
+    """Belt-and-suspenders: audit `dir(sqlite3)` for every `SQLITE_*` action
+    code this build exposes that is one of the well-known authorizer action
+    codes (values 1-33 per sqlite3.h's action code table) and isn't part of
+    the allow-set -- confirms `_DENY_OPCODE_NAMES` didn't silently miss one
+    that exists in this build."""
+    allowed_action_names = {"SQLITE_SELECT", "SQLITE_READ", "SQLITE_FUNCTION", "SQLITE_RECURSIVE"}
+    # The full set of sqlite3.h authorizer action code names (1-33), per
+    # https://www.sqlite.org/c3ref/c_alter_table.html -- used only to filter
+    # `dir(sqlite3)` down to genuine action codes, not to invent constants.
+    known_action_code_names = {
+        "SQLITE_CREATE_INDEX", "SQLITE_CREATE_TABLE", "SQLITE_CREATE_TEMP_INDEX",
+        "SQLITE_CREATE_TEMP_TABLE", "SQLITE_CREATE_TEMP_TRIGGER", "SQLITE_CREATE_TEMP_VIEW",
+        "SQLITE_CREATE_TRIGGER", "SQLITE_CREATE_VIEW", "SQLITE_DELETE", "SQLITE_DROP_INDEX",
+        "SQLITE_DROP_TABLE", "SQLITE_DROP_TEMP_INDEX", "SQLITE_DROP_TEMP_TABLE",
+        "SQLITE_DROP_TEMP_TRIGGER", "SQLITE_DROP_TEMP_VIEW", "SQLITE_DROP_TRIGGER",
+        "SQLITE_DROP_VIEW", "SQLITE_INSERT", "SQLITE_PRAGMA", "SQLITE_READ",
+        "SQLITE_SELECT", "SQLITE_TRANSACTION", "SQLITE_UPDATE", "SQLITE_ATTACH",
+        "SQLITE_DETACH", "SQLITE_ALTER_TABLE", "SQLITE_REINDEX", "SQLITE_ANALYZE",
+        "SQLITE_CREATE_VTABLE", "SQLITE_DROP_VTABLE", "SQLITE_FUNCTION", "SQLITE_SAVEPOINT",
+        "SQLITE_COPY", "SQLITE_RECURSIVE",
+    }
+    present_in_build = {n for n in known_action_code_names if hasattr(sqlite3, n)}
+    security_relevant_present = present_in_build - allowed_action_names
+    covered = set(_DENY_OPCODE_NAMES)
+    missing = security_relevant_present - covered
+    assert not missing, f"opcode matrix is missing constants present in this build: {sorted(missing)}"
+
+
+# ---------------------------------------------------------------------------
+# 20: CTE-wrapped DML execution proof -- a leading `WITH ... AS (...)` must
+# not smuggle an INSERT/UPDATE/DELETE past the authorizer. Execution-level
+# (not callback-level) against a real guarded connection, with an
+# unchanged-row-count check proving no partial mutation happened before the
+# deny fired.
+# ---------------------------------------------------------------------------
+
+def test_cte_wrapped_insert_denied_and_no_partial_mutation(fixture_db):
+    conn = _guarded_conn(fixture_db)
+    try:
+        before = conn.execute("SELECT COUNT(*) FROM dim_fondo").fetchone()[0]
+        with pytest.raises(sqlite3.DatabaseError):
+            conn.execute(
+                "WITH x AS (SELECT 1) INSERT INTO dim_fondo (fondo_key, nombre) "
+                "SELECT 'CTE', 'smuggled' FROM x"
+            )
+        after = conn.execute("SELECT COUNT(*) FROM dim_fondo").fetchone()[0]
+        assert after == before
+    finally:
+        conn.close()
+
+
+def test_cte_wrapped_update_denied_and_no_partial_mutation(fixture_db):
+    conn = _guarded_conn(fixture_db)
+    try:
+        before = conn.execute(
+            "SELECT nombre FROM dim_fondo WHERE fondo_key = 'PT'"
+        ).fetchone()[0]
+        with pytest.raises(sqlite3.DatabaseError):
+            conn.execute(
+                "WITH x AS (SELECT 1) UPDATE dim_fondo SET nombre = 'tampered' "
+                "WHERE fondo_key = 'PT' AND EXISTS (SELECT 1 FROM x)"
+            )
+        after = conn.execute(
+            "SELECT nombre FROM dim_fondo WHERE fondo_key = 'PT'"
+        ).fetchone()[0]
+        assert after == before
+    finally:
+        conn.close()
+
+
+def test_cte_wrapped_delete_denied_and_no_partial_mutation(fixture_db):
+    conn = _guarded_conn(fixture_db)
+    try:
+        before = conn.execute("SELECT COUNT(*) FROM dim_fondo").fetchone()[0]
+        with pytest.raises(sqlite3.DatabaseError):
+            conn.execute(
+                "WITH x AS (SELECT 1) DELETE FROM dim_fondo "
+                "WHERE fondo_key = 'PT' AND EXISTS (SELECT 1 FROM x)"
+            )
+        after = conn.execute("SELECT COUNT(*) FROM dim_fondo").fetchone()[0]
+        assert after == before
+    finally:
+        conn.close()
+
+
 @pytest.mark.skipif(not REAL_DB.exists(), reason="memory/agente_toesca_v2.db not present")
 def test_rent_roll_governed_dataset_end_to_end_against_real_db():
     before = REAL_DB.stat()
