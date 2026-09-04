@@ -56,8 +56,13 @@ def _login(page, base_url: str, username: str) -> None:
     page.goto(f"{base_url}/login")
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
-    page.get_by_role("button", name="Entrar").click()
-    page.wait_for_url(f"{base_url}/analyst")
+    with page.expect_navigation(
+        url=f"{base_url}/analyst",
+        wait_until="domcontentloaded",
+        timeout=10_000,
+    ):
+        page.get_by_role("button", name="Entrar").click(no_wait_after=True)
+    page.locator(".home-state").wait_for(state="visible", timeout=10_000)
 
 
 def test_thumbs_feedback_persists_across_reload_and_report_flow_still_works(monkeypatch, tmp_path):
