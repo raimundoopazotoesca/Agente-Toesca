@@ -63,9 +63,16 @@ def _login(page, base_url: str, username: str) -> None:
     page.goto(f"{base_url}/login")
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
-    page.get_by_role("button", name="Entrar").click()
     # El login exitoso corre la transición Toesca (~1.4s) antes de navegar.
-    page.wait_for_url(f"{base_url}/analyst", timeout=5_000)
+    with page.expect_navigation(
+        url=f"{base_url}/analyst",
+        wait_until="domcontentloaded",
+        timeout=10_000,
+    ):
+        page.get_by_role("button", name="Entrar").click(no_wait_after=True)
+    page.get_by_role(
+        "heading", name=f"Hola, {username.capitalize()}"
+    ).wait_for(state="visible", timeout=10_000)
 
 
 def test_visible_product_name_is_consistent_on_login_and_home(monkeypatch, tmp_path):
