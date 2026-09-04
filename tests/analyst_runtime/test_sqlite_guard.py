@@ -497,25 +497,23 @@ def test_allowed_functions_exact_contract():
 # 19: deny-by-default opcode matrix -- every security-relevant SQLite action
 # code NOT in the frozen allow-set (SQLITE_SELECT, SQLITE_READ,
 # SQLITE_FUNCTION, SQLITE_RECURSIVE) must deny at the authorizer-callback
-# level. Built from `getattr(sqlite3, name, None)` so it only exercises
-# constants this Python build's sqlite3 module actually exposes -- no
-# invented constants.
+# level. The parametrize list itself is built from `getattr(sqlite3, name,
+# None)` filtering, so a constant this Python build's sqlite3 module doesn't
+# expose is never generated as a test case at all (no skip node in the
+# collected suite) -- see `test_deny_opcode_matrix_audit_covers_all_expected_names`
+# below for the always-run, never-skipped audit that a name being absent here
+# is deliberate, not silently dropped.
 # ---------------------------------------------------------------------------
 
-# name -> reason skipped, for constants not present in this Python build's
-# `sqlite3` module. SQLITE_COPY is long-deprecated upstream and was never
-# exposed by CPython's sqlite3 module; documented here rather than invented.
-_OPCODE_SKIP_REASONS = {
-    "SQLITE_COPY": "deprecated SQLite opcode, not exposed by CPython's sqlite3 module",
-}
-
-# Every security-relevant action code that must be denied: DML, DDL
+# The full expected list of security-relevant action names: DML, DDL
 # (including TEMP variants and virtual tables), ATTACH/DETACH, PRAGMA,
-# transaction/savepoint control, ALTER/REINDEX/ANALYZE. Excludes
-# SQLITE_SELECT, SQLITE_READ, SQLITE_FUNCTION, SQLITE_RECURSIVE (the
-# allow-listed action classes, covered by other tests) and SQLITE_COPY
-# (unavailable in this build, see _OPCODE_SKIP_REASONS).
-_DENY_OPCODE_NAMES = [
+# transaction/savepoint control, ALTER/REINDEX/ANALYZE, plus the deprecated
+# SQLITE_COPY. Excludes SQLITE_SELECT, SQLITE_READ, SQLITE_FUNCTION,
+# SQLITE_RECURSIVE (the allow-listed action classes, covered by other
+# tests). This is the single source of truth for "what should be tested if
+# available" -- both the parametrized deny test and the audit test below
+# derive from it, so they cannot drift apart.
+_EXPECTED_DENY_OPCODE_NAMES = [
     # DML
     "SQLITE_INSERT",
     "SQLITE_UPDATE",
@@ -552,16 +550,34 @@ _DENY_OPCODE_NAMES = [
     # Schema maintenance
     "SQLITE_REINDEX",
     "SQLITE_ANALYZE",
-    # Deprecated / possibly-absent
+    # Deprecated -- long removed from CPython's sqlite3 module; kept in the
+    # expected list so its absence is asserted deliberately (see the audit
+    # test) rather than silently omitted.
     "SQLITE_COPY",
 ]
 
+# Filtered at collection time: only names this Python build's sqlite3 module
+# actually exposes become parametrized cases. A name absent from this build
+# (currently just SQLITE_COPY) is never generated as a test case -- no skip
+# node appears anywhere in the collected suite.
+_AVAILABLE_DENY_OPCODES = [
+    (name, getattr(sqlite3, name))
+    for name in _EXPECTED_DENY_OPCODE_NAMES
+    if hasattr(sqlite3, name)
+]
 
-@pytest.mark.parametrize("opcode_name", _DENY_OPCODE_NAMES)
-def test_deny_by_default_opcode_matrix(opcode_name):
-    action = getattr(sqlite3, opcode_name, None)
-    if action is None:
-        pytest.skip(_OPCODE_SKIP_REASONS.get(opcode_name, f"{opcode_name} not exposed by this Python build's sqlite3 module"))
+# Names from the expected list that this build's sqlite3 module does not
+# expose -- documented explicitly (not just implied by set subtraction) so
+# it's visible in the test body which names are deliberately excluded and
+# why. SQLITE_COPY is a long-deprecated SQLite opcode CPython's sqlite3
+# module has never exposed.
+_UNAVAILABLE_DENY_OPCODE_NAMES = {"SQLITE_COPY"}
+
+
+@pytest.mark.parametrize(
+    "opcode_name,action", _AVAILABLE_DENY_OPCODES, ids=[n for n, _ in _AVAILABLE_DENY_OPCODES]
+)
+def test_deny_by_default_opcode_matrix(opcode_name, action):
     authorizer = make_authorizer()
     # arg1/arg2 values are irrelevant here: the implementation only inspects
     # them for SQLITE_READ/SQLITE_FUNCTION, so any action code outside the
@@ -571,33 +587,38 @@ def test_deny_by_default_opcode_matrix(opcode_name):
     assert result == sqlite3.SQLITE_DENY, f"{opcode_name} ({action}) was not denied"
 
 
-def test_deny_opcode_matrix_covers_all_security_relevant_constants_in_this_build():
-    """Belt-and-suspenders: audit `dir(sqlite3)` for every `SQLITE_*` action
-    code this build exposes that is one of the well-known authorizer action
-    codes (values 1-33 per sqlite3.h's action code table) and isn't part of
-    the allow-set -- confirms `_DENY_OPCODE_NAMES` didn't silently miss one
-    that exists in this build."""
-    allowed_action_names = {"SQLITE_SELECT", "SQLITE_READ", "SQLITE_FUNCTION", "SQLITE_RECURSIVE"}
-    # The full set of sqlite3.h authorizer action code names (1-33), per
-    # https://www.sqlite.org/c3ref/c_alter_table.html -- used only to filter
-    # `dir(sqlite3)` down to genuine action codes, not to invent constants.
-    known_action_code_names = {
-        "SQLITE_CREATE_INDEX", "SQLITE_CREATE_TABLE", "SQLITE_CREATE_TEMP_INDEX",
-        "SQLITE_CREATE_TEMP_TABLE", "SQLITE_CREATE_TEMP_TRIGGER", "SQLITE_CREATE_TEMP_VIEW",
-        "SQLITE_CREATE_TRIGGER", "SQLITE_CREATE_VIEW", "SQLITE_DELETE", "SQLITE_DROP_INDEX",
-        "SQLITE_DROP_TABLE", "SQLITE_DROP_TEMP_INDEX", "SQLITE_DROP_TEMP_TABLE",
-        "SQLITE_DROP_TEMP_TRIGGER", "SQLITE_DROP_TEMP_VIEW", "SQLITE_DROP_TRIGGER",
-        "SQLITE_DROP_VIEW", "SQLITE_INSERT", "SQLITE_PRAGMA", "SQLITE_READ",
-        "SQLITE_SELECT", "SQLITE_TRANSACTION", "SQLITE_UPDATE", "SQLITE_ATTACH",
-        "SQLITE_DETACH", "SQLITE_ALTER_TABLE", "SQLITE_REINDEX", "SQLITE_ANALYZE",
-        "SQLITE_CREATE_VTABLE", "SQLITE_DROP_VTABLE", "SQLITE_FUNCTION", "SQLITE_SAVEPOINT",
-        "SQLITE_COPY", "SQLITE_RECURSIVE",
-    }
-    present_in_build = {n for n in known_action_code_names if hasattr(sqlite3, n)}
-    security_relevant_present = present_in_build - allowed_action_names
-    covered = set(_DENY_OPCODE_NAMES)
-    missing = security_relevant_present - covered
-    assert not missing, f"opcode matrix is missing constants present in this build: {sorted(missing)}"
+def test_deny_opcode_matrix_audit_covers_all_expected_names():
+    """Always-collected, always-run audit (no `pytest.skip` anywhere in this
+    test): partitions `_EXPECTED_DENY_OPCODE_NAMES` into available vs.
+    unavailable in this Python build via `getattr`, and asserts:
+
+    1. every AVAILABLE name is actually present in `_AVAILABLE_DENY_OPCODES`
+       (the same list the parametrized deny test above runs against) --
+       proves the two lists cannot silently drift apart, since they are
+       both derived from the same `_EXPECTED_DENY_OPCODE_NAMES` source.
+    2. the unavailable set is exactly `{"SQLITE_COPY"}` in this build --
+       documents, in an assertion (not just a comment), that SQLITE_COPY is
+       the one deliberately-excluded, long-deprecated opcode and nothing
+       else silently fell out.
+    """
+    available_names = {name for name in _EXPECTED_DENY_OPCODE_NAMES if hasattr(sqlite3, name)}
+    unavailable_names = {name for name in _EXPECTED_DENY_OPCODE_NAMES if not hasattr(sqlite3, name)}
+
+    tested_names = {name for name, _ in _AVAILABLE_DENY_OPCODES}
+    missing_from_parametrized_test = available_names - tested_names
+    assert not missing_from_parametrized_test, (
+        "names available in this build but missing from the parametrized "
+        f"deny test: {sorted(missing_from_parametrized_test)}"
+    )
+
+    assert unavailable_names == _UNAVAILABLE_DENY_OPCODE_NAMES, (
+        "unexpected unavailable-constant set in this Python build's sqlite3 "
+        f"module: got {sorted(unavailable_names)}, expected "
+        f"{sorted(_UNAVAILABLE_DENY_OPCODE_NAMES)} (SQLITE_COPY is a "
+        "long-deprecated SQLite opcode never exposed by CPython's sqlite3 "
+        "module -- any other name showing up here means a constant this "
+        "build should have was silently dropped)"
+    )
 
 
 # ---------------------------------------------------------------------------
