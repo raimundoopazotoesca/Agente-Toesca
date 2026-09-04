@@ -171,12 +171,15 @@ def test_logout_clears_selection_before_another_user_logs_in(monkeypatch, tmp_pa
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         page.set_default_timeout(2_000)
-        _login(page, base_url, "raimundo")
+        with page.expect_response("**/api/analyst/product_updates/unseen_count", timeout=10_000):
+            _login(page, base_url, "raimundo")
+        page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
         page.evaluate("localStorage.setItem('toesca_asistente_conversation_id', 'raimundo-chat')")
         page.get_by_role("button", name="Salir").click()
         page.wait_for_url(f"{base_url}/login", timeout=5_000)
 
-        _login(page, base_url, "gregorio")
+        with page.expect_response("**/api/analyst/product_updates/unseen_count", timeout=10_000):
+            _login(page, base_url, "gregorio")
         page.get_by_role("heading", name="Hola, Gregorio").wait_for(state="visible")
         assert page.locator(".home-state").is_visible()
         assert not page.locator("#error-banner.show").is_visible()

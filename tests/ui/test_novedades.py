@@ -74,8 +74,13 @@ def _login(page, base_url: str, username: str) -> None:
     page.goto(f"{base_url}/login", wait_until="domcontentloaded", timeout=10_000)
     page.locator("#username").fill(username)
     page.locator("#password").fill("password")
-    page.get_by_role("button", name="Entrar").click()
-    page.wait_for_url(f"{base_url}/analyst", timeout=10_000)
+    with page.expect_navigation(
+        url=f"{base_url}/analyst",
+        wait_until="domcontentloaded",
+        timeout=10_000,
+    ):
+        page.get_by_role("button", name="Entrar").click(no_wait_after=True)
+    page.get_by_role("heading", name=f"Hola, {username.capitalize()}").wait_for(state="visible")
 
 
 @pytest.mark.parametrize("viewport", [{"width": 1440, "height": 900}, {"width": 1280, "height": 800}])
@@ -120,9 +125,9 @@ def test_update_becomes_seen_after_viewing_and_indicator_clears(monkeypatch, tmp
         )
         assert page.locator("#novedades-unread-dot.show").count() == 0
 
-        page.reload()
+        with page.expect_response("**/api/analyst/product_updates/unseen_count"):
+            page.reload()
         page.get_by_role("button", name="Novedades").wait_for(state="visible")
-        page.wait_for_timeout(300)  # unseen_count re-fetch on the fresh page load
         assert page.locator("#novedades-unread-dot.show").count() == 0
         browser.close()
 
@@ -283,7 +288,12 @@ def test_cta_routes_through_the_normal_chat_composer_path(monkeypatch, tmp_path)
         page.get_by_role("button", name="Novedades").click()
         cta = page.get_by_role("button", name="Volver al chat")
         cta.wait_for(state="visible", timeout=10_000)
-        cta.click()
-        page.wait_for_url(f"{base_url}/analyst", timeout=3_000)
+        with page.expect_navigation(
+            url=f"{base_url}/analyst",
+            wait_until="domcontentloaded",
+            timeout=10_000,
+        ):
+            cta.click(no_wait_after=True)
         page.get_by_role("heading", name="Hola, Raimundo").wait_for(state="visible")
+        assert page.url == f"{base_url}/analyst"
         browser.close()
