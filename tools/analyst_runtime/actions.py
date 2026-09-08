@@ -44,6 +44,13 @@ from tools.analyst_runtime.resolution import resolution_from_entity_payload
 
 MAX_ROWS_RETURNED = 50
 
+# A3.1c: deterministic per-statement SQL resource control. The deadline is
+# armed only after sandbox.connect(guard=True) returns -- connection setup
+# time is never charged against it -- and cleared per statement, never
+# reused across RunSqlAction.execute() calls.
+SQL_TIMEOUT_SECONDS = 3.0
+SQL_PROGRESS_OPCODES = 1000
+
 # Fail-closed semantic contract rejections that are USER-facing: the question,
 # as asked, does not identify a single governed figure. They are relayed to the
 # loop as a `semantic_rejection` control so the turn ends in a clarification
@@ -161,15 +168,38 @@ class RunSqlAction:
         if not re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE):
             sql = f"{sql} LIMIT {MAX_ROWS_RETURNED}"
         conn = self.sandbox.connect(guard=True)
+        timed_out = False
+        handler_installed = False
         try:
+            deadline = time.monotonic() + SQL_TIMEOUT_SECONDS
+
+            def _progress() -> int:
+                nonlocal timed_out
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    return 1
+                return 0
+
+            conn.set_progress_handler(_progress, SQL_PROGRESS_OPCODES)
+            handler_installed = True
+
             cur = conn.execute(sql)
             cols = [d[0] for d in cur.description or []]
             rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED)]
             return ToolResult(call_id=request.call_id, ok=True, content=format_query_result(cols, rows), trace=_sql_trace(query, row_count=len(rows)))
+        except sqlite3.OperationalError as exc:
+            if timed_out:
+                message = f"SQL statement exceeded {SQL_TIMEOUT_SECONDS:g}s timeout"
+                return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error_type": "sql_timeout", "error": message}, ensure_ascii=False), trace=_sql_trace(query, error=message, error_type="sql_timeout"))
+            return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": str(exc)}, ensure_ascii=False), trace=_sql_trace(query, error=str(exc)))
         except Exception as exc:  # noqa: BLE001 -- surfaced to the model as a tool error, not raised
             return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": str(exc)}, ensure_ascii=False), trace=_sql_trace(query, error=str(exc)))
         finally:
-            conn.close()
+            try:
+                if handler_installed:
+                    conn.set_progress_handler(None, 0)
+            finally:
+                conn.close()
 
 
 @dataclass
@@ -315,12 +345,12 @@ def _optional_positive_int(arguments: dict[str, object], name: str) -> int | Non
     return value
 
 
-def _sql_trace(query: object, row_count: int | None = None, error: str | None = None) -> dict[str, object]:
+def _sql_trace(query: object, row_count: int | None = None, error: str | None = None, error_type: str = "sql_error") -> dict[str, object]:
     trace: dict[str, object] = {"arguments": {"query": query}}
     if error is None:
         trace["result"] = {"row_count": row_count}
     else:
-        trace["error"] = {"error_type": "sql_error", "message": error}
+        trace["error"] = {"error_type": error_type, "message": error}
     return trace
 
 
