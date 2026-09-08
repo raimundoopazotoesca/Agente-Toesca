@@ -160,7 +160,9 @@ def test_validate_sql_allows_select_with_and_one_trailing_semicolon(sql):
         "SELECT ';'",
         "SELECT \"quoted;identifier\" FROM dim_fondo",
         "SELECT 1 /* ; */",
+        "SELECT 1 -- ;",
         "SELECT 1 -- ;\nFROM dim_fondo",
+        "SELECT 1 -- comment ;",
     ],
 )
 def test_validate_sql_rejects_invalid_first_tokens_and_any_nontrailing_semicolon(sql):
