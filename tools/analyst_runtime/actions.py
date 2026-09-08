@@ -79,6 +79,53 @@ class SqlSandbox(Protocol):
     def connect(self, guard: bool = True) -> sqlite3.Connection: ...
 
 
+def _trailing_semicolon_is_comment_or_quoted_text(query: str) -> bool:
+    """Whether the final semicolon is inside comment or quoted text.
+
+    This is deliberately limited lexical state, not SQL parsing: it only
+    distinguishes a statement terminator from a semicolon in SQL text.
+    """
+    state = "normal"
+    index = 0
+    text = query[:-1]
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if state == "line_comment":
+            if char in "\r\n":
+                state = "normal"
+        elif state == "block_comment":
+            if char == "*" and next_char == "/":
+                state = "normal"
+                index += 1
+        elif state in {"single_quote", "double_quote", "backtick_quote"}:
+            quote = {"single_quote": "'", "double_quote": '\"', "backtick_quote": "`"}[state]
+            if char == quote:
+                if next_char == quote:
+                    index += 1
+                else:
+                    state = "normal"
+        elif state == "bracket_quote":
+            if char == "]":
+                state = "normal"
+        elif char == "-" and next_char == "-":
+            state = "line_comment"
+            index += 1
+        elif char == "/" and next_char == "*":
+            state = "block_comment"
+            index += 1
+        elif char == "'":
+            state = "single_quote"
+        elif char == '\"':
+            state = "double_quote"
+        elif char == "`":
+            state = "backtick_quote"
+        elif char == "[":
+            state = "bracket_quote"
+        index += 1
+    return state != "normal"
+
+
 def validate_sql(sql: str) -> str | None:
     """Return a structural error, or ``None`` for a single SELECT/WITH shape.
 
@@ -88,7 +135,7 @@ def validate_sql(sql: str) -> str | None:
     query = (sql or "").rstrip()
     if not query:
         return "Query vacia."
-    if query.endswith(";"):
+    if query.endswith(";") and not _trailing_semicolon_is_comment_or_quoted_text(query):
         query = query[:-1].rstrip()
     if not query:
         return "Query vacia."
