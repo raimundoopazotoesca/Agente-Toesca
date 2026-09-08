@@ -124,26 +124,58 @@ class _SlowConnectSandbox:
 # validate_sql
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("sql", ["SELECT 1", "select * from dim_fondo", "WITH x AS (SELECT 1) SELECT * FROM x"])
-def test_validate_sql_allows_select_and_with(sql):
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 1",
+        "  sElEcT 1",
+        "\n\tWITH x AS (SELECT 1) SELECT * FROM x",
+        "with x AS (SELECT 1) SELECT * FROM x",
+        "SELECT 1; \t",
+        "SELECT 1 -- ordinary comment",
+    ],
+)
+def test_validate_sql_allows_select_with_and_one_trailing_semicolon(sql):
     assert validate_sql(sql) is None
 
 
 @pytest.mark.parametrize(
     "sql",
     [
+        "",
+        " \n\t ",
+        ";",
         "INSERT INTO dim_fondo VALUES ('X','Y')",
         "UPDATE dim_fondo SET nombre='x'",
         "DELETE FROM dim_fondo",
         "CREATE TABLE x (a int)",
         "DROP TABLE dim_fondo",
+        "ALTER TABLE dim_fondo RENAME TO fondo",
         "PRAGMA table_info(dim_fondo)",
+        "EXPLAIN SELECT 1",
+        "VACUUM",
         "ATTACH DATABASE 'x.db' AS x",
         "SELECT 1; SELECT 2",
+        "SELECT 1;;",
+        "SELECT ';'",
+        "SELECT \"quoted;identifier\" FROM dim_fondo",
+        "SELECT 1 /* ; */",
+        "SELECT 1 -- ;\nFROM dim_fondo",
     ],
 )
-def test_validate_sql_rejects_writes_and_multi_statement(sql):
+def test_validate_sql_rejects_invalid_first_tokens_and_any_nontrailing_semicolon(sql):
     assert validate_sql(sql) is not None
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 'INSERT UPDATE DELETE CREATE DROP ALTER PRAGMA EXPLAIN VACUUM' AS note",
+        "WITH update_label AS (SELECT 'DELETE') SELECT * FROM update_label",
+    ],
+)
+def test_validate_sql_does_not_inspect_keywords_after_first_token(sql):
+    assert validate_sql(sql) is None
 
 
 # ---------------------------------------------------------------------------
@@ -243,6 +275,17 @@ def test_run_sql_action_rejects_write_same_error_shape(fixture_db):
     result = action.execute(ToolRequest(call_id="1", name="run_sql", arguments={"query": "DELETE FROM dim_fondo"}))
     assert result.ok is False
     assert "error" in result.content
+
+
+def test_run_sql_action_leaves_with_delete_authorization_to_sqlite(fixture_db):
+    query = "WITH x AS (SELECT 1) DELETE FROM dim_fondo"
+    assert validate_sql(query) is None
+
+    action = RunSqlAction(sandbox=LiveReadOnlySandbox(fixture_db))
+    result = action.execute(ToolRequest(call_id="1", name="run_sql", arguments={"query": query}))
+
+    assert result.ok is False
+    assert result.trace["error"]["error_type"] == "sql_error"
 
 
 # ---------------------------------------------------------------------------

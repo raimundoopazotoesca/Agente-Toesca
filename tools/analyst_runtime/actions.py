@@ -68,12 +68,6 @@ _GOVERNED_AUTHORITY_NOTE = (
     "con SQL crudo o de buscarlas en el esquema."
 )
 
-_FORBIDDEN_RE = re.compile(
-    r"\b(insert|update|delete|drop|alter|create|attach|detach|pragma|vacuum|replace)\b",
-    re.IGNORECASE,
-)
-
-
 class SqlSandbox(Protocol):
     """Anything that can hand out a guarded, read-only sqlite3 connection.
 
@@ -86,20 +80,23 @@ class SqlSandbox(Protocol):
 
 
 def validate_sql(sql: str) -> str | None:
-    """None if safe to attempt; an error string otherwise. Byte-for-byte the
-    same check Stage 1/2 used (moved here, not rewritten) -- this is a cheap
-    pre-filter for a better error message back to the model; the sandbox's
-    own authorizer is the actual enforcement layer regardless."""
-    s = (sql or "").strip().rstrip(";").strip()
-    if not s:
+    """Return a structural error, or ``None`` for a single SELECT/WITH shape.
+
+    This deliberately does not parse CTEs or inspect SQL after the first
+    token. SQLite's authorizer remains responsible for execution policy.
+    """
+    query = (sql or "").rstrip()
+    if not query:
         return "Query vacia."
-    if ";" in s:
+    if query.endswith(";"):
+        query = query[:-1].rstrip()
+    if not query:
+        return "Query vacia."
+    if ";" in query:
         return "Solo se permite una sentencia SQL."
-    head = s.split(None, 1)[0].lower()
+    head = query.split(None, 1)[0].lower()
     if head not in {"select", "with"}:
         return "Solo se permiten sentencias SELECT o WITH."
-    if _FORBIDDEN_RE.search(s):
-        return "La consulta contiene una operacion no permitida (solo lectura)."
     return None
 
 
