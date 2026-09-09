@@ -335,6 +335,7 @@ class OpenAIResponsesAnalystSession:
         )
         canonical = [item for item in evidence if item.evidence_class == "canonical_metric" and len(item.facts) == 1]
         governed = [item for item in evidence if item.evidence_class == "governed_dataset"]
+        supporting = [item for item in evidence if item.evidence_class == "controlled_sql"]
         validation = None
         no_evidence = None
         if investigation.termination_reason in {"clarification_required", "semantic_rejection"}:
@@ -379,7 +380,7 @@ class OpenAIResponsesAnalystSession:
                 envelope = _materialize_canonical_claims_from_governed_evidence(envelope, governed)
                 result.turn.raw["structured_output"] = envelope
                 validation = validate_and_render(envelope, canonical, governed, self._db_path,
-                                                 requested_unit)
+                                                 requested_unit, supporting_evidence=supporting)
                 result.turn.text = validation.content
                 result.turn.raw.update(validation.trace)
         else:
