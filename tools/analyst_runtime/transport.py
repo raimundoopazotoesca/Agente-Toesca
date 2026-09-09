@@ -171,7 +171,8 @@ class ToolEvidence:
               provenance: dict[str, Any], facts: tuple[dict[str, Any], ...],
               coverage: dict[str, Any] | None = None, metric_id: str | None = None,
               dataset_id: str | None = None, requested_temporal: dict[str, Any] | None = None,
-              granularity: str = "month", limitations: tuple[str, ...] = ()) -> "ToolEvidence":
+              granularity: str = "month", limitations: tuple[str, ...] = (),
+              row_limit: int | None = None) -> "ToolEvidence":
         """Construct evidence from what today's producers already compute,
         deriving ``temporal``/``units``/``result`` from ``facts`` rather than
         requiring each producer to author them by hand.
@@ -180,6 +181,11 @@ class ToolEvidence:
         real catalog-backed identity (metric catalog key, dataset-catalog
         key, account-concept id) -- never a raw table name. Leave them
         ``None`` when no such identity exists today.
+
+        ``row_limit`` bounds only the model-visible ``result.rows`` projection
+        derived here -- ``facts`` (the citeable, guard-visible authority) is
+        never truncated by it. ``None`` (the default) keeps every fact
+        visible, matching every producer's behavior before A3.2b.
         """
         return cls(
             evidence_id=evidence_id, evidence_class=evidence_class,
@@ -187,7 +193,7 @@ class ToolEvidence:
             authority=Authority(kind=evidence_class, source_system=source_kind,
                                  metric_id=metric_id, dataset_id=dataset_id),
             scope=scope, temporal=_derive_temporal(facts, requested_temporal, granularity),
-            units=_derive_units(facts), result=_derive_result(facts),
+            units=_derive_units(facts), result=_derive_result(facts, row_limit),
             facts=facts, provenance=provenance, limitations=limitations,
             coverage=coverage, semantic_contract=semantic_contract,
         )
@@ -208,14 +214,23 @@ def _derive_units(facts: tuple[dict[str, Any], ...]) -> Units:
     return Units(unit=next(iter(units))) if len(units) == 1 else Units()
 
 
-def _derive_result(facts: tuple[dict[str, Any], ...]) -> ResultEnvelope:
+def _derive_result(facts: tuple[dict[str, Any], ...], row_limit: int | None = None) -> ResultEnvelope:
     if not facts:
         return ResultEnvelope(kind="empty", columns=(), rows=(), total_rows=0, returned_rows=0)
     columns = tuple(sorted({key for fact in facts for key in fact}))
-    rows = tuple(dict(fact) for fact in facts)
-    kind = "scalar" if len(facts) == 1 else "table"
-    return ResultEnvelope(kind=kind, columns=columns, rows=rows, total_rows=len(facts),
-                           returned_rows=len(facts), truncated=False, has_more=False)
+    total = len(facts)
+    # facts (the citeable authority) is never sliced -- only the
+    # model-visible rows are. total_rows is legitimately known here (it is
+    # literally len(facts)), so it is reported even when the projection is
+    # bounded -- this is not the "never invent total_rows" case, which is
+    # about controlled_sql never having run a COUNT(*).
+    bounded = row_limit is not None and total > row_limit
+    visible = facts[:row_limit] if bounded else facts
+    rows = tuple(dict(fact) for fact in visible)
+    kind = "scalar" if total == 1 else "table"
+    return ResultEnvelope(kind=kind, columns=columns, rows=rows, total_rows=total,
+                           returned_rows=len(rows), truncated=bounded, has_more=bounded,
+                           omission_reason=(f"row_limit: showing {len(rows)} of {total} facts" if bounded else None))
 
 
 _JSON_SCALAR_TYPES = (str, int, float, bool, type(None))
