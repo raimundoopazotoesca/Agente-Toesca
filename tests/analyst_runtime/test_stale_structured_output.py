@@ -12,7 +12,8 @@ from tools.analyst_runtime.session import (
     OpenAIResponsesAnalystSession, _TerminalEvidenceValidator,
     _materialize_canonical_claims_from_governed_evidence, _materialize_governed_dataset_claims,
 )
-from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest, ToolResult
+from tests.analyst_runtime._evidence_factory import mk_evidence
+from tools.analyst_runtime.transport import ModelResponse, ToolRequest, ToolResult
 
 
 FINANCIAL_FACT = {
@@ -25,8 +26,8 @@ TENANT_FACTS = (
     {"metric_key": "gla", "value": 900.0, "unit": "m2", "entity_id": "Tenant B", "period": "2026-06",
      "space_type": None, "space_types": None, "measurement_unit": None},
 )
-FINANCIAL = ToolEvidence("financial", "canonical_metric", facts=(FINANCIAL_FACT,))
-TENANTS = ToolEvidence(
+FINANCIAL = mk_evidence("financial", "canonical_metric", facts=(FINANCIAL_FACT,))
+TENANTS = mk_evidence(
     "tenants", "governed_dataset", coverage={"status": "complete", "observed_count": 2, "eligible_count": 2,
                                                  "universe_kind": "asset_tenants"}, facts=TENANT_FACTS,
 )
@@ -108,7 +109,7 @@ def test_current_request_fails_closed_for_invalid_ambiguous_or_new_factual_reuse
 
 
 def test_dataset_claim_identity_is_materialized_from_evidence_not_provider_fields():
-    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "complete", "universe_kind": "grouped", "universe_id": "u"}, facts=(
+    evidence = mk_evidence("d", "governed_dataset", coverage={"status": "complete", "universe_kind": "grouped", "universe_id": "u"}, facts=(
         {"metric_key": "gla_m2", "value": 2.0, "unit": "m2", "entity_id": "Tenant A", "period": None},
         {"metric_key": "gla_m2", "value": 1.0, "unit": "m2", "entity_id": "Tenant B", "period": None},
     ))
@@ -129,7 +130,7 @@ def test_canonical_claim_citing_a_governed_dataset_row_is_materialized_from_the_
     value/unit are then taken FROM it, exactly like
     _materialize_governed_dataset_claims already does for
     governed_dataset_claims."""
-    evidence = ToolEvidence("d", "governed_dataset", facts=(
+    evidence = mk_evidence("d", "governed_dataset", facts=(
         {"metric_key": "gla_m2", "value": 766.3, "unit": "m2", "entity_id": "Notaría", "period": None},
         {"metric_key": "gla_m2", "value": 473.3, "unit": "m2", "entity_id": "Tucapel", "period": None},
     ))
@@ -149,7 +150,7 @@ def test_canonical_claim_citing_an_unknown_entity_is_left_untouched_and_still_fa
     the claim is left as-is (not materialized), so coverage_guard's own
     binding still rejects it exactly as before -- this never manufactures a
     fact that doesn't exist."""
-    evidence = ToolEvidence("d", "governed_dataset", facts=(
+    evidence = mk_evidence("d", "governed_dataset", facts=(
         {"metric_key": "gla_m2", "value": 766.3, "unit": "m2", "entity_id": "Notaría", "period": None},
     ))
     envelope = {"canonical_metric_claims": [
@@ -192,7 +193,7 @@ def _session(*turns):
 
 def test_invalid_structured_dataset_envelope_falls_back_to_current_dataset_facts():
     """A broken rewrite may not discard fresh dataset evidence for old prose."""
-    tenants = ToolEvidence(
+    tenants = mk_evidence(
         "turn-2-tenants", "governed_dataset",
         coverage={"status": "complete", "observed_count": 2, "eligible_count": 2,
                   "universe_kind": "asset_tenants"},

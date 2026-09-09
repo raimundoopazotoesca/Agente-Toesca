@@ -49,7 +49,7 @@ def _render_item(item: ToolEvidence) -> str:
     parts = [
         f"evidence_id={item.evidence_id}",
         f"clase={item.evidence_class}",
-        f"herramienta={item.source.get('tool_name', '?')}",
+        f"herramienta={item.producer.tool_name}",
         f"metrica={item.semantic_contract.get('metric_key') or _facts_metric(item) or 'ninguna'}",
         f"alcance={_render_scope(item.scope)}",
         f"periodos={_render_ids(_unique(item.facts, 'period'))}",

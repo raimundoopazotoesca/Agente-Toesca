@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.actions import ActionRegistry
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.session import OpenAIResponsesAnalystSession
-from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest, ToolResult, ToolSpec
+from tools.analyst_runtime.transport import ModelResponse, ToolRequest, ToolResult, ToolSpec
 
 DB = Path("memory/agente_toesca_v2.db")
 
@@ -46,7 +47,7 @@ class _FakeTaxQueryAction:
 
     def execute(self, request: ToolRequest) -> ToolResult:
         return ToolResult(request.call_id, True, "{}", trace={"tool_name": self.name},
-                          evidence=ToolEvidence(request.call_id, "canonical_metric", facts=(_FACT,)))
+                          evidence=mk_evidence(request.call_id, "canonical_metric", facts=(_FACT,)))
 
 
 def _turn_responses(call_id: str, claim_id: str) -> list[ModelResponse]:

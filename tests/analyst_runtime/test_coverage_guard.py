@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.coverage_guard import validate_and_render
-from tools.analyst_runtime.transport import ToolEvidence
 
 
-CANONICAL_EVIDENCE = ToolEvidence(
+CANONICAL_EVIDENCE = mk_evidence(
     "e1", "canonical_metric",
     facts=({"metric_key": "vacancia", "value": 5.945, "unit": "%", "entity_id": "A", "period": "2026-06"},),
 )
@@ -29,7 +29,7 @@ def catalog_db(tmp_path: Path) -> Path:
 
 
 def _governed_evidence(facts, coverage, scope=None):
-    return ToolEvidence(
+    return mk_evidence(
         "g1", "governed_dataset", scope=scope or {"fund": "PT"},
         semantic_contract={"metric_key": "m2_vacantes"}, coverage=coverage, facts=facts,
     )
@@ -201,9 +201,9 @@ def test_free_text_superlative_between_two_components_fails_closed(catalog_db):
 
 
 def test_superlative_backed_by_a_comparison_claim_is_permitted():
-    canonical_a = ToolEvidence("ea", "canonical_metric",
+    canonical_a = mk_evidence("ea", "canonical_metric",
         facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},))
-    canonical_b = ToolEvidence("eb", "canonical_metric",
+    canonical_b = mk_evidence("eb", "canonical_metric",
         facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},))
     envelope = {
         "fragments": [
@@ -226,9 +226,9 @@ def test_superlative_backed_by_a_comparison_claim_is_permitted():
 def test_comparison_operation_direction_is_computed_from_real_values_not_claim_order():
     # lhs (Apo4700, 22.91) > rhs (Apo4501, 7.84): must render "mayor", never
     # "menor" regardless of which claim the model happened to list first.
-    canonical_a = ToolEvidence("ea", "canonical_metric",
+    canonical_a = mk_evidence("ea", "canonical_metric",
         facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 7.84, "unit": "%", "entity_id": "Apo4501", "period": "2026-06"},))
-    canonical_b = ToolEvidence("eb", "canonical_metric",
+    canonical_b = mk_evidence("eb", "canonical_metric",
         facts=({"metric_key": "vacancia_fisica_pct_activo", "value": 22.91, "unit": "%", "entity_id": "Apo4700", "period": "2026-06"},))
     envelope = {
         "fragments": [{"type": "canonical_metric_ref", "claim_id": "cb"}, {"type": "derived_metric_ref", "claim_id": "d1"}, {"type": "canonical_metric_ref", "claim_id": "ca"}],
@@ -329,7 +329,7 @@ def test_governed_claim_with_confirmed_empty_coverage_renders_a_deterministic_no
     be a list, and the model's only honest way to cite "confirmed empty" is
     entity_ids=[] -- that must not be rejected as invalid_claim when the
     referenced evidence's own coverage.status is "none"."""
-    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "none", "eligible_count": 0, "observed_count": 0}, facts=())
+    evidence = mk_evidence("d", "governed_dataset", coverage={"status": "none", "eligible_count": 0, "observed_count": 0}, facts=())
     envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
                 "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "d", "metric_key": None,
                                               "entity_ids": [], "period": None, "universe_kind": None}]}
@@ -342,7 +342,7 @@ def test_governed_claim_with_empty_entity_ids_still_fails_when_coverage_is_not_c
     """An empty entity_ids claim must still fail closed when the evidence's
     own coverage does NOT confirm zero rows -- the model may not assert
     "nothing found" against evidence that never established that."""
-    evidence = ToolEvidence("d", "governed_dataset", coverage={"status": "complete", "eligible_count": 2, "observed_count": 2},
+    evidence = mk_evidence("d", "governed_dataset", coverage={"status": "complete", "eligible_count": 2, "observed_count": 2},
                              facts=({"metric_key": "gla_m2", "value": 1.0, "unit": "m2", "entity_id": "Torre A", "period": None},))
     envelope = {"fragments": [{"type": "governed_dataset_ref", "claim_id": "g"}], "canonical_metric_claims": [],
                 "governed_dataset_claims": [{"claim_id": "g", "evidence_id": "d", "metric_key": None,
@@ -367,7 +367,7 @@ def test_canonical_conflict_fallback_uses_catalog_display_name_and_human_unit():
     metric_key/unit code (e.g. 'vacancia_pct_fondo' / 'pct_0_100') must never
     reach the user even on the fail-closed path; the catalog's display_name
     and a human unit label must be used instead."""
-    real_metric_evidence = ToolEvidence(
+    real_metric_evidence = mk_evidence(
         "e1", "canonical_metric",
         facts=({"metric_key": "vacancia_pct_fondo", "value": 5.945, "unit": "pct_0_100",
                 "entity_id": "TRI", "period": "2026-06"},),

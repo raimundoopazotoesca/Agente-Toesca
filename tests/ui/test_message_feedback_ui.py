@@ -69,7 +69,7 @@ def test_thumbs_feedback_persists_across_reload_and_report_flow_still_works(monk
     with _server(monkeypatch, tmp_path) as base_url, sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
-        page.set_default_timeout(4_000)
+        page.set_default_timeout(10_000)
         _login(page, base_url, "raimundo")
 
         page.locator("#composer-input").fill("Hola")

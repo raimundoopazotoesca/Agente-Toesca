@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.coverage_guard import validate_and_render
-from tools.analyst_runtime.transport import ToolEvidence
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def _fact(metric_key, value, unit, entity_id, period):
 
 
 def _canonical_evidence(evidence_id, fact):
-    return ToolEvidence(evidence_id, "canonical_metric", facts=(fact,))
+    return mk_evidence(evidence_id, "canonical_metric", facts=(fact,))
 
 
 def _claim(claim_id, evidence_id, fact):
@@ -208,8 +208,8 @@ def test_table_uses_the_same_global_uf_policy_as_prose(catalog_db):
                "presentation_conversion": {"from_unit": "CLP", "to_unit": "UF", "temporal_basis": "point_in_time",
                                            "reference_value": 35000.0, "source": "raw_uf_diaria", "reference_date": "2025-01-31"}},
     }
-    evidence = [ToolEvidence("e1", "canonical_metric", facts=(facts["c1"],)),
-                ToolEvidence("e2", "canonical_metric", facts=(facts["c2"],))]
+    evidence = [mk_evidence("e1", "canonical_metric", facts=(facts["c1"],)),
+                mk_evidence("e2", "canonical_metric", facts=(facts["c2"],))]
     envelope = {"fragments": [], "canonical_metric_claims": [_claim("c1", "e1", facts["c1"]), _claim("c2", "e2", facts["c2"])],
                 "governed_dataset_claims": [], "derived_metric_claims": [],
                 "table_claims": [{"claim_id": "t1", "cell_claim_ids": ["c1", "c2"], "order_by": None}]}

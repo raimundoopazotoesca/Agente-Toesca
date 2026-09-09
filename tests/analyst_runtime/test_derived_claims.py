@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import pytest
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.coverage_guard import validate_and_render
 from tools.analyst_runtime.derived_claims import DerivedClaimError, compute_derived_claim
-from tools.analyst_runtime.transport import ToolEvidence
 
-NOI_PT_2025 = ToolEvidence("e2025", "canonical_metric",
+NOI_PT_2025 = mk_evidence("e2025", "canonical_metric",
     facts=({"metric_key": "noi_anual", "value": 172868.0, "unit": "UF", "entity_id": "PT", "period": "2025"},))
-NOI_PT_2024 = ToolEvidence("e2024", "canonical_metric",
+NOI_PT_2024 = mk_evidence("e2024", "canonical_metric",
     facts=({"metric_key": "noi_anual", "value": 164612.0, "unit": "UF", "entity_id": "PT", "period": "2024"},))
-NOI_TRI_2025 = ToolEvidence("e_tri", "canonical_metric",
+NOI_TRI_2025 = mk_evidence("e_tri", "canonical_metric",
     facts=({"metric_key": "noi_anual", "value": 315312.0, "unit": "UF", "entity_id": "TRI", "period": "2025"},))
-LTV_PT = ToolEvidence("e_ltv_pt", "canonical_metric",
+LTV_PT = mk_evidence("e_ltv_pt", "canonical_metric",
     facts=({"metric_key": "ltv", "value": 81.22, "unit": "pct_0_100", "entity_id": "PT", "period": "2025"},))
-LTV_TRI = ToolEvidence("e_ltv_tri", "canonical_metric",
+LTV_TRI = mk_evidence("e_ltv_tri", "canonical_metric",
     facts=({"metric_key": "ltv", "value": 61.02, "unit": "pct_0_100", "entity_id": "TRI", "period": "2025"},))
 
 CANONICAL_2Y = [NOI_PT_2025, NOI_PT_2024]
@@ -125,8 +125,8 @@ def test_derived_claim_referencing_unbound_operand_fails_closed():
 
 
 def test_derived_claim_operand_unit_mismatch_fails_closed():
-    lhs = ToolEvidence("e_a", "canonical_metric", facts=({"metric_key": "noi_anual", "value": 100.0, "unit": "UF", "entity_id": "PT", "period": "2025"},))
-    rhs = ToolEvidence("e_b", "canonical_metric", facts=({"metric_key": "gastos", "value": 50.0, "unit": "clp", "entity_id": "PT", "period": "2025"},))
+    lhs = mk_evidence("e_a", "canonical_metric", facts=({"metric_key": "noi_anual", "value": 100.0, "unit": "UF", "entity_id": "PT", "period": "2025"},))
+    rhs = mk_evidence("e_b", "canonical_metric", facts=({"metric_key": "gastos", "value": 50.0, "unit": "clp", "entity_id": "PT", "period": "2025"},))
     with pytest.raises(DerivedClaimError):
         compute_derived_claim("d1", "difference", lhs.facts[0], rhs.facts[0], "a", "b")
 
