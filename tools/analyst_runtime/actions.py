@@ -239,9 +239,16 @@ class RunSqlAction:
 
             cur = conn.execute(sql)
             cols = [d[0] for d in cur.description or []]
-            fetch_cap = MAX_ROWS_RETURNED if has_explicit_limit else MAX_ROWS_RETURNED + 1
-            raw_rows = [list(r) for r in cur.fetchmany(fetch_cap)]
-            bounded = not has_explicit_limit and len(raw_rows) > MAX_ROWS_RETURNED
+            # Always probe one row past the cap -- including when the caller
+            # wrote their own LIMIT. Their LIMIT is never rewritten (SQLite
+            # itself won't hand back more rows than it asked for), so this is
+            # purely a detection read: a caller's LIMIT <= MAX_ROWS_RETURNED
+            # (e.g. LIMIT 50) can never fill the +1 slot and so is correctly
+            # never flagged truncated; a caller's LIMIT above it (e.g. LIMIT
+            # 100) is correctly flagged truncated/has_more whenever at least
+            # MAX_ROWS_RETURNED + 1 real rows exist.
+            raw_rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED + 1)]
+            bounded = len(raw_rows) > MAX_ROWS_RETURNED
             rows = raw_rows[:MAX_ROWS_RETURNED] if bounded else raw_rows
             evidence = ToolEvidence(
                 evidence_id=request.call_id, evidence_class="controlled_sql",

@@ -316,6 +316,68 @@ def test_run_sql_under_the_cap_is_never_flagged_truncated(wide_db):
     assert evidence.result.has_more is False
 
 
+def test_run_sql_explicit_limit_exactly_at_the_cap_is_never_flagged_truncated(wide_db):
+    """A caller's own LIMIT 50 (== MAX_ROWS_RETURNED) can never fill the
+    probe's +1 slot -- SQLite itself never hands back a 51st row when asked
+    for exactly 50 -- so this must read the same as an ordinary bounded
+    result, never as truncated."""
+    action = RunSqlAction(sandbox=LiveReadOnlySandbox(wide_db))
+    result = action.execute(ToolRequest("1", "run_sql", {"query": "SELECT fondo_key FROM dim_fondo ORDER BY fondo_key LIMIT 50"}))
+
+    evidence = result.evidence
+    assert evidence.result.returned_rows == MAX_ROWS_RETURNED
+    assert len(evidence.result.rows) == MAX_ROWS_RETURNED
+    assert evidence.result.truncated is False
+    assert evidence.result.has_more is False
+    assert evidence.result.total_rows is None
+    payload = json.loads(result.content)
+    assert len(payload["rows"]) == MAX_ROWS_RETURNED
+    assert payload["truncated"] is False
+
+
+def test_run_sql_explicit_limit_above_the_cap_is_flagged_truncated_when_more_rows_exist(wide_db):
+    """A caller's own LIMIT 100 against a real 65-row table: SQLite would
+    happily hand back all 65, so the MAX_ROWS_RETURNED + 1 probe read finds
+    a 51st row and correctly flags truncated/has_more -- proving the system
+    bound applies regardless of what LIMIT the caller wrote, without ever
+    rewriting their SQL."""
+    action = RunSqlAction(sandbox=LiveReadOnlySandbox(wide_db))
+    result = action.execute(ToolRequest("1", "run_sql", {"query": "SELECT fondo_key FROM dim_fondo ORDER BY fondo_key LIMIT 100"}))
+
+    evidence = result.evidence
+    assert evidence.result.returned_rows == MAX_ROWS_RETURNED
+    assert len(evidence.result.rows) == MAX_ROWS_RETURNED
+    assert evidence.result.truncated is True
+    assert evidence.result.has_more is True
+    assert evidence.result.total_rows is None  # never invented -- no COUNT(*) was run
+    assert evidence.result.omission_reason is not None
+    # content stays bounded/unflagged exactly as before -- only evidence changes.
+    payload = json.loads(result.content)
+    assert len(payload["rows"]) == MAX_ROWS_RETURNED
+    assert payload["truncated"] is False
+
+
+def test_run_sql_explicit_limit_above_the_cap_but_under_actual_rows_is_not_truncated(wide_db):
+    """LIMIT 100 against a table with only 40 real rows: the caller's LIMIT
+    exceeds MAX_ROWS_RETURNED, but there is genuinely nothing beyond what
+    was returned -- must not be flagged truncated."""
+    path = wide_db.parent / "narrow.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE dim_fondo (fondo_key TEXT PRIMARY KEY, nombre TEXT)")
+    conn.executemany("INSERT INTO dim_fondo (fondo_key, nombre) VALUES (?, ?)",
+                      [(f"F{i:03d}", f"Fondo {i}") for i in range(40)])
+    conn.commit()
+    conn.close()
+
+    action = RunSqlAction(sandbox=LiveReadOnlySandbox(path))
+    result = action.execute(ToolRequest("1", "run_sql", {"query": "SELECT fondo_key FROM dim_fondo ORDER BY fondo_key LIMIT 100"}))
+
+    evidence = result.evidence
+    assert evidence.result.returned_rows == 40
+    assert evidence.result.truncated is False
+    assert evidence.result.has_more is False
+
+
 def test_run_sql_empty_result_is_still_valid_evidence(wide_db):
     action = RunSqlAction(sandbox=LiveReadOnlySandbox(wide_db))
     result = action.execute(ToolRequest("1", "run_sql", {"query": "SELECT fondo_key FROM dim_fondo WHERE fondo_key = 'ZZZ'"}))
