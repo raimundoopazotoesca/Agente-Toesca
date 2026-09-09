@@ -15,6 +15,7 @@ hooks/middleware, no action categories/confidence/priorities.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -23,7 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Protocol
 
-from tools.analyst_runtime.transport import ToolEvidence, ToolRequest, ToolResult, ToolSpec
+from tools.analyst_runtime.transport import (Authority, Producer, ResultEnvelope, Temporal, ToolEvidence,
+                                              ToolRequest, ToolResult, ToolSpec, Units)
 from tools.analytics.executor import AnalyticsExecutor, AnalyticsQueryRequest, SemanticQueryError
 from tools.datasets.executor import (DatasetFilter, DatasetMeasure, DatasetQueryError,
                                      GovernedDatasetExecutor, GovernedDatasetQuery)
@@ -209,8 +211,16 @@ class RunSqlAction:
         if error:
             return ToolResult(call_id=request.call_id, ok=False, content=json.dumps({"error": error}, ensure_ascii=False), trace=_sql_trace(query, error=error))
         sql = query.strip().rstrip(";")
-        if not re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE):
-            sql = f"{sql} LIMIT {MAX_ROWS_RETURNED}"
+        # sql_fingerprint identifies the validated, executed statement -- taken
+        # before the implicit LIMIT below, which is a resource-control
+        # artifact of this action, not part of the caller's query.
+        sql_fingerprint = f"sha256:{hashlib.sha256(sql.encode()).hexdigest()}"
+        has_explicit_limit = bool(re.search(r"\blimit\b\s+\d+", sql, re.IGNORECASE))
+        if not has_explicit_limit:
+            # Fetch one row past the cap so a real row beyond it -- not a
+            # guess -- is what marks the evidence truncated/has_more. Never
+            # exposed past MAX_ROWS_RETURNED in content or evidence.rows.
+            sql = f"{sql} LIMIT {MAX_ROWS_RETURNED + 1}"
         conn = self.sandbox.connect(guard=True)
         timed_out = False
         handler_installed = False
@@ -229,8 +239,24 @@ class RunSqlAction:
 
             cur = conn.execute(sql)
             cols = [d[0] for d in cur.description or []]
-            rows = [list(r) for r in cur.fetchmany(MAX_ROWS_RETURNED)]
-            return ToolResult(call_id=request.call_id, ok=True, content=format_query_result(cols, rows), trace=_sql_trace(query, row_count=len(rows)))
+            fetch_cap = MAX_ROWS_RETURNED if has_explicit_limit else MAX_ROWS_RETURNED + 1
+            raw_rows = [list(r) for r in cur.fetchmany(fetch_cap)]
+            bounded = not has_explicit_limit and len(raw_rows) > MAX_ROWS_RETURNED
+            rows = raw_rows[:MAX_ROWS_RETURNED] if bounded else raw_rows
+            evidence = ToolEvidence(
+                evidence_id=request.call_id, evidence_class="controlled_sql",
+                producer=Producer(tool_name=self.name),
+                authority=Authority(kind="controlled_sql", sql_fingerprint=sql_fingerprint),
+                scope={}, temporal=Temporal(), units=Units(),
+                result=ResultEnvelope(
+                    kind="empty" if not rows else "table", columns=tuple(cols),
+                    rows=tuple(dict(zip(cols, row)) for row in rows),
+                    total_rows=None, returned_rows=len(rows), truncated=bounded, has_more=bounded,
+                    omission_reason=(f"row_limit: showing {len(rows)} of at least {len(rows) + 1} rows" if bounded else None)),
+                provenance={"sql": query},
+            )
+            return ToolResult(call_id=request.call_id, ok=True, content=format_query_result(cols, rows),
+                              trace=_sql_trace(query, row_count=len(rows), has_more=bounded), evidence=evidence)
         except sqlite3.OperationalError as exc:
             if timed_out:
                 message = f"SQL statement exceeded {SQL_TIMEOUT_SECONDS:g}s timeout"
@@ -399,10 +425,11 @@ def _optional_positive_int(arguments: dict[str, object], name: str) -> int | Non
     return value
 
 
-def _sql_trace(query: object, row_count: int | None = None, error: str | None = None, error_type: str = "sql_error") -> dict[str, object]:
+def _sql_trace(query: object, row_count: int | None = None, has_more: bool = False,
+                error: str | None = None, error_type: str = "sql_error") -> dict[str, object]:
     trace: dict[str, object] = {"arguments": {"query": query}}
     if error is None:
-        trace["result"] = {"row_count": row_count}
+        trace["result"] = {"row_count": row_count, "has_more": has_more}
     else:
         trace["error"] = {"error_type": error_type, "message": error}
     return trace
@@ -559,6 +586,7 @@ class _AnalyticsCapabilityAction:
                     facts=tuple({"metric_key": r.metric_key, "value": r.value, "unit": r.unit,
                                  "entity_id": r.entity_id, "period": r.period, **(r.dimensions or {})} for r in result.rows),
                     metric_id=result.rows[0].metric_key, requested_temporal=_requested_window(request.arguments),
+                    row_limit=MAX_ROWS_RETURNED,
                 )
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
@@ -858,7 +886,8 @@ class AnalyticsDatasetQueryAction:
                 evidence_id=request.call_id, evidence_class="governed_dataset",
                 tool_name=self.name, source_kind="dataset", scope={},
                 semantic_contract=result.contract, provenance={"tables": [result.contract["source"]]},
-                coverage=result.coverage, facts=tuple(facts), dataset_id=query.dataset)
+                coverage=result.coverage, facts=tuple(facts), dataset_id=query.dataset,
+                row_limit=MAX_ROWS_RETURNED)
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "coverage": result.coverage}, evidence=evidence)
         except (KeyError, TypeError, ValueError, DatasetQueryError) as exc:
             return ToolResult(request.call_id, False, json.dumps({"error_type": "semantic_query_error", "error": str(exc)}, ensure_ascii=False), {"tool_name": self.name, "error": str(exc)})
