@@ -335,6 +335,25 @@ def test_run_sql_explicit_limit_exactly_at_the_cap_is_never_flagged_truncated(wi
     assert payload["truncated"] is False
 
 
+def test_run_sql_explicit_limit_one_over_the_cap_is_flagged_truncated(wide_db):
+    """The tightest boundary: a caller's own LIMIT 51 (== MAX_ROWS_RETURNED + 1)
+    against a table with at least 51 real rows lets the probe read fill
+    exactly its +1 slot -- must be flagged truncated/has_more, not just a
+    LIMIT far above the cap like LIMIT 100."""
+    action = RunSqlAction(sandbox=LiveReadOnlySandbox(wide_db))
+    result = action.execute(ToolRequest("1", "run_sql", {"query": "SELECT fondo_key FROM dim_fondo ORDER BY fondo_key LIMIT 51"}))
+
+    evidence = result.evidence
+    assert evidence.result.returned_rows == MAX_ROWS_RETURNED
+    assert len(evidence.result.rows) == MAX_ROWS_RETURNED
+    assert evidence.result.truncated is True
+    assert evidence.result.has_more is True
+    assert evidence.result.total_rows is None
+    payload = json.loads(result.content)
+    assert len(payload["rows"]) == MAX_ROWS_RETURNED
+    assert payload["truncated"] is False
+
+
 def test_run_sql_explicit_limit_above_the_cap_is_flagged_truncated_when_more_rows_exist(wide_db):
     """A caller's own LIMIT 100 against a real 65-row table: SQLite would
     happily hand back all 65, so the MAX_ROWS_RETURNED + 1 probe read finds
