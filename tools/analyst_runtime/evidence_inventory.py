@@ -35,13 +35,24 @@ INVENTORY_HEADER = (
 
 _MAX_LISTED_IDS = 40
 
+# Only these classes back a claim type (canonical_metric_claims /
+# governed_dataset_claims) that canonical_guard/coverage_guard validate
+# against. controlled_sql (A3.2b) is real evidence but not a governed claim
+# target -- listing it here would invite citing an evidence_id that no claim
+# type accepts, so it is excluded from this inventory, not just from the
+# guards it was already excluded from.
+_CITEABLE_CLAIM_CLASSES = frozenset({"canonical_metric", "governed_dataset", "verified_query"})
+
 
 def render_evidence_inventory(evidence: list[ToolEvidence]) -> str:
-    """One line per evidence item, or "" when the investigation produced none."""
-    if not evidence:
+    """One line per citeable evidence item, or "" when the investigation
+    produced none (including when it produced only non-claimable evidence,
+    e.g. controlled_sql)."""
+    citeable = [item for item in evidence if item.evidence_class in _CITEABLE_CLAIM_CLASSES]
+    if not citeable:
         return ""
     lines = [INVENTORY_HEADER]
-    lines.extend(f"- {_render_item(item)}" for item in evidence)
+    lines.extend(f"- {_render_item(item)}" for item in citeable)
     return "\n".join(lines)
 
 
