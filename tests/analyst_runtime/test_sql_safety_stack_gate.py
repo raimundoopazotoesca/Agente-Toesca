@@ -101,7 +101,12 @@ def test_queryable_objects_allowed_functions_and_governed_udf_execute(kind, safe
     result = RunSqlAction(sandbox).execute(ToolRequest("a3-1e", "run_sql", {"query": query}))
 
     assert result.ok is True
-    assert result.evidence is None
+    # A3.2b: run_sql now carries controlled_sql evidence -- facts stays
+    # empty (SQL output is not a governed claim), the bounded rows live on
+    # result.rows instead.
+    assert result.evidence is not None
+    assert result.evidence.evidence_class == "controlled_sql"
+    assert result.evidence.facts == ()
     payload = json.loads(result.content)
     assert payload["rows"][0][-1] == 12
     assert payload["rows"][0][2] == 60
@@ -180,7 +185,8 @@ def test_with_select_cte_is_accepted_end_to_end(kind, safety_db):
     result = _run(kind, safety_db, query)
 
     assert result.ok is True
-    assert result.evidence is None
+    assert result.evidence is not None
+    assert result.evidence.evidence_class == "controlled_sql"
     assert json.loads(result.content)["rows"] == [[60]]
 
 
