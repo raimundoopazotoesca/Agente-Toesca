@@ -447,10 +447,14 @@ def test_schema_search_never_attaches_evidence():
 
 
 # ---------------------------------------------------------------------------
-# 17 (broader): controlled_sql evidence is excluded from the citeable-claims
-# inventory -- run_sql now producing evidence must not let the model treat
-# ungoverned SQL output as if it could bind a canonical_metric_claim /
-# governed_dataset_claim.
+# 17 (broader): controlled_sql evidence is excluded from the CITEABLE-CLAIMS
+# section of the inventory -- run_sql producing evidence must not let the
+# model treat ungoverned SQL output as if it could bind a
+# canonical_metric_claim / governed_dataset_claim. A3.2c: it is instead
+# exposed in a separate supporting-evidence section (see
+# test_a3_2c_supporting_evidence_transport.py for the full contract), so this
+# test only asserts the two sections stay disjoint, not that controlled_sql
+# is invisible to the inventory altogether.
 # ---------------------------------------------------------------------------
 
 def test_evidence_inventory_excludes_controlled_sql_from_citeable_listing(wide_db):
@@ -465,8 +469,21 @@ def test_evidence_inventory_excludes_controlled_sql_from_citeable_listing(wide_d
     assert lookup_result.evidence is not None
 
     only_sql = render_evidence_inventory([sql_result.evidence])
-    assert only_sql == ""  # no citeable evidence at all -> no inventory block
+    # A3.2c: controlled_sql is now exposed, but only as supporting/noncanonical
+    # evidence -- never as if it were citeable in canonical_metric_claims.
+    # (The supporting section's own header text legitimately *mentions*
+    # "canonical_metric_claims" while explaining it can't go there, so check
+    # the rendered evidence line itself, not the whole block, for "clase=".)
+    assert only_sql != ""
+    assert "clase=controlled_sql" in only_sql
+    assert "clase=canonical_metric" not in only_sql
 
     mixed = render_evidence_inventory([sql_result.evidence, lookup_result.evidence])
-    assert "controlled_sql" not in mixed
+    assert "controlled_sql" in mixed
     assert "canonical_metric" in mixed
+    # The two evidence classes must render on distinct lines -- never merged
+    # into one line that could make controlled_sql look citeable.
+    sql_line = next(line for line in mixed.split("\n") if line.startswith(f"- evidence_id={sql_result.evidence.evidence_id}"))
+    lookup_line = next(line for line in mixed.split("\n") if line.startswith(f"- evidence_id={lookup_result.evidence.evidence_id}"))
+    assert "controlled_sql" in sql_line and "canonical_metric" not in sql_line
+    assert "canonical_metric" in lookup_line and "controlled_sql" not in lookup_line

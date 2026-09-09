@@ -96,21 +96,37 @@ class CoverageValidation:
 
 def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolEvidence],
                           governed_evidence: list[ToolEvidence], db_path: Path | None = None,
-                          requested_monetary_unit: str | None = None) -> CoverageValidation:
+                          requested_monetary_unit: str | None = None, *,
+                          supporting_evidence: list[ToolEvidence] | None = None) -> CoverageValidation:
+    # Defensive re-filter, not just trust-the-caller: even if a future caller
+    # passes a mixed list, only genuinely canonical_metric/governed_dataset/
+    # controlled_sql items can ever bind through their respective claim type.
+    # This is the boundary that makes cross-class binding structurally
+    # impossible, not merely something session.py's own filtering happens to
+    # prevent today.
+    canonical_evidence = [item for item in canonical_evidence if item.evidence_class == "canonical_metric"]
+    governed_evidence = [item for item in governed_evidence if item.evidence_class == "governed_dataset"]
+    supporting_evidence = [item for item in (supporting_evidence or ()) if item.evidence_class == "controlled_sql"]
+
     canonical_by_id = {item.evidence_id: item for item in canonical_evidence}
     if len(canonical_by_id) != len(canonical_evidence):
         return _fail(canonical_evidence, governed_evidence, "duplicate_canonical_evidence_id", db_path)
     governed_by_id = {item.evidence_id: item for item in governed_evidence}
     if len(governed_by_id) != len(governed_evidence):
         return _fail(canonical_evidence, governed_evidence, "duplicate_governed_evidence_id", db_path)
+    supporting_by_id = {item.evidence_id: item for item in supporting_evidence}
+    if len(supporting_by_id) != len(supporting_evidence):
+        return _fail(canonical_evidence, governed_evidence, "duplicate_supporting_evidence_id", db_path)
 
     fragments = envelope.get("fragments")
     canonical_claims = envelope.get("canonical_metric_claims")
     governed_claims = envelope.get("governed_dataset_claims", [])
     derived_claims = envelope.get("derived_metric_claims", [])
     table_claims = envelope.get("table_claims", [])
+    supporting_claims = envelope.get("supporting_evidence_claims", [])
     if not isinstance(fragments, list) or not isinstance(canonical_claims, list) or not isinstance(governed_claims, list) \
-            or not isinstance(derived_claims, list) or not isinstance(table_claims, list):
+            or not isinstance(derived_claims, list) or not isinstance(table_claims, list) \
+            or not isinstance(supporting_claims, list):
         return _fail(canonical_evidence, governed_evidence, "invalid_envelope", db_path)
 
     bound_canonical: dict[str, dict[str, Any]] = {}
@@ -228,6 +244,24 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         selected_from_governed.pop(item.evidence_id, None)
         backed_entity_ids.update(claim_entity_ids)
 
+    # Supporting (noncanonical) claims: A3.2c. Exclusively bind to
+    # controlled_sql evidence -- supporting_by_id was built only from items
+    # already filtered to that class, so an evidence_id that happens to exist
+    # in canonical_by_id/governed_by_id (but not supporting_by_id) still fails
+    # closed here rather than resolving against the wrong lookup. A claim_id
+    # colliding with a canonical/governed claim_id is rejected too: the three
+    # claim-id namespaces must stay disjoint so a later reference can never
+    # be ambiguous about which claim type it names.
+    bound_supporting: dict[str, ToolEvidence] = {}
+    for claim in supporting_claims:
+        if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_supporting \
+                or claim["claim_id"] in bound_canonical or claim["claim_id"] in bound_governed:
+            return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
+        item = supporting_by_id.get(claim.get("evidence_id"))
+        if item is None:
+            return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
+        bound_supporting[claim["claim_id"]] = item
+
     # Derived (arithmetic) claims: each operand MUST reference a claim_id
     # already bound above (canonical, never a raw evidence_id and never a
     # governed claim, so the operand set is exactly the single-fact values a
@@ -237,10 +271,16 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     bound_derived: dict[str, Any] = {}
     for claim in derived_claims:
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) \
-                or claim["claim_id"] in bound_derived or claim["claim_id"] in bound_canonical:
+                or claim["claim_id"] in bound_derived or claim["claim_id"] in bound_canonical \
+                or claim["claim_id"] in bound_supporting:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         operation = claim.get("operation")
         lhs_claim_id, rhs_claim_id = claim.get("lhs_claim_id"), claim.get("rhs_claim_id")
+        # bound_canonical only -- a supporting (controlled_sql) claim_id can
+        # never be an operand: it has no ``value`` to compute with, and
+        # looking it up here would silently do nothing (KeyError-free
+        # ``.get`` returning None), which already falls through to the
+        # binding_mismatch fail-closed below rather than a false accept.
         lhs_fact, rhs_fact = bound_canonical.get(lhs_claim_id), bound_canonical.get(rhs_claim_id)
         if lhs_fact is None or rhs_fact is None or not isinstance(operation, str):
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
@@ -283,6 +323,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     provenance_ok = True
     catalog = _load_asset_catalog(db_path) if db_path is not None else {}
     provenance_checked = False
+    referenced_supporting: set[str] = set()
     for fragment in fragments:
         if not isinstance(fragment, dict):
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment", db_path)
@@ -316,6 +357,13 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
             _append_fragment(rendered, _render_governed(bound_governed[fragment["claim_id"]], db_path, requested_monetary_unit))
         elif kind == "derived_metric_ref" and fragment.get("claim_id") in bound_derived:
             _append_fragment(rendered, render_derived_claim(bound_derived[fragment["claim_id"]]))
+        elif kind == "evidence_ref" and fragment.get("claim_id") in bound_supporting:
+            # Noncanonical (controlled_sql) reference: marks that this point
+            # in the answer relies on supporting, ungoverned evidence. Never
+            # renders a value -- there is none to render (facts == ()) -- and
+            # never treated as a citeable figure. The claim_id is tracked
+            # only for the trace, not for the rendered text.
+            referenced_supporting.add(fragment["claim_id"])
         else:
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment", db_path)
 
@@ -330,7 +378,9 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
 
     return CoverageValidation(True, prefix + "".join(rendered), _trace(
         canonical_claims=bound_canonical, governed_coverage=governed_coverage,
-        result="pass", provenance=("pass" if provenance_checked else "not_applicable")),
+        result="pass", provenance=("pass" if provenance_checked else "not_applicable"),
+        supporting_claim_count=len(bound_supporting),
+        supporting_evidence_ids_referenced=sorted({bound_supporting[cid].evidence_id for cid in referenced_supporting})),
         tables=tuple(tables))
 
 
@@ -604,7 +654,8 @@ def _load_asset_catalog(db_path: Path) -> dict[str, str]:
 
 
 def _trace(canonical_claims: dict[str, Any], governed_coverage: list[dict[str, Any]], result: str,
-           provenance: str, reason: str | None = None) -> dict[str, Any]:
+           provenance: str, reason: str | None = None, supporting_claim_count: int = 0,
+           supporting_evidence_ids_referenced: list[str] | None = None) -> dict[str, Any]:
     worst = _worst_status(gc.get("status") for gc in governed_coverage)
     gap_count = sum(max((gc.get("eligible_count") or 0) - (gc.get("observed_count") or 0), 0) for gc in governed_coverage)
     first = governed_coverage[0] if governed_coverage else None
@@ -621,6 +672,8 @@ def _trace(canonical_claims: dict[str, Any], governed_coverage: list[dict[str, A
         "coverage_validation_result": result,
         "entity_provenance_validation": provenance,
         "deterministic_fallback_used": result == "fail",
+        "supporting_claim_count": supporting_claim_count,
+        "supporting_evidence_ids_referenced": supporting_evidence_ids_referenced or [],
     }
     if reason:
         trace["reason"] = reason

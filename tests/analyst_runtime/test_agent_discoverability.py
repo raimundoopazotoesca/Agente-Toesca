@@ -173,9 +173,13 @@ def test_synthesis_inventory_names_the_evidence_the_investigation_really_produce
     assert "vigente_hasta" not in synthesis_message
 
 
-def test_inventory_is_absent_when_the_investigation_produced_no_evidence():
-    """No evidence, no inventory: the reserved synthesis message stays
-    byte-identical to the frozen instruction."""
+def test_inventory_is_absent_when_the_investigation_produced_no_citeable_evidence():
+    """No canonical/governed/verified_query evidence -> no CITEABLE inventory
+    block in the reserved synthesis message. A3.2c: a run_sql-only turn now
+    produces controlled_sql evidence, which the message legitimately does
+    carry (in its own supporting section, so synthesis can reference it via
+    supporting_evidence_claims) -- but the citeable-claims section, and its
+    header, must still be entirely absent."""
     transport = RecordingTransport([
         ModelResponse("", [ToolRequest("sql", "run_sql", {"query": "SELECT 1"})]),
         ModelResponse("Nada relevante."),
@@ -185,7 +189,10 @@ def test_inventory_is_absent_when_the_investigation_produced_no_evidence():
 
     _session(transport).ask("Explora")
 
-    assert transport.requests[-1].message == _SYNTHESIS_INSTRUCTION
+    message = transport.requests[-1].message
+    assert message.startswith(_SYNTHESIS_INSTRUCTION)
+    assert INVENTORY_HEADER not in message
+    assert "controlled_sql" in message
 
 
 def test_render_evidence_inventory_is_derived_only_from_tool_evidence():
