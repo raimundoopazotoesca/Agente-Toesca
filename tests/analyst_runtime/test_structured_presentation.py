@@ -1,8 +1,8 @@
 import pytest
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.presentation import AllowedClaim, render_segments, validate_structured_output
 from tools.analyst_runtime.session import _allowed_claims
-from tools.analyst_runtime.transport import ToolEvidence
 
 
 CLAIM = AllowedClaim("c1", "e1", "synthetic_flow", "fund-a", 1234.5, "UF", "2025-06", "sum")
@@ -67,10 +67,10 @@ def test_multiple_claims_must_each_be_rendered_once():
 
 
 def test_allowed_claims_preserve_aggregation_and_lineage_from_evidence():
-    evidence = ToolEvidence("e1", "canonical_metric", semantic_contract={"aggregation": "sum"},
-                            provenance={"source_periods": ["2025-01", "2025-02"]},
-                            facts=({"metric_key": "synthetic_flow", "value": 1234.5, "unit": "UF",
-                                    "entity_id": "fund-a", "period": "2025-01..2025-02"},))
+    evidence = mk_evidence("e1", "canonical_metric", semantic_contract={"aggregation": "sum"},
+                           provenance={"source_periods": ["2025-01", "2025-02"]},
+                           facts=({"metric_key": "synthetic_flow", "value": 1234.5, "unit": "UF",
+                                   "entity_id": "fund-a", "period": "2025-01..2025-02"},))
     claims = _allowed_claims({"canonical_metric_claims": [{"claim_id": "c1", "evidence_id": "e1",
         "metric_key": "synthetic_flow", "value": 1234.5, "unit": "UF", "entity_id": "fund-a",
         "period": "2025-01..2025-02"}]}, [evidence])

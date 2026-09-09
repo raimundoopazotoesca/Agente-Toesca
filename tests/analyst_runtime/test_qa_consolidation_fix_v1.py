@@ -31,12 +31,12 @@ from tools.analytics.humanize import humanize_text
 # ---------------------------------------------------------------------------
 
 def test_two_consecutive_governed_dataset_refs_get_a_glue_space():
-    from tools.analyst_runtime.transport import ToolEvidence
+    from tests.analyst_runtime._evidence_factory import mk_evidence
 
     facts_a = ({"metric_key": "contribuciones", "value": 15220.0, "unit": "UF", "entity_id": "Torre A", "period": "2025"},)
     facts_b = ({"metric_key": "contribuciones", "value": 7526.0, "unit": "UF", "entity_id": "Boulevard PT", "period": "2025"},)
-    ev_a = ToolEvidence("g1", "governed_dataset", scope={"fund": "PT"}, coverage={"status": "complete"}, facts=facts_a)
-    ev_b = ToolEvidence("g2", "governed_dataset", scope={"fund": "PT"}, coverage={"status": "complete"}, facts=facts_b)
+    ev_a = mk_evidence("g1", "governed_dataset", scope={"fund": "PT"}, coverage={"status": "complete"}, facts=facts_a)
+    ev_b = mk_evidence("g2", "governed_dataset", scope={"fund": "PT"}, coverage={"status": "complete"}, facts=facts_b)
     envelope = {
         "fragments": [
             {"type": "governed_dataset_ref", "claim_id": "ca"},
@@ -95,11 +95,11 @@ def test_fresh_tool_evidence_excludes_stale_replay_evidence():
     as soon as the current turn obtains governed evidence, that evidence is
     the sole factual source for the current answer.
     """
+    from tests.analyst_runtime._evidence_factory import mk_evidence
     from tools.analyst_runtime.session import _evidence_for_current_answer
-    from tools.analyst_runtime.transport import ToolEvidence
 
-    stale = ToolEvidence("stale-ltv", "canonical_metric", facts=({"metric_key": "ltv", "value": 81.22, "unit": "%", "entity_id": "PT", "period": "2026-06"},))
-    fresh = ToolEvidence("fresh-dataset", "governed_dataset", facts=())
+    stale = mk_evidence("stale-ltv", "canonical_metric", facts=({"metric_key": "ltv", "value": 81.22, "unit": "%", "entity_id": "PT", "period": "2026-06"},))
+    fresh = mk_evidence("fresh-dataset", "governed_dataset", facts=())
     old_item = TranscriptItem(role="assistant", tool_results=[ToolResult("old", True, "{}", evidence=stale)])
     new_item = TranscriptItem(role="assistant", tool_results=[ToolResult("new", True, "{}", evidence=fresh)])
     investigation = SimpleNamespace(round_trajectory=[old_item, new_item])
@@ -199,17 +199,17 @@ def test_explicit_invalid_aggregation_request_still_rejects_deterministically():
 # ---------------------------------------------------------------------------
 
 def _retained_evidence():
-    from tools.analyst_runtime.transport import ToolEvidence
+    from tests.analyst_runtime._evidence_factory import mk_evidence
     # Simulates evidence a PRIOR turn's tool call produced and the session
     # retained across turns -- coverage_guard only cares that the evidence_id
     # still resolves, not which turn originally produced it.
     return [
-        ToolEvidence("call_a", "canonical_metric",
-                     facts=({"metric_key": "contribuciones", "value": 15220.0, "unit": "UF",
-                             "entity_id": "Torre A", "period": "2025"},)),
-        ToolEvidence("call_b", "canonical_metric",
-                     facts=({"metric_key": "contribuciones", "value": 7526.0, "unit": "UF",
-                             "entity_id": "Boulevard PT", "period": "2025"},)),
+        mk_evidence("call_a", "canonical_metric",
+                    facts=({"metric_key": "contribuciones", "value": 15220.0, "unit": "UF",
+                            "entity_id": "Torre A", "period": "2025"},)),
+        mk_evidence("call_b", "canonical_metric",
+                    facts=({"metric_key": "contribuciones", "value": 7526.0, "unit": "UF",
+                            "entity_id": "Boulevard PT", "period": "2025"},)),
     ]
 
 

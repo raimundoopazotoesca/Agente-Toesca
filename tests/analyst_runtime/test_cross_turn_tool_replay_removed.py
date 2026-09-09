@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.analyst_loop import AnalystLoop
 from tools.analyst_runtime.session import OpenAIResponsesAnalystSession, OpenAIResponsesTransport
-from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest, ToolResult
+from tools.analyst_runtime.transport import ModelResponse, ToolRequest, ToolResult
 
 FINANCIAL_FACT = {
     "metric_key": "ltv_fondo", "value": 61.02, "unit": "%", "entity_id": "TRI", "period": "2026-06",
@@ -20,10 +21,10 @@ TENANT_FACTS = (
     {"metric_key": "gla", "value": 1200.0, "unit": "m2", "entity_id": "Tenant A", "period": "2026-06",
      "space_type": None, "space_types": None, "measurement_unit": None},
 )
-FINANCIAL = ToolEvidence("financial", "canonical_metric", facts=(FINANCIAL_FACT,))
-TENANTS = ToolEvidence("tenants", "governed_dataset",
-                        coverage={"status": "complete", "observed_count": 1, "eligible_count": 1,
-                                  "universe_kind": "asset_tenants"}, facts=TENANT_FACTS)
+FINANCIAL = mk_evidence("financial", "canonical_metric", facts=(FINANCIAL_FACT,))
+TENANTS = mk_evidence("tenants", "governed_dataset",
+                       coverage={"status": "complete", "observed_count": 1, "eligible_count": 1,
+                                 "universe_kind": "asset_tenants"}, facts=TENANT_FACTS)
 
 
 def _financial_envelope():

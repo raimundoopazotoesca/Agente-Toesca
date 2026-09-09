@@ -260,6 +260,16 @@ class ResolveEntityAction:
             return ToolResult(request.call_id, False, json.dumps(payload, ensure_ascii=False), trace=trace)
 
 
+def _requested_window(arguments: dict[str, object]) -> dict[str, object] | None:
+    """The caller-requested period window for ToolEvidence.temporal, when the
+    action's own arguments expose one -- never fabricated when they don't."""
+    period = arguments.get("period")
+    if period is None:
+        return None
+    period_end = arguments.get("period_end")
+    return {"period": period, "period_end": period_end} if period_end is not None else {"period": period}
+
+
 def _required_string(arguments: dict[str, object], name: str) -> str:
     value = arguments[name]
     if not isinstance(value, str) or not value:
@@ -432,10 +442,10 @@ class _AnalyticsCapabilityAction:
             evidence = None
             if result.result_kind == "scalar" and len(result.rows) == 1:
                 row = result.rows[0]
-                evidence = ToolEvidence(
+                evidence = ToolEvidence.build(
                     evidence_id=request.call_id,
                     evidence_class="canonical_metric",
-                    source={"tool_name": self.name, "source_kind": row.source_kind},
+                    tool_name=self.name, source_kind=row.source_kind,
                     scope=scope,
                     semantic_contract={"metric_key": row.metric_key,
                                        "aggregation": request.arguments.get("aggregation"),
@@ -443,6 +453,7 @@ class _AnalyticsCapabilityAction:
                     provenance=row.provenance,
                     facts=({"metric_key": row.metric_key, "value": row.value, "unit": row.unit,
                             "entity_id": row.entity_id, "period": row.period, **(row.dimensions or {})},),
+                    metric_id=row.metric_key, requested_temporal=_requested_window(request.arguments),
                 )
             elif result.rows:
                 # A multi-row *scalar* result is a time series over one entity,
@@ -453,10 +464,10 @@ class _AnalyticsCapabilityAction:
                 period_range = result.result_kind == "scalar"
                 coverage = (_period_range_coverage(result.rows) if period_range
                             else self._dataset_coverage(scope, request.arguments, result.rows))
-                evidence = ToolEvidence(
+                evidence = ToolEvidence.build(
                     evidence_id=request.call_id,
                     evidence_class="governed_dataset",
-                    source={"tool_name": self.name, "source_kind": result.rows[0].source_kind},
+                    tool_name=self.name, source_kind=result.rows[0].source_kind,
                     scope=scope,
                     semantic_contract={"metric_key": result.rows[0].metric_key,
                                        "entity_grain": result.rows[0].entity_type,
@@ -471,6 +482,7 @@ class _AnalyticsCapabilityAction:
                     coverage=coverage,
                     facts=tuple({"metric_key": r.metric_key, "value": r.value, "unit": r.unit,
                                  "entity_id": r.entity_id, "period": r.period, **(r.dimensions or {})} for r in result.rows),
+                    metric_id=result.rows[0].metric_key, requested_temporal=_requested_window(request.arguments),
                 )
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str),
                               trace=_capability_trace(request.arguments, scope, payload, self._allowed_fields()), evidence=evidence)
@@ -766,7 +778,11 @@ class AnalyticsDatasetQueryAction:
                     facts.append({"metric_key": name, "value": row[name], "unit": load_dataset_catalog().datasets[query.dataset].measures[name]["unit"], "entity_id": entity_id, "period": dimensions.get("periodo"), "dimensions": dimensions})
                     if "share_of_total" in row: facts.append({"metric_key": "share_of_total", "value": row["share_of_total"], "unit": "%", "entity_id": entity_id, "period": dimensions.get("periodo"), "dimensions": dimensions})
             payload = {"evidence_id": request.call_id, "rows": result.rows, "coverage": result.coverage, "contract": result.contract}
-            evidence = ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "dataset"}, {}, result.contract, {"tables": [result.contract["source"]]}, result.coverage, tuple(facts))
+            evidence = ToolEvidence.build(
+                evidence_id=request.call_id, evidence_class="governed_dataset",
+                tool_name=self.name, source_kind="dataset", scope={},
+                semantic_contract=result.contract, provenance={"tables": [result.contract["source"]]},
+                coverage=result.coverage, facts=tuple(facts), dataset_id=query.dataset)
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "coverage": result.coverage}, evidence=evidence)
         except (KeyError, TypeError, ValueError, DatasetQueryError) as exc:
             return ToolResult(request.call_id, False, json.dumps({"error_type": "semantic_query_error", "error": str(exc)}, ensure_ascii=False), {"tool_name": self.name, "error": str(exc)})
@@ -806,7 +822,15 @@ class AnalyticsAccountQueryAction:
             # empty governed dataset would make the synthesis guard render a
             # misleading entity-enumeration fallback instead of allowing the
             # model to state that evidence is unavailable (which is not zero).
-            evidence = (ToolEvidence(request.call_id, "governed_dataset", {"tool_name": self.name, "source_kind": "account_concept"}, {"asset": result.entity_id}, {"metric_key": result.concept_id, "aggregation": args["aggregation"], "accounting_basis": result.basis, "entity_grain": result.entity_type, "period_grain": "month", "universe_kind": "account_mapping"}, result.lineage, coverage, (fact,)) if result.value is not None else None)
+            evidence = (ToolEvidence.build(
+                evidence_id=request.call_id, evidence_class="governed_dataset",
+                tool_name=self.name, source_kind="account_concept", scope={"asset": result.entity_id},
+                semantic_contract={"metric_key": result.concept_id, "aggregation": args["aggregation"],
+                                   "accounting_basis": result.basis, "entity_grain": result.entity_type,
+                                   "period_grain": "month", "universe_kind": "account_mapping"},
+                provenance=result.lineage, coverage=coverage, facts=(fact,),
+                metric_id=result.concept_id, requested_temporal=_requested_window(args),
+            ) if result.value is not None else None)
             return ToolResult(request.call_id, True, json.dumps(payload, ensure_ascii=False, default=str), {"tool_name": self.name, "arguments": args, "coverage": coverage, "accounting_basis": result.basis, "mapped_account_rows": result.account_row_count}, evidence=evidence)
         except (AccountQueryError, KeyError, TypeError, ValueError) as exc:
             payload = {"error_type": "semantic_query_error", "error": str(exc)}
@@ -865,11 +889,12 @@ class ListAssetsAction:
                         "status": "complete" if eligible and eligible <= observed else ("partial" if eligible else "unknown")}
             payload = {"evidence_id": request.call_id, "fund": fund, "period": period, "assets": list(facts),
                        "applicable_count": len(observed), "total_count": len(facts)}
-            evidence = ToolEvidence(
+            evidence = ToolEvidence.build(
                 evidence_id=request.call_id, evidence_class="governed_dataset",
-                source={"tool_name": self.name, "source_kind": "canonical"},
+                tool_name=self.name, source_kind="canonical",
                 scope={"fund": fund}, semantic_contract={"entity_grain": "asset", "universe_kind": "fund_assets"},
                 provenance={"tables": ["dim_fondo", "dim_activo"]}, coverage=coverage, facts=facts,
+                requested_temporal=({"period": period} if period else None), granularity="point_in_time",
             )
             trace = {"tool_name": self.name, "arguments": {"fund": fund, "period": period},
                      "result": {"row_count": len(facts), "coverage_status": coverage["status"],

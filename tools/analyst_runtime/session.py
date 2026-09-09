@@ -25,7 +25,9 @@ from tools.analyst_runtime.evidence_inventory import render_evidence_inventory
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
-from tools.analyst_runtime.transport import ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult, ToolSpec, TranscriptItem
+from tools.analyst_runtime.transport import (ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence,
+                                              ToolRequest, ToolResult, ToolSpec, TranscriptItem, evidence_from_dict,
+                                              evidence_to_dict)
 
 
 _CONTEXT_ISOLATION_INSTRUCTION = (
@@ -576,7 +578,7 @@ def _account_no_evidence_payload(investigation: Any) -> dict[str, Any] | None:
     parent_scope: dict[str, Any] | None = None
     for item in reversed(investigation.round_trajectory):
         for result in reversed(item.tool_results):
-            if result.evidence is not None and result.evidence.source.get("tool_name") == "list_assets":
+            if result.evidence is not None and result.evidence.producer.tool_name == "list_assets":
                 scope = result.evidence.scope
                 if isinstance(scope.get("fund"), str):
                     parent_scope = {"entity": scope["fund"], "entity_type": "fund"}
@@ -907,17 +909,11 @@ def _default_openai_client() -> Any:
 
 def _evidence_to_memory(item: ToolEvidence) -> dict[str, Any]:
     """Serialize only validated factual evidence; never provider/tool transcripts."""
-    return {"evidence_id": item.evidence_id, "evidence_class": item.evidence_class,
-            "source": deepcopy(item.source), "scope": deepcopy(item.scope),
-            "semantic_contract": deepcopy(item.semantic_contract), "provenance": deepcopy(item.provenance),
-            "coverage": deepcopy(item.coverage), "facts": [deepcopy(fact) for fact in item.facts]}
+    return evidence_to_dict(item)
 
 
 def _memory_to_evidence(item: dict[str, Any]) -> ToolEvidence:
-    return ToolEvidence(str(item["evidence_id"]), str(item.get("evidence_class", "unknown")),
-                        deepcopy(item.get("source") or {}), deepcopy(item.get("scope") or {}),
-                        deepcopy(item.get("semantic_contract") or {}), deepcopy(item.get("provenance") or {}),
-                        deepcopy(item.get("coverage")), tuple(deepcopy(item.get("facts") or [])))
+    return evidence_from_dict(deepcopy(item))
 
 
 def _item_dict(item: Any) -> dict[str, Any]:

@@ -1,8 +1,8 @@
+from tests.analyst_runtime._evidence_factory import mk_evidence
 from tools.analyst_runtime.canonical_guard import validate_and_render
-from tools.analyst_runtime.transport import ToolEvidence
 
 
-EVIDENCE = ToolEvidence("e1", "canonical_metric", facts=({"metric_key": "vacancia", "value": 5.945, "unit": "%", "entity_id": "A", "period": "2026-06"},))
+EVIDENCE = mk_evidence("e1", "canonical_metric", facts=({"metric_key": "vacancia", "value": 5.945, "unit": "%", "entity_id": "A", "period": "2026-06"},))
 
 
 def test_renders_only_value_from_matching_evidence():

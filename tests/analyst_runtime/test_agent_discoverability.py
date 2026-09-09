@@ -29,7 +29,8 @@ from tools.analyst_runtime.session import (
 )
 from tools.analytics.catalog import CATALOG_PATH, load_metric_catalog
 from tools.analytics.models import DimensionedAccess
-from tools.analyst_runtime.transport import ModelResponse, ToolEvidence, ToolRequest
+from tests.analyst_runtime._evidence_factory import mk_evidence
+from tools.analyst_runtime.transport import ModelResponse, ToolRequest
 
 DB = Path("memory/agente_toesca_v2.db")
 
@@ -188,9 +189,9 @@ def test_inventory_is_absent_when_the_investigation_produced_no_evidence():
 
 
 def test_render_evidence_inventory_is_derived_only_from_tool_evidence():
-    evidence = [ToolEvidence(
-        evidence_id="e1", evidence_class="governed_dataset",
-        source={"tool_name": "analytics_breakdown_asset", "source_kind": "canonical"},
+    evidence = [mk_evidence(
+        "e1", "governed_dataset",
+        tool_name="analytics_breakdown_asset", source_kind="canonical",
         scope={"fund": "TRI"}, semantic_contract={"metric_key": "noi_mensual_activo"},
         coverage={"status": "partial", "observed_count": 4, "eligible_count": 12, "universe_kind": "fund_assets"},
         facts=({"metric_key": "noi_mensual_activo", "value": 1.0, "unit": "clp", "entity_id": "INMOSA", "period": "2026-06"},),
