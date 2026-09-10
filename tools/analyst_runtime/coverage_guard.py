@@ -167,7 +167,14 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     bound_governed: dict[str, dict[str, Any]] = {}
     governed_coverage: list[dict[str, Any]] = []
     for claim in governed_claims:
-        if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) or claim["claim_id"] in bound_governed:
+        # claim_id namespace must stay disjoint from bound_canonical too --
+        # see A3.2f: this pair was the one asymmetric case left after A3.2d
+        # closed the derived-vs-governed and supporting-vs-{canonical,governed}
+        # collisions on the same principle (each claim type still resolves
+        # from its own dict, so no wrong value was ever rendered by this gap;
+        # it is a namespace-hygiene fix, not a data-integrity one).
+        if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) \
+                or claim["claim_id"] in bound_governed or claim["claim_id"] in bound_canonical:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         item = governed_by_id.get(claim.get("evidence_id"))
         if item is None or item.evidence_class != "governed_dataset":

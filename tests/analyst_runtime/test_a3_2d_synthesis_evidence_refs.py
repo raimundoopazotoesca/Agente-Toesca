@@ -353,3 +353,35 @@ def test_derived_claim_id_colliding_with_governed_claim_id_fails_closed():
     result = validate_and_render(envelope, [CANONICAL_EVIDENCE, CANONICAL_EVIDENCE_2], [GOVERNED_EVIDENCE])
     assert result.valid is False
     assert result.trace.get("reason") == "invalid_claim"
+
+
+# ===========================================================================
+# A3.2f fix: governed_dataset_claims' claim_id collision check now also
+# covers bound_canonical.
+#
+# Same asymmetric-namespace shape as the derived-vs-governed gap fixed above
+# in A3.2d: the governed-claims loop's guard clause only tested
+# `claim_id in bound_governed`, never `claim_id in bound_canonical`, even
+# though the supporting- and derived-claims loops (both processed AFTER
+# canonical/governed) already check against bound_canonical. Concretely: a
+# canonical_metric_claims entry and a governed_dataset_claims entry could
+# share one claim_id and both pass validation, each independently rendering
+# from its own dict (canonical_metric_ref -> bound_canonical,
+# governed_dataset_ref -> bound_governed), so no wrong/mixed value was ever
+# produced -- a namespace-hygiene gap relative to the documented "the ...
+# claim-id namespaces must stay disjoint" invariant, not a data-integrity
+# bug. Closed the same way the derived-vs-governed case was: completing the
+# check the code already applies to the other two claim types.
+# ===========================================================================
+
+def test_canonical_claim_id_colliding_with_governed_claim_id_fails_closed():
+    envelope = _envelope(
+        fragments=[{"type": "canonical_metric_ref", "claim_id": "c1"},
+                   {"type": "governed_dataset_ref", "claim_id": "c1"}],
+        canonical_metric_claims=[{"claim_id": "c1", "evidence_id": "e_canon", **CANONICAL_FACT}],
+        governed_dataset_claims=[{"claim_id": "c1", "evidence_id": "e_gov", "metric_key": None,
+                                   "entity_ids": ["Apo4501"], "period": "2026-06", "universe_kind": "fund_assets"}],
+    )
+    result = validate_and_render(envelope, [CANONICAL_EVIDENCE], [GOVERNED_EVIDENCE])
+    assert result.valid is False
+    assert result.trace.get("reason") == "invalid_claim"

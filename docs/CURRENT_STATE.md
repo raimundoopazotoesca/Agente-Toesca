@@ -157,9 +157,11 @@ Analyst-queryable — this is a "not wired up yet" state, not a bug in either co
 **Runtime**: `tools/analyst_runtime/` — a provider-neutral reasoning loop
 (`analyst_loop.py`) plus a wire-protocol adapter layer (`transport.py`), explicitly
 designed so the reasoning policy never imports a specific provider SDK. Companion
-modules: `canonical_guard.py`, `coverage_guard.py` (claims must be backed by governed
-data with explicit coverage checks), `derived_claims.py`, `evidence_inventory.py`,
-`live_sandbox.py`, `sqlite_guard.py`, `synthesis_schema.py`.
+modules: `coverage_guard.py` (the single active claim validator; claims must be backed
+by governed data with explicit coverage checks), `derived_claims.py`, `evidence_inventory.py`,
+`live_sandbox.py`, `sqlite_guard.py`, `synthesis_schema.py`. `canonical_guard.py` (Stage 5.3)
+is DEPRECATED as of A3.2f: not production-wired, retained only as `coverage_guard.py`'s
+single-fact parity reference (see its module docstring).
 
 **Persistence**: `tools/analyst_workspace/` — `conversation_service.py`, `store.py`,
 `admin.py`, `export_markdown.py`, `title_generator.py`. This is a separate concern from
@@ -169,8 +171,9 @@ the reasoning loop: conversations, feedback, and workspace state.
 service directly; the Flask app supplies it via a lazy factory so HTTP tests and module
 imports stay free of workspace/provider/DB side effects.
 
-**Current strengths**: claim-level guards (`canonical_guard.py`/`coverage_guard.py`) that
-appear more sophisticated than the regex-based mutation gate the old `agent.py` uses —
+**Current strengths**: claim-level guards (`coverage_guard.py`; `canonical_guard.py` is
+deprecated, see above) that appear more sophisticated than the regex-based mutation gate
+the old `agent.py` uses —
 **not independently verified by reading `sqlite_guard.py` line-by-line in this audit
 pass; verify before relying on this claim for a safety-critical decision.**
 

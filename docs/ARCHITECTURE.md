@@ -114,10 +114,11 @@ enforced boundary):
   `ModelTransport` seam between the reasoning loop and whichever provider is actually
   configured (Chat Completions, OpenAI Responses, Anthropic Messages have each needed
   this at different points — see `eval/round_b/` adapters).
-- **Guards** (`canonical_guard.py`, `coverage_guard.py`, `sqlite_guard.py`): enforce that
-  claims are backed by governed data with explicit coverage checks before they reach a
-  user. Not independently line-by-line verified in the Pass 1/1.5 audits — verify before
-  treating this as a safety guarantee in a new design.
+- **Guards** (`coverage_guard.py`, `sqlite_guard.py`): enforce that claims are backed by
+  governed data with explicit coverage checks before they reach a user. Not independently
+  line-by-line verified in the Pass 1/1.5 audits — verify before treating this as a safety
+  guarantee in a new design. `canonical_guard.py` is DEPRECATED as of A3.2f: not
+  production-wired, retained only as `coverage_guard.py`'s single-fact parity reference.
 - **Conversation persistence** (`tools/analyst_workspace/`): a separate module from the
   reasoning loop — `conversation_service.py`, `store.py`, `admin.py`,
   `export_markdown.py`. This is why `tools/analyst_api.py` supplies the service via a lazy
