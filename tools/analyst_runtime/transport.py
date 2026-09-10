@@ -306,6 +306,181 @@ def evidence_from_dict(data: dict[str, Any]) -> ToolEvidence:
     )
 
 
+#: A3.2e contract version stamp for the durable-evidence projection shape
+#: (distinct from EVIDENCE_CONTRACT_VERSION, which stamps ToolEvidence
+#: itself). Bumped only when DurableEvidenceProjection's own shape changes.
+DURABLE_EVIDENCE_PROJECTION_VERSION = "1"
+
+#: Only these evidence classes may ever become durable factual evidence.
+#: controlled_sql is supporting/noncanonical (facts always ()) and
+#: verified_query remains reserved (no producer exists yet) -- neither is
+#: ever projected for durable storage. See the A3.2e architecture decision
+#: memo, section E/F.
+DURABLE_EVIDENCE_CLASSES = frozenset({"canonical_metric", "governed_dataset"})
+
+
+class DurableProjectionError(ValueError):
+    """A durable evidence projection could not be reconstructed into a
+    trustworthy ToolEvidence: an unrecognized ``projection_version``, a
+    missing/incomplete ``authority`` block, a non-durable ``evidence_class``,
+    or any other gap that would force ``reconstruct_durable_evidence`` to
+    guess. Always fails closed -- the caller must drop the item, never
+    synthesize a substitute Authority or infer one from table/tool names."""
+
+
+def project_evidence_for_durable_storage(evidence: ToolEvidence) -> dict[str, Any] | None:
+    """The sole authorized ToolEvidence -> durable-row transformation (A3.2e).
+
+    Returns ``None`` for any evidence_class that must never become durable
+    factual evidence:
+
+    - ``controlled_sql`` is supporting/noncanonical; ``facts`` is always
+      ``()`` by ToolEvidence's own invariant, so a durable snapshot of it
+      would carry zero evidentiary value while still tempting a future
+      caller to treat it as governed history. It stays ephemeral/supporting;
+      SQL text auditability is already covered by TurnTrace/message metadata.
+    - ``verified_query`` remains reserved per the existing A3.2 contract --
+      no producer exists yet, so there is nothing legitimate to project.
+
+    Only ``canonical_metric``/``governed_dataset`` evidence is projected.
+    Deliberately excludes ``result`` (the bounded, model-visible display
+    rows derived from ``facts``) -- the durable store keeps only the
+    citeable ``facts``, never the display projection built from them, even
+    when ``result.kind == "table"``."""
+    if evidence.evidence_class not in DURABLE_EVIDENCE_CLASSES:
+        return None
+    return {
+        "projection_version": DURABLE_EVIDENCE_PROJECTION_VERSION,
+        "evidence_id": evidence.evidence_id,
+        "evidence_class": evidence.evidence_class,
+        "producer": {
+            "tool_name": evidence.producer.tool_name,
+            "contract_version": evidence.producer.contract_version,
+        },
+        "authority": {
+            "kind": evidence.authority.kind,
+            "source_system": evidence.authority.source_system,
+            "dataset_id": evidence.authority.dataset_id,
+            "dataset_version": evidence.authority.dataset_version,
+            "metric_id": evidence.authority.metric_id,
+            "metric_version": evidence.authority.metric_version,
+            "verified_query_id": evidence.authority.verified_query_id,
+            "verified_query_version": evidence.authority.verified_query_version,
+            "sql_fingerprint": evidence.authority.sql_fingerprint,
+        },
+        "scope": dict(evidence.scope),
+        "temporal": {
+            "requested": evidence.temporal.requested,
+            "resolved": evidence.temporal.resolved,
+            "observed_as_of": evidence.temporal.observed_as_of,
+            "granularity": evidence.temporal.granularity,
+        },
+        "units": {
+            "unit": evidence.units.unit,
+            "scale": evidence.units.scale,
+            "basis": evidence.units.basis,
+        },
+        "provenance": dict(evidence.provenance),
+        "facts": [dict(fact) for fact in evidence.facts],
+        "limitations": list(evidence.limitations),
+        "coverage": dict(evidence.coverage) if evidence.coverage is not None else None,
+        "semantic_contract": dict(evidence.semantic_contract),
+    }
+
+
+def reconstruct_durable_evidence(projection: dict[str, Any]) -> ToolEvidence:
+    """Strict counterpart to ``project_evidence_for_durable_storage``.
+
+    This is the *only* authorized durable-row -> ToolEvidence path. It never
+    accepts a partial/ad hoc dict, never infers ``authority`` from
+    ``evidence_class``/``semantic_contract``/``provenance``, never fills a
+    missing field with a fabricated default, and never falls back to
+    ``evidence_from_dict`` (which round-trips a *full* ToolEvidence,
+    including ``result``, and is not the durable contract).
+
+    Fails closed with ``DurableProjectionError`` -- never a bare
+    ``KeyError``/``TypeError`` -- when: the payload is not a dict; the
+    ``projection_version`` is missing or unrecognized (this is exactly how a
+    pre-A3.2e legacy row, which never had this column, is rejected rather
+    than silently accepted); ``evidence_class`` is not
+    ``canonical_metric``/``governed_dataset``; or ``producer.tool_name`` /
+    ``authority.kind`` is missing. The caller (``session.py``) is
+    responsible for dropping the offending item and recording a technical
+    event -- one bad historical row must never fail an entire restart.
+
+    ``result`` is not part of the durable contract (see
+    ``project_evidence_for_durable_storage``), so the reconstructed object
+    carries an honest empty placeholder: reused historical evidence was
+    never citeable via ``result`` to begin with (``evidence_inventory.py``
+    and ``coverage_guard.py`` both bind against ``facts``, never
+    ``result.rows``)."""
+    if not isinstance(projection, dict):
+        raise DurableProjectionError("durable evidence projection must be a dict")
+
+    version = projection.get("projection_version")
+    if version != DURABLE_EVIDENCE_PROJECTION_VERSION:
+        raise DurableProjectionError(
+            f"unrecognized durable evidence projection_version: {version!r} "
+            "(a pre-A3.2e legacy row has no recognized projection and is dropped, not guessed at)"
+        )
+
+    evidence_class = projection.get("evidence_class")
+    if evidence_class not in DURABLE_EVIDENCE_CLASSES:
+        raise DurableProjectionError(
+            f"durable evidence_class must be one of {sorted(DURABLE_EVIDENCE_CLASSES)}, got {evidence_class!r}"
+        )
+
+    evidence_id = projection.get("evidence_id")
+    if not evidence_id:
+        raise DurableProjectionError("durable evidence projection missing evidence_id")
+
+    producer_data = projection.get("producer")
+    if not isinstance(producer_data, dict) or not producer_data.get("tool_name"):
+        raise DurableProjectionError("durable evidence projection missing producer.tool_name")
+
+    authority_data = projection.get("authority")
+    if not isinstance(authority_data, dict) or not authority_data.get("kind"):
+        raise DurableProjectionError("durable evidence projection missing authority.kind")
+
+    temporal_data = projection.get("temporal") or {}
+    units_data = projection.get("units") or {}
+    try:
+        return ToolEvidence(
+            evidence_id=str(evidence_id),
+            evidence_class=str(evidence_class),
+            producer=Producer(
+                tool_name=str(producer_data["tool_name"]),
+                contract_version=str(producer_data.get("contract_version", EVIDENCE_CONTRACT_VERSION)),
+            ),
+            authority=Authority(
+                kind=str(authority_data["kind"]), source_system=authority_data.get("source_system"),
+                dataset_id=authority_data.get("dataset_id"), dataset_version=authority_data.get("dataset_version"),
+                metric_id=authority_data.get("metric_id"), metric_version=authority_data.get("metric_version"),
+                verified_query_id=authority_data.get("verified_query_id"),
+                verified_query_version=authority_data.get("verified_query_version"),
+                sql_fingerprint=authority_data.get("sql_fingerprint"),
+            ),
+            scope=dict(projection.get("scope") or {}),
+            temporal=Temporal(
+                requested=temporal_data.get("requested"), resolved=temporal_data.get("resolved"),
+                observed_as_of=temporal_data.get("observed_as_of"), granularity=temporal_data.get("granularity"),
+            ),
+            units=Units(unit=units_data.get("unit"), scale=units_data.get("scale"), basis=units_data.get("basis")),
+            result=ResultEnvelope(kind="empty"),
+            facts=tuple(dict(fact) for fact in projection.get("facts") or ()),
+            provenance=dict(projection.get("provenance") or {}),
+            limitations=tuple(projection.get("limitations") or ()),
+            coverage=dict(projection["coverage"]) if projection.get("coverage") is not None else None,
+            semantic_contract=dict(projection.get("semantic_contract") or {}),
+        )
+    except ValueError as exc:
+        # ToolEvidence.__post_init__ (e.g. authority.kind != evidence_class,
+        # or an evidence_class outside _EVIDENCE_CLASSES) raises ValueError.
+        # Re-typed here so every failure mode at this boundary is uniformly
+        # a DurableProjectionError for the caller to catch.
+        raise DurableProjectionError(str(exc)) from exc
+
+
 @dataclass(frozen=True)
 class StructuredOutputContract:
     name: str

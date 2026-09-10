@@ -6,6 +6,7 @@ keeps imports and ordinary workspace operations offline and testable.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from copy import deepcopy
 from hashlib import sha256
@@ -25,9 +26,13 @@ from tools.analyst_runtime.evidence_inventory import render_evidence_inventory
 from tools.analyst_runtime.base import ToolCall, Usage
 from tools.analyst_runtime.live_sandbox import LiveReadOnlySandbox
 from tools.analyst_runtime.presentation import AllowedClaim, FinalPresenter, OpenAIResponsesFinalPresenter, PresentationResult
-from tools.analyst_runtime.transport import (ModelRequest, ModelResponse, StructuredOutputContract, ToolEvidence,
-                                              ToolRequest, ToolResult, ToolSpec, TranscriptItem, evidence_from_dict,
-                                              evidence_to_dict)
+from tools.analyst_runtime.transport import (DurableProjectionError, ModelRequest, ModelResponse,
+                                              StructuredOutputContract, ToolEvidence, ToolRequest, ToolResult,
+                                              ToolSpec, TranscriptItem,
+                                              project_evidence_for_durable_storage, reconstruct_durable_evidence)
+
+
+_logger = logging.getLogger(__name__)
 
 
 _CONTEXT_ISOLATION_INSTRUCTION = (
@@ -437,7 +442,15 @@ class OpenAIResponsesAnalystSession:
         durable_memory = None
         envelope = result.turn.raw.get("structured_output") if isinstance(result.turn.raw, dict) else None
         if validation is not None and validation.valid and evidence and isinstance(envelope, dict):
-            durable_memory = {"evidence": [_evidence_to_memory(item) for item in evidence], "envelope": envelope}
+            # _evidence_to_memory returns None for controlled_sql/verified_query
+            # (A3.2e: only canonical_metric/governed_dataset are ever durable
+            # factual evidence) -- filtered out here so durable_memory["evidence"]
+            # never contains a non-durable item in the first place. store.py's
+            # persist_analytical_turn re-checks this independently; this is not
+            # the only boundary, just the first one.
+            projected_evidence = [projection for item in evidence
+                                   if (projection := _evidence_to_memory(item)) is not None]
+            durable_memory = {"evidence": projected_evidence, "envelope": envelope}
         elif no_evidence is not None:
             durable_memory = {"evidence": [{"evidence_id": "none:" + _answer_hash(json.dumps(no_evidence, sort_keys=True)),
                 "evidence_class": "governed_dataset", "source": {"tool_name": "analytics_account_query"},
@@ -885,7 +898,7 @@ class OpenAIResponsesAnalystSessionFactory:
         # in-process replay. Durable claims/evidence are hydrated separately.
         history: list[TranscriptItem] = []
         durable = (runtime_context or {}).get("durable_analytical_context", {})
-        durable_evidence = [_memory_to_evidence(item) for item in durable.get("evidence", []) if isinstance(item, dict)]
+        durable_evidence = _reconstruct_durable_evidence_batch(durable.get("evidence", []))
         claims = durable.get("claims", [])
         if claims:
             history.append(TranscriptItem(role="assistant", text=(
@@ -908,13 +921,39 @@ def _default_openai_client() -> Any:
     return OpenAI(max_retries=0)
 
 
-def _evidence_to_memory(item: ToolEvidence) -> dict[str, Any]:
-    """Serialize only validated factual evidence; never provider/tool transcripts."""
-    return evidence_to_dict(item)
+def _evidence_to_memory(item: ToolEvidence) -> dict[str, Any] | None:
+    """Project one turn's evidence into its A3.2e durable-storage shape.
+
+    Returns ``None`` for controlled_sql/verified_query (never durable
+    factual evidence); the caller filters those out before they ever reach
+    ``durable_memory["evidence"]``. Never the full ``evidence_to_dict()``
+    serialization -- that keeps ``result``/rows, which the durable contract
+    explicitly excludes (see transport.project_evidence_for_durable_storage)."""
+    return project_evidence_for_durable_storage(item)
 
 
-def _memory_to_evidence(item: dict[str, Any]) -> ToolEvidence:
-    return evidence_from_dict(deepcopy(item))
+def _reconstruct_durable_evidence_batch(items: list[Any]) -> list[ToolEvidence]:
+    """Reconstruct real ``ToolEvidence`` objects from durable rows, failing
+    closed per item rather than per batch.
+
+    A single legacy row (pre-A3.2e, no recognized projection_version) or a
+    corrupted projection must never crash session creation on restart -- it
+    is dropped and logged as a technical event; every other, valid item in
+    ``items`` is still hydrated. This is the only place a durable dict is
+    turned into a ToolEvidence -- never a bare/partial dict handed straight
+    to a reconstruction function without going through this fail-closed path."""
+    reconstructed: list[ToolEvidence] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            reconstructed.append(reconstruct_durable_evidence(deepcopy(item)))
+        except DurableProjectionError as exc:
+            _logger.warning(
+                "durable evidence dropped on restart hydration: evidence_id=%r reason=%s",
+                item.get("evidence_id"), exc,
+            )
+    return reconstructed
 
 
 def _item_dict(item: Any) -> dict[str, Any]:

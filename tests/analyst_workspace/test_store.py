@@ -31,7 +31,7 @@ def test_initialize_creates_versioned_schema(tmp_path):
         assert {"analytical_turn", "fact_claim", "evidence_snapshot", "claim_dependency", "analytical_turn_evidence"} <= tables
         assert {"feedback_report", "user_capability"} <= tables
         assert {"product_update", "product_update_seen"} <= tables
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 10
     finally:
         conn.close()
 
