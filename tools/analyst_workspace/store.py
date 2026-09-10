@@ -935,6 +935,20 @@ class WorkspaceStore:
                         # does, via project_evidence_for_durable_storage returning
                         # None for it, but that is not relied on here).
                         continue
+                    # A3.2f: this 7-field fingerprint is deliberately kept as-is,
+                    # not widened to also cover producer/authority/temporal/units
+                    # (all four persisted as separate columns below, never hashed).
+                    # `facts` -- the only field that changes a rendered claim's
+                    # value -- IS included, so a fingerprint collision requires
+                    # identical citeable content too; the only thing an omitted
+                    # field can cause is two evidence items with identical facts/
+                    # scope/coverage but different provenance metadata (e.g. a
+                    # re-run under a newer producer/authority contract version)
+                    # sharing one row and displaying the FIRST-inserted producer/
+                    # authority metadata. Widening would defeat dedup for that
+                    # common, legitimate case (same facts, newer contract
+                    # version) without changing any cited value, which is a
+                    # worse trade than the narrow, metadata-only risk it closes.
                     compact = {key: item.get(key) for key in ("evidence_class", "source", "scope", "semantic_contract", "provenance", "coverage", "facts")}
                     fingerprint = hashlib.sha256(json.dumps(compact, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
                     row = conn.execute("SELECT id FROM evidence_snapshot WHERE fingerprint=?", (fingerprint,)).fetchone()

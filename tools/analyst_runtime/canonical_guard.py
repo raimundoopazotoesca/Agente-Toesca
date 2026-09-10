@@ -1,4 +1,16 @@
-"""Deterministic binding of structured canonical claims to tool evidence."""
+"""Deterministic binding of structured canonical claims to tool evidence.
+
+DEPRECATED (A3.2f): this module (Stage 5.3) is not production-wired. The
+single active claim validator is tools.analyst_runtime.coverage_guard
+.validate_and_render, which re-implements this module's single-fact binding
+rules byte-identically as one case of its broader envelope (canonical_metric
+/ governed_dataset / derived_metric / table / supporting_evidence claims --
+see coverage_guard.py's own module docstring). No production code imports
+this module; it is retained solely as coverage_guard.py's single-fact parity
+reference, exercised by test_coverage_guard.py's parity tests (e.g.
+test_canonical_only_envelope_renders_identically_to_stage_5_3). Do not add
+new callers here -- extend coverage_guard.py instead.
+"""
 from dataclasses import dataclass
 from typing import Any
 

@@ -291,6 +291,22 @@ def test_canonical_claim_selecting_a_wrong_period_value_fails_closed():
     assert validation.trace["reason"] == "binding_mismatch"
 
 
+def test_canonical_claim_with_a_wrong_unit_fails_closed():
+    """A3.2f: the generic binding_mismatch equality check covers `unit`
+    among its 8 compared fields (coverage_guard.validate_and_render), but no
+    prior test isolated unit specifically -- only period/entity/value had
+    dedicated regressions. `unit` is one of the two rendered, consequence-
+    bearing fields (with `value`), so it deserves its own regression rather
+    than only implicit coverage via the period-mismatch test above."""
+    evidence = _period_range_evidence()
+    fact = next(f for f in evidence.facts if f["period"] == "2026-06")
+    claim = {"evidence_id": "e1", **fact, "unit": "percent_already_multiplied"}
+    validation = validate_and_render(_canonical_claim_envelope(claim), [], [evidence])
+
+    assert not validation.valid
+    assert validation.trace["reason"] == "binding_mismatch"
+
+
 def test_canonical_claim_for_an_absent_period_fails_closed():
     evidence = _period_range_evidence()
     fact = next(f for f in evidence.facts if f["period"] == "2026-06")

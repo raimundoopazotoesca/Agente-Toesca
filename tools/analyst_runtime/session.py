@@ -657,6 +657,22 @@ def _evidence_for_current_answer(investigation: Any, retained_history_length: in
     place of the evidence it just requested.  A genuinely tool-less follow-up
     still receives the prior validated facts it needs for comparison or
     arithmetic.
+
+    A3.2f durable-evidence policy (documented here, not newly enforced --
+    this function already implements it): durable/retained evidence is
+    reused verbatim ONLY for a historical follow-up (this turn made no new
+    tool call, so ``current_results`` is empty and the ``durable_evidence +
+    prior_items`` branch below runs) -- never as a silent substitute for a
+    genuinely new factual query. A new factual question is expected to
+    trigger a fresh tool call, whose result then becomes the current turn's
+    ONLY evidence (the ``if current_results: return current_evidence``
+    branch), superseding any durable/prior evidence for that claim. No TTL
+    or live-DB revalidation of durable evidence is implemented -- durable
+    facts are never re-checked against the live DB before reuse in the
+    historical-follow-up branch; correctness of "a new question gets fresh
+    data" instead depends on the model choosing to call a tool for a
+    genuinely new question, which is planner/prompt behavior, not something
+    this function (or coverage_guard) enforces structurally.
     """
     prior_items = investigation.round_trajectory[:retained_history_length]
     current_items = investigation.round_trajectory[retained_history_length:]
