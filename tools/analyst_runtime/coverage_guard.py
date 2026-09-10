@@ -270,9 +270,17 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     # touches a rendered/humanized display string.
     bound_derived: dict[str, Any] = {}
     for claim in derived_claims:
+        # claim_id namespace must stay disjoint from ALL other claim types
+        # (canonical, governed, supporting), not just canonical/supporting --
+        # see A3.2d: a derived claim_id colliding with a governed one used to
+        # pass through unrejected here (each fragment type still resolved
+        # against its own dict, so no wrong value was ever rendered, but the
+        # documented "three claim-id namespaces must stay disjoint" invariant
+        # was not actually enforced for this pair). Closed for consistency
+        # with the existing canonical/supporting checks on this same line.
         if not isinstance(claim, dict) or not isinstance(claim.get("claim_id"), str) \
                 or claim["claim_id"] in bound_derived or claim["claim_id"] in bound_canonical \
-                or claim["claim_id"] in bound_supporting:
+                or claim["claim_id"] in bound_supporting or claim["claim_id"] in bound_governed:
             return _fail(canonical_evidence, governed_evidence, "invalid_claim", db_path)
         operation = claim.get("operation")
         lhs_claim_id, rhs_claim_id = claim.get("lhs_claim_id"), claim.get("rhs_claim_id")
