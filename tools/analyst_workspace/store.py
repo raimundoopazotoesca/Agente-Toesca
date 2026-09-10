@@ -17,10 +17,11 @@ from uuid import uuid4
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from tools.analyst_runtime.transport import DURABLE_EVIDENCE_CLASSES
 from tools.analyst_workspace.models import Conversation, Feedback, FeedbackReport, Message, ProductUpdate, preferred_name
 from tools.analyst_workspace.percentile import average, nearest_rank_percentile
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 DEFAULT_TITLE = "Nueva conversación"
 _ROLES = {"user", "assistant"}
 _RATINGS = {"up", "down"}
@@ -284,6 +285,28 @@ class WorkspaceStore:
                         ON product_update_seen(user_id);
                     """)
                     conn.execute("PRAGMA user_version = 9")
+                    version = 9
+                if version < 10:
+                    # A3.2e: evidence_snapshot originally captured only
+                    # evidence_class/scope/provenance/coverage/semantic_contract/
+                    # source/facts -- never producer/authority/temporal/units,
+                    # which the durable-evidence reconstruction contract
+                    # (tools.analyst_runtime.transport.reconstruct_durable_evidence)
+                    # requires. Additive-only: existing rows keep NULL in every
+                    # new column and are treated as projection_version-less
+                    # legacy rows (dropped, not backfilled, on reconstruction --
+                    # see WorkspaceStore.load_durable_context_for_user and the
+                    # A3.2e architecture decision memo, section J).
+                    self._backup_before_durable_evidence_projection_migration()
+                    conn.executescript("""
+                    ALTER TABLE evidence_snapshot ADD COLUMN producer_json TEXT;
+                    ALTER TABLE evidence_snapshot ADD COLUMN authority_json TEXT;
+                    ALTER TABLE evidence_snapshot ADD COLUMN temporal_json TEXT;
+                    ALTER TABLE evidence_snapshot ADD COLUMN units_json TEXT;
+                    ALTER TABLE evidence_snapshot ADD COLUMN limitations_json TEXT;
+                    ALTER TABLE evidence_snapshot ADD COLUMN projection_version TEXT;
+                    """)
+                    conn.execute("PRAGMA user_version = 10")
         finally:
             conn.close()
 
@@ -902,16 +925,36 @@ class WorkspaceStore:
                 for item in evidence:
                     if not isinstance(item, dict) or not isinstance(item.get("evidence_id"), str):
                         continue
+                    if item.get("evidence_class") not in DURABLE_EVIDENCE_CLASSES:
+                        # A3.2e: explicit persistence-layer boundary. controlled_sql
+                        # is supporting/noncanonical (facts always ()) and must
+                        # never become durable factual evidence, regardless of
+                        # whether an unfiltered evidence list reaches this call --
+                        # this check does not trust the caller to have already
+                        # filtered it out (tools.analyst_runtime.session already
+                        # does, via project_evidence_for_durable_storage returning
+                        # None for it, but that is not relied on here).
+                        continue
                     compact = {key: item.get(key) for key in ("evidence_class", "source", "scope", "semantic_contract", "provenance", "coverage", "facts")}
                     fingerprint = hashlib.sha256(json.dumps(compact, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
                     row = conn.execute("SELECT id FROM evidence_snapshot WHERE fingerprint=?", (fingerprint,)).fetchone()
                     snapshot_id = row["id"] if row else str(uuid4())
                     if row is None:
-                        conn.execute("INSERT INTO evidence_snapshot VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+                        conn.execute("INSERT INTO evidence_snapshot VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
                             snapshot_id, fingerprint, str(item.get("evidence_class", "unknown")),
                             _serialize_object(item.get("scope") or {}, "scope"), _serialize_object(item.get("provenance") or {}, "provenance"),
                             _serialize_object(item.get("coverage"), "coverage"), _serialize_object(item.get("semantic_contract") or {}, "semantic_contract"),
-                            _serialize_object(item.get("source") or {}, "source"), json.dumps(item.get("facts") or [], ensure_ascii=False, separators=(",", ":")), now))
+                            _serialize_object(item.get("source") or {}, "source"), json.dumps(item.get("facts") or [], ensure_ascii=False, separators=(",", ":")), now,
+                            # A3.2e durable evidence projection fields (schema v10).
+                            # Populated only when the caller supplied a real
+                            # projection (tools.analyst_runtime.transport
+                            # .project_evidence_for_durable_storage output); absent
+                            # on a pre-v10 caller's dict, which is exactly the
+                            # legacy-row shape reconstruct_durable_evidence rejects.
+                            _serialize_object(item.get("producer"), "producer"), _serialize_object(item.get("authority"), "authority"),
+                            _serialize_object(item.get("temporal"), "temporal"), _serialize_object(item.get("units"), "units"),
+                            json.dumps(item.get("limitations"), ensure_ascii=False, separators=(",", ":")) if item.get("limitations") is not None else None,
+                            item.get("projection_version")))
                     evidence_ids[item["evidence_id"]] = snapshot_id
                     conn.execute("INSERT OR IGNORE INTO analytical_turn_evidence VALUES (?, ?)", (turn_id, snapshot_id))
                 claim_ids: dict[str, str] = {}
@@ -937,7 +980,8 @@ class WorkspaceStore:
         conn = self._connect()
         try:
             rows = conn.execute("""SELECT fc.*, es.evidence_class, es.source_json, es.scope_json, es.semantic_contract_json,
-                es.provenance_json, es.coverage_json, es.facts_json FROM fact_claim fc
+                es.provenance_json, es.coverage_json, es.facts_json, es.producer_json, es.authority_json,
+                es.temporal_json, es.units_json, es.limitations_json, es.projection_version FROM fact_claim fc
                 JOIN analytical_turn at ON at.id=fc.analytical_turn_id LEFT JOIN evidence_snapshot es ON es.id=fc.evidence_snapshot_id
                 WHERE at.conversation_id=? ORDER BY at.created_at DESC, fc.created_at DESC LIMIT ?""", (conversation_id, limit)).fetchall()
             evidence_rows = conn.execute("""SELECT DISTINCT es.* FROM analytical_turn at
@@ -953,15 +997,9 @@ class WorkspaceStore:
                 payload["evidence_id"] = row["evidence_snapshot_id"]
             (derived_claims if row["kind"] == "derived_fact" else claims).append(payload)
             if row["evidence_snapshot_id"] and row["evidence_snapshot_id"] not in evidence_by_id:
-                evidence_by_id[row["evidence_snapshot_id"]] = {"evidence_id": row["evidence_snapshot_id"], "evidence_class": row["evidence_class"],
-                    "source": _deserialize_object(row["source_json"]) or {}, "scope": _deserialize_object(row["scope_json"]) or {},
-                    "semantic_contract": _deserialize_object(row["semantic_contract_json"]) or {}, "provenance": _deserialize_object(row["provenance_json"]) or {},
-                    "coverage": _deserialize_object(row["coverage_json"]), "facts": json.loads(row["facts_json"])}
+                evidence_by_id[row["evidence_snapshot_id"]] = _durable_evidence_dict_from_row(row["evidence_snapshot_id"], row)
         for row in evidence_rows:
-            evidence_by_id.setdefault(row["id"], {"evidence_id": row["id"], "evidence_class": row["evidence_class"],
-                "source": _deserialize_object(row["source_json"]) or {}, "scope": _deserialize_object(row["scope_json"]) or {},
-                "semantic_contract": _deserialize_object(row["semantic_contract_json"]) or {}, "provenance": _deserialize_object(row["provenance_json"]) or {},
-                "coverage": _deserialize_object(row["coverage_json"]), "facts": json.loads(row["facts_json"])})
+            evidence_by_id.setdefault(row["id"], _durable_evidence_dict_from_row(row["id"], row))
         return {"claims": claims, "derived_claims": derived_claims, "evidence": list(evidence_by_id.values())}
 
     def list_messages(self, conversation_id: str) -> list[Message]:
@@ -1445,6 +1483,11 @@ class WorkspaceStore:
         if self.db_path.exists() and not backup.exists():
             shutil.copy2(self.db_path, backup)
 
+    def _backup_before_durable_evidence_projection_migration(self) -> None:
+        backup = self.db_path.with_suffix(self.db_path.suffix + ".pre_durable_evidence_projection_v1.bak")
+        if self.db_path.exists() and not backup.exists():
+            shutil.copy2(self.db_path, backup)
+
     def _create_initial_admin(self, conn: sqlite3.Connection) -> str:
         username = os.environ.get("ANALYST_INITIAL_ADMIN_USERNAME", "admin").strip().lower()
         row = conn.execute("SELECT id FROM user WHERE username=?", (username,)).fetchone()
@@ -1571,6 +1614,34 @@ def _feedback_report_from_row(row: sqlite3.Row) -> FeedbackReport:
 
 def _deserialize_object(value: str | None) -> dict[str, Any] | None:
     return json.loads(value) if value is not None else None
+
+
+def _durable_evidence_dict_from_row(evidence_id: str, row: sqlite3.Row) -> dict[str, Any]:
+    """Project one ``evidence_snapshot`` row (joined in, whichever query)
+    into the exact dict shape ``tools.analyst_runtime.transport
+    .reconstruct_durable_evidence`` expects. A pre-A3.2e (schema < 10) row
+    simply has NULL in every new column here -- ``projection_version`` comes
+    back ``None``, which is precisely what makes reconstruction reject it as
+    a legacy row (see the A3.2e architecture decision memo, section J) --
+    this function never fabricates a value for a column that does not
+    exist in the stored row."""
+    keys = row.keys()
+    return {
+        "evidence_id": evidence_id,
+        "evidence_class": row["evidence_class"],
+        "source": _deserialize_object(row["source_json"]) or {},
+        "scope": _deserialize_object(row["scope_json"]) or {},
+        "semantic_contract": _deserialize_object(row["semantic_contract_json"]) or {},
+        "provenance": _deserialize_object(row["provenance_json"]) or {},
+        "coverage": _deserialize_object(row["coverage_json"]),
+        "facts": json.loads(row["facts_json"]),
+        "producer": _deserialize_object(row["producer_json"]) if "producer_json" in keys else None,
+        "authority": _deserialize_object(row["authority_json"]) if "authority_json" in keys else None,
+        "temporal": _deserialize_object(row["temporal_json"]) if "temporal_json" in keys else None,
+        "units": _deserialize_object(row["units_json"]) if "units_json" in keys else None,
+        "limitations": (_deserialize_object(row["limitations_json"]) if "limitations_json" in keys else None) or [],
+        "projection_version": row["projection_version"] if "projection_version" in keys else None,
+    }
 
 
 def _product_update_from_row(row: sqlite3.Row) -> ProductUpdate:
