@@ -17,7 +17,6 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 | Protected base HEAD captured for this checkpoint | `58cb06bc832e35a01a713d22219e6947853c03ff` (merge commit of PR #23, "feat/a3-3-factual-trend-validation" — closes A3.3) |
 | Checkpoint documentation source commit | `c760086c70a1e0811f6d75762fef0402cf24a9f7` (historical — source commit for the prior, 2026-09-03 checkpoint; A3.1/A3.2/A3.3 all landed after that checkpoint without a doc sync, closed by this update) |
 | Date verified | 2026-09-11 |
-| Product framing | The primary product is **Toesca Platform**, the operating system for real-estate investment decisions: Analyst, Ingesta, Factsheets, Informes, Asset Workspace, Data Quality/Admin, Evaluaciones, Trace/auditability. The Analyst is one capability inside the platform, not the platform itself — see "Product — what exists today" below for the per-surface breakdown, which predates this framing and is not yet restructured around it. |
 | Latest migration in repo (on this branch's own tree) | `091_rent_roll_semantic_renta.sql` (`tools/db/migrations/`) — unchanged since the prior checkpoint |
 | Production DB schema (last known, per source-level self-disclosure — not independently checked against a live DB) | `84` — migrations 085–091 are **not yet applied to production** (unchanged; not re-verified against a live DB as part of this sync) |
 | Test files in repo | 165 under `tests/`, 63 `.py` files under `eval/` (27 `test_*.py`) (file counts, not a pass/fail run) |
@@ -28,8 +27,8 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 | **A2 — Agent Architecture** | **CLOSED / PASS.** PR #6 merged. Established the canonical single-Analyst architecture; `tools/db_chat.py` / `POST /api/chat` confirmed transition-only (see `docs/a2-db-chat-transition-boundary.md`). |
 | **Baseline Debt Burn-down #2** | **CLOSED / PASS.** PR #7 merged. Historical allowlist: 14 → 0. `eval/baselines/pytest-known-failures.json` now holds an empty `failure_ids` list (verified directly at this HEAD). Overall trajectory: 19 → 14 → 0. |
 | **A3.1 — SQL Safety** | **CLOSED / PASS.** Sub-slices A3.1a–A3.1e all merged: PR #9 (governed SQL surface registry, `feat/a3-1a-sql-surface`), PR #11 (SQLite authorizer, `feat/a3-1b-sqlite-authorizer`), PR #13 (per-statement timeout, `feat/a3-1c-sql-timeout`), PR #14 (structural validation, `feat/a3-1d-sql-structural-validation`) + PR #15 (trailing-semicolon fix, `fix/a3-1d-trailing-semicolon`), PR #16 (full-stack adversarial gate, `feat/a3-1e-sql-safety-stack-gate-resume`). PRs #10 and #12, interleaved in the same merge sequence, are unrelated UI fixes, not A3.1 sub-slices. See `tools/analyst_runtime/sqlite_guard.py` and `tools/db/sql_surface.py`. |
-| **A3.2 — Evidence / Citation Lifecycle** | **CLOSED / PASS.** Sub-slices A3.2a–A3.2f all merged (PRs #17–#22): `ToolResult`/`ToolEvidence` Result-Evidence contract, governed-dataset producers bounded via `row_limit`, `controlled_sql` transported as supporting/non-canonical evidence (never promoted to a canonical claim), synthesis evidence-ref hardening, durable evidence projection for restart hydration, and E2E lifecycle hardening. `canonical_guard.py` (Stage 5.3) is now formally deprecated — not production-wired, retained only as `coverage_guard.py`'s single-fact parity reference. |
-| **A3.3 — Factual Validation** | **CLOSED / PASS.** PR #23 merged (merge commit `58cb06bc832e35a01a713d22219e6947853c03ff`, same commit as the protected HEAD row above; implementation commit `6af793b`, "deterministic trend-direction validation over A3.2 claims" — not itself a merge commit). Adds `tools/analyst_runtime/trend_assertions.py` and coverage-guard integration that fail-closed on UP/DOWN/FLAT drift against governed evidence. **Do not modify this implementation as part of documentation work** — it is closed and out of scope for this sync. |
+| **A3.2 — Result + Evidence Contract** | **CLOSED / PASS.** Sub-slices A3.2a–A3.2f all merged (PRs #17–#22): `ToolResult`/`ToolEvidence` Result-Evidence contract, governed-dataset producers bounded via `row_limit`, `controlled_sql` transported as supporting/non-canonical evidence (never promoted to a canonical claim), synthesis evidence-ref hardening, durable evidence projection for restart hydration, and E2E lifecycle hardening. `canonical_guard.py` (Stage 5.3) is now formally deprecated — not production-wired, retained only as `coverage_guard.py`'s single-fact parity reference. (Name per `docs/ROADMAP.md`'s official A3.2 label; the sub-slice sequencing itself is a reasonable execution-time refinement not reflected in the roadmap's single-slice description.) |
+| **A3.3 — Result Validation** | **CLOSED / PASS.** PR #23 merged (merge commit `58cb06bc832e35a01a713d22219e6947853c03ff`, same commit as the protected HEAD row above; implementation commit `6af793b`, "deterministic trend-direction validation over A3.2 claims" — not itself a merge commit). Adds `tools/analyst_runtime/trend_assertions.py` and coverage-guard integration that fail-closed on UP/DOWN/FLAT drift against governed evidence. **Do not modify this implementation as part of documentation work** — it is closed and out of scope for this sync. (Name per `docs/ROADMAP.md:169`. PR #24, `fix/pilot-export-feedback-test`, merged immediately after PR #23 in the same sequence — unrelated UI/test fix, not part of A3.3.) |
 | Current development phase | A0/A1/A1.5, Eval Foundation Step 0, Documentation Reset, Pilot Quality Standard v1, both Baseline Debt Burn-downs, A2 — Agent Architecture, and now **all of A3.1, A3.2, and A3.3 are closed.** JLL v2 remains a separate parallel track — technical cutover candidate frozen, external gate pending (unchanged by this checkpoint). **No phase is assumed to be "next" by default.** A3.4 (Trace / Retention / Auditability) and A4 (advanced intelligence) both remain future work per `docs/ROADMAP.md`, but this checkpoint deliberately does not commit to either as the immediate next slice — the post-A3.3 conversational benchmark surfaced gaps (deixis/conversation state, synthesis completeness, retrieval-vs-missing-data ambiguity, entity-set references) that are not yet reproduced with trace evidence. See `docs/A3_POST_A3.3_GAP_REGISTER.md` for the gap-by-gap classification and what would need to happen before any of them becomes implementation scope. |
 
 <!-- AUTO-GENERATED:START -->
@@ -307,6 +306,19 @@ canonical Analyst. This is a triage conclusion, not universal proof.
 - The historical baseline-failure allowlist is now empty (Burn-down #1 + #2 closed it:
   19 → 14 → 0) — see Baseline Debt Triage above. There is no remaining tracked debt under
   the baseline gate; any new failure now trips it as a regression, not an allowed one.
+- `docs/ROADMAP.md`'s A3 narrative (the "### A3 — Tools, SQL & Safety" section) still
+  reads "immediate next slice A3.1 — SQL Safety ... not yet started as of this
+  checkpoint," which is stale as of this checkpoint (A3.1–A3.3 are closed, see Snapshot
+  above). This is **documentation debt only** — it does not mean A3.1 needs to be
+  reopened or re-verified; A3.1's closure is independently evidenced by the PRs cited in
+  the Snapshot table above. `ROADMAP.md` itself needs a follow-up edit, out of scope for
+  this checkpoint.
+- No design/spec document for any A3 sub-slice (A3.1a–A3.1e, A3.2a–A3.2f, A3.3) exists
+  under `docs/` at this checkpoint — unlike the pattern established elsewhere in this repo
+  (`docs/superpowers/specs/`, `docs/superpowers/plans/`). Scope-closure claims for A3 in
+  this document rely on commit-message self-reporting, not an independently reviewable
+  spec artifact. This is a traceability gap, not a reason to doubt the closures themselves
+  — the commits and their tests are real and merged.
 
 **Architectural debt**
 - `agent.py`'s long-term role (which of its 102 tools survive) is an open question
@@ -328,9 +340,9 @@ canonical Analyst. This is a triage conclusion, not universal proof.
 ## Next exact steps
 
 A2 — Agent Architecture, both Baseline Debt Burn-down blocks, and all of **A3.1 — SQL
-Safety**, **A3.2 — Evidence / Citation Lifecycle**, and **A3.3 — Factual Validation** are
-closed. **A3.3 is not to be reopened** on the basis of the post-closure conversational
-benchmark findings — see `docs/A3_POST_A3.3_GAP_REGISTER.md`.
+Safety**, **A3.2 — Result + Evidence Contract**, and **A3.3 — Result Validation** are
+closed (names per `docs/ROADMAP.md:169`). **A3.3 is not to be reopened** on the basis of
+the post-closure conversational benchmark findings — see `docs/A3_POST_A3.3_GAP_REGISTER.md`.
 
 What comes next is deliberately **not pre-committed** to A3.4 or A4 by this checkpoint.
 `docs/ROADMAP.md` lists A3.4 (Trace / Retention / Auditability) as the next-in-sequence

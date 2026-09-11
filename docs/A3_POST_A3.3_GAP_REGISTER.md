@@ -130,33 +130,47 @@ A3.3 as part of this investigation — trend-direction validation is a separate,
 **ID**: GAP-C
 
 **Description**: A prior analysis flagged Apoquindo 4501 ("Apo4501") as a case where the
-agent appeared to report missing data. Direct inspection found the asset **does** exist with
-substantial data:
+agent appeared to report missing data. That prior analysis reports that direct inspection
+found the asset exists with substantial data:
 
 - Apo4501 exists as a canonical asset belonging to the Apo fund.
 - ER data exists for that asset.
-- A direct query found approximately 715 rows, spanning 2019-01 to 2026-05.
+- A direct query is reported to have found approximately 715 rows, spanning 2019-01 to
+  2026-05.
 
 **Benchmark case(s)**: Apoquindo 4501 queries (conversational benchmark, retrieval class).
 
-**Evidence available**: Direct SQL-level confirmation that the data exists (~715 rows,
-2019-01 to 2026-05 range). **No trace evidence yet showing where, in the resolution chain,
-the agent's answer diverged from that ground truth.**
+**Evidence available**: **Reported evidence, not independently reproduced as part of this
+consolidation.** The "~715 rows, 2019-01 to 2026-05" figure is stated by the prior analysis
+that produced this gap; this consolidation pass did not re-run that query against any
+database (live or version-controlled snapshot) to confirm it, and the prior analysis itself
+does not state which database instance or snapshot the query ran against. Do not treat the
+row count as a canonically verified fact until it is reproduced with its data source stated
+explicitly. This gap must **not** be resolved by running that query against the live,
+uncommitted `memory/agente_toesca_v2.db` as a shortcut — see the reproduction steps below,
+which call for a full trace, not a one-off row count. **No trace evidence yet showing
+where, in the resolution chain, the agent's answer diverged from the reported ground
+truth.**
 
 **Classification**: **no reproducido / retrieval failure potencial.**
-This must **not** be classified as "missing data" — the data-level evidence directly
-contradicts that. It is also not yet classified as a confirmed retrieval bug, because the
-specific point of failure in the chain (user → entity resolution → tool selection → tool
-args → query → result) has not been isolated with a trace.
+This must **not** be prematurely classified as "missing data" on the strength of the
+reported evidence above — but that reported evidence is itself unreproduced by this
+consolidation (see "Evidence available"), so this is not yet classified as a confirmed
+retrieval bug either. Two things need reproduction before this gap can move out of
+"no reproducido": (1) the underlying row count/date range itself, with its data source
+stated, and (2) the specific point of failure in the chain (user → entity resolution →
+tool selection → tool args → query → result).
 
-**Diagnóstico técnico**: The failure, if real, is somewhere in:
+**Diagnóstico técnico**: The failure, if the reported data presence holds up under
+reproduction, is somewhere in:
 
 ```
 user → entity resolution → tool selection → tool args → query → result
 ```
 
-Given that the underlying data is confirmed present, a report of "no data" for this case
-would be a **retrieval failure**, not a true data-absence case. Candidate failure points:
+If the underlying data is confirmed present on reproduction, a report of "no data" for
+this case would be a **retrieval failure**, not a true data-absence case. Candidate failure
+points:
 entity resolution not mapping "Apo4501"/"Apoquindo 4501" phrasing to the canonical asset key,
 tool selection choosing a scope that excludes this asset, or tool arguments (date range,
 fund filter) narrowing the query incorrectly.
@@ -168,11 +182,14 @@ absence, every such response is a **false negative** that looks identical to cor
 governed behavior on the surface — this is the highest-risk gap in this register precisely
 because it is silent by design.
 
-**Recomendación**: Reproduce with a full trace on an Apo4501 query. Verify, in order: (1)
-entity resolution output for "Apo4501" / "Apoquindo 4501" phrasing, (2) which tool was
-selected and why, (3) the exact arguments passed to that tool, (4) the raw query executed,
-(5) the raw result before presentation. Explicitly distinguish "query correctly returned zero
-rows for the requested scope" from "query never reached the right scope."
+**Recomendación**: Reproduce with a full trace on an Apo4501 query, against a stated,
+recorded database instance/snapshot (so the row-count claim itself becomes verifiable, not
+just the retrieval-chain question). Verify, in order: (0) re-run the underlying data-presence
+check and record which DB instance/snapshot it ran against; (1) entity resolution output for
+"Apo4501" / "Apoquindo 4501" phrasing, (2) which tool was selected and why, (3) the exact
+arguments passed to that tool, (4) the raw query executed, (5) the raw result before
+presentation. Explicitly distinguish "query correctly returned zero rows for the requested
+scope" from "query never reached the right scope."
 
 **Scope actual**: **investigar/reproducir** — highest priority of the four gaps given the
 false-negative risk against the "no data" governance rule.
