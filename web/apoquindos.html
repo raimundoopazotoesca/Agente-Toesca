@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apoquindos | Toesca</title>
+<style>
+:root{
+  --ink:#0f172a;
+  --muted:#55606e;
+  --faint:#8993a1;
+  --paper:#ffffff;
+  --ground:#f6f7f9;
+  --line:#e4e8ec;
+  --green:#15803d;
+  --green-tint:#e9f6ee;
+  --coral:#d5564a;
+  --coral-tint:#f5d4cf;
+  --blue:#2563eb;
+  --blue-tint:#eaf1ff;
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 6px 20px -12px rgba(15,23,42,.12);
+  --radius:14px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font:15px/1.5 -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit}
+
+/* Top bar */
+.topbar{
+  position:sticky;top:0;z-index:20;height:56px;background:var(--paper);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;
+  padding:0 max(20px,calc((100vw - 1240px)/2));gap:10px;
+}
+.topbar__brand{font-weight:700;letter-spacing:-.01em}
+.topbar__sep{color:var(--faint)}
+.topbar__crumb{color:var(--muted);font-size:13.5px}
+.asset-switcher{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.asset-switcher__link{
+  font-size:12.5px;font-weight:600;color:var(--muted);text-decoration:none;
+  padding:6px 11px;border-radius:7px;transition:background-color .15s ease,color .15s ease;
+}
+.asset-switcher__link:hover{background:var(--ground);color:var(--ink)}
+.asset-switcher__link:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.asset-switcher__link.is-active{color:var(--blue);background:var(--blue-tint);cursor:default}
+
+main{max-width:1240px;margin:0 auto;padding:36px 20px 64px}
+
+/* Hero */
+.hero-head{margin-bottom:22px}
+.eyebrow{
+  color:var(--blue);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;margin:0 0 8px;
+}
+h1{font:700 34px/1.15 -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;margin:0 0 6px;letter-spacing:-.02em}
+.subtitle{margin:0;color:var(--muted);font-size:15px;max-width:60ch}
+
+.context-bar{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  margin-top:20px;padding:14px 18px;background:var(--paper);border:1px solid var(--line);
+  border-radius:var(--radius);box-shadow:var(--shadow);
+}
+.context-bar__status{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+  padding:5px 10px;border-radius:999px;line-height:1.2;
+}
+.chip--ok{background:var(--green-tint);color:var(--green)}
+.chip--partial{background:#fdf3e6;color:#9a6a12}
+.chip--unavailable{background:var(--coral-tint);color:var(--coral)}
+.chip__dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.context-bar__period{color:var(--muted);font-size:13.5px}
+.context-bar__period strong{color:var(--ink);font-weight:700}
+
+.field{display:flex;align-items:center;gap:8px}
+.field label{font-size:13px;color:var(--muted)}
+select{
+  appearance:none;-webkit-appearance:none;background:var(--paper);
+  border:1px solid var(--line);border-radius:9px;padding:7px 30px 7px 12px;
+  font:inherit;font-size:13.5px;color:var(--ink);cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2355606e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 11px center;
+}
+select:hover{border-color:#c7ced6}
+select:focus-visible{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
+
+/* Legend */
+.legend{display:flex;align-items:center;gap:18px;margin:18px 2px 6px;font-size:13px;color:var(--muted)}
+.legend__item{display:inline-flex;align-items:center;gap:7px}
+.legend__swatch{width:11px;height:11px;border-radius:3px;background:var(--green)}
+.legend__swatch.vacant{background:var(--coral)}
+
+/* Buildings grid */
+.buildings{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+
+.panel{
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+
+.building-card{padding:22px}
+.building-card__head{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+  border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px;
+}
+.building-card__name{margin:0;font:700 20px/1.2 -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;letter-spacing:-.01em}
+.building-card__tag{display:block;color:var(--faint);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.building-card__stats{display:flex;gap:18px;flex-wrap:wrap;justify-content:flex-end;text-align:right}
+.stat{min-width:64px}
+.stat__value{display:block;font:700 22px/1.1 -apple-system,"Segoe UI",Roboto,Inter,system-ui,sans-serif;color:var(--ink)}
+.stat__value.is-occupancy{color:var(--green)}
+.stat__label{display:block;font-size:11px;color:var(--faint);margin-top:3px}
+
+.building-card__rents{
+  display:flex;gap:22px;padding:12px 14px;margin-bottom:20px;
+  background:var(--ground);border-radius:10px;
+}
+.rent-chip{display:flex;flex-direction:column}
+.rent-chip__label{font-size:10.5px;color:var(--faint);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.rent-chip__value{font-size:14px;font-weight:700;color:var(--ink);margin-top:2px}
+
+.visual-block{margin-top:4px}
+.visual-block + .visual-block{margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}
+.visual-block__head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.visual-block__title{font-size:13px;font-weight:700;color:var(--ink)}
+.visual-block__meta{font-size:12.5px;color:var(--muted)}
+
+.building-visual-wrap{display:flex;justify-content:center}
+.building-shape,.local-layout{position:relative;width:100%;margin:0 auto}
+.building-shape{max-width:230px;aspect-ratio:235/303}
+.building-shape.is-4700{max-width:238px;aspect-ratio:246/298}
+.local-layout{max-width:260px;aspect-ratio:333/216}
+
+.floor,.local{
+  position:absolute;cursor:pointer;
+  border:2px solid var(--paper);
+  box-shadow:0 0 0 0 transparent;
+  transition:box-shadow .15s ease, filter .15s ease;
+}
+.floor{border-radius:2px}
+.local{border-radius:3px;background:var(--green)}
+.local.vacant{background:var(--coral)}
+
+.floor:hover,.floor:focus-visible,
+.local:hover,.local:focus-visible{
+  box-shadow:inset 0 0 0 2px var(--blue);filter:brightness(1.05);z-index:2;outline:none;
+}
+
+[data-tip-title]{cursor:pointer}
+[data-tip-title]:focus-visible{outline-offset:2px}
+
+/* Detail panel */
+.detail-panel{
+  position:fixed;z-index:70;width:288px;max-width:calc(100vw - 24px);
+  background:var(--paper);color:var(--ink);border:1px solid var(--line);
+  border-radius:14px;box-shadow:0 20px 48px -16px rgba(15,23,42,.32);
+  padding:16px 16px 14px;
+}
+.detail-panel--wide{width:420px}
+.detail-panel--wide .detail-units{max-height:360px}
+.detail-panel__head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px}
+.detail-panel__head-left{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.detail-panel__eyebrow{display:block;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.detail-panel__title{margin:2px 0 0;font-size:19px;font-weight:700;letter-spacing:-.01em;line-height:1.15}
+.detail-panel__close,.detail-panel__back{
+  appearance:none;background:none;border:none;color:var(--muted);font-size:19px;line-height:1;
+  cursor:pointer;padding:3px 7px;border-radius:7px;flex:none;
+}
+.detail-panel__close{margin:-4px -6px 0 0}
+.detail-panel__back{margin:-2px 0 0 -4px}
+.detail-panel__close:hover,.detail-panel__back:hover{background:var(--ground);color:var(--ink)}
+.detail-panel__close:focus-visible,.detail-panel__back:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.detail-panel__body{font-size:12.5px}
+
+/* Nombre de arrendatario clickeable (abre su perfil dentro del panel) */
+.arrendatario-link{color:var(--blue);cursor:pointer;text-underline-offset:2px}
+.arrendatario-link:hover{text-decoration:underline}
+.arrendatario-link:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:3px}
+
+/* Floor panel */
+.detail-panel__summary{display:flex;gap:22px;margin-bottom:12px}
+.detail-metric{display:flex;flex-direction:column}
+.detail-metric__value{font-size:19px;font-weight:700;color:var(--ink);line-height:1.1}
+.detail-metric__value.is-occupancy{color:var(--green)}
+.detail-metric__label{font-size:10.5px;color:var(--faint);margin-top:2px}
+
+.detail-bar{height:6px;border-radius:4px;background:var(--coral-tint);overflow:hidden;margin-bottom:14px}
+.detail-bar span{display:block;height:100%;background:var(--green);border-radius:4px}
+
+.detail-units{max-height:216px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;margin:0 -6px;padding:0 6px}
+.unit-row{padding:7px 6px;border-radius:8px}
+.unit-row.is-vacant{background:var(--coral-tint)}
+.unit-row__top{display:flex;align-items:center;gap:7px}
+.unit-row__code{font-weight:700;font-size:12.5px;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none}
+.status-dot.is-vacant{background:var(--coral)}
+.unit-row__m2{flex:none;font-size:12px;color:var(--muted);font-weight:600}
+.unit-row__sub{font-size:11.5px;color:var(--muted);margin-top:2px;padding-left:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.unit-row.is-vacant .unit-row__sub{color:var(--coral)}
+.unit-row__sub--muted{color:var(--faint)}
+.detail-panel__subhead{margin:14px 0 8px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+
+/* Local panel */
+.detail-panel__status-row{margin-bottom:14px}
+.status-badge{
+  display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
+  font-size:12px;font-weight:700;
+}
+.status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.status-badge.is-occ{background:var(--green-tint);color:var(--green)}
+.status-badge.is-vacant{background:var(--coral-tint);color:var(--coral)}
+
+.detail-facts{margin:0;display:flex;flex-direction:column}
+.detail-facts__row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:8px 0;border-bottom:1px solid var(--line)}
+.detail-facts__row:last-child{border-bottom:none;padding-bottom:0}
+.detail-facts__row dt{margin:0;color:var(--muted)}
+.detail-facts__row dd{margin:0;font-weight:700;color:var(--ink);text-align:right}
+.detail-panel__note{margin:12px 0 0;font-size:12px;color:var(--faint)}
+
+.detail-facts--compact{margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.detail-facts--compact .detail-facts__row{padding:3px 0;border-bottom:none;font-size:12px}
+.detail-facts--compact .detail-facts__row dd{font-weight:600}
+
+.notice{
+  padding:16px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);
+  font-size:13.5px;background:var(--ground);text-align:center;
+}
+
+.empty-state{
+  padding:48px 24px;text-align:center;color:var(--muted);
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);grid-column:1/-1;
+}
+.empty-state strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+
+.history{margin-top:22px;padding:22px}
+.history h2{margin:0 0 14px;font-size:16px}
+
+/* Análisis consolidado */
+.insights{margin-top:28px}
+.insights__head{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:16px}
+.insights__title{margin:0 0 3px;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.insights__subtitle{margin:0;color:var(--muted);font-size:13.5px}
+.insights__grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+
+.scope-tabs{
+  display:inline-flex;gap:2px;padding:3px;background:var(--ground);
+  border:1px solid var(--line);border-radius:10px;flex:none;
+}
+.scope-tabs__btn{
+  appearance:none;border:none;background:transparent;cursor:pointer;
+  padding:7px 13px;border-radius:7px;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--muted);transition:background-color .15s ease,color .15s ease;
+  white-space:nowrap;
+}
+.scope-tabs__btn:hover{color:var(--ink)}
+.scope-tabs__btn:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+.scope-tabs__btn.is-active{background:var(--paper);color:var(--blue);box-shadow:var(--shadow)}
+
+.chart-card{padding:20px}
+.chart-card__head{margin-bottom:16px}
+.chart-card__title{margin:0;font-size:14.5px;font-weight:700}
+.chart-card__meta{margin:2px 0 0;font-size:12px;color:var(--faint)}
+.chart-card__body{min-height:180px}
+
+/* Horizontal bars (composición) */
+.hbar-list{display:flex;flex-direction:column;gap:10px}
+.hbar-row{display:grid;grid-template-columns:104px 1fr 64px;align-items:center;gap:10px}
+.hbar-row__label{font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbar-row__track{position:relative;height:16px;background:var(--ground);border-radius:4px;overflow:hidden}
+.hbar-row__fill{position:absolute;left:0;top:0;height:100%;border-radius:4px;background:var(--blue);min-width:3px;transition:filter .15s ease}
+.hbar-row__track:hover .hbar-row__fill,.hbar-row__track:focus-visible .hbar-row__fill{filter:brightness(1.12)}
+.hbar-row__value{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+
+/* Columns (vencimiento por año) */
+.cols-chart{display:flex;align-items:flex-end;gap:6px;height:168px;padding-top:8px}
+.cols-chart__col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.cols-chart__bar{width:100%;max-width:26px;border-radius:3px 3px 0 0;background:var(--blue);min-height:2px;transition:filter .15s ease}
+.cols-chart__bar:hover,.cols-chart__bar:focus-visible{filter:brightness(1.12)}
+.cols-chart__label{margin-top:6px;font-size:10.5px;color:var(--faint);white-space:nowrap}
+.cols-chart__foot{margin-top:12px;font-size:12px;color:var(--muted)}
+
+/* Line / area (vacancia histórica) */
+.line-chart{width:100%;height:180px;display:block}
+.line-chart__area{fill:var(--green);fill-opacity:.1}
+.line-chart__line{fill:none;stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.line-chart__dot{fill:var(--green);stroke:var(--paper);stroke-width:2;cursor:pointer}
+.line-chart__dot:hover,.line-chart__dot:focus-visible{filter:brightness(1.15)}
+.line-chart__grid{stroke:var(--line);stroke-width:1}
+.line-chart__axis-label{fill:var(--faint);font-size:10px;font-family:inherit}
+
+@media(max-width:860px){
+  .insights__grid{grid-template-columns:1fr}
+}
+
+/* Tooltip */
+.tooltip{
+  position:fixed;z-index:60;max-width:240px;background:var(--ink);color:#fff;
+  padding:9px 11px;border-radius:9px;font-size:12.5px;line-height:1.45;
+  box-shadow:0 8px 24px -8px rgba(15,23,42,.4);pointer-events:none;
+}
+.tooltip__title{font-weight:700;margin-bottom:2px}
+.tooltip__row{display:block;color:#dbe2ea}
+.tooltip__row--muted{color:#aeb8c4}
+
+@media(max-width:860px){
+  .buildings{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  .topbar{padding:0 16px}
+  main{padding:26px 14px 48px}
+  h1{font-size:28px}
+  .building-card__head{flex-direction:column}
+  .building-card__stats{justify-content:flex-start;text-align:left}
+  .context-bar{flex-direction:column;align-items:stretch}
+  .context-bar__status{justify-content:space-between}
+}
+@media(prefers-reduced-motion:reduce){
+  *{transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="topbar__brand">Toesca</span>
+  <span class="topbar__sep">/</span>
+  <span class="topbar__crumb">Activos</span>
+  <nav class="asset-switcher" aria-label="Cambiar de activo">
+    <a class="asset-switcher__link is-active" aria-current="page" href="/reports/apoquindos">Apoquindos</a>
+    <a class="asset-switcher__link" href="/reports/pt">PT</a>
+    <a class="asset-switcher__link" href="/reports/vina">Viña Centro</a>
+    <a class="asset-switcher__link" href="/reports/curico">Curicó</a>
+    <a class="asset-switcher__link" href="/reports/sucden">Sucden</a>
+    <a class="asset-switcher__link" href="/reports/inmosa">INMOSA</a>
+  </nav>
+</header>
+<main>
+  <div class="hero-head">
+    <p class="eyebrow">Vista de activo</p>
+    <h1>Apoquindos</h1>
+    <p class="subtitle">Ocupación espacial de Apoquindo 4501 y Apoquindo 4700, piso a piso y local a local.</p>
+  </div>
+
+  <section id="apo-context" class="context-bar">
+    <div class="context-bar__status" id="coverage"></div>
+    <div class="field">
+      <label for="period">Período</label>
+      <select id="period"></select>
+    </div>
+  </section>
+
+  <div class="legend">
+    <span class="legend__item"><span class="legend__swatch"></span> Ocupado</span>
+    <span class="legend__item"><span class="legend__swatch vacant"></span> Vacante</span>
+  </div>
+
+  <section id="building-layouts" class="buildings" aria-live="polite"></section>
+
+  <section id="apo-insights" class="insights">
+    <div class="insights__head">
+      <div>
+        <h2 class="insights__title">Análisis</h2>
+        <p class="insights__subtitle"><span id="insights-scope-label">Consolidado</span> · <span id="insights-period"></span></p>
+      </div>
+      <div class="scope-tabs" id="insights-scope-tabs" role="tablist" aria-label="Alcance del análisis"></div>
+    </div>
+    <div class="insights__grid">
+      <article class="panel chart-card">
+        <div class="chart-card__head">
+          <h3 class="chart-card__title">Composición por rubro de arrendatario</h3>
+          <p class="chart-card__meta">Renta mensual ocupada (UF)</p>
+        </div>
+        <div class="chart-card__body" id="chart-rubro"></div>
+      </article>
+      <article class="panel chart-card">
+        <div class="chart-card__head">
+          <h3 class="chart-card__title">Composición por tipo de activo</h3>
+          <p class="chart-card__meta">Renta mensual ocupada (UF)</p>
+        </div>
+        <div class="chart-card__body" id="chart-tipo"></div>
+      </article>
+      <article class="panel chart-card">
+        <div class="chart-card__head">
+          <h3 class="chart-card__title">Perfil de vencimiento de contratos</h3>
+          <p class="chart-card__meta">Renta mensual ocupada por año de término (UF)</p>
+        </div>
+        <div class="chart-card__body" id="chart-vencimiento"></div>
+      </article>
+      <article class="panel chart-card">
+        <div class="chart-card__head">
+          <h3 class="chart-card__title">Vacancia histórica</h3>
+          <p class="chart-card__meta">Ocupación consolidada por período</p>
+        </div>
+        <div class="chart-card__body" id="chart-vacancia"></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="apo-history" class="panel history">
+    <h2>Evolución comparada</h2>
+    <div class="notice">La evolución se incorporará sobre el mismo contrato en el siguiente corte.</div>
+  </section>
+</main>
+<script src="/apoquindos.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Informe de Vacancia · Toesca Platform</title>
+  <style>
+    :root{--ink:#14202d;--muted:#657384;--line:#dde3e8;--paper:#fff;--ground:#f4f6f8;--navy:#0f1b2a;--accent:#0f766e;--accent-soft:#e3f4f1;--warn:#a16207;--warn-bg:#fff8df;--radius:10px}
+    *{box-sizing:border-box} body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .top{height:58px;background:var(--navy);color:#eef4f8;display:flex;align-items:center;padding:0 max(24px,calc((100vw - 1320px)/2));gap:13px}.mark{font:600 22px Georgia,serif}.top small{color:#aebdca}.top a{margin-left:auto;color:#d7e3eb;text-decoration:none;font-size:13px}
+    main{max-width:1320px;margin:auto;padding:30px 24px 56px}.eyebrow{color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}.heading{display:flex;align-items:end;gap:18px;margin:4px 0 20px}.heading h1{font:600 29px/1.15 Georgia,serif;margin:0}.heading p{margin:0;color:var(--muted)}
+    .context{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;gap:12px;align-items:end;flex-wrap:wrap}.field{display:grid;gap:5px;min-width:145px}.field label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}.field select{appearance:none;border:1px solid #cbd5dc;border-radius:6px;background:#fff;padding:8px 28px 8px 9px;color:var(--ink);font:inherit}.coverage{margin-left:auto;min-width:220px;padding:8px 11px;border-left:3px solid var(--accent);background:#f4fbfa;color:#315a57;font-size:12px}.coverage.partial{border-color:var(--warn);background:var(--warn-bg);color:#805d12}
+    .grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(290px,1fr);gap:18px;margin-top:18px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:18px}.panel h2{font-size:14px;margin:0 0 3px}.panel .sub{font-size:12px;color:var(--muted);margin:0 0 16px}.kpis{display:grid;grid-template-columns:1.45fr repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}.kpi{background:#fff;padding:14px}.kpi label{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}.kpi strong{display:block;font:600 25px/1.2 Georgia,serif;margin-top:8px}.kpi.primary{background:#f5fbfa}.kpi.primary strong{font-size:36px;color:#075f59}.kpi small{color:var(--muted);font-size:11px}.radar{margin-top:18px}.asset-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:10px}.asset-card{border:1px solid var(--line);border-radius:8px;background:#fff;padding:13px;text-align:left;cursor:pointer;color:inherit}.asset-card:hover,.asset-card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}.asset-card h3{font-size:13px;margin:0 0 3px}.asset-card .meta{font-size:11px;color:var(--muted)}.asset-card strong{font:600 26px/1 Georgia,serif;display:block;margin:12px 0 5px}.asset-card .numbers{font-size:11px;color:var(--muted)}.spatial{margin-top:18px}.buildings{display:flex;align-items:flex-end;gap:18px;overflow:auto;padding:10px 2px}.building{min-width:150px;text-align:center}.building h3{font-size:12px;margin:0 0 8px}.floors{display:flex;flex-direction:column;gap:3px}.floor{height:24px;border-radius:3px;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:space-between;padding:0 7px;background:#14806f}.floor.vacant{background:#d97058}.floor.partial{background:#8796a5}
+    .history-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.tabs{display:flex;gap:4px}.tabs button{border:1px solid var(--line);background:#fff;border-radius:5px;padding:5px 8px;font:inherit;color:var(--muted);cursor:pointer}.tabs button.active{background:var(--navy);border-color:var(--navy);color:#fff}.chart{height:225px;border-bottom:1px solid var(--line);position:relative}.chart svg{width:100%;height:100%;display:block}.axis{font-size:10px;fill:#778596}.line{fill:none;stroke:var(--accent);stroke-width:2.5}.dot{fill:#fff;stroke:var(--accent);stroke-width:2}.table-wrap{overflow:auto;margin-top:14px}table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:right;padding:7px 6px;color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}td{text-align:right;padding:8px 6px;border-bottom:1px solid #edf0f2}tr:last-child td{border-bottom:0}.unavailable{padding:12px;border:1px dashed #cdd5dc;border-radius:7px;color:var(--muted);font-size:12px}.loading{color:var(--muted);padding:26px 0}.error{color:#9f1239;background:#fff1f2;padding:10px;border-radius:6px}.legend{display:flex;gap:13px;color:var(--muted);font-size:11px}.legend i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block}
+    @media(max-width:760px){main{padding:22px 14px}.top{padding:0 14px}.heading{display:block}.heading p{margin-top:7px}.context{display:grid;grid-template-columns:1fr 1fr}.coverage{grid-column:1/-1;margin:0;border-left:3px solid var(--accent)}.grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.kpi.primary{grid-column:1/-1}.history-controls{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <header class="top"><span class="mark">t.</span><span>Toesca Platform<br><small>Informes</small></span><a href="/analyst">Volver al Analyst</a></header>
+  <main>
+    <div class="eyebrow">Informe analítico</div>
+    <div class="heading"><h1>Vacancia</h1><p>Superficie, evolución y cobertura del portfolio.</p></div>
+    <section id="report-context" class="context" aria-label="Contexto del informe">
+      <div class="field"><label for="fund">Fondo</label><select id="fund"></select></div>
+      <div class="field"><label for="period">Período</label><select id="period"></select></div>
+      <div class="field"><label for="parking-scope">Alcance físico</label><select id="parking-scope"><option value="exclude">Sin estacionamientos</option><option value="include">Con estacionamientos</option></select></div>
+      <div id="report-coverage" class="coverage">Cargando cobertura…</div>
+    </section>
+    <section id="asset-radar" class="panel radar" aria-live="polite"><div class="loading">Cargando activos…</div></section>
+    <section id="report-summary" class="panel" aria-live="polite"><div class="loading">Cargando resumen…</div></section>
+    <div class="grid">
+      <section id="report-history" class="panel" aria-live="polite"><div class="loading">Cargando evolución…</div></section>
+      <aside class="panel"><h2>Movimientos y explicación</h2><p class="sub">Próxima capacidad analítica</p><div class="unavailable">El análisis causal requiere un movement ledger gobernado con unidad, período y estado antes/después. Aún no está disponible.</div></aside>
+    </div>
+    <section id="spatial-occupancy" class="panel spatial" aria-live="polite"><div class="unavailable">Selecciona un activo para ver su ocupación espacial cuando haya cobertura.</div></section>
+  </main>
+  <script src="/vacancy_report.js" defer></script>
+</body>
+</html>

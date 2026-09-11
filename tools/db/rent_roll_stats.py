@@ -83,6 +83,7 @@ def _snapshot(activo_key: str, periodo: str) -> dict:
                 "tipo_activo_3": tipo,
                 "renta_gracia": extra.get("renta_gracia") or 0.0,
                 "tipo_arrendatario": extra.get("tipo_arrendatario"),
+                "fecha_inicio": extra.get("fecha_inicio"),
             }
     return out
 
@@ -636,18 +637,55 @@ def get_m2_arrendatario(activo_key: str, periodo: str, top_n: int = 5) -> dict |
     return _top_n_por_clave(snapshot, lambda v: v["arrendatario"], lambda v: v["m2"] or 0.0, top_n)
 
 
-def get_rubro_arrendatario(activo_key: str, periodo: str, top_n: int = 10) -> dict | None:
+def get_rubro_arrendatario(
+    activo_key: str, periodo: str, top_n: int = 10, edificios: list[str] | None = None,
+) -> dict | None:
     """Renta mensual ocupada (UF), agrupada por rubro del arrendatario
     (extra_json.tipo_arrendatario, top-N por monto + "Otro"), para el
     gráfico "Composición por Rubro del Arrendatario" de la página 2 (ver
-    FONDOS_CFG[fondo]["page2"]). Vacantes se excluyen. None si no hay rent
-    roll ingestado para (activo_key, periodo)."""
+    FONDOS_CFG[fondo]["page2"]). Vacantes se excluyen. `edificios` opcional
+    (labels post-_ACTIVO2_LABEL, ej. "Apoquindo 4501") restringe el cálculo a
+    esos edificios — por defecto (None) agrega todo activo_key, igual que
+    siempre. None si no hay rent roll ingestado para (activo_key, periodo)."""
     snapshot = _snapshot(activo_key, periodo)
     if not snapshot:
         return None
+    if edificios is not None:
+        snapshot = {k: v for k, v in snapshot.items() if _ACTIVO2_LABEL.get(k[0], k[0]) in edificios}
     return _top_n_por_clave(
         snapshot, lambda v: v.get("tipo_arrendatario"), _monto_mensual_uf, top_n, otros_label="Otro",
     )
+
+
+def get_unidades(activo_key: str, periodo: str, edificios: list[str] | None = None) -> list[dict] | None:
+    """Filas crudas del snapshot (ocupadas y vacantes) con edificio, unidad,
+    arrendatario, m2, renta_uf (tasa UF/m2/mes), vencimiento, tipo_activo y
+    rubro del arrendatario — para drill-down desde una agregación (rubro,
+    tipo de activo, vencimiento) hasta las unidades que la componen. No
+    agrega ni clasifica nada nuevo: son los mismos campos que ya usan
+    get_rubro_arrendatario / get_tipo_activo / get_perfil_vencimiento. None
+    si no hay rent roll ingestado para (activo_key, periodo)."""
+    snapshot = _snapshot(activo_key, periodo)
+    if not snapshot:
+        return None
+    if edificios is not None:
+        snapshot = {k: v for k, v in snapshot.items() if _ACTIVO2_LABEL.get(k[0], k[0]) in edificios}
+    out = []
+    for (activo2, unidad), v in snapshot.items():
+        vacante = _es_vacante(v["arrendatario"])
+        out.append({
+            "edificio": _ACTIVO2_LABEL.get(activo2, activo2),
+            "unidad": unidad,
+            "vacante": vacante,
+            "arrendatario": None if vacante else v["arrendatario"],
+            "tipo_arrendatario": None if vacante else v.get("tipo_arrendatario"),
+            "m2": round(v["m2"] or 0.0, 1),
+            "renta_uf": None if vacante else round(v["renta_uf"], 2),
+            "vencimiento": None if vacante else v.get("vencimiento"),
+            "fecha_inicio": None if vacante else v.get("fecha_inicio"),
+            "tipo_activo": v.get("tipo_activo_3"),
+        })
+    return out
 
 
 def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) -> dict | None:
@@ -670,8 +708,11 @@ def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) 
     _monto_mensual_uf).
 
     Devuelve {"por_anio": {edificio: {anio_bucket: uf}}, "anios": [buckets en
-    orden], "plazo_medio_anios": float | None}. None si no hay rent roll
-    ingestado para (activo_key, periodo)."""
+    orden], "plazo_medio_anios": float | None, "unidades_por_anio":
+    {edificio: {anio_bucket: [unidad, ...]}}} — este último con la misma
+    unidad/arrendatario/m2/renta_uf que devuelve get_unidades, para
+    drill-down desde una barra del gráfico hasta los contratos que vencen
+    ese año. None si no hay rent roll ingestado para (activo_key, periodo)."""
     snapshot = _snapshot(activo_key, periodo)
     if not snapshot:
         return None
@@ -682,6 +723,7 @@ def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) 
     anios = [str(a) for a in range(report_year, anio_max)] + [f"{anio_max}+"]
 
     por_anio: dict[str, dict[str, float]] = {ed: {a: 0.0 for a in anios} for ed in edificios}
+    unidades_por_anio: dict[str, dict[str, list]] = {ed: {a: [] for a in anios} for ed in edificios}
     peso_total = 0.0
     plazo_ponderado = 0.0
 
@@ -694,18 +736,36 @@ def get_perfil_vencimiento(activo_key: str, periodo: str, edificios: list[str]) 
         venc = v.get("vencimiento")
         if not venc:
             continue
+        try:
+            anio_venc = int(str(venc)[:4])
+        except ValueError:
+            # Fecha mal formada en el rent roll de origen (ej. DD-MM-YYYY en
+            # vez de YYYY-MM-DD) — se omite esa unidad en vez de reventar el
+            # reporte completo, mismo criterio que get_perfil_vencimiento_tri.
+            continue
         monto = _monto_mensual_uf(v)
-        anio_venc = int(str(venc)[:4])
         bucket = str(anio_venc) if anio_venc < anio_max else f"{anio_max}+"
         por_anio[edificio][bucket] = round(por_anio[edificio].get(bucket, 0.0) + monto, 1)
+        unidades_por_anio[edificio][bucket].append({
+            "edificio": edificio, "unidad": k[1], "vacante": False,
+            "arrendatario": v["arrendatario"], "tipo_arrendatario": v.get("tipo_arrendatario"),
+            "m2": round(v["m2"] or 0.0, 1), "renta_uf": round(v["renta_uf"], 2), "vencimiento": venc,
+            "tipo_activo": v.get("tipo_activo_3"), "fecha_inicio": v.get("fecha_inicio"),
+        })
 
         if venc > report_date and monto:
-            dias = (_fecha(venc) - _fecha(report_date)).days
+            try:
+                dias = (_fecha(venc) - _fecha(report_date)).days
+            except ValueError:
+                continue
             plazo_ponderado += (dias / 365.0) * monto
             peso_total += monto
 
     plazo_medio = round(plazo_ponderado / peso_total, 2) if peso_total else None
-    return {"por_anio": por_anio, "anios": anios, "plazo_medio_anios": plazo_medio}
+    return {
+        "por_anio": por_anio, "anios": anios, "plazo_medio_anios": plazo_medio,
+        "unidades_por_anio": unidades_por_anio,
+    }
 
 
 def _fecha(s: str):
@@ -998,16 +1058,20 @@ def get_perf_table_tri(report_periodo: str) -> dict | None:
     return out
 
 
-def get_tipo_activo(activo_key: str, periodo: str) -> dict | None:
+def get_tipo_activo(activo_key: str, periodo: str, edificios: list[str] | None = None) -> dict | None:
     """Renta mensual ocupada (UF), agrupada por tipo de activo (Oficinas,
     Locales Comerciales, Estacionamientos, Bodegas — ver v["tipo_activo_3"] en
     _snapshot, vocabulario cerrado fijado por _TIPO_ACTIVO_2_MAP), para el
     donut "Composición por Tipo de Activo" de la página 2 (ver
-    FONDOS_CFG[fondo]["page2"]["tipo_activo"]). Vacantes se excluyen. None si
-    no hay rent roll ingestado para (activo_key, periodo)."""
+    FONDOS_CFG[fondo]["page2"]["tipo_activo"]). `edificios` opcional restringe
+    a esos edificios (ver get_rubro_arrendatario); por defecto agrega todo
+    activo_key. Vacantes se excluyen. None si no hay rent roll ingestado para
+    (activo_key, periodo)."""
     snapshot = _snapshot(activo_key, periodo)
     if not snapshot:
         return None
+    if edificios is not None:
+        snapshot = {k: v for k, v in snapshot.items() if _ACTIVO2_LABEL.get(k[0], k[0]) in edificios}
 
     agg: dict[str, float] = {}
     for v in snapshot.values():
