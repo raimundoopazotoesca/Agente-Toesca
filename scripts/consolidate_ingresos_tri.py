@@ -170,9 +170,20 @@ def main():
             v = series[key]
             print(f"  {key} (part. {part}): {len(v)} periodos ({min(v) if v else '-'} a {max(v) if v else '-'})")
 
+        # Gap C: mismo defecto de granularidad que NOI (ver
+        # consolidate_noi_tri.py) -- 'Apoquindo' es la suma de Apo4501+Apo4700,
+        # pero el capability gobernado a nivel activo promete resolver
+        # cualquier activo_key real. Se reutiliza la misma
+        # _ingresos_activo_raw() ya usada arriba, solo acotada a un único
+        # activo_key -- ninguna lógica de cálculo nueva.
+        series_individuales = {
+            raw_key: _ingresos_activo_raw(conn, [raw_key])
+            for raw_key in _COMPONENTES_RAW["Apoquindo"]
+        }
+
         # Persistir ingresos_mensual por activo (100%, BRUTO), reemplazando el
         # recipe anterior si existía.
-        for key, serie in series.items():
+        for key, serie in {**series, **series_individuales}.items():
             conn.execute(
                 "DELETE FROM derived_kpi WHERE entidad_tipo='activo' AND entidad_key=? AND "
                 "kpi='ingresos_mensual' AND formula=?",

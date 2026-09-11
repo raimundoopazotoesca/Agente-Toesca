@@ -1,6 +1,8 @@
 # Matriz de claves ambiguas en `derived_kpi` — `Apoquindo` y `Fondo Apoquindo`
 
-**Fecha:** 2026-07-24 · **Estado:** análisis entregado, clasificación pendiente de decisión humana
+**Fecha:** 2026-07-24 · **Estado:** análisis entregado; decisión sobre la clave `Apoquindo`
+(noi_mensual/ingresos_mensual) cerrada 2026-09-11 — ver "Decisión (2026-09-11)" al final. La
+clasificación de `Fondo Apoquindo` (m2_vacantes, fuente CDG) sigue pendiente.
 **Método:** consultas directas a `memory/agente_toesca_v2.db` + rastreo del script generador. Ninguna conclusión se basa en el nombre de la clave; todas las equivalencias están verificadas numéricamente.
 
 > **Corrección a un supuesto previo:** en `ROADMAP.md` v2.0 planteé que `Fondo Apoquindo` podía ser la participación de TRI en el fondo Apo (look-through). **Es falso.** La verificación numérica muestra que es el agregado de los dos activos del fondo. Ninguna de las dos claves representa la participación de TRI.
@@ -134,3 +136,22 @@ Luego: `UPDATE derived_kpi SET estado='legacy', reemplazado_por=NULL WHERE formu
 2. **Nombre de las series migradas:** si eliges A, ¿las 178 filas de `Apoquindo` se recalculan bajo `fondo/Apo` con la misma receta (`raw_er_noi_v1`), o se marcan legacy y se recalcula con receta nueva versionada?
 3. **`2026-07` de `Fondo Apoquindo`** con valor 0,0: ¿dato real o artefacto del CDG a descartar?
 4. **Momento:** ¿se hace junto con el pipeline canónico (F1.1) o antes? Recomiendo con F1.1, porque implica recalcular y tocar el catálogo del Asistente en el mismo movimiento.
+
+## Decisión (2026-09-11) — clave `Apoquindo` (noi_mensual / ingresos_mensual)
+
+Investigación de Gap C (`docs/A3_POST_A3.3_GAP_REGISTER.md`) confirmó, con una prueba
+reproducible sobre DB aislada, que la ausencia de `Apo4501`/`Apo4700` individuales en
+`derived_kpi` no es la decisión pendiente de esta matriz sobre si `Apoquindo` "es" el fondo —
+es un problema distinto y más simple: el capability gobernado `noi_mensual_activo`
+(`catalog_v1.yaml`, grano `asset`) no puede resolver ningún `activo_key` real del fondo Apo
+porque nunca se materializó a ese grano, solo al agregado.
+
+**Decisión: se conserva `Apoquindo` sin cambios (no se resuelve aquí la Opción A/B de la
+sección 4 — sigue abierta) y se la complementa con `Apo4501`/`Apo4700` individuales**, misma
+tabla, misma fórmula (`raw_er_noi_v1`/`raw_er_ingresos_v1`), mismo `entidad_tipo='activo'`.
+Implementado en `scripts/consolidate_noi_tri.py`/`scripts/consolidate_ingresos_tri.py` — ver
+la nota de implementación en
+`docs/superpowers/specs/2026-07-09-apoquindo-er-ingesta-design.md`. Verificado sin doble
+conteo: los consumidores agregados existentes (`scripts/build_factsheet.py`
+`_TRI_TIPO_ACTIVO_COMPONENTES`, `tools/noi_query.py` `_CATEGORIA_FUENTE`) usan listas curadas
+fijas y no enumeran `derived_kpi` dinámicamente, por lo que no recogen las nuevas filas.
