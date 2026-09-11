@@ -87,7 +87,17 @@ def test_pilot_feedback_export_button_downloads_markdown_file(monkeypatch, tmp_p
         reporter.get_by_role("button", name="Reportar problema").wait_for(state="visible")
         reporter.get_by_role("button", name="Reportar problema").click()
         reporter.locator("#report-comment").fill("Se necesita más detalle.")
-        reporter.get_by_role("button", name="Enviar reporte").click()
+        # Wait on the actual network response, not just the toast: the toast
+        # auto-hides after ~2.6s (see analyst_workspace.js's toastTimer), so
+        # polling for it after the fact can miss a narrow visible window
+        # under a slow/contended runner even when the POST succeeded. This
+        # anchors the test to the real completion signal and still asserts
+        # the toast afterwards.
+        with reporter.expect_response(
+            lambda response: response.url.endswith("/api/analyst/feedback_reports") and response.request.method == "POST"
+        ) as response_info:
+            reporter.get_by_role("button", name="Enviar reporte").click()
+        assert response_info.value.ok
         reporter.get_by_text("Reporte enviado. Gracias.").wait_for(state="visible")
 
         reviewer = browser.new_page()
