@@ -36,7 +36,7 @@ class RecordingPresenter:
     def __init__(self):
         self.calls: list[tuple] = []
 
-    def present(self, *, user_message, draft_answer, claims=()):
+    def present(self, *, user_message, draft_answer, claims=(), trend_index=None):
         self.calls.append(claims)
         from tools.analyst_runtime.presentation import PresentationResult
         return PresentationResult(draft_answer, False, 0.0, None, None, "not_applicable")

@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from tools.analyst_runtime.derived_claims import DerivedClaim, DerivedClaimError, compute_derived_claim, render_derived_claim
 from tools.analyst_runtime.transport import ToolEvidence
+from tools.analyst_runtime.trend_assertions import AMBIGUOUS, Direction, eligible_trend_direction, extract_clause_trend_hits
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.formatting import render_fact, render_named_fact
 from tools.analytics.humanize import entity_display_name, entity_kind_label, format_period_short, humanize_text
@@ -92,6 +93,14 @@ class CoverageValidation:
     # protocol and would risk being paraphrased away or garbled. Tables are
     # appended by the caller (session.py) AFTER presentation, verbatim.
     tables: tuple[str, ...] = ()
+    # A3.3: (entity_id, metric_key) -> the single real UP/DOWN/FLAT direction
+    # already validated against this envelope's derived claims. Threaded
+    # through to FinalPresenter (via session.py) so the post-presentation
+    # trend-drift check can ground itself in the SAME arithmetic this
+    # function already computed, instead of recomputing it a second time
+    # over rendered (no-longer-structured) prose. Only keys with exactly one
+    # eligible direction are kept -- see _build_trend_index.
+    trend_index: dict[tuple[str, str], Direction] = field(default_factory=dict)
 
 
 def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolEvidence],
@@ -305,6 +314,32 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         except DerivedClaimError:
             return _fail(canonical_evidence, governed_evidence, "binding_mismatch", db_path)
 
+    # A3.3: (entity_id, metric_key) -> set of directions the bound derived
+    # claims actually ground for that pair. Built once here (never inside
+    # the fragment loop) by re-resolving each derived claim's lhs/rhs facts
+    # from bound_canonical via its own lineage -- no new arithmetic, no new
+    # storage; DerivedClaim.lineage already carries lhs_claim_id/rhs_claim_id
+    # from derived_claims.compute_derived_claim. A key collecting 2+ distinct
+    # directions (two contradictory derived claims for the same pair) is
+    # kept as-is and only fails a fragment that actually cites it -- see
+    # "ambiguous_trend_claim" below.
+    trend_directions: dict[tuple[str, str], set[Direction]] = {}
+    for derived in bound_derived.values():
+        lhs_claim_id = derived.lineage.get("lhs_claim_id")
+        rhs_claim_id = derived.lineage.get("rhs_claim_id")
+        lhs_fact, rhs_fact = bound_canonical.get(lhs_claim_id), bound_canonical.get(rhs_claim_id)
+        if lhs_fact is None or rhs_fact is None:
+            continue
+        direction = eligible_trend_direction(derived.operation, lhs_fact, rhs_fact)
+        if direction is None:
+            continue
+        key = (str(lhs_fact.get("entity_id")), str(lhs_fact.get("metric_key")))
+        trend_directions.setdefault(key, set()).add(direction)
+    trend_index: dict[tuple[str, str], Direction] = {
+        key: next(iter(directions)) for key, directions in trend_directions.items() if len(directions) == 1
+    }
+    ambiguous_trend_keys = {key for key, directions in trend_directions.items() if len(directions) > 1}
+
     # A "multi-component" turn: 2+ distinct entities bound to the same
     # metric_key+period in this envelope (a breakdown/comparison context).
     # Drives both the vague-referent and unbound-comparison guards below.
@@ -339,7 +374,7 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
     catalog = _load_asset_catalog(db_path) if db_path is not None else {}
     provenance_checked = False
     referenced_supporting: set[str] = set()
-    for fragment in fragments:
+    for index, fragment in enumerate(fragments):
         if not isinstance(fragment, dict):
             return _fail(canonical_evidence, governed_evidence, "invalid_fragment", db_path)
         kind = fragment.get("type")
@@ -353,6 +388,53 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
                 # this is the guard that stops "8,26 UF" from ever reaching a
                 # reader unbound.
                 return _fail(canonical_evidence, governed_evidence, "unbound_derived_quantity", db_path)
+            # A3.3: a single-entity trend verb/adjective (see trend_assertions
+            # lexicon) must match the REAL direction computed from the raw
+            # values -- not merely have SOME derived claim exist (that was the
+            # A3.3 Design Memo v1 defect: value-only respaldo, never checked
+            # AGAINST the value). See the Design Memo v2 for the binding
+            # contract this implements.
+            trend_hits = extract_clause_trend_hits(text)
+            if trend_hits == AMBIGUOUS:
+                # Two DIFFERENT directions inside one undelimited clause --
+                # nothing tells us which value each verb refers to.
+                return _fail(canonical_evidence, governed_evidence, "binding_ambiguous", db_path)
+            if len(trend_hits) > 1:
+                # 2+ independently-delimited trend clauses inside ONE
+                # fragment. The synthesis schema instructs the model to
+                # insert a ref fragment "wherever a governed figure
+                # belongs" -- the expected, tested shape for a genuine
+                # compound trend statement ("El NOI subio, pero la vacancia
+                # cayo") is therefore separate interleaved fragments (each
+                # clause with its own adjacent ref), each handled
+                # independently by this same loop. A single fragment
+                # cramming two trend clauses together has no way to tell
+                # which of (at most) one adjacent ref fragment belongs to
+                # which clause -- fail closed rather than guess.
+                return _fail(canonical_evidence, governed_evidence, "binding_ambiguous", db_path)
+            if trend_hits:
+                direction_claimed = trend_hits[0].direction
+                identity = _trend_anchor_identity(_nearest_trend_anchor(fragments, index), bound_canonical, bound_derived)
+                # identity is None means no canonical_metric_ref/derived_metric_ref
+                # fragment is adjacent at all (e.g. the neighbor is a
+                # governed_dataset_ref, or there is none) -- there is no
+                # anchor to even ATTEMPT binding against, so no
+                # TrendAssertion is formed and this clause is simply outside
+                # A3.3's scope (same precedent as free descriptive prose with
+                # no claim_ref nearby at all -- see e.g. the existing
+                # "Torre A no tuvo cambios respecto al otro periodo
+                # revisado." single-component fixture, whose only neighbor
+                # is a governed_dataset_ref). This is deliberately different
+                # from "an anchor WAS found but grounds no direction",
+                # handled below, which DOES fail closed.
+                if identity is not None:
+                    if identity in ambiguous_trend_keys:
+                        return _fail(canonical_evidence, governed_evidence, "ambiguous_trend_claim", db_path)
+                    direction_computed = trend_index.get(identity)
+                    if direction_computed is None:
+                        return _fail(canonical_evidence, governed_evidence, "unbound_trend_assertion", db_path)
+                    if direction_computed != direction_claimed:
+                        return _fail(canonical_evidence, governed_evidence, "trend_direction_mismatch", db_path)
             if multi_component_context and _VAGUE_REFERENT_RE.search(text):
                 return _fail(canonical_evidence, governed_evidence, "vague_entity_reference", db_path)
             if multi_component_context and not has_comparison_claim and _COMPARISON_SUPERLATIVE_RE.search(text):
@@ -396,7 +478,54 @@ def validate_and_render(envelope: dict[str, Any], canonical_evidence: list[ToolE
         result="pass", provenance=("pass" if provenance_checked else "not_applicable"),
         supporting_claim_count=len(bound_supporting),
         supporting_evidence_ids_referenced=sorted({bound_supporting[cid].evidence_id for cid in referenced_supporting})),
-        tables=tuple(tables))
+        tables=tuple(tables), trend_index=trend_index)
+
+
+def _nearest_trend_anchor(fragments: list[Any], index: int) -> dict[str, Any] | None:
+    """A3.3: the claim ref fragment a trend clause at ``index`` refers to.
+
+    Walks forward first (Spanish word order puts the verb before the value:
+    "cayo a [ref]"), then backward, skipping only whitespace/blank
+    text-type fragments (the harmless inter-fragment glue already documented
+    on _append_fragment) so an empty separator fragment never blocks a real
+    adjacent ref. Stops at the first NON-blank text/raw_text fragment or any
+    other fragment type encountered -- that is a different clause's or a
+    different kind of citation's territory, never guessed across.
+    """
+    for step in (1, -1):
+        i = index + step
+        while 0 <= i < len(fragments):
+            candidate = fragments[i]
+            if not isinstance(candidate, dict):
+                break
+            kind = candidate.get("type")
+            if kind in {"canonical_metric_ref", "derived_metric_ref"}:
+                return candidate
+            if kind in {"text", "raw_text"} and isinstance(candidate.get("text"), str) and not candidate["text"].strip():
+                i += step
+                continue
+            break
+    return None
+
+
+def _trend_anchor_identity(anchor: dict[str, Any] | None, bound_canonical: dict[str, dict[str, Any]],
+                           bound_derived: dict[str, DerivedClaim]) -> tuple[str, str] | None:
+    """(entity_id, metric_key) the anchor fragment's ALREADY-BOUND fact
+    names -- never text-derived, always the same values coverage_guard
+    verified for that claim_id above."""
+    if anchor is None:
+        return None
+    claim_id = anchor.get("claim_id")
+    if anchor.get("type") == "canonical_metric_ref":
+        fact = bound_canonical.get(claim_id)
+        return (str(fact.get("entity_id")), str(fact.get("metric_key"))) if fact is not None else None
+    if anchor.get("type") == "derived_metric_ref":
+        derived = bound_derived.get(claim_id)
+        if derived is None:
+            return None
+        lhs_fact = bound_canonical.get(derived.lineage.get("lhs_claim_id"))
+        return (str(lhs_fact.get("entity_id")), str(lhs_fact.get("metric_key"))) if lhs_fact is not None else None
+    return None
 
 
 _GLUE_BOUNDARY_RE = re.compile(r"[\s([{–—-]$")
@@ -725,7 +854,9 @@ def _fail(canonical_evidence: list[ToolEvidence], governed_evidence: list[ToolEv
         # citation to an unrelated result, so preserve the normal fail-closed
         # response.  Parse/shape failure has made no such claim and can safely
         # fall back to this turn's complete governed result.
-        if reason in {"invalid_envelope", "vague_entity_reference", "unbound_qualitative_comparison"}:
+        if reason in {"invalid_envelope", "vague_entity_reference", "unbound_qualitative_comparison",
+                      "unbound_trend_assertion", "trend_direction_mismatch", "binding_ambiguous",
+                      "ambiguous_trend_claim"}:
             rendered_sets = []
             for item in governed_evidence:
                 if item.facts:

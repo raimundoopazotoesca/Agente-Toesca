@@ -431,7 +431,8 @@ class OpenAIResponsesAnalystSession:
                         # detect/strip one after the fact.
                         else self._present(turn.text, text, () if has_tables else
                                             _allowed_claims(result.turn.raw.get("structured_output") or {}, evidence, self._db_path,
-                                                            requested_unit)))
+                                                            requested_unit),
+                                            validation.trend_index if validation is not None else {}))
         turn.raw["presenter_invoked"] = presentation.applied or (self._presenter is not None and not (validation and not validation.valid))
         # Tables are deterministic Markdown rendered by coverage_guard and
         # appended here, AFTER presentation -- never passed through
@@ -477,10 +478,12 @@ class OpenAIResponsesAnalystSession:
             fresh_evidence_count=len(evidence) - len(self._durable_evidence),
         )
 
-    def _present(self, draft: str, user_message: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult:
+    def _present(self, draft: str, user_message: str, claims: tuple[AllowedClaim, ...] = (),
+                trend_index: dict[tuple[str, str], str] | None = None) -> PresentationResult:
         if self._presenter is None:
             return PresentationResult(draft, False, None, None, None, "not_configured")
-        return self._presenter.present(user_message=user_message, draft_answer=draft, claims=claims)
+        return self._presenter.present(user_message=user_message, draft_answer=draft, claims=claims,
+                                       trend_index=trend_index)
 
 
 def _display_period(period_value: str, aggregation: str | None) -> str:

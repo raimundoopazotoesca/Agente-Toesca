@@ -14,7 +14,7 @@ def test_capturing_presenter_forwards_runtime_claims(module_name, monkeypatch):
     captured = {}
 
     class InnerPresenter:
-        def present(self, *, user_message, draft_answer, claims):
+        def present(self, *, user_message, draft_answer, claims, trend_index=None):
             captured.update(user_message=user_message, draft_answer=draft_answer, claims=claims)
             return "result"
 
