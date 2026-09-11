@@ -27,9 +27,9 @@ for state and keep only their own subject matter (rules, roadmap, architecture).
 | **Baseline Debt Burn-down #1** | **CLOSED / PASS.** PR #5 merged. Historical allowlist: 19 → 14. |
 | **A2 — Agent Architecture** | **CLOSED / PASS.** PR #6 merged. Established the canonical single-Analyst architecture; `tools/db_chat.py` / `POST /api/chat` confirmed transition-only (see `docs/a2-db-chat-transition-boundary.md`). |
 | **Baseline Debt Burn-down #2** | **CLOSED / PASS.** PR #7 merged. Historical allowlist: 14 → 0. `eval/baselines/pytest-known-failures.json` now holds an empty `failure_ids` list (verified directly at this HEAD). Overall trajectory: 19 → 14 → 0. |
-| **A3.1 — SQL Safety** | **CLOSED / PASS.** Sub-slices A3.1a–A3.1e all merged (PRs #8–#16: governed SQL surface registry, SQLite authorizer, per-statement timeout, structural validation + trailing-semicolon fix, full-stack adversarial gate). See `tools/analyst_runtime/sqlite_guard.py` and `tools/db/sql_surface.py`. |
+| **A3.1 — SQL Safety** | **CLOSED / PASS.** Sub-slices A3.1a–A3.1e all merged: PR #9 (governed SQL surface registry, `feat/a3-1a-sql-surface`), PR #11 (SQLite authorizer, `feat/a3-1b-sqlite-authorizer`), PR #13 (per-statement timeout, `feat/a3-1c-sql-timeout`), PR #14 (structural validation, `feat/a3-1d-sql-structural-validation`) + PR #15 (trailing-semicolon fix, `fix/a3-1d-trailing-semicolon`), PR #16 (full-stack adversarial gate, `feat/a3-1e-sql-safety-stack-gate-resume`). PRs #10 and #12, interleaved in the same merge sequence, are unrelated UI fixes, not A3.1 sub-slices. See `tools/analyst_runtime/sqlite_guard.py` and `tools/db/sql_surface.py`. |
 | **A3.2 — Evidence / Citation Lifecycle** | **CLOSED / PASS.** Sub-slices A3.2a–A3.2f all merged (PRs #17–#22): `ToolResult`/`ToolEvidence` Result-Evidence contract, governed-dataset producers bounded via `row_limit`, `controlled_sql` transported as supporting/non-canonical evidence (never promoted to a canonical claim), synthesis evidence-ref hardening, durable evidence projection for restart hydration, and E2E lifecycle hardening. `canonical_guard.py` (Stage 5.3) is now formally deprecated — not production-wired, retained only as `coverage_guard.py`'s single-fact parity reference. |
-| **A3.3 — Factual Validation** | **CLOSED / PASS.** PR #23 merged (`6af793b`, deterministic trend-direction validation over A3.2 claims). Adds `tools/analyst_runtime/trend_assertions.py` and coverage-guard integration that fail-closed on UP/DOWN/FLAT drift against governed evidence. **Do not modify this implementation as part of documentation work** — it is closed and out of scope for this sync. |
+| **A3.3 — Factual Validation** | **CLOSED / PASS.** PR #23 merged (merge commit `58cb06bc832e35a01a713d22219e6947853c03ff`, same commit as the protected HEAD row above; implementation commit `6af793b`, "deterministic trend-direction validation over A3.2 claims" — not itself a merge commit). Adds `tools/analyst_runtime/trend_assertions.py` and coverage-guard integration that fail-closed on UP/DOWN/FLAT drift against governed evidence. **Do not modify this implementation as part of documentation work** — it is closed and out of scope for this sync. |
 | Current development phase | A0/A1/A1.5, Eval Foundation Step 0, Documentation Reset, Pilot Quality Standard v1, both Baseline Debt Burn-downs, A2 — Agent Architecture, and now **all of A3.1, A3.2, and A3.3 are closed.** JLL v2 remains a separate parallel track — technical cutover candidate frozen, external gate pending (unchanged by this checkpoint). **No phase is assumed to be "next" by default.** A3.4 (Trace / Retention / Auditability) and A4 (advanced intelligence) both remain future work per `docs/ROADMAP.md`, but this checkpoint deliberately does not commit to either as the immediate next slice — the post-A3.3 conversational benchmark surfaced gaps (deixis/conversation state, synthesis completeness, retrieval-vs-missing-data ambiguity, entity-set references) that are not yet reproduced with trace evidence. See `docs/A3_POST_A3.3_GAP_REGISTER.md` for the gap-by-gap classification and what would need to happen before any of them becomes implementation scope. |
 
 <!-- AUTO-GENERATED:START -->
@@ -207,8 +207,10 @@ pass; verify before relying on this claim for a safety-critical decision.**
 ## Eval & Observability
 
 Present in the repo (spot-checked at this checkpoint's protected HEAD,
-`c760086c70a1e0811f6d75762fef0402cf24a9f7`; originally established at PR #1's protected
-base `4d0a13075736c9bfd5f7c420c684253a636cd093`):
+`58cb06bc832e35a01a713d22219e6947853c03ff`; Eval Foundation Step 0 was originally
+established by PR #1, merge commit `631987393f240a17d902bf5a61104119c0e3eb98` — a prior
+revision of this section mislabeled this as "PR #1's protected base `4d0a13075736c9bfd5f7c420c684253a636cd093`", but that SHA is actually the merge commit of PR #3
+("Pilot Quality Standard v1"), unrelated to PR #1; corrected here):
 - `eval/benchmark/` — frozen dev/holdout process (`DEV_SET_V1_FREEZE.md`,
   `HOLDOUT_SET_V1_FREEZE.md`, `PENDING.md` — known gaps include unvalidated
   `renta_uf/m²`, no capex, no morosidad table, unvalidated DSCR).
@@ -223,8 +225,9 @@ base `4d0a13075736c9bfd5f7c420c684253a636cd093`):
 
 **Eval Foundation Step 0: CLOSED / PASS.** Track A (`audit/analyst-eval-blueprint-v1`)
 merged as PR #1 ("eval: make analyst evaluation foundation load-bearing") into the
-protected branch `feat/alpha-v0.1`. The protected base HEAD captured for this checkpoint
-is `4d0a13075736c9bfd5f7c420c684253a636cd093`.
+protected branch `feat/alpha-v0.1`, merge commit `631987393f240a17d902bf5a61104119c0e3eb98`
+(see the correction note above this section — `4d0a13075736c9bfd5f7c420c684253a636cd093`,
+previously cited here, is PR #3's merge commit, not PR #1's).
 
 **Required checks, active on `feat/alpha-v0.1`** (GitHub ruleset "Toesca protected devel";
 target: `feat/alpha-v0.1` only; enforcement: active; bypass: none; strict/up-to-date
@@ -242,7 +245,8 @@ empty: `new_failure_ids = []`, `new_anomalous_ids = {}`, `stale_pass_ids = []`,
 `internal_errors = []`. `eval/benchmark/tests` and `eval/product_alpha/tests` must both be
 100% green with no allowlist.
 
-**Current state, as of this checkpoint (protected HEAD `c760086`)**: the historical
+**Current state, as of this checkpoint (protected HEAD `58cb06b`; unchanged since the
+prior `c760086` checkpoint — re-verified, not re-derived)**: the historical
 allowlist has been fully burned down — 19 → 14 (Burn-down #1, PR #5) → 0 (Burn-down #2,
 PR #7). `eval/baselines/pytest-known-failures.json` now contains an empty `failure_ids`
 list at this HEAD (verified directly). Any new test failure now trips the gate as a
@@ -259,7 +263,8 @@ future documentation and implementation PRs.
 **Baseline Debt Burn-down #2 — CLOSED / PASS (current).** PR #7 merged into the
 protected branch, closing the remaining 14 historical IDs. The active
 historical-failure allowlist is now **empty** (`eval/baselines/pytest-known-failures.json`
-→ `failure_ids: []`, verified directly at protected HEAD `c760086`). Zero historical
+→ `failure_ids: []`, verified directly at protected HEAD `58cb06b`, unchanged since
+`c760086`). Zero historical
 allowance remains — any test failure from here on trips the baseline-gated check as a
 regression. Overall trajectory across both burn-downs: **19 → 14 → 0**.
 
