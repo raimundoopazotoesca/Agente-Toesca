@@ -167,9 +167,22 @@ def main():
             v = series[key]
             print(f"  {key} (part. {part}): {len(v)} periodos ({min(v) if v else '-'} a {max(v) if v else '-'})")
 
+        # Gap C: 'Apoquindo' es la suma de Apo4501+Apo4700, pero
+        # noi_mensual_activo (catalog_v1.yaml) promete resolver cualquier
+        # activo_key real de dim_activo -- sin esto, una consulta por
+        # Apo4501/Apo4700 individual no encuentra nada en derived_kpi aunque
+        # raw_er_activo_line sí tenga datos (ver docs/A3_POST_A3.3_GAP_REGISTER.md
+        # Gap C, docs/matriz-claves-ambiguas-apoquindo.md). Se reutiliza la
+        # misma _noi_activo_raw() ya usada arriba, solo acotada a un único
+        # activo_key -- ninguna lógica de cálculo nueva.
+        series_individuales = {
+            raw_key: _noi_activo_raw(conn, [raw_key])
+            for raw_key in _COMPONENTES_RAW["Apoquindo"]
+        }
+
         # Persistir noi_mensual por activo (100%), reemplazando cualquier
         # versión anterior (incluye la basada en CDG — ver [[feedback_no_usar_cdg]]).
-        for key, serie in series.items():
+        for key, serie in {**series, **series_individuales}.items():
             conn.execute(
                 "DELETE FROM derived_kpi WHERE entidad_tipo='activo' AND entidad_key=? AND kpi='noi_mensual'",
                 (key,),

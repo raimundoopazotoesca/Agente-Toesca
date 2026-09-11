@@ -158,3 +158,20 @@ Antes de dar por completado:
 4. `SELECT participacion_fondo_activo FROM dim_activo WHERE activo_key IN ('Apo4501','Apo4700')` devuelve 1.0 y 1.0
 5. Tests unitarios verdes
 6. Wiki actualizada (log + página fondo Apo)
+
+## Nota de implementación (2026-09-11) — cierre de D4
+
+D4 anticipaba cachear en `derived_kpi` con `entidad_tipo='activo'`, `kpi='noi_mensual'` "si el uso
+repetido lo justifica más adelante". Ese cacheo terminó implementándose en
+`scripts/consolidate_noi_tri.py` (y su análogo `scripts/consolidate_ingresos_tri.py`), pero
+escrito **solo** bajo la clave agregada `'Apoquindo'` (= Apo4501+Apo4700), nunca bajo los
+`activo_key` individuales que D4 tenía en mente — un gap de alcance entre ambas piezas de
+trabajo, no una decisión deliberada de excluir el grano por activo (ver
+`docs/matriz-claves-ambiguas-apoquindo.md` para el diagnóstico completo, y
+`docs/A3_POST_A3.3_GAP_REGISTER.md`, Gap C, para la investigación que lo confirmó).
+
+Cerrado 2026-09-11: `consolidate_noi_tri.py`/`consolidate_ingresos_tri.py` ahora también
+persisten `Apo4501` y `Apo4700` individualmente (misma fórmula `raw_er_noi_v1`/
+`raw_er_ingresos_v1`, mismo `COALESCE(monto_uf, monto_clp)`, `variante` sin cambios respecto
+a la convención ya vigente — `NULL`, consistente con que `catalog_v1.yaml` no declara
+variante para `noi_mensual_activo`). El agregado `'Apoquindo'` se mantiene sin cambios.
