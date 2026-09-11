@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from tools.analyst_runtime.derived_claims import DerivedClaim, render_derived_claim
+from tools.analyst_runtime.trend_assertions import AMBIGUOUS, Direction, extract_clause_trend_hits
 from tools.analytics.catalog import load_metric_catalog
 from tools.analytics.formatting import render_metric_value
 
@@ -160,7 +162,87 @@ def _redact_numeric_literals(text: str) -> str:
 
 
 class FinalPresenter(Protocol):
-    def present(self, *, user_message: str, draft_answer: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult: ...
+    def present(self, *, user_message: str, draft_answer: str, claims: tuple[AllowedClaim, ...] = (),
+               trend_index: dict[tuple[str, str], Direction] | None = None) -> PresentationResult: ...
+
+
+def _entity_mentions(text: str, name: str) -> bool:
+    return re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", text, re.UNICODE) is not None
+
+
+def _extract_trend_directions(
+    text: str, claims: tuple[AllowedClaim, ...], trend_index: dict[tuple[str, str], Direction],
+) -> dict[tuple[str, str], Direction] | str:
+    """A3.3: (entity_id, metric_key) -> direction asserted in ``text``.
+
+    Runs on ALREADY-RENDERED prose (draft_answer / the presenter's own
+    output), so there is no claim_id/fragment structure left to bind
+    against -- unlike coverage_guard's fragment-adjacency binding. Instead
+    this resolves a clause's entity the same way coverage_guard's own
+    entity-provenance guard does elsewhere: literal, word-boundary matching
+    of a real display name/entity_id already known to be correct (from the
+    SAME AllowedClaim list coverage_guard's binding produced) -- never a new
+    text-to-entity heuristic. A clause is only resolved when exactly one
+    entity is named in it AND trend_index carries exactly one metric_key for
+    that entity (mirroring coverage_guard's own null-metric_key single-
+    candidate inference pattern); anything less unambiguous is silently
+    skipped here, never guessed -- see the A3.3 Design Memo v2 closure notes
+    on this layer's narrower, intentionally conservative coverage.
+    """
+    if not trend_index:
+        return {}
+    entity_names: dict[str, list[str]] = {}
+    for claim in claims:
+        names = entity_names.setdefault(claim.entity_id, [])
+        for candidate in (claim.entity_display, claim.entity_id):
+            if candidate and candidate not in names:
+                names.append(candidate)
+    hits = extract_clause_trend_hits(text)
+    if hits == AMBIGUOUS:
+        return AMBIGUOUS
+    resolved: dict[tuple[str, str], Direction] = {}
+    for hit in hits:
+        matched_entities = [entity_id for entity_id, names in entity_names.items()
+                            if any(_entity_mentions(hit.clause, name) for name in names)]
+        if len(matched_entities) != 1:
+            continue
+        candidate_keys = [key for key in trend_index if key[0] == matched_entities[0]]
+        if len(candidate_keys) != 1:
+            continue
+        resolved[candidate_keys[0]] = hit.direction
+    return resolved
+
+
+def _trend_consistency_status(draft_answer: str, final_text: str, claims: tuple[AllowedClaim, ...],
+                              trend_index: dict[tuple[str, str], Direction] | None) -> str | None:
+    """None if consistent; a fail-closed integrity_status string otherwise.
+
+    Rules (A3.3 Design Memo v2 section 9): same normalized direction for a
+    key present in both -> ok. Direction changed for a key present in both
+    -> fail. A key present only in the FINAL text (the presenter introduced
+    a trend assertion the validated draft never made) -> fail. A key present
+    only in the draft (the presenter simply omitted it) -> ok, an omission
+    is not a corruption.
+    """
+    if not trend_index:
+        return None
+    draft_directions = _extract_trend_directions(draft_answer, claims, trend_index)
+    final_directions = _extract_trend_directions(final_text, claims, trend_index)
+    if final_directions == AMBIGUOUS:
+        return "presentation_trend_ambiguous"
+    if draft_directions == AMBIGUOUS:
+        # The validated draft itself could not be resolved here (should not
+        # happen: coverage_guard already rejects an ambiguous clause before
+        # this text is ever produced) -- nothing safe to compare against, so
+        # this defensive branch treats it as "no known draft assertions"
+        # rather than silently trusting the final text's claims.
+        draft_directions = {}
+    for key, direction in final_directions.items():
+        if key not in draft_directions:
+            return "presentation_trend_introduced"
+        if draft_directions[key] != direction:
+            return "presentation_trend_drift"
+    return None
 
 
 class OpenAIResponsesFinalPresenter:
@@ -170,7 +252,8 @@ class OpenAIResponsesFinalPresenter:
         self._client = client
         self._model = model
 
-    def present(self, *, user_message: str, draft_answer: str, claims: tuple[AllowedClaim, ...] = ()) -> PresentationResult:
+    def present(self, *, user_message: str, draft_answer: str, claims: tuple[AllowedClaim, ...] = (),
+               trend_index: dict[tuple[str, str], Direction] | None = None) -> PresentationResult:
         started = time.monotonic()
         if not claims:
             # There is no factual presentation contract for free-form output.
@@ -190,6 +273,9 @@ class OpenAIResponsesFinalPresenter:
             )
             output = json.loads(str(getattr(response, "output_text", "") or ""))
             content = validate_structured_output(output, claims)
+            trend_status = _trend_consistency_status(draft_answer, content, claims, trend_index)
+            if trend_status is not None:
+                return _fallback(draft_answer, trend_status, started, self._model)
             status = "passed"
             return PresentationResult(content, True, _elapsed_ms(started), "openai", self._model, status)
         except (json.JSONDecodeError, ValueError) as exc:

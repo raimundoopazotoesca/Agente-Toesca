@@ -51,10 +51,11 @@ class CapturingPresenter:
         self.last_result: PresentationResult | None = None
         self.invoked = False
 
-    def present(self, *, user_message: str, draft_answer: str, claims=()) -> PresentationResult:
+    def present(self, *, user_message: str, draft_answer: str, claims=(), trend_index=None) -> PresentationResult:
         self.invoked = True
         self.last_draft = draft_answer
-        result = self._inner.present(user_message=user_message, draft_answer=draft_answer, claims=claims)
+        result = self._inner.present(user_message=user_message, draft_answer=draft_answer, claims=claims,
+                                     trend_index=trend_index)
         self.last_result = result
         return result
 
