@@ -259,7 +259,7 @@ def _token_ok() -> bool:
 
 @app.before_request
 def _require_token():
-    if request.path.startswith("/api/analyst/") or request.path in {"/api/auth/login", "/api/auth/logout", "/api/auth/me"}:
+    if request.path.startswith(("/api/analyst/", "/api/reports/")) or request.path in {"/api/auth/login", "/api/auth/logout", "/api/auth/me"}:
         return None
     if not request.path.startswith("/api/"):
         return None
@@ -289,7 +289,7 @@ def _principal():
 
 @app.before_request
 def _require_analyst_user():
-    if not request.path.startswith("/api/analyst/"):
+    if not request.path.startswith(("/api/analyst/", "/api/reports/")):
         return None
     if request.method == "OPTIONS":
         return None
@@ -436,6 +436,124 @@ def serve_db_diagram():
 @app.get("/factsheet")
 def serve_factsheet():
     return _serve_html_con_token(ROOT, "factsheet.html")
+
+
+@app.get("/reports/vacancy")
+def serve_vacancy_report():
+    if _principal() is None:
+        return redirect("/login")
+    return _serve_html_con_token(WEB_DIR, "vacancy_report.html")
+
+
+@app.get("/vacancy_report.js")
+def serve_vacancy_report_js():
+    return send_from_directory(WEB_DIR, "vacancy_report.js")
+
+
+@app.get("/reports/apoquindos")
+def serve_apoquindos_view():
+    if _principal() is None:
+        return redirect("/login")
+    return _serve_html_con_token(WEB_DIR, "apoquindos.html")
+
+
+@app.get("/apoquindos.js")
+def serve_apoquindos_js():
+    return send_from_directory(WEB_DIR, "apoquindos.js")
+
+
+@app.get("/api/reports/apoquindos")
+def apoquindos_view_api():
+    from tools.reports.apoquindos import ApoquindosViewProvider
+    report = ApoquindosViewProvider(ROOT / "memory" / "agente_toesca_v2.db").build(request.args.get("period") or None)
+    return jsonify(report)
+
+
+@app.get("/reports/pt")
+def serve_pt_view():
+    if _principal() is None:
+        return redirect("/login")
+    return _serve_html_con_token(WEB_DIR, "pt.html")
+
+
+@app.get("/pt.js")
+def serve_pt_js():
+    return send_from_directory(WEB_DIR, "pt.js")
+
+
+@app.get("/api/reports/pt")
+def pt_view_api():
+    from tools.reports.pt import PTViewProvider
+    report = PTViewProvider(ROOT / "memory" / "agente_toesca_v2.db").build(request.args.get("period") or None)
+    return jsonify(report)
+
+
+def _single_asset_route(page: str, provider_module: str, provider_class: str):
+    """Registra /reports/<page> y /api/reports/<page> — mismo patrón que
+    apoquindos/pt, factorizado porque vina/curico/sucden/inmosa comparten
+    exactamente esta forma (una sola página, un solo provider). El JS lo
+    sirven las rutas compartidas /single_asset_report.js o
+    /simple_asset_report.js (no hay un <page>.js individual)."""
+    def serve_html():
+        if _principal() is None:
+            return redirect("/login")
+        return _serve_html_con_token(WEB_DIR, f"{page}.html")
+
+    def serve_api():
+        module = __import__(provider_module, fromlist=[provider_class])
+        provider = getattr(module, provider_class)
+        report = provider(ROOT / "memory" / "agente_toesca_v2.db").build(request.args.get("period") or None)
+        return jsonify(report)
+
+    app.add_url_rule(f"/reports/{page}", f"serve_{page}_view", serve_html)
+    app.add_url_rule(f"/api/reports/{page}", f"{page}_view_api", serve_api)
+
+
+@app.get("/single_asset_report.js")
+def serve_single_asset_report_js():
+    return send_from_directory(WEB_DIR, "single_asset_report.js")
+
+
+@app.get("/simple_asset_report.js")
+def serve_simple_asset_report_js():
+    return send_from_directory(WEB_DIR, "simple_asset_report.js")
+
+
+# Imágenes del plano real de Local 100 (Inmob. CdC, ver tools/reports/pt.py
+# ::_PLANO_LOCAL_100_PISOS) — mismos archivos que usa scripts/build_factsheet.py
+# vía _data_uri, servidos acá como estáticos en vez de embebidos en el JSON.
+_PLANO_LOCAL_100_IMAGES = {"pt_plano_piso1.png", "pt_plano_piso2.png"}
+
+
+@app.get("/plano-assets/<filename>")
+def serve_plano_asset(filename: str):
+    if filename not in _PLANO_LOCAL_100_IMAGES:
+        return Response("No encontrado.", status=404)
+    return send_from_directory(ROOT / "assets", filename)
+
+
+_single_asset_route("vina", "tools.reports.vina", "VinaViewProvider")
+_single_asset_route("curico", "tools.reports.curico", "CuricoViewProvider")
+_single_asset_route("sucden", "tools.reports.sucden", "SucdenViewProvider")
+_single_asset_route("inmosa", "tools.reports.inmosa", "InmosaViewProvider")
+
+
+@app.get("/api/reports/vacancy")
+def vacancy_report_api():
+    from tools.reports.vacancy import VacancyReportContext, VacancyReportProvider
+
+    try:
+        context = VacancyReportContext(
+            fund=request.args.get("fund", "Apo"),
+            period=request.args.get("period") or None,
+            window=request.args.get("window", "12M"),
+            parking_scope=request.args.get("parking_scope", "exclude"),
+            asset=request.args.get("asset") or None,
+        )
+        report = VacancyReportProvider(ROOT / "memory" / "agente_toesca_v2.db").build(context)
+    except ValueError as exc:
+        return jsonify({"error": "invalid_report_context", "message": str(exc)}), 400
+    return jsonify(report)
 
 
 @app.get("/chat_bubble.js")
